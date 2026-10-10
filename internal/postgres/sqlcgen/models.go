@@ -5,8 +5,9 @@
 package sqlcgen
 
 import (
+	"time"
+
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Asset struct {
@@ -22,9 +23,9 @@ type Asset struct {
 	Retired            bool
 	DeclaredOwnerID    *int64
 	DeclaredExposureID *int16
-	CreatedAt          pgtype.Timestamptz
-	ImportedChangedAt  pgtype.Timestamptz
-	InactiveSince      pgtype.Timestamptz
+	CreatedAt          time.Time
+	ImportedChangedAt  time.Time
+	InactiveSince      *time.Time
 }
 
 type AssetKind struct {
@@ -43,7 +44,7 @@ type CmdbSource struct {
 	CustomerID uuid.UUID
 	Provider   string
 	Settings   []byte
-	CreatedAt  pgtype.Timestamptz
+	CreatedAt  time.Time
 }
 
 type Criticality struct {
@@ -70,4 +71,24 @@ type SoftwareComponent struct {
 type SoftwareRole struct {
 	ID   int16
 	Name string
+}
+
+type SyncOutcome struct {
+	ID   int16
+	Name string
+}
+
+type SyncRun struct {
+	ID             int64
+	CmdbSourceID   uuid.UUID
+	StartedAt      time.Time
+	FinishedAt     time.Time
+	OutcomeID      int16
+	Created        int32
+	Updated        int32
+	Deactivated    int32
+	Reactivated    int32
+	Skipped        int32
+	SkippedRecords []byte
+	Failure        *string
 }

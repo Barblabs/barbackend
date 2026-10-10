@@ -9,6 +9,49 @@ import (
 	"context"
 )
 
+// iteratorForInsertAssets implements pgx.CopyFromSource.
+type iteratorForInsertAssets struct {
+	rows                 []InsertAssetsParams
+	skippedFirstNextCall bool
+}
+
+func (r *iteratorForInsertAssets) Next() bool {
+	if len(r.rows) == 0 {
+		return false
+	}
+	if !r.skippedFirstNextCall {
+		r.skippedFirstNextCall = true
+		return true
+	}
+	r.rows = r.rows[1:]
+	return len(r.rows) > 0
+}
+
+func (r iteratorForInsertAssets) Values() ([]interface{}, error) {
+	return []interface{}{
+		r.rows[0].CmdbSourceID,
+		r.rows[0].RecordID,
+		r.rows[0].Name,
+		r.rows[0].Description,
+		r.rows[0].KindID,
+		r.rows[0].HardwareVendor,
+		r.rows[0].HardwareModel,
+		r.rows[0].CriticalityID,
+		r.rows[0].ImportedOwnerID,
+		r.rows[0].Retired,
+		r.rows[0].InactiveSince,
+	}, nil
+}
+
+func (r iteratorForInsertAssets) Err() error {
+	return nil
+}
+
+// Created Assets have no Declarations, so those columns stay NULL.
+func (q *Queries) InsertAssets(ctx context.Context, arg []InsertAssetsParams) (int64, error) {
+	return q.db.CopyFrom(ctx, []string{"assets"}, []string{"cmdb_source_id", "record_id", "name", "description", "kind_id", "hardware_vendor", "hardware_model", "criticality_id", "imported_owner_id", "retired", "inactive_since"}, &iteratorForInsertAssets{rows: arg})
+}
+
 // iteratorForInsertSoftwareComponents implements pgx.CopyFromSource.
 type iteratorForInsertSoftwareComponents struct {
 	rows                 []InsertSoftwareComponentsParams

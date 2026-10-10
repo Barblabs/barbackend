@@ -10,6 +10,7 @@ import (
 	"barbackend/internal/inventory"
 	"barbackend/internal/postgres"
 	"barbackend/internal/postgres/pgtest"
+	"github.com/google/uuid"
 )
 
 func fullParams(t *testing.T) inventory.ImportedAssetParams {
@@ -29,30 +30,28 @@ func fullParams(t *testing.T) inventory.ImportedAssetParams {
 	}
 }
 
-func TestAssetRoundTrip(t *testing.T) {
-	minimal := inventory.ImportedAssetParams{Name: "vm-01", Kind: inventory.VirtualMachine}
+func record(t *testing.T, id string, p inventory.ImportedAssetParams) inventory.Record {
+	return inventory.Record{RecordID: id, Imported: mustImported(t, p)}
+}
+
+func TestCreatedAssetRoundTrip(t *testing.T) {
 	tests := []struct {
 		name     string
 		imported inventory.ImportedAssetParams
-		state    inventory.AssetState
 	}{
-		{"minimal and active", minimal, inventory.AssetState{Active: true}},
-		{"everything set and inactive", fullParams(t), inventory.AssetState{DeclaredOwner: mustOwner(t, "declared@example.com"), DeclaredExposure: inventory.InternetFacing}},
+		{"minimal and active", inventory.ImportedAssetParams{Name: "vm-01", Kind: inventory.VirtualMachine}},
+		{"everything set and inactive", fullParams(t)},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			db := pgtest.NewDB(t)
 			src := newSource(t, db, newCustomer())
-			want, err := inventory.RestoreAsset(inventory.SourceReference{Source: src.ID(), RecordID: "42"}, mustImported(t, tt.imported), tt.state)
-			if err != nil {
-				t.Fatal(err)
-			}
 
-			inTx(t, db, func(tx *postgres.Tx) error { return tx.CreateAsset(context.Background(), want) })
+			r := syncRecords(t, db, src.ID(), record(t, "42", tt.imported))
 
-			got := assets(t, db, src.ID())
-			if len(got) != 1 || !reflect.DeepEqual(got[0], want) {
+			want := r.Changes()[0].Asset
+			if got := assets(t, db, src.ID()); len(got) != 1 || !reflect.DeepEqual(got[0], want) {
 				t.Errorf("assets = %+v, want [%+v]", got, want)
 			}
 		})
@@ -66,25 +65,11 @@ func TestAssetOwnersAreSharedWithinACustomer(t *testing.T) {
 	first := newSource(t, db, customer)
 	second := newSource(t, db, customer)
 	other := newSource(t, db, newCustomer())
-
 	p := inventory.ImportedAssetParams{Name: "pc", Kind: inventory.Workstation, Owner: mustOwner(t, "owner@example.com")}
-	inTx(t, db, func(tx *postgres.Tx) error {
-		for i, src := range []inventory.CMDBSource{first, first, second, other} {
-			a, err := inventory.NewAsset(inventory.SourceReference{Source: src.ID(), RecordID: string(rune('a' + i))}, mustImported(t, p))
-			if err != nil {
-				return err
-			}
-			if i == 1 {
-				if err := a.DeclareOwner(mustOwner(t, "Owner@Example.com")); err != nil {
-					return err
-				}
-			}
-			if err := tx.CreateAsset(context.Background(), a); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
+
+	syncRecords(t, db, first.ID(), record(t, "a", p), record(t, "b", p))
+	syncRecords(t, db, second.ID(), record(t, "a", p))
+	syncRecords(t, db, other.ID(), record(t, "a", p))
 
 	if n := queryInt(t, conn, "SELECT count(*) FROM asset_owners WHERE customer_id = $1", customer.String()); n != 1 {
 		t.Errorf("owners of the customer = %d, want 1", n)
@@ -94,31 +79,33 @@ func TestAssetOwnersAreSharedWithinACustomer(t *testing.T) {
 	}
 }
 
-func TestUpdateImportedKeepsStateAndDeclarations(t *testing.T) {
+func TestImportedUpdateKeepsDeclarations(t *testing.T) {
 	t.Parallel()
-	db := pgtest.NewDB(t)
+	db, conn := newDBWithConn(t)
 	src := newSource(t, db, newCustomer())
-	ref := inventory.SourceReference{Source: src.ID(), RecordID: "1"}
-	state := inventory.AssetState{DeclaredOwner: mustOwner(t, "declared@example.com"), DeclaredExposure: inventory.Internal}
-	stored, err := inventory.RestoreAsset(ref, mustImported(t, fullParams(t)), state)
+	syncRecords(t, db, src.ID(), record(t, "1", fullParams(t)))
+	_, err := conn.Exec(context.Background(), `
+		WITH owner AS (
+			INSERT INTO asset_owners (customer_id, email) VALUES ($1, 'declared@example.com') RETURNING id
+		)
+		UPDATE assets SET declared_owner_id = (SELECT id FROM owner), declared_exposure_id = $2`,
+		src.Customer().String(), int16(inventory.Internal))
 	if err != nil {
 		t.Fatal(err)
 	}
-	inTx(t, db, func(tx *postgres.Tx) error { return tx.CreateAsset(context.Background(), stored) })
 
-	// The caller's Asset differs in state and Declarations: only its imported values must be written.
 	changed := inventory.ImportedAssetParams{
 		Name:     "srv-01-renamed",
 		Kind:     inventory.Server,
 		Software: []inventory.SoftwareComponent{{Role: inventory.OperatingSystem, Name: "Ubuntu", Version: "24.04 LTS"}},
 	}
-	update, err := inventory.NewAsset(ref, mustImported(t, changed))
-	if err != nil {
-		t.Fatal(err)
-	}
-	inTx(t, db, func(tx *postgres.Tx) error { return tx.UpdateImported(context.Background(), update) })
+	syncRecords(t, db, src.ID(), record(t, "1", changed))
 
-	want, err := inventory.RestoreAsset(ref, mustImported(t, changed), state)
+	want, err := inventory.RestoreAsset(inventory.SourceReference{Source: src.ID(), RecordID: "1"}, mustImported(t, changed), inventory.AssetState{
+		Active:           true,
+		DeclaredOwner:    mustOwner(t, "declared@example.com"),
+		DeclaredExposure: inventory.Internal,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,16 +114,12 @@ func TestUpdateImportedKeepsStateAndDeclarations(t *testing.T) {
 	}
 }
 
-func TestUpdateActiveKeepsFirstInactiveTime(t *testing.T) {
+func TestDeactivationKeepsFirstInactiveTime(t *testing.T) {
 	t.Parallel()
 	db, conn := newDBWithConn(t)
 	src := newSource(t, db, newCustomer())
-	a, err := inventory.NewAsset(inventory.SourceReference{Source: src.ID(), RecordID: "1"}, mustImported(t, fullParams(t)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	inTx(t, db, func(tx *postgres.Tx) error { return tx.CreateAsset(context.Background(), a) })
-
+	retired := fullParams(t)
+	syncRecords(t, db, src.ID(), record(t, "1", retired))
 	inactiveSince := func() *time.Time {
 		var ts *time.Time
 		if err := conn.QueryRow(context.Background(), "SELECT inactive_since FROM assets").Scan(&ts); err != nil {
@@ -144,50 +127,173 @@ func TestUpdateActiveKeepsFirstInactiveTime(t *testing.T) {
 		}
 		return ts
 	}
-	setActive := func(active bool) {
-		if active {
-			a.Reactivate()
-		} else {
-			a.MarkInactive()
-		}
-		inTx(t, db, func(tx *postgres.Tx) error { return tx.UpdateActive(context.Background(), a) })
-	}
-
-	setActive(false)
 	first := inactiveSince()
 	if first == nil {
-		t.Fatal("inactive_since is NULL after marking inactive")
+		t.Fatal("inactive_since is NULL for an Asset created Inactive")
 	}
-	setActive(false)
+
+	// A reconciliation that still sees the Asset as Active deactivates it again.
+	stale := restore(t, src.ID(), "1", retired, true)
+	inSource(t, db, src.ID(), func(tx *postgres.SourceTx) error {
+		r, err := inventory.Reconcile(src.ID(), []*inventory.Asset{stale}, inventory.Snapshot{})
+		if err != nil {
+			return err
+		}
+		return save(tx, r)
+	})
 	if again := inactiveSince(); again == nil || !again.Equal(*first) {
-		t.Errorf("inactive_since = %v after staying inactive, want %v", again, first)
+		t.Errorf("inactive_since = %v after deactivating again, want %v", again, first)
 	}
-	setActive(true)
+
+	unretired := retired
+	unretired.Retired = false
+	syncRecords(t, db, src.ID(), record(t, "1", unretired))
 	if ts := inactiveSince(); ts != nil {
 		t.Errorf("inactive_since = %v after reactivating, want NULL", ts)
 	}
-	if got := assets(t, db, src.ID()); !got[0].Active() {
-		t.Error("reloaded asset is inactive, want active")
-	}
 }
 
-func TestUpdatesOfMissingAssetFail(t *testing.T) {
-	t.Parallel()
-	db := pgtest.NewDB(t)
-	src := newSource(t, db, newCustomer())
-	a, err := inventory.NewAsset(inventory.SourceReference{Source: src.ID(), RecordID: "missing"}, mustImported(t, fullParams(t)))
+func restore(t *testing.T, src inventory.CMDBSourceID, recordID string, p inventory.ImportedAssetParams, active bool) *inventory.Asset {
+	t.Helper()
+	a, err := inventory.RestoreAsset(inventory.SourceReference{Source: src, RecordID: recordID}, mustImported(t, p), inventory.AssetState{Active: active})
 	if err != nil {
 		t.Fatal(err)
 	}
-	updates := map[string]func(*postgres.Tx) error{
-		"imported": func(tx *postgres.Tx) error { return tx.UpdateImported(context.Background(), a) },
-		"active":   func(tx *postgres.Tx) error { return tx.UpdateActive(context.Background(), a) },
+	return a
+}
+
+func TestSaveOfMissingAssetFails(t *testing.T) {
+	active := inventory.ImportedAssetParams{Name: "vm", Kind: inventory.VirtualMachine}
+	renamed := active
+	renamed.Name = "vm-renamed"
+	tests := []struct {
+		name     string
+		active   bool
+		snapshot []inventory.ImportedAssetParams
+	}{
+		{"imported update", true, []inventory.ImportedAssetParams{renamed}},
+		{"deactivation", true, nil},
+		{"reactivation", false, []inventory.ImportedAssetParams{active}},
 	}
-	for name, update := range updates {
-		t.Run(name, func(t *testing.T) {
-			if err := db.InTx(context.Background(), update); !errors.Is(err, postgres.ErrNotFound) {
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			db := pgtest.NewDB(t)
+			src := newSource(t, db, newCustomer())
+			var s inventory.Snapshot
+			for _, p := range tt.snapshot {
+				s.Records = append(s.Records, record(t, "missing", p))
+			}
+
+			err := db.InLockedSource(context.Background(), src.ID(), time.Now(), func(tx *postgres.SourceTx) error {
+				r, err := inventory.Reconcile(src.ID(), []*inventory.Asset{restore(t, src.ID(), "missing", active, tt.active)}, s)
+				if err != nil {
+					return err
+				}
+				return save(tx, r)
+			})
+			if !errors.Is(err, postgres.ErrNotFound) {
 				t.Errorf("err = %v, want ErrNotFound", err)
 			}
 		})
+	}
+}
+
+func TestInLockedSourceOfMissingSource(t *testing.T) {
+	t.Parallel()
+	db := pgtest.NewDB(t)
+	err := db.InLockedSource(context.Background(), inventory.CMDBSourceID(uuid.New()), time.Now(), func(*postgres.SourceTx) error { return nil })
+	if !errors.Is(err, postgres.ErrNotFound) {
+		t.Errorf("err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestInLockedSourceRejectsSupersededSync(t *testing.T) {
+	t.Parallel()
+	db := pgtest.NewDB(t)
+	src := newSource(t, db, newCustomer())
+	start := time.Date(2026, 10, 10, 12, 0, 0, 0, time.UTC)
+	later := start.Add(time.Hour)
+	recordRun := func(run inventory.SyncRun, err error) {
+		t.Helper()
+		if err != nil {
+			t.Fatal(err)
+		}
+		inTx(t, db, func(tx *postgres.Tx) error { return tx.RecordSyncRun(context.Background(), run) })
+	}
+	lock := func(startedAt time.Time) error {
+		return db.InLockedSource(context.Background(), src.ID(), startedAt, func(*postgres.SourceTx) error { return nil })
+	}
+
+	recordRun(inventory.FailedRun(src.ID(), later, later, errors.New("cmdb unreachable")))
+	if err := lock(start); err != nil {
+		t.Errorf("after a later failed run: err = %v, want nil", err)
+	}
+
+	r, err := inventory.Reconcile(src.ID(), nil, inventory.Snapshot{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	recordRun(inventory.SucceededRun(r, later, later))
+	if err := lock(start); !errors.Is(err, postgres.ErrSuperseded) {
+		t.Errorf("after a later successful run: err = %v, want ErrSuperseded", err)
+	}
+	if err := lock(later.Add(time.Second)); err != nil {
+		t.Errorf("after an earlier successful run: err = %v, want nil", err)
+	}
+}
+
+func TestInLockedSourceFailsWhileLocked(t *testing.T) {
+	t.Parallel()
+	db := pgtest.NewDB(t)
+	src := newSource(t, db, newCustomer())
+	lock := func() error {
+		return db.InLockedSource(context.Background(), src.ID(), time.Now(), func(*postgres.SourceTx) error { return nil })
+	}
+
+	locked, release := make(chan struct{}), make(chan struct{})
+	done := make(chan error)
+	go func() {
+		done <- db.InLockedSource(context.Background(), src.ID(), time.Now(), func(*postgres.SourceTx) error {
+			close(locked)
+			<-release
+			return nil
+		})
+	}()
+	<-locked
+
+	if err := lock(); !errors.Is(err, postgres.ErrSyncInProgress) {
+		t.Errorf("err = %v, want ErrSyncInProgress", err)
+	}
+
+	close(release)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if err := lock(); err != nil {
+		t.Errorf("after release: err = %v, want nil", err)
+	}
+}
+
+func TestSaveOfAnotherSourceFails(t *testing.T) {
+	t.Parallel()
+	db, conn := newDBWithConn(t)
+	customer := newCustomer()
+	locked := newSource(t, db, customer)
+	other := newSource(t, db, customer)
+
+	err := db.InLockedSource(context.Background(), locked.ID(), time.Now(), func(tx *postgres.SourceTx) error {
+		r, err := inventory.Reconcile(other.ID(), nil, inventory.Snapshot{Records: []inventory.Record{record(t, "1", fullParams(t))}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return save(tx, r)
+	})
+
+	if err == nil {
+		t.Error("err = nil, want an error for a reconciliation of another source")
+	}
+	if n := queryInt(t, conn, "SELECT count(*) FROM assets") + queryInt(t, conn, "SELECT count(*) FROM sync_runs"); n != 0 {
+		t.Errorf("rows written = %d, want 0", n)
 	}
 }

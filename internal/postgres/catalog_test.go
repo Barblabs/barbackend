@@ -19,6 +19,7 @@ func TestCatalogsMatchDomainConstants(t *testing.T) {
 		"criticalities":  names(inventory.CriticalityHigh, inventory.CriticalityMedium, inventory.CriticalityLow),
 		"exposures":      names(inventory.InternetFacing, inventory.Internal),
 		"software_roles": names(inventory.OperatingSystem, inventory.Application),
+		"sync_outcomes":  names(inventory.SyncSucceeded, inventory.SyncFailed),
 	}
 	ctx := context.Background()
 	conn := pgtest.Conn(t, pgtest.URL(t))

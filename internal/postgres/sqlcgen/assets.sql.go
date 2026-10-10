@@ -7,69 +7,58 @@ package sqlcgen
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
 
+const deactivateAssets = `-- name: DeactivateAssets :execrows
+UPDATE assets
+SET inactive_since = coalesce(inactive_since, now())
+WHERE cmdb_source_id = $1 AND record_id = ANY($2::text[])
+`
+
+type DeactivateAssetsParams struct {
+	CmdbSourceID uuid.UUID
+	RecordIds    []string
+}
+
+// inactive_since keeps its original time when an Inactive Asset stays Inactive.
+func (q *Queries) DeactivateAssets(ctx context.Context, arg DeactivateAssetsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deactivateAssets, arg.CmdbSourceID, arg.RecordIds)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteSoftwareComponents = `-- name: DeleteSoftwareComponents :exec
 DELETE FROM software_components
-WHERE cmdb_source_id = $1 AND record_id = $2
+WHERE cmdb_source_id = $1 AND record_id = ANY($2::text[])
 `
 
 type DeleteSoftwareComponentsParams struct {
 	CmdbSourceID uuid.UUID
-	RecordID     string
+	RecordIds    []string
 }
 
 func (q *Queries) DeleteSoftwareComponents(ctx context.Context, arg DeleteSoftwareComponentsParams) error {
-	_, err := q.db.Exec(ctx, deleteSoftwareComponents, arg.CmdbSourceID, arg.RecordID)
+	_, err := q.db.Exec(ctx, deleteSoftwareComponents, arg.CmdbSourceID, arg.RecordIds)
 	return err
 }
 
-const insertAsset = `-- name: InsertAsset :exec
-INSERT INTO assets (
-    cmdb_source_id, record_id, name, description, kind_id, hardware_vendor, hardware_model,
-    criticality_id, imported_owner_id, retired, declared_owner_id, declared_exposure_id, inactive_since
-) VALUES (
-    $1, $2, $3, $4, $5, $6, $7,
-    $8, $9, $10, $11, $12,
-    CASE WHEN $13::boolean THEN NULL ELSE now() END
-)
-`
-
-type InsertAssetParams struct {
-	CmdbSourceID       uuid.UUID
-	RecordID           string
-	Name               string
-	Description        string
-	KindID             int16
-	HardwareVendor     *string
-	HardwareModel      *string
-	CriticalityID      *int16
-	ImportedOwnerID    *int64
-	Retired            bool
-	DeclaredOwnerID    *int64
-	DeclaredExposureID *int16
-	Active             bool
-}
-
-func (q *Queries) InsertAsset(ctx context.Context, arg InsertAssetParams) error {
-	_, err := q.db.Exec(ctx, insertAsset,
-		arg.CmdbSourceID,
-		arg.RecordID,
-		arg.Name,
-		arg.Description,
-		arg.KindID,
-		arg.HardwareVendor,
-		arg.HardwareModel,
-		arg.CriticalityID,
-		arg.ImportedOwnerID,
-		arg.Retired,
-		arg.DeclaredOwnerID,
-		arg.DeclaredExposureID,
-		arg.Active,
-	)
-	return err
+type InsertAssetsParams struct {
+	CmdbSourceID    uuid.UUID
+	RecordID        string
+	Name            string
+	Description     string
+	KindID          int16
+	HardwareVendor  *string
+	HardwareModel   *string
+	CriticalityID   *int16
+	ImportedOwnerID *int64
+	Retired         bool
+	InactiveSince   *time.Time
 }
 
 type InsertSoftwareComponentsParams struct {
@@ -186,91 +175,75 @@ func (q *Queries) ListSoftwareComponents(ctx context.Context, cmdbSourceID uuid.
 	return items, nil
 }
 
-const updateAssetActive = `-- name: UpdateAssetActive :execrows
+const reactivateAssets = `-- name: ReactivateAssets :execrows
 UPDATE assets
-SET inactive_since = CASE WHEN $1::boolean THEN NULL ELSE coalesce(inactive_since, now()) END
-WHERE cmdb_source_id = $2 AND record_id = $3
+SET inactive_since = NULL
+WHERE cmdb_source_id = $1 AND record_id = ANY($2::text[])
 `
 
-type UpdateAssetActiveParams struct {
-	Active       bool
+type ReactivateAssetsParams struct {
 	CmdbSourceID uuid.UUID
-	RecordID     string
+	RecordIds    []string
 }
 
-// inactive_since keeps its original time when an Inactive Asset stays Inactive.
-func (q *Queries) UpdateAssetActive(ctx context.Context, arg UpdateAssetActiveParams) (int64, error) {
-	result, err := q.db.Exec(ctx, updateAssetActive, arg.Active, arg.CmdbSourceID, arg.RecordID)
+func (q *Queries) ReactivateAssets(ctx context.Context, arg ReactivateAssetsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, reactivateAssets, arg.CmdbSourceID, arg.RecordIds)
 	if err != nil {
 		return 0, err
 	}
 	return result.RowsAffected(), nil
 }
 
-const updateAssetImported = `-- name: UpdateAssetImported :execrows
-UPDATE assets
-SET name = $1,
-    description = $2,
-    kind_id = $3,
-    hardware_vendor = $4,
-    hardware_model = $5,
-    criticality_id = $6,
-    imported_owner_id = $7,
-    retired = $8,
-    imported_changed_at = now()
-WHERE cmdb_source_id = $9 AND record_id = $10
+const transactionTime = `-- name: TransactionTime :one
+SELECT now()::timestamptz
 `
 
-type UpdateAssetImportedParams struct {
-	Name            string
-	Description     string
-	KindID          int16
-	HardwareVendor  *string
-	HardwareModel   *string
-	CriticalityID   *int16
-	ImportedOwnerID *int64
-	Retired         bool
-	CmdbSourceID    uuid.UUID
-	RecordID        string
+// COPY cannot call now(), so inactive_since comes from here: the same
+// transaction time the column defaults use.
+func (q *Queries) TransactionTime(ctx context.Context) (time.Time, error) {
+	row := q.db.QueryRow(ctx, transactionTime)
+	var column_1 time.Time
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
-func (q *Queries) UpdateAssetImported(ctx context.Context, arg UpdateAssetImportedParams) (int64, error) {
-	result, err := q.db.Exec(ctx, updateAssetImported,
-		arg.Name,
-		arg.Description,
-		arg.KindID,
-		arg.HardwareVendor,
-		arg.HardwareModel,
-		arg.CriticalityID,
-		arg.ImportedOwnerID,
-		arg.Retired,
-		arg.CmdbSourceID,
-		arg.RecordID,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const upsertAssetOwner = `-- name: UpsertAssetOwner :one
+const upsertAssetOwners = `-- name: UpsertAssetOwners :many
 INSERT INTO asset_owners (customer_id, email)
-SELECT s.customer_id, $1
-FROM cmdb_sources s
+SELECT s.customer_id, e.email
+FROM cmdb_sources s, unnest($1::text[]) AS e (email)
 WHERE s.id = $2
 ON CONFLICT (customer_id, email) DO UPDATE SET email = EXCLUDED.email
-RETURNING id
+RETURNING id, email
 `
 
-type UpsertAssetOwnerParams struct {
-	Email        string
+type UpsertAssetOwnersParams struct {
+	Emails       []string
 	CmdbSourceID uuid.UUID
 }
 
-// The no-op update makes RETURNING yield the id of an existing owner too.
-func (q *Queries) UpsertAssetOwner(ctx context.Context, arg UpsertAssetOwnerParams) (int64, error) {
-	row := q.db.QueryRow(ctx, upsertAssetOwner, arg.Email, arg.CmdbSourceID)
-	var id int64
-	err := row.Scan(&id)
-	return id, err
+type UpsertAssetOwnersRow struct {
+	ID    int64
+	Email string
+}
+
+// Emails must be unique within one call: ON CONFLICT cannot update a row twice
+// in one statement. The no-op update makes RETURNING yield existing owners too.
+func (q *Queries) UpsertAssetOwners(ctx context.Context, arg UpsertAssetOwnersParams) ([]UpsertAssetOwnersRow, error) {
+	rows, err := q.db.Query(ctx, upsertAssetOwners, arg.Emails, arg.CmdbSourceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []UpsertAssetOwnersRow
+	for rows.Next() {
+		var i UpsertAssetOwnersRow
+		if err := rows.Scan(&i.ID, &i.Email); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

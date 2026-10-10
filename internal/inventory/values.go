@@ -102,6 +102,23 @@ func (c SoftwareComponent) clone() SoftwareComponent {
 	return c
 }
 
+// componentKey is a SoftwareComponent by value, usable as a map key.
+type componentKey struct {
+	role       SoftwareRole
+	name       string
+	version    string
+	identified bool
+	product    Product
+}
+
+func (c SoftwareComponent) key() componentKey {
+	k := componentKey{role: c.Role, name: c.Name, version: c.Version}
+	if c.Product != nil {
+		k.identified, k.product = true, *c.Product
+	}
+	return k
+}
+
 type Criticality int
 
 // Stored as catalog ids (ADR 0006): never renumber.
