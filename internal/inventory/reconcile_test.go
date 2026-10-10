@@ -3,6 +3,7 @@ package inventory_test
 import (
 	"errors"
 	"reflect"
+	"slices"
 	"testing"
 
 	"barbackend/internal/inventory"
@@ -15,12 +16,11 @@ type stored struct {
 	active bool
 }
 
-// change is an inventory.Change reduced to what the tests compare.
-type change struct {
-	id                                      string
-	created, importedChanged, activeChanged bool
-	activeAfter                             bool
-	nameAfter                               string
+// outcome is a Reconciliation reduced to record ids, plus the ids of every
+// Asset, stored or created, that is Inactive afterwards.
+type outcome struct {
+	created, updated, deactivated, reactivated []string
+	inactive                                   []string
 }
 
 func TestReconcile(t *testing.T) {
@@ -46,53 +46,66 @@ func TestReconcile(t *testing.T) {
 		existing []stored
 		records  map[string]inventory.ImportedAssetParams
 		skipped  []string
-		want     []change
+		want     outcome
 	}{
-		{"new", nil, recs("1", base), nil,
-			[]change{{id: "1", created: true, activeAfter: true, nameAfter: "srv-01"}}},
-		{"new and retired is created inactive", nil, recs("1", retired), nil,
-			[]change{{id: "1", created: true, activeAfter: false, nameAfter: "srv-01"}}},
-		{"changed", []stored{{"1", base, true}}, recs("1", renamed), nil,
-			[]change{{id: "1", importedChanged: true, activeAfter: true, nameAfter: "srv-01-renamed"}}},
-		{"unchanged", []stored{{"1", base, true}}, recs("1", base), nil, nil},
-		{"software reordered is unchanged", []stored{{"1", software, true}}, recs("1", reordered), nil, nil},
-		{"duplicate software component is a change", []stored{{"1", software, true}}, recs("1", duplicated), nil,
-			[]change{{id: "1", importedChanged: true, activeAfter: true, nameAfter: "srv-01"}}},
-		{"identified product is a change", []stored{{"1", software, true}}, recs("1", identifiedSoftware), nil,
-			[]change{{id: "1", importedChanged: true, activeAfter: true, nameAfter: "srv-01"}}},
-		{"hardware vendor is a change", []stored{{"1", hardware, true}}, recs("1", otherHardware), nil,
-			[]change{{id: "1", importedChanged: true, activeAfter: true, nameAfter: "srv-01"}}},
+		{"new", nil, recs("1", base), nil, outcome{created: ids("1")}},
+		{"new and retired is created inactive", nil, recs("1", retired), nil, outcome{created: ids("1"), inactive: ids("1")}},
+		{"changed", []stored{{"1", base, true}}, recs("1", renamed), nil, outcome{updated: ids("1")}},
+		{"unchanged", []stored{{"1", base, true}}, recs("1", base), nil, outcome{}},
+		{"software reordered is unchanged", []stored{{"1", software, true}}, recs("1", reordered), nil, outcome{}},
+		{"duplicate software component is a change", []stored{{"1", software, true}}, recs("1", duplicated), nil, outcome{updated: ids("1")}},
+		{"identified product is a change", []stored{{"1", software, true}}, recs("1", identifiedSoftware), nil, outcome{updated: ids("1")}},
+		{"hardware vendor is a change", []stored{{"1", hardware, true}}, recs("1", otherHardware), nil, outcome{updated: ids("1")}},
 		{"retired", []stored{{"1", base, true}}, recs("1", retired), nil,
-			[]change{{id: "1", importedChanged: true, activeChanged: true, activeAfter: false, nameAfter: "srv-01"}}},
-		{"missing", []stored{{"1", base, true}}, nil, nil,
-			[]change{{id: "1", activeChanged: true, activeAfter: false, nameAfter: "srv-01"}}},
-		{"missing and already inactive", []stored{{"1", base, false}}, nil, nil, nil},
-		{"reappearing", []stored{{"1", base, false}}, recs("1", base), nil,
-			[]change{{id: "1", activeChanged: true, activeAfter: true, nameAfter: "srv-01"}}},
-		{"un-retired", []stored{{"1", retired, false}}, recs("1", base), nil,
-			[]change{{id: "1", importedChanged: true, activeChanged: true, activeAfter: true, nameAfter: "srv-01"}}},
-		{"retired and already inactive", []stored{{"1", retired, false}}, recs("1", retired), nil, nil},
-		{"skipped but existing", []stored{{"1", base, true}}, nil, []string{"1"}, nil},
-		{"skipped and new", nil, nil, []string{"1"}, nil},
+			outcome{updated: ids("1"), deactivated: ids("1"), inactive: ids("1")}},
+		{"missing", []stored{{"1", base, true}}, nil, nil, outcome{deactivated: ids("1"), inactive: ids("1")}},
+		{"missing and already inactive", []stored{{"1", base, false}}, nil, nil, outcome{inactive: ids("1")}},
+		{"reappearing", []stored{{"1", base, false}}, recs("1", base), nil, outcome{reactivated: ids("1")}},
+		{"un-retired", []stored{{"1", retired, false}}, recs("1", base), nil, outcome{updated: ids("1"), reactivated: ids("1")}},
+		{"retired and already inactive", []stored{{"1", retired, false}}, recs("1", retired), nil, outcome{inactive: ids("1")}},
+		{"skipped but existing", []stored{{"1", base, true}}, nil, []string{"1"}, outcome{}},
+		{"skipped and new", nil, nil, []string{"1"}, outcome{}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r, err := inventory.Reconcile(sourceID, storedAssets(t, tt.existing), snapshot(t, tt.records, tt.skipped...))
+			existing := storedAssets(t, tt.existing)
+			s := snapshot(t, tt.records, tt.skipped...)
+			r, err := inventory.Reconcile(sourceID, existing, s)
 			if err != nil {
 				t.Fatal(err)
 			}
-			var got []change
-			for _, c := range r.Changes() {
-				got = append(got, change{
-					id: c.Asset.Ref().RecordID, created: c.Created, importedChanged: c.ImportedChanged,
-					activeChanged: c.ActiveChanged, activeAfter: c.Asset.Active(), nameAfter: c.Asset.Imported().Name(),
-				})
+			all := slices.Concat(existing, r.Created())
+			got := outcome{
+				created:     recordIDs(r.Created()),
+				updated:     recordIDs(r.Updated()),
+				deactivated: recordIDs(r.Deactivated()),
+				reactivated: recordIDs(r.Reactivated()),
+			}
+			for _, a := range all {
+				if !a.Active() {
+					got.inactive = append(got.inactive, a.Ref().RecordID)
+				}
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("changes = %+v, want %+v", got, tt.want)
+				t.Errorf("outcome = %+v, want %+v", got, tt.want)
+			}
+			for _, a := range all {
+				if p, ok := tt.records[a.Ref().RecordID]; ok && a.Imported().Name() != p.Name {
+					t.Errorf("asset %s has name %q, want the snapshot's %q", a.Ref().RecordID, a.Imported().Name(), p.Name)
+				}
 			}
 		})
 	}
+}
+
+func ids(recordIDs ...string) []string { return recordIDs }
+
+func recordIDs(assets []*inventory.Asset) []string {
+	var ids []string
+	for _, a := range assets {
+		ids = append(ids, a.Ref().RecordID)
+	}
+	return ids
 }
 
 func TestReconciliationCountsAndSkippedRecords(t *testing.T) {
