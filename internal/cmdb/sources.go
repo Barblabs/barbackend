@@ -65,11 +65,15 @@ func (s *Sources) Sync(ctx context.Context, id inventory.CMDBSourceID) (inventor
 }
 
 // sync reads the snapshot before locking the source, so a slow CMDB Provider
-// never holds the lock.
+// never holds the lock. Settings are validated again because a provider may
+// have tightened its rules since the source was added.
 func (s *Sources) sync(ctx context.Context, src inventory.CMDBSource, settings json.RawMessage, started time.Time) (inventory.SyncRun, error) {
 	p, err := s.provider(src.Provider())
 	if err != nil {
 		return inventory.SyncRun{}, err
+	}
+	if err := p.ValidateSettings(settings); err != nil {
+		return inventory.SyncRun{}, fmt.Errorf("settings of %s: %w", src.ID(), err)
 	}
 	snapshot, err := p.Snapshot(ctx, settings)
 	if err != nil {
