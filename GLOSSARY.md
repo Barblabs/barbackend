@@ -56,6 +56,10 @@ _Avoid_: Deleted, obsolete, retired, archived
 Bringing the Assets of one CMDB Source in line with a complete snapshot of its records: creating, updating, deactivating and reactivating Assets.
 _Avoid_: Import job, refresh, poll, crawl
 
+**Sync Run**:
+The record of one Sync of a CMDB Source: whether it succeeded or failed, when it ran, how many Assets it created, updated, deactivated and reactivated, and which records it skipped and why. A failed Sync Run changed no Asset.
+_Avoid_: Job, import log, sync history
+
 **Declaration**:
 A value about an Asset set by a barbattack user rather than imported from its CMDB Source. Where both exist, the Declaration wins, and removing it restores the imported value.
 _Avoid_: Override, manual value, custom field

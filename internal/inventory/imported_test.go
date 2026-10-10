@@ -258,6 +258,9 @@ func TestStringers(t *testing.T) {
 		{"Exposure/Internet-facing", inventory.InternetFacing.String(), "Internet-facing"},
 		{"Exposure/Internal", inventory.Internal.String(), "Internal"},
 		{"Exposure/99", inventory.Exposure(99).String(), "Exposure(99)"},
+		{"SyncOutcome/Succeeded", inventory.SyncSucceeded.String(), "Succeeded"},
+		{"SyncOutcome/Failed", inventory.SyncFailed.String(), "Failed"},
+		{"SyncOutcome/99", inventory.SyncOutcome(99).String(), "SyncOutcome(99)"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
