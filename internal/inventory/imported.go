@@ -3,7 +3,6 @@ package inventory
 import (
 	"fmt"
 	"slices"
-	"strings"
 )
 
 type ImportedAssetParams struct {
@@ -29,7 +28,7 @@ type ImportedAsset struct {
 }
 
 func NewImportedAsset(p ImportedAssetParams) (ImportedAsset, error) {
-	if strings.TrimSpace(p.Name) == "" {
+	if blank(p.Name) {
 		return ImportedAsset{}, ErrEmptyName
 	}
 	if !p.Kind.valid() {
@@ -38,7 +37,7 @@ func NewImportedAsset(p ImportedAssetParams) (ImportedAsset, error) {
 	if p.Hardware != nil && !p.Kind.Physical() {
 		return ImportedAsset{}, fmt.Errorf("%w: %s", ErrHardwareOnVirtual, p.Kind)
 	}
-	if p.Hardware != nil && strings.TrimSpace(p.Hardware.Vendor) == "" && strings.TrimSpace(p.Hardware.Model) == "" {
+	if p.Hardware != nil && blank(p.Hardware.Vendor) && blank(p.Hardware.Model) {
 		return ImportedAsset{}, fmt.Errorf("%w: neither vendor nor model is set", ErrInvalidHardware)
 	}
 	if !p.Criticality.valid() {
@@ -49,10 +48,10 @@ func NewImportedAsset(p ImportedAssetParams) (ImportedAsset, error) {
 		if !c.Role.valid() {
 			return ImportedAsset{}, fmt.Errorf("%w: component %d has role %d", ErrInvalidSoftware, i, int(c.Role))
 		}
-		if strings.TrimSpace(c.Name) == "" {
+		if blank(c.Name) {
 			return ImportedAsset{}, fmt.Errorf("%w: component %d has no name", ErrInvalidSoftware, i)
 		}
-		if c.Product != nil && (strings.TrimSpace(c.Product.Vendor) == "" || strings.TrimSpace(c.Product.Name) == "") {
+		if c.Product != nil && (blank(c.Product.Vendor) || blank(c.Product.Name)) {
 			return ImportedAsset{}, fmt.Errorf("%w: component %d has a product without vendor or name", ErrInvalidSoftware, i)
 		}
 		if c.Role == OperatingSystem {

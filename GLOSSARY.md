@@ -52,6 +52,10 @@ _Avoid_: Unknown software, unmatched
 An Asset that barbattack has stopped monitoring, normally because its CMDB Source reports it as retired or no longer contains it. It is kept for history; being reported as retired is an imported value, not the same as being Inactive.
 _Avoid_: Deleted, obsolete, retired, archived
 
+**Sync**:
+Bringing the Assets of one CMDB Source in line with a complete snapshot of its records: creating, updating, deactivating and reactivating Assets.
+_Avoid_: Import job, refresh, poll, crawl
+
 **Declaration**:
 A value about an Asset set by a barbattack user rather than imported from its CMDB Source. Where both exist, the Declaration wins, and removing it restores the imported value.
 _Avoid_: Override, manual value, custom field

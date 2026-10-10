@@ -259,3 +259,50 @@ func TestAssetReplaceImportedNewOwnerWithoutDeclaration(t *testing.T) {
 		t.Errorf("Owner() = %v, %v; want %v, true", o, ok, second)
 	}
 }
+
+func TestRestoreAsset(t *testing.T) {
+	ref := inventory.SourceReference{Source: "s", RecordID: "1"}
+	imported := mustImported(t, validParams())
+	tests := []struct {
+		name  string
+		ref   inventory.SourceReference
+		state inventory.AssetState
+		want  error
+	}{
+		{"active without declarations", ref, inventory.AssetState{Active: true}, nil},
+		{"inactive with declarations", ref, inventory.AssetState{DeclaredOwner: "o@example.com", DeclaredExposure: inventory.Internal}, nil},
+		{"invalid reference", inventory.SourceReference{Source: "s"}, inventory.AssetState{Active: true}, inventory.ErrInvalidSourceReference},
+		{"out of range exposure", ref, inventory.AssetState{DeclaredExposure: 42}, inventory.ErrInvalidExposure},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a, err := inventory.RestoreAsset(tt.ref, imported, tt.state)
+			if !errors.Is(err, tt.want) {
+				t.Fatalf("err = %v, want %v", err, tt.want)
+			}
+			if err != nil {
+				return
+			}
+			owner, _ := a.DeclaredOwner()
+			got := inventory.AssetState{Active: a.Active(), DeclaredOwner: owner, DeclaredExposure: a.Exposure()}
+			if got != tt.state {
+				t.Errorf("restored state = %+v, want %+v", got, tt.state)
+			}
+		})
+	}
+}
+
+func TestAssetDeclaredOwnerIgnoresImported(t *testing.T) {
+	p := validParams()
+	p.Owner = "imported@example.com"
+	a := newAsset(t, p)
+	if got, ok := a.DeclaredOwner(); ok {
+		t.Fatalf("DeclaredOwner() = %q, want none", got)
+	}
+	if err := a.DeclareOwner("declared@example.com"); err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := a.DeclaredOwner(); !ok || got != "declared@example.com" {
+		t.Errorf("DeclaredOwner() = %q, %v; want declared@example.com, true", got, ok)
+	}
+}

@@ -2,7 +2,6 @@ package inventory
 
 import (
 	"fmt"
-	"strings"
 )
 
 type Asset struct {
@@ -15,16 +14,38 @@ type Asset struct {
 }
 
 func NewAsset(ref SourceReference, imported ImportedAsset) (*Asset, error) {
-	if strings.TrimSpace(string(ref.Source)) == "" {
+	if blank(string(ref.Source)) {
 		return nil, fmt.Errorf("%w: empty source", ErrInvalidSourceReference)
 	}
-	if strings.TrimSpace(ref.RecordID) == "" {
+	if blank(ref.RecordID) {
 		return nil, fmt.Errorf("%w: empty record id", ErrInvalidSourceReference)
 	}
 	if imported.isZero() {
 		return nil, ErrZeroImportedAsset
 	}
 	return &Asset{ref: ref, imported: imported, active: true}, nil
+}
+
+// AssetState is what barbattack itself holds about an Asset, as opposed to
+// its imported values. A blank owner or an Unknown exposure means no Declaration.
+type AssetState struct {
+	Active           bool
+	DeclaredOwner    OwnerEmail
+	DeclaredExposure Exposure
+}
+
+func RestoreAsset(ref SourceReference, imported ImportedAsset, state AssetState) (*Asset, error) {
+	a, err := NewAsset(ref, imported)
+	if err != nil {
+		return nil, err
+	}
+	if !state.DeclaredExposure.valid() {
+		return nil, fmt.Errorf("%w: %d", ErrInvalidExposure, int(state.DeclaredExposure))
+	}
+	a.active = state.Active
+	a.declaredOwner = state.DeclaredOwner
+	a.declaredExposure = state.DeclaredExposure
+	return a, nil
 }
 
 func (a *Asset) Ref() SourceReference { return a.ref }
@@ -36,6 +57,13 @@ func (a *Asset) Owner() (OwnerEmail, bool) {
 		return a.declaredOwner, true
 	}
 	return a.imported.Owner()
+}
+
+func (a *Asset) DeclaredOwner() (OwnerEmail, bool) {
+	if a.declaredOwner.blank() {
+		return "", false
+	}
+	return a.declaredOwner, true
 }
 
 func (a *Asset) Exposure() Exposure { return a.declaredExposure }
