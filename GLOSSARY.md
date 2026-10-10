@@ -49,7 +49,7 @@ A Software Component that has not been matched to a Product, so barbattack canno
 _Avoid_: Unknown software, unmatched
 
 **Inactive Asset**:
-An Asset that its CMDB Source reports as retired or no longer contains. It is kept for history but no longer monitored.
+An Asset that barbattack has stopped monitoring, normally because its CMDB Source reports it as retired or no longer contains it. It is kept for history; being reported as retired is an imported value, not the same as being Inactive.
 _Avoid_: Deleted, obsolete, retired, archived
 
 **Declaration**:
