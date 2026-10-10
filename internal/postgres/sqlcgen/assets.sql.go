@@ -48,19 +48,17 @@ func (q *Queries) DeleteSoftwareComponents(ctx context.Context, arg DeleteSoftwa
 }
 
 type InsertAssetsParams struct {
-	CmdbSourceID       uuid.UUID
-	RecordID           string
-	Name               string
-	Description        string
-	KindID             int16
-	HardwareVendor     *string
-	HardwareModel      *string
-	CriticalityID      *int16
-	ImportedOwnerID    *int64
-	Retired            bool
-	DeclaredOwnerID    *int64
-	DeclaredExposureID *int16
-	InactiveSince      *time.Time
+	CmdbSourceID    uuid.UUID
+	RecordID        string
+	Name            string
+	Description     string
+	KindID          int16
+	HardwareVendor  *string
+	HardwareModel   *string
+	CriticalityID   *int16
+	ImportedOwnerID *int64
+	Retired         bool
+	InactiveSince   *time.Time
 }
 
 type InsertSoftwareComponentsParams struct {

@@ -82,11 +82,7 @@ func Reconcile(source CMDBSourceID, existing []*Asset, s Snapshot) (Reconciliati
 			r.changes = append(r.changes, c)
 			continue
 		}
-		c, err := update(a, rec.Imported)
-		if err != nil {
-			return Reconciliation{}, err
-		}
-		if c.ImportedChanged || c.ActiveChanged {
+		if c := update(a, rec.Imported); c.ImportedChanged || c.ActiveChanged {
 			r.changes = append(r.changes, c)
 		}
 	}
@@ -159,12 +155,12 @@ func create(source CMDBSourceID, rec Record) (Change, error) {
 
 // update keeps an Asset present in the Snapshot Active exactly when its
 // record is not reported as retired.
-func update(a *Asset, imported ImportedAsset) (Change, error) {
+func update(a *Asset, imported ImportedAsset) Change {
 	c := Change{Asset: a}
 	if !a.Imported().equal(imported) {
-		if err := a.ReplaceImported(imported); err != nil {
-			return Change{}, fmt.Errorf("record %q: %w", a.Ref().RecordID, err)
-		}
+		// ReplaceImported only rejects a zero ImportedAsset, which
+		// validateSnapshot has already ruled out.
+		_ = a.ReplaceImported(imported)
 		c.ImportedChanged = true
 	}
 	switch active := !imported.Retired(); {
@@ -175,5 +171,5 @@ func update(a *Asset, imported ImportedAsset) (Change, error) {
 		a.MarkInactive()
 		c.ActiveChanged = true
 	}
-	return c, nil
+	return c
 }

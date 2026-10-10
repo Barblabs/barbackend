@@ -39,8 +39,6 @@ func (r iteratorForInsertAssets) Values() ([]interface{}, error) {
 		r.rows[0].CriticalityID,
 		r.rows[0].ImportedOwnerID,
 		r.rows[0].Retired,
-		r.rows[0].DeclaredOwnerID,
-		r.rows[0].DeclaredExposureID,
 		r.rows[0].InactiveSince,
 	}, nil
 }
@@ -49,8 +47,9 @@ func (r iteratorForInsertAssets) Err() error {
 	return nil
 }
 
+// Created Assets have no Declarations, so those columns stay NULL.
 func (q *Queries) InsertAssets(ctx context.Context, arg []InsertAssetsParams) (int64, error) {
-	return q.db.CopyFrom(ctx, []string{"assets"}, []string{"cmdb_source_id", "record_id", "name", "description", "kind_id", "hardware_vendor", "hardware_model", "criticality_id", "imported_owner_id", "retired", "declared_owner_id", "declared_exposure_id", "inactive_since"}, &iteratorForInsertAssets{rows: arg})
+	return q.db.CopyFrom(ctx, []string{"assets"}, []string{"cmdb_source_id", "record_id", "name", "description", "kind_id", "hardware_vendor", "hardware_model", "criticality_id", "imported_owner_id", "retired", "inactive_since"}, &iteratorForInsertAssets{rows: arg})
 }
 
 // iteratorForInsertSoftwareComponents implements pgx.CopyFromSource.

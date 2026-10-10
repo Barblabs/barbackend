@@ -41,35 +41,41 @@ func (t *SourceTx) Assets(ctx context.Context) ([]*inventory.Asset, error) {
 	return assets, nil
 }
 
-// Save writes the changes of a Reconciliation and the successful Sync Run
-// that produced it. Updates write only imported values and the Active state,
-// so Declarations stay as stored. Each kind of write is one statement for all
-// Assets, so a Sync takes the same number of round trips at any size.
-func (t *SourceTx) Save(ctx context.Context, r inventory.Reconciliation, run inventory.SyncRun) error {
-	switch {
-	case r.Source() != t.source || run.Source() != t.source:
-		return fmt.Errorf("save to %s: reconciliation of %s, run of %s", t.source, r.Source(), run.Source())
-	case run.Outcome() != inventory.SyncSucceeded:
-		return fmt.Errorf("save to %s: run outcome is %s", t.source, run.Outcome())
+// Save writes the changes of a Reconciliation and records the successful
+// Sync Run that produced it. Updates write only imported values and the
+// Active state, so Declarations stay as stored. Each kind of write is one
+// statement for all Assets, so a Sync takes the same number of round trips at
+// any size.
+func (t *SourceTx) Save(ctx context.Context, r inventory.Reconciliation, started, finished time.Time) (inventory.SyncRun, error) {
+	// Only this transaction's CMDB Source is locked.
+	if r.Source() != t.source {
+		return inventory.SyncRun{}, fmt.Errorf("save to %s: reconciliation of %s", t.source, r.Source())
+	}
+	run, err := inventory.SucceededRun(r, started, finished)
+	if err != nil {
+		return inventory.SyncRun{}, err
 	}
 	changes := r.Changes()
 	owners, err := t.upsertOwners(ctx, changes)
 	if err != nil {
-		return err
+		return inventory.SyncRun{}, err
 	}
 	if err := t.insertCreated(ctx, changes, owners); err != nil {
-		return err
+		return inventory.SyncRun{}, err
 	}
 	if err := t.updateImported(ctx, changes, owners); err != nil {
-		return err
+		return inventory.SyncRun{}, err
 	}
 	if err := t.replaceSoftware(ctx, changes); err != nil {
-		return err
+		return inventory.SyncRun{}, err
 	}
 	if err := t.updateActive(ctx, changes); err != nil {
-		return err
+		return inventory.SyncRun{}, err
 	}
-	return recordSyncRun(ctx, t.q, run)
+	if err := recordSyncRun(ctx, t.q, run); err != nil {
+		return inventory.SyncRun{}, err
+	}
+	return run, nil
 }
 
 // ownerIDs maps an Asset Owner's email to its row id.
@@ -83,8 +89,8 @@ func (ids ownerIDs) ref(owner inventory.OwnerEmail, ok bool) *int64 {
 	return &id
 }
 
-// upsertOwners stores every Asset Owner the changes write. Only created Assets
-// write a declared owner: updates keep the stored Declarations.
+// upsertOwners stores every imported Asset Owner the changes write. A created
+// Asset has no Declarations yet, and updates keep the stored ones.
 func (t *SourceTx) upsertOwners(ctx context.Context, changes []inventory.Change) (ownerIDs, error) {
 	seen := map[string]bool{}
 	var emails []string
@@ -97,9 +103,6 @@ func (t *SourceTx) upsertOwners(ctx context.Context, changes []inventory.Change)
 	for _, c := range changes {
 		if c.Created || c.ImportedChanged {
 			add(c.Asset.Imported().Owner())
-		}
-		if c.Created {
-			add(c.Asset.DeclaredOwner())
 		}
 	}
 	if len(emails) == 0 {
@@ -141,18 +144,16 @@ func (t *SourceTx) insertCreated(ctx context.Context, changes []inventory.Change
 	for i, a := range created {
 		imported := importedColumns(t.source, a, owners)
 		rows[i] = sqlcgen.InsertAssetsParams{
-			CmdbSourceID:       imported.CmdbSourceID,
-			RecordID:           imported.RecordID,
-			Name:               imported.Name,
-			Description:        imported.Description,
-			KindID:             imported.KindID,
-			HardwareVendor:     imported.HardwareVendor,
-			HardwareModel:      imported.HardwareModel,
-			CriticalityID:      imported.CriticalityID,
-			ImportedOwnerID:    imported.ImportedOwnerID,
-			Retired:            imported.Retired,
-			DeclaredOwnerID:    owners.ref(a.DeclaredOwner()),
-			DeclaredExposureID: nullableID(a.Exposure(), inventory.ExposureUnknown),
+			CmdbSourceID:    imported.CmdbSourceID,
+			RecordID:        imported.RecordID,
+			Name:            imported.Name,
+			Description:     imported.Description,
+			KindID:          imported.KindID,
+			HardwareVendor:  imported.HardwareVendor,
+			HardwareModel:   imported.HardwareModel,
+			CriticalityID:   imported.CriticalityID,
+			ImportedOwnerID: imported.ImportedOwnerID,
+			Retired:         imported.Retired,
 		}
 		if !a.Active() {
 			rows[i].InactiveSince = inactiveSince

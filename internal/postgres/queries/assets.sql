@@ -13,11 +13,12 @@ RETURNING id, email;
 -- name: TransactionTime :one
 SELECT now()::timestamptz;
 
+-- Created Assets have no Declarations, so those columns stay NULL.
 -- name: InsertAssets :copyfrom
 INSERT INTO assets (
     cmdb_source_id, record_id, name, description, kind_id, hardware_vendor, hardware_model,
-    criticality_id, imported_owner_id, retired, declared_owner_id, declared_exposure_id, inactive_since
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13);
+    criticality_id, imported_owner_id, retired, inactive_since
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11);
 
 -- name: UpdateAssetImported :batchone
 UPDATE assets
