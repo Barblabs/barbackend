@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"os"
 	"strings"
+
+	"barbackend/internal/cmdb/itop/rest"
 )
 
 var (
@@ -106,22 +108,15 @@ func (a authDocument) validate() error {
 	return nil
 }
 
-type credentials struct {
-	mode     authMode
-	user     string
-	password string
-	token    string
-}
-
-// credentials reads the secrets at Sync time rather than in ValidateSettings,
+// auth reads the secrets at Sync time rather than in ValidateSettings,
 // because the process adding a source is not the one that syncs it.
-func (a authDocument) credentials() (credentials, error) {
+func (a authDocument) auth() (rest.Auth, error) {
 	if a.Mode == basicAuth {
 		password, err := secret(a.PasswordEnv)
-		return credentials{mode: basicAuth, user: a.User, password: password}, err
+		return rest.BasicAuth(a.User, password), err
 	}
 	token, err := secret(a.TokenEnv)
-	return credentials{mode: tokenAuth, token: token}, err
+	return rest.TokenAuth(token), err
 }
 
 func secret(env string) (string, error) {

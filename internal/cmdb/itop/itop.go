@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"barbackend/internal/cmdb/itop/rest"
 	"barbackend/internal/inventory"
 )
 
@@ -21,11 +22,11 @@ func (Provider) Snapshot(ctx context.Context, raw json.RawMessage) (inventory.Sn
 	if err != nil {
 		return inventory.Snapshot{}, err
 	}
-	creds, err := s.auth.credentials()
+	auth, err := s.auth.auth()
 	if err != nil {
 		return inventory.Snapshot{}, err
 	}
-	cis, lk, err := fetch(ctx, newClient(s.baseURL, creds))
+	cis, lk, err := fetch(ctx, rest.New(s.baseURL, auth, rest.Options{}))
 	if err != nil {
 		return inventory.Snapshot{}, err
 	}

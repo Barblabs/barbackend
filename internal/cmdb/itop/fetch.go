@@ -1,7 +1,15 @@
 package itop
 
-import "context"
+import (
+	"context"
+	"errors"
 
-func fetch(ctx context.Context, c *client) ([]ci, lookups, error) {
+	"barbackend/internal/cmdb/itop/rest"
+)
+
+// errNotImplemented is scaffold, removed once fetch lands.
+var errNotImplemented = errors.New("itop: not implemented")
+
+func fetch(ctx context.Context, c *rest.Client) ([]ci, lookups, error) {
 	return nil, lookups{}, errNotImplemented
 }
