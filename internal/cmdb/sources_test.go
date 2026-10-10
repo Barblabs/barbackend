@@ -156,3 +156,25 @@ func TestSyncOfMissingSource(t *testing.T) {
 		t.Errorf("err = %v, want ErrNotFound", err)
 	}
 }
+
+func TestSyncOfUnregisteredProviderFails(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	src, err := inventory.NewCMDBSource(inventory.CMDBSourceID(uuid.New()), newCustomer(), "removed")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = e.db.InTx(context.Background(), func(tx *postgres.Tx) error {
+		return tx.CreateCMDBSource(context.Background(), src, json.RawMessage(`{}`))
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := e.sources.Sync(context.Background(), src.ID()); !errors.Is(err, cmdb.ErrUnknownProvider) {
+		t.Errorf("err = %v, want ErrUnknownProvider", err)
+	}
+	if n := e.queryInt(t, "SELECT count(*) FROM sync_runs WHERE outcome_id = $1", int16(inventory.SyncFailed)); n != 1 {
+		t.Errorf("failed runs = %d, want 1", n)
+	}
+}

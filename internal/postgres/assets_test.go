@@ -274,3 +274,26 @@ func TestInLockedSourceFailsWhileLocked(t *testing.T) {
 		t.Errorf("after release: err = %v, want nil", err)
 	}
 }
+
+func TestSaveOfAnotherSourceFails(t *testing.T) {
+	t.Parallel()
+	db, conn := newDBWithConn(t)
+	customer := newCustomer()
+	locked := newSource(t, db, customer)
+	other := newSource(t, db, customer)
+
+	err := db.InLockedSource(context.Background(), locked.ID(), time.Now(), func(tx *postgres.SourceTx) error {
+		r, err := inventory.Reconcile(other.ID(), nil, inventory.Snapshot{Records: []inventory.Record{record(t, "1", fullParams(t))}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return save(tx, r)
+	})
+
+	if err == nil {
+		t.Error("err = nil, want an error for a reconciliation of another source")
+	}
+	if n := queryInt(t, conn, "SELECT count(*) FROM assets") + queryInt(t, conn, "SELECT count(*) FROM sync_runs"); n != 0 {
+		t.Errorf("rows written = %d, want 0", n)
+	}
+}
