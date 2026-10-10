@@ -4,6 +4,6 @@ Keep entries concise and useful across future sessions. Point to authoritative f
 
 ## Domain
 
-- `GLOSSARY.md` is the canonical domain language (Asset, Software Component, Declaration, ...). Read it before naming types, fields or packages, and use its terms instead of CMDB-specific ones (CI, finalclass, sys_id).
-- `docs/adr/` records why the model is shaped the way it is. Check it before changing how Assets are imported, owned or identified.
+- `GLOSSARY.md` contains the domain language for the project. Use the terms as defined in the file, don't drift to synonyms.
+- `docs/adr/` Read adrs that touch the area you are working in. If your output contradicts an existing ADR, surface it rather than overriding.
 - When a domain term or decision changes, use the `domain-modeling` skill to update both.
