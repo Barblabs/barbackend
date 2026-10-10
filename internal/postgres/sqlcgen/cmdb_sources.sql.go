@@ -62,9 +62,10 @@ const lockCMDBSource = `-- name: LockCMDBSource :one
 SELECT id
 FROM cmdb_sources
 WHERE id = $1
-FOR UPDATE
+FOR UPDATE NOWAIT
 `
 
+// NOWAIT fails at once instead of queueing behind a Sync that may never end.
 func (q *Queries) LockCMDBSource(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, lockCMDBSource, id)
 	var id_2 uuid.UUID

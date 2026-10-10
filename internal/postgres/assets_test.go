@@ -11,7 +11,6 @@ import (
 	"barbackend/internal/postgres"
 	"barbackend/internal/postgres/pgtest"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgconn"
 )
 
 func fullParams(t *testing.T) inventory.ImportedAssetParams {
@@ -244,20 +243,13 @@ func TestInLockedSourceRejectsSupersededSync(t *testing.T) {
 	}
 }
 
-func TestInLockedSourceBlocksASecondTransaction(t *testing.T) {
+func TestInLockedSourceFailsWhileLocked(t *testing.T) {
 	t.Parallel()
-	url := pgtest.URL(t)
-	open := func(url string) *postgres.DB {
-		db, err := postgres.Open(context.Background(), url)
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Cleanup(db.Close)
-		return db
-	}
-	db := open(url)
-	impatient := open(url + "&lock_timeout=100ms")
+	db := pgtest.NewDB(t)
 	src := newSource(t, db, newCustomer())
+	lock := func() error {
+		return db.InLockedSource(context.Background(), src.ID(), time.Now(), func(*postgres.SourceTx) error { return nil })
+	}
 
 	locked, release := make(chan struct{}), make(chan struct{})
 	done := make(chan error)
@@ -270,17 +262,15 @@ func TestInLockedSourceBlocksASecondTransaction(t *testing.T) {
 	}()
 	<-locked
 
-	err := impatient.InLockedSource(context.Background(), src.ID(), time.Now(), func(*postgres.SourceTx) error { return nil })
-	var pgErr *pgconn.PgError
-	if !errors.As(err, &pgErr) || pgErr.Code != "55P03" {
-		t.Errorf("err = %v, want lock_not_available (55P03)", err)
+	if err := lock(); !errors.Is(err, postgres.ErrSyncInProgress) {
+		t.Errorf("err = %v, want ErrSyncInProgress", err)
 	}
 
 	close(release)
 	if err := <-done; err != nil {
 		t.Fatal(err)
 	}
-	if err := impatient.InLockedSource(context.Background(), src.ID(), time.Now(), func(*postgres.SourceTx) error { return nil }); err != nil {
+	if err := lock(); err != nil {
 		t.Errorf("after release: err = %v, want nil", err)
 	}
 }

@@ -12,6 +12,7 @@ import (
 	"barbackend/internal/postgres/sqlcgen"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
@@ -19,9 +20,13 @@ import (
 )
 
 var (
-	ErrNotFound   = errors.New("not found")
-	ErrSuperseded = errors.New("superseded by a later successful sync")
+	ErrNotFound       = errors.New("not found")
+	ErrSuperseded     = errors.New("superseded by a later successful sync")
+	ErrSyncInProgress = errors.New("another sync of the cmdb source is running")
 )
+
+// lockNotAvailable is the SQLSTATE of a NOWAIT lock that is already held.
+const lockNotAvailable = "55P03"
 
 //go:embed migrations/*.sql
 var migrations embed.FS
@@ -74,7 +79,8 @@ func (db *DB) InTx(ctx context.Context, fn func(*Tx) error) error {
 }
 
 // InLockedSource runs fn in one transaction holding a row lock on the CMDB
-// Source, so two Syncs of one source never write at the same time. A Sync
+// Source, so two Syncs of one source never write at the same time: while the
+// lock is held, it fails at once with ErrSyncInProgress. A Sync
 // started before the source's latest successful one holds an older snapshot,
 // so it fails with ErrSuperseded instead of overwriting newer imported values.
 func (db *DB) InLockedSource(ctx context.Context, id inventory.CMDBSourceID, startedAt time.Time, fn func(*SourceTx) error) error {
@@ -83,6 +89,10 @@ func (db *DB) InLockedSource(ctx context.Context, id inventory.CMDBSourceID, sta
 		_, err := q.LockCMDBSource(ctx, uuid.UUID(id))
 		if errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf("cmdb source %s: %w", id, ErrNotFound)
+		}
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == lockNotAvailable {
+			return fmt.Errorf("cmdb source %s: %w", id, ErrSyncInProgress)
 		}
 		if err != nil {
 			return fmt.Errorf("lock cmdb source %s: %w", id, err)

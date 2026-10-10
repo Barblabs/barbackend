@@ -7,8 +7,9 @@ SELECT id, customer_id, provider, settings
 FROM cmdb_sources
 WHERE id = $1;
 
+-- NOWAIT fails at once instead of queueing behind a Sync that may never end.
 -- name: LockCMDBSource :one
 SELECT id
 FROM cmdb_sources
 WHERE id = $1
-FOR UPDATE;
+FOR UPDATE NOWAIT;
