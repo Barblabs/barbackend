@@ -19,7 +19,7 @@ func TestSyncRunRoundTrip(t *testing.T) {
 		Started, Finished time.Time
 		Outcome           int16
 		Counts            [5]int
-		Skipped           []inventory.Rejection
+		Skipped           []inventory.SkippedRecord
 		Error             *string
 	}
 	failure := "cmdb unreachable"
@@ -32,8 +32,8 @@ func TestSyncRunRoundTrip(t *testing.T) {
 			name: "succeeded",
 			run: func(t *testing.T, src inventory.CMDBSourceID) inventory.SyncRun {
 				r, err := inventory.Reconcile(src, nil, inventory.Snapshot{
-					Records:    []inventory.Record{{RecordID: "1", Imported: mustImported(t, fullParams(t))}},
-					Rejections: []inventory.Rejection{{RecordID: "2", Reason: "no name"}},
+					Records: []inventory.Record{{RecordID: "1", Imported: mustImported(t, fullParams(t))}},
+					Skipped: []inventory.SkippedRecord{{RecordID: "2", Reason: "no name"}},
 				})
 				if err != nil {
 					t.Fatal(err)
@@ -47,7 +47,7 @@ func TestSyncRunRoundTrip(t *testing.T) {
 			want: row{
 				Started: started, Finished: finished, Outcome: int16(inventory.SyncSucceeded),
 				Counts:  [5]int{1, 0, 0, 0, 1},
-				Skipped: []inventory.Rejection{{RecordID: "2", Reason: "no name"}},
+				Skipped: []inventory.SkippedRecord{{RecordID: "2", Reason: "no name"}},
 			},
 		},
 		{
@@ -61,7 +61,7 @@ func TestSyncRunRoundTrip(t *testing.T) {
 			},
 			want: row{
 				Started: started, Finished: finished, Outcome: int16(inventory.SyncFailed),
-				Skipped: []inventory.Rejection{}, Error: &failure,
+				Skipped: []inventory.SkippedRecord{}, Error: &failure,
 			},
 		},
 	}
@@ -93,10 +93,10 @@ func TestSyncRunRoundTrip(t *testing.T) {
 			}
 			// A JSON null instead of [] leaves records nil, so got.Skipped stays nil.
 			if records != nil {
-				got.Skipped = []inventory.Rejection{}
+				got.Skipped = []inventory.SkippedRecord{}
 			}
 			for _, r := range records {
-				got.Skipped = append(got.Skipped, inventory.Rejection{RecordID: r.RecordID, Reason: r.Reason})
+				got.Skipped = append(got.Skipped, inventory.SkippedRecord{RecordID: r.RecordID, Reason: r.Reason})
 			}
 			got.Started, got.Finished = got.Started.UTC(), got.Finished.UTC()
 			if !reflect.DeepEqual(got, tt.want) {

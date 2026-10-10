@@ -36,7 +36,7 @@ type SyncRun struct {
 	finished time.Time
 	outcome  SyncOutcome
 	counts   SyncCounts
-	skipped  []Rejection
+	skipped  []SkippedRecord
 	failure  string
 }
 
@@ -50,7 +50,7 @@ func SucceededRun(r Reconciliation, started, finished time.Time) (SyncRun, error
 		finished: finished,
 		outcome:  SyncSucceeded,
 		counts:   r.Counts(),
-		skipped:  r.Rejections(),
+		skipped:  r.Skipped(),
 	}, nil
 }
 
@@ -86,7 +86,7 @@ func (r SyncRun) Outcome() SyncOutcome { return r.outcome }
 
 func (r SyncRun) Counts() SyncCounts { return r.counts }
 
-func (r SyncRun) Skipped() []Rejection { return slices.Clone(r.skipped) }
+func (r SyncRun) Skipped() []SkippedRecord { return slices.Clone(r.skipped) }
 
 // Failure is the error a failed run stopped on, empty for a successful run.
 func (r SyncRun) Failure() string { return r.failure }

@@ -27,19 +27,19 @@ type SyncCounts struct {
 // Reconciliation is built only by Reconcile, so whoever stores it can rely on
 // its Changes being consistent with one Snapshot of one CMDB Source.
 type Reconciliation struct {
-	source     CMDBSourceID
-	changes    []Change
-	rejections []Rejection
+	source  CMDBSourceID
+	changes []Change
+	skipped []SkippedRecord
 }
 
 func (r Reconciliation) Source() CMDBSourceID { return r.source }
 
 func (r Reconciliation) Changes() []Change { return slices.Clone(r.changes) }
 
-func (r Reconciliation) Rejections() []Rejection { return slices.Clone(r.rejections) }
+func (r Reconciliation) Skipped() []SkippedRecord { return slices.Clone(r.skipped) }
 
 func (r Reconciliation) Counts() SyncCounts {
-	counts := SyncCounts{Skipped: len(r.rejections)}
+	counts := SyncCounts{Skipped: len(r.skipped)}
 	for _, c := range r.changes {
 		switch {
 		case c.Created:
@@ -64,12 +64,12 @@ func Reconcile(source CMDBSourceID, existing []*Asset, s Snapshot) (Reconciliati
 	if err != nil {
 		return Reconciliation{}, err
 	}
-	rejected, err := validateSnapshot(s)
+	skipped, err := validateSnapshot(s)
 	if err != nil {
 		return Reconciliation{}, err
 	}
 
-	r := Reconciliation{source: source, rejections: slices.Clone(s.Rejections)}
+	r := Reconciliation{source: source, skipped: slices.Clone(s.Skipped)}
 	present := make(map[string]bool, len(s.Records))
 	for _, rec := range s.Records {
 		present[rec.RecordID] = true
@@ -86,10 +86,10 @@ func Reconcile(source CMDBSourceID, existing []*Asset, s Snapshot) (Reconciliati
 			r.changes = append(r.changes, c)
 		}
 	}
-	// A rejected record is still in the CMDB Source, so its Asset is not missing.
+	// A Skipped Record is still in the CMDB Source, so its Asset is not missing.
 	for _, a := range existing {
 		id := a.Ref().RecordID
-		if !present[id] && !rejected[id] && a.Active() {
+		if !present[id] && !skipped[id] && a.Active() {
 			a.MarkInactive()
 			r.changes = append(r.changes, Change{Asset: a, ActiveChanged: true})
 		}
@@ -113,17 +113,17 @@ func indexExisting(source CMDBSourceID, existing []*Asset) (map[string]*Asset, e
 }
 
 // validateSnapshot checks everything that could make Reconcile fail before
-// any Asset is changed, and returns the rejected record ids.
+// any Asset is changed, and returns the ids of the Skipped Records.
 func validateSnapshot(s Snapshot) (map[string]bool, error) {
-	rejected := make(map[string]bool, len(s.Rejections))
-	for _, rej := range s.Rejections {
-		if blank(rej.RecordID) {
-			return nil, fmt.Errorf("%w: rejection with empty record id", ErrInvalidSnapshot)
+	skipped := make(map[string]bool, len(s.Skipped))
+	for _, sr := range s.Skipped {
+		if blank(sr.RecordID) {
+			return nil, fmt.Errorf("%w: skipped record with empty record id", ErrInvalidSnapshot)
 		}
-		if rejected[rej.RecordID] {
-			return nil, fmt.Errorf("%w: record %q rejected twice", ErrInvalidSnapshot, rej.RecordID)
+		if skipped[sr.RecordID] {
+			return nil, fmt.Errorf("%w: record %q skipped twice", ErrInvalidSnapshot, sr.RecordID)
 		}
-		rejected[rej.RecordID] = true
+		skipped[sr.RecordID] = true
 	}
 	seen := make(map[string]bool, len(s.Records))
 	for _, rec := range s.Records {
@@ -132,14 +132,14 @@ func validateSnapshot(s Snapshot) (map[string]bool, error) {
 			return nil, fmt.Errorf("%w: record with empty record id", ErrInvalidSnapshot)
 		case seen[rec.RecordID]:
 			return nil, fmt.Errorf("%w: duplicate record %q", ErrInvalidSnapshot, rec.RecordID)
-		case rejected[rec.RecordID]:
-			return nil, fmt.Errorf("%w: record %q is both imported and rejected", ErrInvalidSnapshot, rec.RecordID)
+		case skipped[rec.RecordID]:
+			return nil, fmt.Errorf("%w: record %q is both imported and skipped", ErrInvalidSnapshot, rec.RecordID)
 		case rec.Imported.isZero():
 			return nil, fmt.Errorf("record %q: %w", rec.RecordID, ErrZeroImportedAsset)
 		}
 		seen[rec.RecordID] = true
 	}
-	return rejected, nil
+	return skipped, nil
 }
 
 func create(source CMDBSourceID, rec Record) (Change, error) {

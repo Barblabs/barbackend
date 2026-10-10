@@ -65,10 +65,10 @@ func TestSync(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
 	src := e.addSource(t)
-	rejection := inventory.Rejection{RecordID: "c", Reason: "no name"}
+	skipped := inventory.SkippedRecord{RecordID: "c", Reason: "no name"}
 	e.provider.snapshot = inventory.Snapshot{
-		Records:    []inventory.Record{record(t, "a", "vm-a"), record(t, "b", "vm-b")},
-		Rejections: []inventory.Rejection{rejection},
+		Records: []inventory.Record{record(t, "a", "vm-a"), record(t, "b", "vm-b")},
+		Skipped: []inventory.SkippedRecord{skipped},
 	}
 
 	first, err := e.sources.Sync(context.Background(), src.ID())
@@ -78,15 +78,15 @@ func TestSync(t *testing.T) {
 	if want := (inventory.SyncCounts{Created: 2, Skipped: 1}); first.Outcome() != inventory.SyncSucceeded || first.Counts() != want {
 		t.Errorf("first run = %v %+v, want Succeeded %+v", first.Outcome(), first.Counts(), want)
 	}
-	if !reflect.DeepEqual(first.Skipped(), []inventory.Rejection{rejection}) {
-		t.Errorf("first run skipped = %+v, want [%+v]", first.Skipped(), rejection)
+	if !reflect.DeepEqual(first.Skipped(), []inventory.SkippedRecord{skipped}) {
+		t.Errorf("first run skipped = %+v, want [%+v]", first.Skipped(), skipped)
 	}
 	var reason string
 	if err := e.conn.QueryRow(context.Background(), "SELECT skipped_records -> 0 ->> 'reason' FROM sync_runs").Scan(&reason); err != nil {
 		t.Fatal(err)
 	}
-	if reason != rejection.Reason {
-		t.Errorf("recorded skip reason = %q, want %q", reason, rejection.Reason)
+	if reason != skipped.Reason {
+		t.Errorf("recorded skip reason = %q, want %q", reason, skipped.Reason)
 	}
 
 	e.provider.snapshot = inventory.Snapshot{Records: []inventory.Record{record(t, "a", "vm-a-renamed")}}

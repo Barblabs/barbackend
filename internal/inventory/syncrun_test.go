@@ -31,8 +31,8 @@ func TestSucceededRun(t *testing.T) {
 	if want := (inventory.SyncCounts{Created: 1, Skipped: 1}); run.Counts() != want {
 		t.Errorf("Counts() = %+v, want %+v", run.Counts(), want)
 	}
-	if !reflect.DeepEqual(run.Skipped(), s.Rejections) {
-		t.Errorf("Skipped() = %+v, want %+v", run.Skipped(), s.Rejections)
+	if !reflect.DeepEqual(run.Skipped(), s.Skipped) {
+		t.Errorf("Skipped() = %+v, want %+v", run.Skipped(), s.Skipped)
 	}
 
 	if _, err := inventory.SucceededRun(inventory.Reconciliation{}, started, finished); !errors.Is(err, inventory.ErrInvalidSyncRun) {

@@ -42,11 +42,11 @@ func TestReconcile(t *testing.T) {
 	otherHardware := with(base, func(p *inventory.ImportedAssetParams) { p.Hardware = &inventory.Hardware{Vendor: "HP", Model: "R740"} })
 
 	tests := []struct {
-		name       string
-		existing   []stored
-		records    map[string]inventory.ImportedAssetParams
-		rejections []string
-		want       []change
+		name     string
+		existing []stored
+		records  map[string]inventory.ImportedAssetParams
+		skipped  []string
+		want     []change
 	}{
 		{"new", nil, recs("1", base), nil,
 			[]change{{id: "1", created: true, activeAfter: true, nameAfter: "srv-01"}}},
@@ -72,12 +72,12 @@ func TestReconcile(t *testing.T) {
 		{"un-retired", []stored{{"1", retired, false}}, recs("1", base), nil,
 			[]change{{id: "1", importedChanged: true, activeChanged: true, activeAfter: true, nameAfter: "srv-01"}}},
 		{"retired and already inactive", []stored{{"1", retired, false}}, recs("1", retired), nil, nil},
-		{"rejected but existing", []stored{{"1", base, true}}, nil, []string{"1"}, nil},
-		{"rejected and new", nil, nil, []string{"1"}, nil},
+		{"skipped but existing", []stored{{"1", base, true}}, nil, []string{"1"}, nil},
+		{"skipped and new", nil, nil, []string{"1"}, nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r, err := inventory.Reconcile(sourceID, storedAssets(t, tt.existing), snapshot(t, tt.records, tt.rejections...))
+			r, err := inventory.Reconcile(sourceID, storedAssets(t, tt.existing), snapshot(t, tt.records, tt.skipped...))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -95,7 +95,7 @@ func TestReconcile(t *testing.T) {
 	}
 }
 
-func TestReconciliationCountsAndRejections(t *testing.T) {
+func TestReconciliationCountsAndSkippedRecords(t *testing.T) {
 	base := validParams()
 	retired := with(base, func(p *inventory.ImportedAssetParams) { p.Retired = true })
 	renamed := with(base, func(p *inventory.ImportedAssetParams) { p.Name = "renamed" })
@@ -104,11 +104,11 @@ func TestReconciliationCountsAndRejections(t *testing.T) {
 		{"retired", base, true},
 		{"missing", base, true},
 		{"reappearing", base, false},
-		{"rejected", base, true},
+		{"skipped", base, true},
 	})
 	s := snapshot(t, map[string]inventory.ImportedAssetParams{
 		"new": base, "changed": renamed, "retired": retired, "reappearing": base,
-	}, "rejected", "rejected-new")
+	}, "skipped", "skipped-new")
 
 	r, err := inventory.Reconcile(sourceID, existing, s)
 	if err != nil {
@@ -118,8 +118,8 @@ func TestReconciliationCountsAndRejections(t *testing.T) {
 	if got := r.Counts(); got != want {
 		t.Errorf("Counts() = %+v, want %+v", got, want)
 	}
-	if got := r.Rejections(); !reflect.DeepEqual(got, s.Rejections) {
-		t.Errorf("Rejections() = %+v, want %+v", got, s.Rejections)
+	if got := r.Skipped(); !reflect.DeepEqual(got, s.Skipped) {
+		t.Errorf("Skipped() = %+v, want %+v", got, s.Skipped)
 	}
 	if r.Source() != sourceID {
 		t.Errorf("Source() = %v, want %v", r.Source(), sourceID)
@@ -131,7 +131,9 @@ func TestReconcileErrorsChangeNoAsset(t *testing.T) {
 	record := func(id string) inventory.Record {
 		return inventory.Record{RecordID: id, Imported: mustImported(t, base)}
 	}
-	rejection := func(id string) inventory.Rejection { return inventory.Rejection{RecordID: id, Reason: "invalid"} }
+	skippedRecord := func(id string) inventory.SkippedRecord {
+		return inventory.SkippedRecord{RecordID: id, Reason: "invalid"}
+	}
 	otherSource := inventory.CMDBSourceID(uuid.New())
 
 	tests := []struct {
@@ -142,9 +144,9 @@ func TestReconcileErrorsChangeNoAsset(t *testing.T) {
 	}{
 		{"blank record id", nil, inventory.Snapshot{Records: []inventory.Record{record(" ")}}, inventory.ErrInvalidSnapshot},
 		{"duplicate record", nil, inventory.Snapshot{Records: []inventory.Record{record("1"), record("1")}}, inventory.ErrInvalidSnapshot},
-		{"imported and rejected", nil, inventory.Snapshot{Records: []inventory.Record{record("1")}, Rejections: []inventory.Rejection{rejection("1")}}, inventory.ErrInvalidSnapshot},
-		{"blank rejection id", nil, inventory.Snapshot{Rejections: []inventory.Rejection{rejection("")}}, inventory.ErrInvalidSnapshot},
-		{"duplicate rejection", nil, inventory.Snapshot{Rejections: []inventory.Rejection{rejection("1"), rejection("1")}}, inventory.ErrInvalidSnapshot},
+		{"imported and skipped", nil, inventory.Snapshot{Records: []inventory.Record{record("1")}, Skipped: []inventory.SkippedRecord{skippedRecord("1")}}, inventory.ErrInvalidSnapshot},
+		{"blank skipped record id", nil, inventory.Snapshot{Skipped: []inventory.SkippedRecord{skippedRecord("")}}, inventory.ErrInvalidSnapshot},
+		{"duplicate skipped record", nil, inventory.Snapshot{Skipped: []inventory.SkippedRecord{skippedRecord("1"), skippedRecord("1")}}, inventory.ErrInvalidSnapshot},
 		{"zero imported asset", nil, inventory.Snapshot{Records: []inventory.Record{{RecordID: "1"}}}, inventory.ErrZeroImportedAsset},
 		{"existing asset of another source", []*inventory.Asset{assetOf(t, otherSource, "1")}, inventory.Snapshot{}, inventory.ErrInvalidExistingAssets},
 		{"duplicate existing asset", []*inventory.Asset{assetOf(t, sourceID, "1"), assetOf(t, sourceID, "1")}, inventory.Snapshot{}, inventory.ErrInvalidExistingAssets},
@@ -173,14 +175,14 @@ func recs(id string, p inventory.ImportedAssetParams) map[string]inventory.Impor
 	return map[string]inventory.ImportedAssetParams{id: p}
 }
 
-func snapshot(t *testing.T, records map[string]inventory.ImportedAssetParams, rejected ...string) inventory.Snapshot {
+func snapshot(t *testing.T, records map[string]inventory.ImportedAssetParams, skipped ...string) inventory.Snapshot {
 	t.Helper()
 	var s inventory.Snapshot
 	for id, p := range records {
 		s.Records = append(s.Records, inventory.Record{RecordID: id, Imported: mustImported(t, p)})
 	}
-	for _, id := range rejected {
-		s.Rejections = append(s.Rejections, inventory.Rejection{RecordID: id, Reason: "invalid " + id})
+	for _, id := range skipped {
+		s.Skipped = append(s.Skipped, inventory.SkippedRecord{RecordID: id, Reason: "invalid " + id})
 	}
 	return s
 }

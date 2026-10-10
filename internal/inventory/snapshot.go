@@ -4,8 +4,8 @@ package inventory
 // plus the records its CMDB Provider could not turn into imported values.
 // Reconcile validates it, so it has no constructor.
 type Snapshot struct {
-	Records    []Record
-	Rejections []Rejection
+	Records []Record
+	Skipped []SkippedRecord
 }
 
 type Record struct {
@@ -13,7 +13,7 @@ type Record struct {
 	Imported ImportedAsset
 }
 
-type Rejection struct {
+type SkippedRecord struct {
 	RecordID string
 	Reason   string
 }
