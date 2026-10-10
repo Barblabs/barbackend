@@ -1,0 +1,102 @@
+package cmdb_test
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"testing"
+	"time"
+
+	"barbackend/internal/cmdb"
+	"barbackend/internal/inventory"
+	"barbackend/internal/postgres"
+	"barbackend/internal/postgres/pgtest"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+)
+
+const fake inventory.CMDBProvider = "fake"
+
+var errInvalidSettings = errors.New("settings need a url")
+
+// fakeProvider returns whatever snapshot or error the test sets.
+type fakeProvider struct {
+	snapshot inventory.Snapshot
+	err      error
+}
+
+func (f *fakeProvider) ValidateSettings(settings json.RawMessage) error {
+	var s struct {
+		URL string `json:"url"`
+	}
+	if err := json.Unmarshal(settings, &s); err != nil || s.URL == "" {
+		return errInvalidSettings
+	}
+	return nil
+}
+
+func (f *fakeProvider) Snapshot(context.Context, json.RawMessage) (inventory.Snapshot, error) {
+	return f.snapshot, f.err
+}
+
+type env struct {
+	db       *postgres.DB
+	conn     *pgx.Conn
+	provider *fakeProvider
+	sources  *cmdb.Sources
+}
+
+func newEnv(t *testing.T) env {
+	t.Helper()
+	url := pgtest.URL(t)
+	db, err := postgres.Open(context.Background(), url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(db.Close)
+	p := &fakeProvider{}
+	return env{db: db, conn: pgtest.Conn(t, url), provider: p, sources: cmdb.NewSources(db, cmdb.Providers{fake: p})}
+}
+
+func (e env) addSource(t *testing.T) inventory.CMDBSource {
+	t.Helper()
+	src, err := e.sources.Add(context.Background(), newCustomer(), fake, json.RawMessage(`{"url": "http://cmdb"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return src
+}
+
+func (e env) assets(t *testing.T, src inventory.CMDBSourceID) []*inventory.Asset {
+	t.Helper()
+	var got []*inventory.Asset
+	err := e.db.InLockedSource(context.Background(), src, time.Now(), func(tx *postgres.SourceTx) error {
+		var err error
+		got, err = tx.Assets(context.Background())
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return got
+}
+
+func (e env) queryInt(t *testing.T, sql string, args ...any) int {
+	t.Helper()
+	var n int
+	if err := e.conn.QueryRow(context.Background(), sql, args...).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
+func newCustomer() inventory.CustomerID { return inventory.CustomerID(uuid.New()) }
+
+func record(t *testing.T, id, name string) inventory.Record {
+	t.Helper()
+	imported, err := inventory.NewImportedAsset(inventory.ImportedAssetParams{Name: name, Kind: inventory.VirtualMachine})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return inventory.Record{RecordID: id, Imported: imported}
+}
