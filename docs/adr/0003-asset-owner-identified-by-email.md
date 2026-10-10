@@ -9,4 +9,4 @@ Emails that differ only in case or surrounding space identify the same Asset Own
 ## Import rules
 
 - **ServiceNow**: the email of the `owned_by` user.
-- **iTop**: contacts have no role, so we never guess. If the CI has exactly one Person contact, that Person is the owner; if it has several Persons, only Teams or no contacts, it has no imported owner.
+- **iTop**: contacts have no role, so we never guess. If the CI has exactly one Person contact, that Person is the owner; if it has several Persons, only Teams or no contacts, it has no imported owner. The Person's email must also be a syntactically valid bare address, or the CI has no imported owner. Persons are counted before emails are checked, so one Person with an invalid email plus one with a valid email is still ambiguous and gives no owner.

@@ -6,6 +6,11 @@ CMDBs record software as free text ("Ubuntu 22.04 LTS"), while threat intelligen
 
 Exposure is a property of the whole Asset, not of each Software Component. An internal-only service on an internet-facing host is treated as exposed; per-component exposure was rejected as too much manual work for the precision gained.
 
+## iTop import rules
+
+- **Operating System**: the OS family as name and the OS version as version. Network Devices have no OS family in iTop, only an IOSVersion (a brand and a version name), so the brand is the name and the IOSVersion's name the version: Cisco `15.2(7)E`. A fixed "IOS" name would mislabel the other vendors iTop stores as IOSVersions, and the friendly name "Cisco 15.2(7)E" as a name would leave no version to match on.
+- No Operating System when its name is blank.
+
 ## Considered Options
 
 - **Business services as an "Application" Asset Kind**: only useful for vendor or product-level intel (breaches, campaigns against a SaaS product). Deferred; it can be added as a new Kind without reshaping the model.

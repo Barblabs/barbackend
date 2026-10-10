@@ -36,7 +36,22 @@ Run `./barbackend` with no arguments to print the usage.
 
 The provider validates the settings before the source is stored. Prints the new CMDB Source ID.
 
-No CMDB Provider is registered in `cmd/barbackend/providers.go` yet, so this fails for every `--provider` until one is added.
+Providers are registered in `cmd/barbackend/providers.go`.
+
+#### iTop (`--provider itop`)
+
+Reads every Server, Virtual Machine, PC and Network Device in the instance through the REST API (version 1.4, iTop 2.7 or later). The user needs the REST Services User profile and read access to those classes.
+
+```bash
+./barbackend source add --customer <customer-uuid> --provider itop \
+  --settings '{"url": "https://itop.example.com", "auth": {"mode": "basic", "user": "barb-reader", "password_env": "ITOP_PASSWORD"}}'
+```
+
+- `url`: the iTop root, with or without a path (`https://example.com/itop`); no credentials, query or fragment.
+- `auth.mode: "basic"`: `user` and `password_env`, the environment variable holding the password.
+- `auth.mode: "token"`: `token_env`, the environment variable holding a token from the authent-token extension.
+
+Settings are stored in plain text, so they only name the variables. Secrets are read when `sync` runs, so the variable must be set in the process that syncs, not the one that adds the source.
 
 ### Sync a CMDB Source
 
