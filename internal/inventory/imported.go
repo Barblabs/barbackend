@@ -89,6 +89,44 @@ func cloneSoftware(in []SoftwareComponent) []SoftwareComponent {
 // A blank name is enough to detect the zero value: NewImportedAsset rejects it.
 func (a ImportedAsset) isZero() bool { return a.name == "" }
 
+// equal treats Software Components as a multiset: CMDB Sources do not promise
+// a stable order, so a reordered list is not a change.
+func (a ImportedAsset) equal(b ImportedAsset) bool {
+	return a.name == b.name &&
+		a.description == b.description &&
+		a.kind == b.kind &&
+		equalValues(a.hardware, b.hardware) &&
+		a.criticality == b.criticality &&
+		a.owner == b.owner &&
+		a.retired == b.retired &&
+		sameComponents(a.software, b.software)
+}
+
+func equalValues[T comparable](a, b *T) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
+}
+
+func sameComponents(a, b []SoftwareComponent) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	counts := make(map[componentKey]int, len(a))
+	for _, c := range a {
+		counts[c.key()]++
+	}
+	for _, c := range b {
+		k := c.key()
+		if counts[k] == 0 {
+			return false
+		}
+		counts[k]--
+	}
+	return true
+}
+
 func (a ImportedAsset) Name() string { return a.name }
 
 func (a ImportedAsset) Description() string { return a.description }
