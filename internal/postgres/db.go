@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
+	"github.com/pressly/goose/v3/lock"
 )
 
 var ErrNotFound = errors.New("not found")
@@ -44,7 +45,12 @@ func (db *DB) Migrate(ctx context.Context) error {
 	}
 	sqlDB := stdlib.OpenDBFromPool(db.pool)
 	defer func() { _ = sqlDB.Close() }()
-	provider, err := goose.NewProvider(goose.DialectPostgres, sqlDB, dir)
+	// The advisory lock keeps two processes migrating at once from both applying a migration.
+	locker, err := lock.NewPostgresSessionLocker()
+	if err != nil {
+		return fmt.Errorf("create migration lock: %w", err)
+	}
+	provider, err := goose.NewProvider(goose.DialectPostgres, sqlDB, dir, goose.WithSessionLocker(locker))
 	if err != nil {
 		return fmt.Errorf("load migrations: %w", err)
 	}
@@ -57,11 +63,10 @@ func (db *DB) Migrate(ctx context.Context) error {
 // InTx runs fn in one transaction, committed only if fn returns nil.
 func (db *DB) InTx(ctx context.Context, fn func(*Tx) error) error {
 	return pgx.BeginFunc(ctx, db.pool, func(tx pgx.Tx) error {
-		return fn(&Tx{tx: tx, q: sqlcgen.New(tx)})
+		return fn(&Tx{q: sqlcgen.New(tx)})
 	})
 }
 
 type Tx struct {
-	tx pgx.Tx
-	q  *sqlcgen.Queries
+	q *sqlcgen.Queries
 }

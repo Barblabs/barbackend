@@ -191,3 +191,22 @@ func TestUpdatesOfMissingAssetFail(t *testing.T) {
 		})
 	}
 }
+
+func TestUnnormalizedOwnerEmailIsRejected(t *testing.T) {
+	t.Parallel()
+	db := pgtest.NewDB(t)
+	src := newSource(t, db, newCustomer())
+	for _, email := range []inventory.OwnerEmail{"Alice@example.com", " alice@example.com"} {
+		t.Run(string(email), func(t *testing.T) {
+			p := inventory.ImportedAssetParams{Name: "pc", Kind: inventory.Workstation, Owner: email}
+			a, err := inventory.NewAsset(inventory.SourceReference{Source: src.ID(), RecordID: "1"}, mustImported(t, p))
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = db.InTx(context.Background(), func(tx *postgres.Tx) error { return tx.CreateAsset(context.Background(), a) })
+			if err == nil {
+				t.Error("CreateAsset succeeded, want the owner email check to reject it")
+			}
+		})
+	}
+}

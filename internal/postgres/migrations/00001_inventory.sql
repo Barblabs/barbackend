@@ -49,7 +49,10 @@ CREATE TABLE asset_owners (
     id          bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     customer_id uuid NOT NULL,
     email       text NOT NULL,
-    UNIQUE (customer_id, email)
+    UNIQUE (customer_id, email),
+    -- Each edge normalizes emails; this rejects one that forgets, which would
+    -- otherwise split one person into two Asset Owners (ADR 0003).
+    CHECK (email = lower(btrim(email)))
 );
 
 CREATE TABLE assets (

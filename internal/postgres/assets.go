@@ -149,6 +149,9 @@ func (t *Tx) software(ctx context.Context, source uuid.UUID) (map[string][]inven
 }
 
 func (t *Tx) insertSoftware(ctx context.Context, source uuid.UUID, recordID string, software []inventory.SoftwareComponent) error {
+	if len(software) == 0 {
+		return nil
+	}
 	rows := make([]sqlcgen.InsertSoftwareComponentsParams, len(software))
 	for i, c := range software {
 		rows[i] = sqlcgen.InsertSoftwareComponentsParams{
