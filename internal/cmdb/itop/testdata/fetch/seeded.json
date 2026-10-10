@@ -1,0 +1,863 @@
+{
+  "{\"operation\":\"core/get\",\"class\":\"IOSVersion\",\"key\":\"SELECT IOSVersion WHERE id \\u003e 0 AND id \\u003c= 500 AND (id IN (90))\",\"output_fields\":\"brand_name,name\",\"limit\":501,\"page\":1}": {
+    "code": 0,
+    "message": "Found: 1",
+    "objects": {
+      "IOSVersion::90": {
+        "code": 0,
+        "message": "",
+        "class": "IOSVersion",
+        "key": "90",
+        "fields": {
+          "brand_name": "Cisco",
+          "name": "15.2(7)E"
+        }
+      }
+    }
+  },
+  "{\"operation\":\"core/get\",\"class\":\"IOSVersion\",\"key\":\"SELECT IOSVersion WHERE id \\u003e 500 AND (id IN (90))\",\"output_fields\":\"id\",\"limit\":1,\"page\":1}": {
+    "code": 0,
+    "message": "Found: 0",
+    "objects": null
+  },
+  "{\"operation\":\"core/get\",\"class\":\"NetworkDevice\",\"key\":\"SELECT NetworkDevice WHERE id \\u003e 0 AND id \\u003c= 500\",\"output_fields\":\"name,description,status,business_criticity,contacts_list,softwares_list,brand_name,model_name,iosversion_id\",\"limit\":501,\"page\":1}": {
+    "code": 0,
+    "message": "Found: 3",
+    "objects": {
+      "NetworkDevice::5": {
+        "code": 0,
+        "message": "",
+        "class": "NetworkDevice",
+        "key": "5",
+        "fields": {
+          "name": "Router1",
+          "description": "",
+          "status": "production",
+          "business_criticity": "low",
+          "contacts_list": [],
+          "softwares_list": [],
+          "brand_name": "Cisco",
+          "model_name": "Procurve 2450",
+          "iosversion_id": "0"
+        }
+      },
+      "NetworkDevice::40": {
+        "code": 0,
+        "message": "",
+        "class": "NetworkDevice",
+        "key": "40",
+        "fields": {
+          "name": "Router2",
+          "description": "",
+          "status": "production",
+          "business_criticity": "high",
+          "contacts_list": [
+            {
+              "contact_id": "46",
+              "contact_name": "Hugo",
+              "friendlyname": "Hugo \/ Router2",
+              "contact_id_friendlyname": "Victor Hugo",
+              "contact_id_finalclass_recall": "Person",
+              "contact_id_obsolescence_flag": ""
+            }
+          ],
+          "softwares_list": [],
+          "brand_name": "Cisco",
+          "model_name": "Cisco 6500",
+          "iosversion_id": "90"
+        }
+      },
+      "NetworkDevice::6": {
+        "code": 0,
+        "message": "",
+        "class": "NetworkDevice",
+        "key": "6",
+        "fields": {
+          "name": "Switch1",
+          "description": "",
+          "status": "implementation",
+          "business_criticity": "low",
+          "contacts_list": [],
+          "softwares_list": [],
+          "brand_name": "HPE",
+          "model_name": "Procurve 2450",
+          "iosversion_id": "0"
+        }
+      }
+    }
+  },
+  "{\"operation\":\"core/get\",\"class\":\"NetworkDevice\",\"key\":\"SELECT NetworkDevice WHERE id \\u003e 500\",\"output_fields\":\"id\",\"limit\":1,\"page\":1}": {
+    "code": 0,
+    "message": "Found: 0",
+    "objects": null
+  },
+  "{\"operation\":\"core/get\",\"class\":\"PC\",\"key\":\"SELECT PC WHERE id \\u003e 0 AND id \\u003c= 500\",\"output_fields\":\"name,description,status,business_criticity,contacts_list,softwares_list,brand_name,model_name,osfamily_name,osversion_name\",\"limit\":501,\"page\":1}": {
+    "code": 0,
+    "message": "Found: 3",
+    "objects": {
+      "PC::32": {
+        "code": 0,
+        "message": "",
+        "class": "PC",
+        "key": "32",
+        "fields": {
+          "name": "PC-ALICE",
+          "description": "",
+          "status": "production",
+          "business_criticity": "high",
+          "contacts_list": [
+            {
+              "contact_id": "5",
+              "contact_name": "Milliat",
+              "friendlyname": "Milliat \/ PC-ALICE",
+              "contact_id_friendlyname": "Alice Milliat",
+              "contact_id_finalclass_recall": "Person",
+              "contact_id_obsolescence_flag": ""
+            }
+          ],
+          "softwares_list": [
+            {
+              "name": "Chrome",
+              "description": "",
+              "org_id": "6",
+              "organization_name": "IT Department",
+              "business_criticity": "low",
+              "move2production": "",
+              "contacts_list": [],
+              "documents_list": [],
+              "applicationsolution_list": [],
+              "softwares_list": [],
+              "groups_list": [],
+              "providercontracts_list": [],
+              "services_list": [],
+              "tickets_list": [],
+              "dataflows": "",
+              "software_id": "4",
+              "software_name": "Chrome",
+              "software_end_of_support": "",
+              "softwarelicence_id": "0",
+              "softwarelicence_name": "",
+              "path": "",
+              "status": null,
+              "finalclass": "PCSoftware",
+              "friendlyname": "Chrome PC-ALICE",
+              "obsolescence_flag": false,
+              "obsolescence_date": "",
+              "org_id_friendlyname": "IT Department",
+              "org_id_obsolescence_flag": "",
+              "software_id_friendlyname": "Chrome 120.0.6099.109",
+              "softwarelicence_id_friendlyname": "",
+              "softwarelicence_id_obsolescence_flag": ""
+            }
+          ],
+          "brand_name": "Dell",
+          "model_name": "OptiPlex 7010",
+          "osfamily_name": "Windows",
+          "osversion_name": "11"
+        }
+      },
+      "PC::33": {
+        "code": 0,
+        "message": "",
+        "class": "PC",
+        "key": "33",
+        "fields": {
+          "name": "PC-MIXED",
+          "description": "",
+          "status": "production",
+          "business_criticity": null,
+          "contacts_list": [
+            {
+              "contact_id": "55",
+              "contact_name": "Mixedcase",
+              "friendlyname": "Mixedcase \/ PC-MIXED",
+              "contact_id_friendlyname": "Test Mixedcase",
+              "contact_id_finalclass_recall": "Person",
+              "contact_id_obsolescence_flag": ""
+            }
+          ],
+          "softwares_list": [],
+          "brand_name": "Lenovo",
+          "model_name": "ThinkPad T14",
+          "osfamily_name": "Ubuntu",
+          "osversion_name": "22.04 LTS"
+        }
+      },
+      "PC::34": {
+        "code": 0,
+        "message": "",
+        "class": "PC",
+        "key": "34",
+        "fields": {
+          "name": "PC-OLD",
+          "description": "",
+          "status": "obsolete",
+          "business_criticity": "medium",
+          "contacts_list": [
+            {
+              "contact_id": "54",
+              "contact_name": "Noemail",
+              "friendlyname": "Noemail \/ PC-OLD",
+              "contact_id_friendlyname": "Test Noemail",
+              "contact_id_finalclass_recall": "Person",
+              "contact_id_obsolescence_flag": ""
+            }
+          ],
+          "softwares_list": [],
+          "brand_name": "",
+          "model_name": "",
+          "osfamily_name": "Windows",
+          "osversion_name": "10"
+        }
+      }
+    }
+  },
+  "{\"operation\":\"core/get\",\"class\":\"PC\",\"key\":\"SELECT PC WHERE id \\u003e 500\",\"output_fields\":\"id\",\"limit\":1,\"page\":1}": {
+    "code": 0,
+    "message": "Found: 0",
+    "objects": null
+  },
+  "{\"operation\":\"core/get\",\"class\":\"Person\",\"key\":\"SELECT Person WHERE id \\u003e 0 AND id \\u003c= 500 AND (id IN (18,46,5,54,55,8))\",\"output_fields\":\"email\",\"limit\":501,\"page\":1}": {
+    "code": 0,
+    "message": "Found: 6",
+    "objects": {
+      "Person::5": {
+        "code": 0,
+        "message": "",
+        "class": "Person",
+        "key": "5",
+        "fields": {
+          "email": "alice.milliat@customer.com"
+        }
+      },
+      "Person::8": {
+        "code": 0,
+        "message": "",
+        "class": "Person",
+        "key": "8",
+        "fields": {
+          "email": "boris.vian@it.com"
+        }
+      },
+      "Person::18": {
+        "code": 0,
+        "message": "",
+        "class": "Person",
+        "key": "18",
+        "fields": {
+          "email": "george.sand@it.com"
+        }
+      },
+      "Person::55": {
+        "code": 0,
+        "message": "",
+        "class": "Person",
+        "key": "55",
+        "fields": {
+          "email": "Test.MixedCase@IT.com"
+        }
+      },
+      "Person::54": {
+        "code": 0,
+        "message": "",
+        "class": "Person",
+        "key": "54",
+        "fields": {
+          "email": ""
+        }
+      },
+      "Person::46": {
+        "code": 0,
+        "message": "",
+        "class": "Person",
+        "key": "46",
+        "fields": {
+          "email": "victor.hugo@it.com"
+        }
+      }
+    }
+  },
+  "{\"operation\":\"core/get\",\"class\":\"Person\",\"key\":\"SELECT Person WHERE id \\u003e 500 AND (id IN (18,46,5,54,55,8))\",\"output_fields\":\"id\",\"limit\":1,\"page\":1}": {
+    "code": 0,
+    "message": "Found: 0",
+    "objects": null
+  },
+  "{\"operation\":\"core/get\",\"class\":\"Server\",\"key\":\"SELECT Server WHERE id \\u003e 0 AND id \\u003c= 500\",\"output_fields\":\"name,description,status,business_criticity,contacts_list,softwares_list,brand_name,model_name,osfamily_name,osversion_name\",\"limit\":501,\"page\":1}": {
+    "code": 0,
+    "message": "Found: 5",
+    "objects": {
+      "Server::1": {
+        "code": 0,
+        "message": "",
+        "class": "Server",
+        "key": "1",
+        "fields": {
+          "name": "Server1",
+          "description": "",
+          "status": "production",
+          "business_criticity": "high",
+          "contacts_list": [
+            {
+              "contact_id": "46",
+              "contact_name": "Hugo",
+              "friendlyname": "Hugo \/ Server1",
+              "contact_id_friendlyname": "Victor Hugo",
+              "contact_id_finalclass_recall": "Person",
+              "contact_id_obsolescence_flag": ""
+            },
+            {
+              "contact_id": "8",
+              "contact_name": "Vian",
+              "friendlyname": "Vian \/ Server1",
+              "contact_id_friendlyname": "Boris Vian",
+              "contact_id_finalclass_recall": "Person",
+              "contact_id_obsolescence_flag": ""
+            }
+          ],
+          "softwares_list": [],
+          "brand_name": "HPE",
+          "model_name": "DL380",
+          "osfamily_name": "vCenter Server",
+          "osversion_name": "2022"
+        }
+      },
+      "Server::2": {
+        "code": 0,
+        "message": "",
+        "class": "Server",
+        "key": "2",
+        "fields": {
+          "name": "Server2",
+          "description": "",
+          "status": "production",
+          "business_criticity": "low",
+          "contacts_list": [],
+          "softwares_list": [
+            {
+              "name": "Oracle",
+              "description": "",
+              "org_id": "6",
+              "organization_name": "IT Department",
+              "business_criticity": "low",
+              "move2production": "",
+              "contacts_list": [],
+              "documents_list": [],
+              "applicationsolution_list": [],
+              "softwares_list": [],
+              "groups_list": [],
+              "providercontracts_list": [],
+              "services_list": [],
+              "tickets_list": [],
+              "dataflows": "",
+              "software_id": "1",
+              "software_name": "MySql",
+              "software_end_of_support": "",
+              "softwarelicence_id": "0",
+              "softwarelicence_name": "",
+              "path": "",
+              "status": null,
+              "finalclass": "DBServer",
+              "friendlyname": "Oracle Server2",
+              "obsolescence_flag": false,
+              "obsolescence_date": "",
+              "org_id_friendlyname": "IT Department",
+              "org_id_obsolescence_flag": "",
+              "software_id_friendlyname": "MySql 8",
+              "softwarelicence_id_friendlyname": "",
+              "softwarelicence_id_obsolescence_flag": ""
+            }
+          ],
+          "brand_name": "",
+          "model_name": "",
+          "osfamily_name": "",
+          "osversion_name": ""
+        }
+      },
+      "Server::3": {
+        "code": 0,
+        "message": "",
+        "class": "Server",
+        "key": "3",
+        "fields": {
+          "name": "Server3",
+          "description": "",
+          "status": "production",
+          "business_criticity": "low",
+          "contacts_list": [
+            {
+              "contact_id": "18",
+              "contact_name": "Sand",
+              "friendlyname": "Sand \/ Server3",
+              "contact_id_friendlyname": "George Sand",
+              "contact_id_finalclass_recall": "Person",
+              "contact_id_obsolescence_flag": ""
+            },
+            {
+              "contact_id": "53",
+              "contact_name": "System \u0026 application support",
+              "friendlyname": "System \u0026 application support \/ Server3",
+              "contact_id_friendlyname": "System \u0026 application support",
+              "contact_id_finalclass_recall": "Team",
+              "contact_id_obsolescence_flag": ""
+            }
+          ],
+          "softwares_list": [
+            {
+              "name": "RabbitMQ",
+              "description": "",
+              "org_id": "6",
+              "organization_name": "IT Department",
+              "business_criticity": "low",
+              "move2production": "",
+              "contacts_list": [],
+              "documents_list": [],
+              "applicationsolution_list": [],
+              "softwares_list": [],
+              "groups_list": [],
+              "providercontracts_list": [],
+              "services_list": [],
+              "tickets_list": [],
+              "dataflows": "",
+              "software_id": "3",
+              "software_name": "RabbitMQ",
+              "software_end_of_support": "",
+              "softwarelicence_id": "0",
+              "softwarelicence_name": "",
+              "path": "",
+              "status": null,
+              "finalclass": "Middleware",
+              "friendlyname": "RabbitMQ Server3",
+              "obsolescence_flag": false,
+              "obsolescence_date": "",
+              "org_id_friendlyname": "IT Department",
+              "org_id_obsolescence_flag": "",
+              "software_id_friendlyname": "RabbitMQ 3.12.13",
+              "softwarelicence_id_friendlyname": "",
+              "softwarelicence_id_obsolescence_flag": ""
+            }
+          ],
+          "brand_name": "HPE",
+          "model_name": "DL380",
+          "osfamily_name": "vCenter Server",
+          "osversion_name": "2022"
+        }
+      },
+      "Server::4": {
+        "code": 0,
+        "message": "",
+        "class": "Server",
+        "key": "4",
+        "fields": {
+          "name": "Server4",
+          "description": "",
+          "status": "production",
+          "business_criticity": "low",
+          "contacts_list": [],
+          "softwares_list": [
+            {
+              "name": "IIS",
+              "description": "",
+              "org_id": "6",
+              "organization_name": "IT Department",
+              "business_criticity": "low",
+              "move2production": "",
+              "contacts_list": [],
+              "documents_list": [],
+              "applicationsolution_list": [],
+              "softwares_list": [],
+              "groups_list": [],
+              "providercontracts_list": [],
+              "services_list": [],
+              "tickets_list": [],
+              "dataflows": "",
+              "software_id": "0",
+              "software_name": "",
+              "software_end_of_support": "",
+              "softwarelicence_id": "0",
+              "softwarelicence_name": "",
+              "path": "",
+              "status": "active",
+              "finalclass": "WebServer",
+              "friendlyname": "IIS Server4",
+              "obsolescence_flag": false,
+              "obsolescence_date": "",
+              "org_id_friendlyname": "IT Department",
+              "org_id_obsolescence_flag": "",
+              "software_id_friendlyname": "",
+              "softwarelicence_id_friendlyname": "",
+              "softwarelicence_id_obsolescence_flag": ""
+            }
+          ],
+          "brand_name": "HPE",
+          "model_name": "DL380",
+          "osfamily_name": "vCenter Server",
+          "osversion_name": "2022"
+        }
+      },
+      "Server::35": {
+        "code": 0,
+        "message": "",
+        "class": "Server",
+        "key": "35",
+        "fields": {
+          "name": "Server5",
+          "description": "",
+          "status": "obsolete",
+          "business_criticity": "medium",
+          "contacts_list": [
+            {
+              "contact_id": "8",
+              "contact_name": "Vian",
+              "friendlyname": "Vian \/ Server5",
+              "contact_id_friendlyname": "Boris Vian",
+              "contact_id_finalclass_recall": "Person",
+              "contact_id_obsolescence_flag": ""
+            }
+          ],
+          "softwares_list": [
+            {
+              "name": "Apache",
+              "description": "",
+              "org_id": "6",
+              "organization_name": "IT Department",
+              "business_criticity": "low",
+              "move2production": "",
+              "contacts_list": [],
+              "documents_list": [],
+              "applicationsolution_list": [],
+              "softwares_list": [],
+              "groups_list": [],
+              "providercontracts_list": [],
+              "services_list": [],
+              "tickets_list": [],
+              "dataflows": "",
+              "software_id": "6",
+              "software_name": "Apache HTTP Server",
+              "software_end_of_support": "",
+              "softwarelicence_id": "0",
+              "softwarelicence_name": "",
+              "path": "",
+              "status": null,
+              "finalclass": "WebServer",
+              "friendlyname": "Apache Server5",
+              "obsolescence_flag": false,
+              "obsolescence_date": "",
+              "org_id_friendlyname": "IT Department",
+              "org_id_obsolescence_flag": "",
+              "software_id_friendlyname": "Apache HTTP Server 2.4.58",
+              "softwarelicence_id_friendlyname": "",
+              "softwarelicence_id_obsolescence_flag": ""
+            }
+          ],
+          "brand_name": "Dell",
+          "model_name": "PowerEdge R740",
+          "osfamily_name": "Red Hat",
+          "osversion_name": "9"
+        }
+      }
+    }
+  },
+  "{\"operation\":\"core/get\",\"class\":\"Server\",\"key\":\"SELECT Server WHERE id \\u003e 500\",\"output_fields\":\"id\",\"limit\":1,\"page\":1}": {
+    "code": 0,
+    "message": "Found: 0",
+    "objects": null
+  },
+  "{\"operation\":\"core/get\",\"class\":\"Software\",\"key\":\"SELECT Software WHERE id \\u003e 0 AND id \\u003c= 500 AND (id IN (1,2,3,4,5,6))\",\"output_fields\":\"name,version\",\"limit\":501,\"page\":1}": {
+    "code": 0,
+    "message": "Found: 6",
+    "objects": {
+      "Software::6": {
+        "code": 0,
+        "message": "",
+        "class": "Software",
+        "key": "6",
+        "fields": {
+          "name": "Apache HTTP Server",
+          "version": "2.4.58"
+        }
+      },
+      "Software::4": {
+        "code": 0,
+        "message": "",
+        "class": "Software",
+        "key": "4",
+        "fields": {
+          "name": "Chrome",
+          "version": "120.0.6099.109"
+        }
+      },
+      "Software::1": {
+        "code": 0,
+        "message": "",
+        "class": "Software",
+        "key": "1",
+        "fields": {
+          "name": "MySql",
+          "version": "8"
+        }
+      },
+      "Software::5": {
+        "code": 0,
+        "message": "",
+        "class": "Software",
+        "key": "5",
+        "fields": {
+          "name": "OpenSSH",
+          "version": "9.6p1"
+        }
+      },
+      "Software::2": {
+        "code": 0,
+        "message": "",
+        "class": "Software",
+        "key": "2",
+        "fields": {
+          "name": "Oracle DB engine",
+          "version": "19c"
+        }
+      },
+      "Software::3": {
+        "code": 0,
+        "message": "",
+        "class": "Software",
+        "key": "3",
+        "fields": {
+          "name": "RabbitMQ",
+          "version": "3.12.13"
+        }
+      }
+    }
+  },
+  "{\"operation\":\"core/get\",\"class\":\"Software\",\"key\":\"SELECT Software WHERE id \\u003e 500 AND (id IN (1,2,3,4,5,6))\",\"output_fields\":\"id\",\"limit\":1,\"page\":1}": {
+    "code": 0,
+    "message": "Found: 0",
+    "objects": null
+  },
+  "{\"operation\":\"core/get\",\"class\":\"VirtualMachine\",\"key\":\"SELECT VirtualMachine WHERE id \\u003e 0 AND id \\u003c= 500\",\"output_fields\":\"name,description,status,business_criticity,contacts_list,softwares_list,osfamily_name,osversion_name\",\"limit\":501,\"page\":1}": {
+    "code": 0,
+    "message": "Found: 4",
+    "objects": {
+      "VirtualMachine::21": {
+        "code": 0,
+        "message": "",
+        "class": "VirtualMachine",
+        "key": "21",
+        "fields": {
+          "name": "VM1",
+          "description": "",
+          "status": "production",
+          "business_criticity": "medium",
+          "contacts_list": [
+            {
+              "contact_id": "52",
+              "contact_name": "Network support",
+              "friendlyname": "Network support \/ VM1",
+              "contact_id_friendlyname": "Network support",
+              "contact_id_finalclass_recall": "Team",
+              "contact_id_obsolescence_flag": ""
+            }
+          ],
+          "softwares_list": [
+            {
+              "name": "Apache",
+              "description": "",
+              "org_id": "6",
+              "organization_name": "IT Department",
+              "business_criticity": "low",
+              "move2production": "",
+              "contacts_list": [],
+              "documents_list": [],
+              "applicationsolution_list": [
+                {
+                  "applicationsolution_id": "13",
+                  "applicationsolution_name": "itop",
+                  "friendlyname": "itop \/ Apache",
+                  "applicationsolution_id_friendlyname": "itop",
+                  "applicationsolution_id_obsolescence_flag": ""
+                }
+              ],
+              "softwares_list": [],
+              "groups_list": [],
+              "providercontracts_list": [],
+              "services_list": [],
+              "tickets_list": [],
+              "dataflows": "",
+              "software_id": "0",
+              "software_name": "",
+              "software_end_of_support": "",
+              "softwarelicence_id": "0",
+              "softwarelicence_name": "",
+              "path": "",
+              "status": null,
+              "finalclass": "WebServer",
+              "friendlyname": "Apache VM1",
+              "obsolescence_flag": false,
+              "obsolescence_date": "",
+              "org_id_friendlyname": "IT Department",
+              "org_id_obsolescence_flag": "",
+              "software_id_friendlyname": "",
+              "softwarelicence_id_friendlyname": "",
+              "softwarelicence_id_obsolescence_flag": ""
+            }
+          ],
+          "osfamily_name": "vCenter Server",
+          "osversion_name": "2022"
+        }
+      },
+      "VirtualMachine::22": {
+        "code": 0,
+        "message": "",
+        "class": "VirtualMachine",
+        "key": "22",
+        "fields": {
+          "name": "VM2",
+          "description": "",
+          "status": "production",
+          "business_criticity": "low",
+          "contacts_list": [],
+          "softwares_list": [
+            {
+              "name": "MySQL",
+              "description": "",
+              "org_id": "6",
+              "organization_name": "IT Department",
+              "business_criticity": "low",
+              "move2production": "",
+              "contacts_list": [],
+              "documents_list": [],
+              "applicationsolution_list": [],
+              "softwares_list": [],
+              "groups_list": [],
+              "providercontracts_list": [],
+              "services_list": [],
+              "tickets_list": [],
+              "dataflows": "",
+              "software_id": "2",
+              "software_name": "Oracle DB engine",
+              "software_end_of_support": "",
+              "softwarelicence_id": "0",
+              "softwarelicence_name": "",
+              "path": "",
+              "status": null,
+              "finalclass": "DBServer",
+              "friendlyname": "MySQL VM2",
+              "obsolescence_flag": false,
+              "obsolescence_date": "",
+              "org_id_friendlyname": "IT Department",
+              "org_id_obsolescence_flag": "",
+              "software_id_friendlyname": "Oracle DB engine 19c",
+              "softwarelicence_id_friendlyname": "",
+              "softwarelicence_id_obsolescence_flag": ""
+            },
+            {
+              "name": "OpenSSH",
+              "description": "",
+              "org_id": "6",
+              "organization_name": "IT Department",
+              "business_criticity": "low",
+              "move2production": "",
+              "contacts_list": [],
+              "documents_list": [],
+              "applicationsolution_list": [],
+              "softwares_list": [],
+              "groups_list": [],
+              "providercontracts_list": [],
+              "services_list": [],
+              "tickets_list": [],
+              "dataflows": "",
+              "software_id": "5",
+              "software_name": "OpenSSH",
+              "software_end_of_support": "",
+              "softwarelicence_id": "0",
+              "softwarelicence_name": "",
+              "path": "",
+              "status": null,
+              "finalclass": "OtherSoftware",
+              "friendlyname": "OpenSSH VM2",
+              "obsolescence_flag": false,
+              "obsolescence_date": "",
+              "org_id_friendlyname": "IT Department",
+              "org_id_obsolescence_flag": "",
+              "software_id_friendlyname": "OpenSSH 9.6p1",
+              "softwarelicence_id_friendlyname": "",
+              "softwarelicence_id_obsolescence_flag": ""
+            }
+          ],
+          "osfamily_name": "Oracle Linux",
+          "osversion_name": "18.04 LTS"
+        }
+      },
+      "VirtualMachine::23": {
+        "code": 0,
+        "message": "",
+        "class": "VirtualMachine",
+        "key": "23",
+        "fields": {
+          "name": "VM3",
+          "description": "",
+          "status": "production",
+          "business_criticity": "low",
+          "contacts_list": [],
+          "softwares_list": [
+            {
+              "name": "Oracle",
+              "description": "",
+              "org_id": "6",
+              "organization_name": "IT Department",
+              "business_criticity": "low",
+              "move2production": "",
+              "contacts_list": [],
+              "documents_list": [],
+              "applicationsolution_list": [],
+              "softwares_list": [],
+              "groups_list": [],
+              "providercontracts_list": [],
+              "services_list": [],
+              "tickets_list": [],
+              "dataflows": "",
+              "software_id": "1",
+              "software_name": "MySql",
+              "software_end_of_support": "",
+              "softwarelicence_id": "0",
+              "softwarelicence_name": "",
+              "path": "",
+              "status": null,
+              "finalclass": "DBServer",
+              "friendlyname": "Oracle VM3",
+              "obsolescence_flag": false,
+              "obsolescence_date": "",
+              "org_id_friendlyname": "IT Department",
+              "org_id_obsolescence_flag": "",
+              "software_id_friendlyname": "MySql 8",
+              "softwarelicence_id_friendlyname": "",
+              "softwarelicence_id_obsolescence_flag": ""
+            }
+          ],
+          "osfamily_name": "vCenter Server",
+          "osversion_name": "2022"
+        }
+      },
+      "VirtualMachine::24": {
+        "code": 0,
+        "message": "",
+        "class": "VirtualMachine",
+        "key": "24",
+        "fields": {
+          "name": "VM4",
+          "description": "",
+          "status": "production",
+          "business_criticity": "low",
+          "contacts_list": [],
+          "softwares_list": [],
+          "osfamily_name": "Oracle Linux",
+          "osversion_name": "18.04 LTS"
+        }
+      }
+    }
+  },
+  "{\"operation\":\"core/get\",\"class\":\"VirtualMachine\",\"key\":\"SELECT VirtualMachine WHERE id \\u003e 500\",\"output_fields\":\"id\",\"limit\":1,\"page\":1}": {
+    "code": 0,
+    "message": "Found: 0",
+    "objects": null
+  }
+}
