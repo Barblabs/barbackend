@@ -1,19 +1,13 @@
 package main
 
-import (
-	"log"
+import "github.com/gin-gonic/gin"
 
-	"github.com/gin-gonic/gin"
-)
-
-func main() {
+func serve() error {
 	router := gin.Default()
 	router.GET("/ping", func(ctx *gin.Context) {
 		ctx.JSON(200, gin.H{
 			"message": "pong",
 		})
 	})
-	if err := router.Run(); err != nil {
-		log.Fatalf("server failed: %v", err)
-	}
+	return router.Run()
 }

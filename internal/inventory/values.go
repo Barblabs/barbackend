@@ -20,9 +20,6 @@ var (
 	ErrZeroImportedAsset        = errors.New("imported asset is the zero value")
 )
 
-// Assets carry no Customer: it is reached through the CMDB Source.
-type CMDBSourceID string
-
 type SourceReference struct {
 	Source   CMDBSourceID
 	RecordID string
@@ -30,11 +27,12 @@ type SourceReference struct {
 
 type AssetKind int
 
+// Stored as catalog ids (ADR 0006): never renumber.
 const (
-	Server AssetKind = iota + 1
-	VirtualMachine
-	Workstation
-	NetworkDevice
+	Server         AssetKind = 1
+	VirtualMachine AssetKind = 2
+	Workstation    AssetKind = 3
+	NetworkDevice  AssetKind = 4
 )
 
 func (k AssetKind) valid() bool { return k >= Server && k <= NetworkDevice }
@@ -62,9 +60,10 @@ type Hardware struct {
 
 type SoftwareRole int
 
+// Stored as catalog ids (ADR 0006): never renumber.
 const (
-	OperatingSystem SoftwareRole = iota + 1
-	Application
+	OperatingSystem SoftwareRole = 1
+	Application     SoftwareRole = 2
 )
 
 func (r SoftwareRole) valid() bool { return r == OperatingSystem || r == Application }
@@ -105,11 +104,12 @@ func (c SoftwareComponent) clone() SoftwareComponent {
 
 type Criticality int
 
+// Stored as catalog ids (ADR 0006): never renumber.
 const (
-	CriticalityUnknown Criticality = iota
-	CriticalityHigh
-	CriticalityMedium
-	CriticalityLow
+	CriticalityUnknown Criticality = 0
+	CriticalityHigh    Criticality = 1
+	CriticalityMedium  Criticality = 2
+	CriticalityLow     Criticality = 3
 )
 
 func (c Criticality) valid() bool { return c >= CriticalityUnknown && c <= CriticalityLow }
@@ -131,10 +131,11 @@ func (c Criticality) String() string {
 
 type Exposure int
 
+// Stored as catalog ids (ADR 0006): never renumber.
 const (
-	ExposureUnknown Exposure = iota
-	InternetFacing
-	Internal
+	ExposureUnknown Exposure = 0
+	InternetFacing  Exposure = 1
+	Internal        Exposure = 2
 )
 
 func (e Exposure) valid() bool { return e >= ExposureUnknown && e <= Internal }
@@ -152,6 +153,24 @@ func (e Exposure) String() string {
 	}
 }
 
-type OwnerEmail string
+// OwnerEmail identifies an Asset Owner. Emails differing only in case or
+// surrounding space name the same person (ADR 0003), so every edge gets the
+// same canonical form from here. The zero value means no owner.
+type OwnerEmail struct {
+	address string
+}
 
-func (o OwnerEmail) blank() bool { return strings.TrimSpace(string(o)) == "" }
+// NewOwnerEmail does not check email syntax: that belongs to the edge that
+// receives it.
+func NewOwnerEmail(s string) (OwnerEmail, error) {
+	if blank(s) {
+		return OwnerEmail{}, ErrEmptyOwnerEmail
+	}
+	return OwnerEmail{address: strings.ToLower(strings.TrimSpace(s))}, nil
+}
+
+func (o OwnerEmail) String() string { return o.address }
+
+func (o OwnerEmail) isZero() bool { return o == OwnerEmail{} }
+
+func blank(s string) bool { return strings.TrimSpace(s) == "" }
