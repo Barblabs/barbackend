@@ -9,7 +9,7 @@ INSERT INTO sync_outcomes (id, name) VALUES
     (1, 'Succeeded'),
     (2, 'Failed');
 
--- skipped_records is [{record_id, reason}]; error is NULL for a successful run.
+-- skipped_records is [{record_id, reason}]; failure is written NULL for a successful run.
 CREATE TABLE sync_runs (
     id              bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     cmdb_source_id  uuid NOT NULL REFERENCES cmdb_sources (id),
@@ -22,7 +22,7 @@ CREATE TABLE sync_runs (
     reactivated     integer NOT NULL,
     skipped         integer NOT NULL,
     skipped_records jsonb NOT NULL,
-    error           text
+    failure         text
 );
 CREATE INDEX sync_runs_cmdb_source_id_started_at_idx ON sync_runs (cmdb_source_id, started_at DESC);
 

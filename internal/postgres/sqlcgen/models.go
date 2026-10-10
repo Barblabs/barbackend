@@ -90,5 +90,5 @@ type SyncRun struct {
 	Reactivated    int32
 	Skipped        int32
 	SkippedRecords []byte
-	Error          *string
+	Failure        *string
 }

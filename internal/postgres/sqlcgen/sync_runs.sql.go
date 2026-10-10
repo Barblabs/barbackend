@@ -15,7 +15,7 @@ import (
 const insertSyncRun = `-- name: InsertSyncRun :exec
 INSERT INTO sync_runs (
     cmdb_source_id, started_at, finished_at, outcome_id,
-    created, updated, deactivated, reactivated, skipped, skipped_records, error
+    created, updated, deactivated, reactivated, skipped, skipped_records, failure
 ) VALUES (
     $1, $2, $3, $4,
     $5, $6, $7, $8, $9, $10, $11
@@ -33,7 +33,7 @@ type InsertSyncRunParams struct {
 	Reactivated    int32
 	Skipped        int32
 	SkippedRecords []byte
-	Error          *string
+	Failure        *string
 }
 
 func (q *Queries) InsertSyncRun(ctx context.Context, arg InsertSyncRunParams) error {
@@ -48,7 +48,7 @@ func (q *Queries) InsertSyncRun(ctx context.Context, arg InsertSyncRunParams) er
 		arg.Reactivated,
 		arg.Skipped,
 		arg.SkippedRecords,
-		arg.Error,
+		arg.Failure,
 	)
 	return err
 }

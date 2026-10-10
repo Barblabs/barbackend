@@ -42,7 +42,7 @@ func recordSyncRun(ctx context.Context, q *sqlcgen.Queries, run inventory.SyncRu
 		SkippedRecords: skippedJSON,
 	}
 	if failure := run.Failure(); failure != "" {
-		p.Error = &failure
+		p.Failure = &failure
 	}
 	if err := q.InsertSyncRun(ctx, p); err != nil {
 		return fmt.Errorf("insert sync run of %s: %w", run.Source(), err)

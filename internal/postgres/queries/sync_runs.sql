@@ -1,10 +1,10 @@
 -- name: InsertSyncRun :exec
 INSERT INTO sync_runs (
     cmdb_source_id, started_at, finished_at, outcome_id,
-    created, updated, deactivated, reactivated, skipped, skipped_records, error
+    created, updated, deactivated, reactivated, skipped, skipped_records, failure
 ) VALUES (
     @cmdb_source_id, @started_at, @finished_at, @outcome_id,
-    @created, @updated, @deactivated, @reactivated, @skipped, @skipped_records, @error
+    @created, @updated, @deactivated, @reactivated, @skipped, @skipped_records, @failure
 );
 
 -- name: SucceededRunStartedAfter :one

@@ -138,7 +138,7 @@ func TestFailedSyncChangesNoAsset(t *testing.T) {
 				t.Errorf("assets = %+v, want unchanged %+v", got, before)
 			}
 			var failure string
-			err = e.conn.QueryRow(context.Background(), "SELECT error FROM sync_runs WHERE outcome_id = $1", int16(inventory.SyncFailed)).Scan(&failure)
+			err = e.conn.QueryRow(context.Background(), "SELECT failure FROM sync_runs WHERE outcome_id = $1", int16(inventory.SyncFailed)).Scan(&failure)
 			if err != nil {
 				t.Fatalf("read failed run: %v", err)
 			}

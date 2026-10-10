@@ -77,7 +77,7 @@ func TestSyncRunRoundTrip(t *testing.T) {
 			var got row
 			var skipped []byte
 			err := conn.QueryRow(context.Background(), `
-				SELECT started_at, finished_at, outcome_id, created, updated, deactivated, reactivated, skipped, skipped_records, error
+				SELECT started_at, finished_at, outcome_id, created, updated, deactivated, reactivated, skipped, skipped_records, failure
 				FROM sync_runs WHERE cmdb_source_id = $1`, src.ID().String()).
 				Scan(&got.Started, &got.Finished, &got.Outcome,
 					&got.Counts[0], &got.Counts[1], &got.Counts[2], &got.Counts[3], &got.Counts[4], &skipped, &got.Error)
