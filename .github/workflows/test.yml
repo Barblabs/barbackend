@@ -1,0 +1,35 @@
+name: test
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            tools.sum
+      # Pinned in tools.mod, so CI and local runs use the same sqlc version.
+      - name: check sqlc output is up to date
+        run: go tool -modfile=tools.mod sqlc diff
+      # pgtest downloads the Postgres binaries on first start; the archive only
+      # changes with the embedded-postgres module or the pinned major version.
+      - name: cache embedded postgres
+        uses: actions/cache@v6
+        with:
+          path: ~/.embedded-postgres-go
+          key: embedded-postgres-${{ runner.os }}-${{ hashFiles('go.sum', 'internal/postgres/pgtest/pgtest.go') }}
+      - name: go test
+        run: go test -race ./...
