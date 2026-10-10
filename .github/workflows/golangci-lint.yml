@@ -18,7 +18,9 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            tools.sum
+      # Pinned in tools.mod, so CI and local runs use the same linter version.
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v9
-        with:
-          version: v2.14
+        run: go tool -modfile=tools.mod golangci-lint run ./...

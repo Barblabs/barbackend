@@ -10,5 +10,9 @@ Keep entries concise and useful across future sessions. Point to authoritative f
 
 ## Database
 
-- Schema lives in `internal/postgres/migrations` (goose); queries in `internal/postgres/queries`. After editing either, run `go tool sqlc generate`; never edit `internal/postgres/sqlcgen`.
+- Schema lives in `internal/postgres/migrations` (goose); queries in `internal/postgres/queries`. After editing either, run `go tool -modfile=tools.mod sqlc generate`; never edit `internal/postgres/sqlcgen`.
 - Integration tests use `internal/postgres/pgtest` (embedded Postgres, one database per test); call `pgtest.Main` from the package's `TestMain`.
+
+## Tools
+
+- Dev tools (`golangci-lint`, `sqlc`, `govulncheck`) are pinned in `tools.mod`; run them as `go tool -modfile=tools.mod <tool>` so local runs and CI use the same versions.
