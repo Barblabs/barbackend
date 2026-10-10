@@ -90,9 +90,6 @@ CREATE TABLE software_components (
 CREATE UNIQUE INDEX software_components_one_operating_system
     ON software_components (cmdb_source_id, record_id) WHERE role_id = 1;
 
-CREATE INDEX software_components_product
-    ON software_components (product_vendor, product_name) WHERE product_vendor IS NOT NULL;
-
 -- +goose Down
 DROP TABLE software_components;
 DROP TABLE assets;

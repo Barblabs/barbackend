@@ -20,7 +20,7 @@ func inTx(t *testing.T, db *postgres.DB, fn func(*postgres.Tx) error) {
 
 func newSource(t *testing.T, db *postgres.DB, customer inventory.CustomerID) inventory.CMDBSource {
 	t.Helper()
-	src, err := inventory.NewCMDBSource(inventory.CMDBSourceID(uuid.NewString()), customer, "itop")
+	src, err := inventory.NewCMDBSource(inventory.CMDBSourceID(uuid.New()), customer, "itop")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,6 +29,8 @@ func newSource(t *testing.T, db *postgres.DB, customer inventory.CustomerID) inv
 	})
 	return src
 }
+
+func newCustomer() inventory.CustomerID { return inventory.CustomerID(uuid.New()) }
 
 func mustImported(t *testing.T, p inventory.ImportedAssetParams) inventory.ImportedAsset {
 	t.Helper()
@@ -50,23 +52,15 @@ func assets(t *testing.T, db *postgres.DB, src inventory.CMDBSourceID) []*invent
 	return got
 }
 
-// newDBWithConn also returns a raw connection, for asserting on rows the
-// store does not expose.
 func newDBWithConn(t *testing.T) (*postgres.DB, *pgx.Conn) {
 	t.Helper()
-	ctx := context.Background()
 	url := pgtest.URL(t)
-	db, err := postgres.Open(ctx, url)
+	db, err := postgres.Open(context.Background(), url)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(db.Close)
-	conn, err := pgx.Connect(ctx, url)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = conn.Close(ctx) })
-	return db, conn
+	return db, pgtest.Conn(t, url)
 }
 
 func queryInt(t *testing.T, conn *pgx.Conn, sql string, args ...any) int {

@@ -21,11 +21,7 @@ func TestCatalogsMatchDomainConstants(t *testing.T) {
 		"software_roles": names(inventory.OperatingSystem, inventory.Application),
 	}
 	ctx := context.Background()
-	conn, err := pgx.Connect(ctx, pgtest.URL(t))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = conn.Close(ctx) })
+	conn := pgtest.Conn(t, pgtest.URL(t))
 
 	for table, want := range catalogs {
 		t.Run(table, func(t *testing.T) {

@@ -10,7 +10,6 @@ import (
 	"barbackend/internal/inventory"
 	"barbackend/internal/postgres"
 	"barbackend/internal/postgres/pgtest"
-	"github.com/google/uuid"
 )
 
 func fullParams() inventory.ImportedAssetParams {
@@ -44,7 +43,7 @@ func TestAssetRoundTrip(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			db := pgtest.NewDB(t)
-			src := newSource(t, db, inventory.CustomerID(uuid.NewString()))
+			src := newSource(t, db, newCustomer())
 			want, err := inventory.RestoreAsset(inventory.SourceReference{Source: src.ID(), RecordID: "42"}, mustImported(t, tt.imported), tt.state)
 			if err != nil {
 				t.Fatal(err)
@@ -63,10 +62,10 @@ func TestAssetRoundTrip(t *testing.T) {
 func TestAssetOwnersAreSharedWithinACustomer(t *testing.T) {
 	t.Parallel()
 	db, conn := newDBWithConn(t)
-	customer := inventory.CustomerID(uuid.NewString())
+	customer := newCustomer()
 	first := newSource(t, db, customer)
 	second := newSource(t, db, customer)
-	other := newSource(t, db, inventory.CustomerID(uuid.NewString()))
+	other := newSource(t, db, newCustomer())
 
 	p := inventory.ImportedAssetParams{Name: "pc", Kind: inventory.Workstation, Owner: "owner@example.com"}
 	inTx(t, db, func(tx *postgres.Tx) error {
@@ -87,7 +86,7 @@ func TestAssetOwnersAreSharedWithinACustomer(t *testing.T) {
 		return nil
 	})
 
-	if n := queryInt(t, conn, "SELECT count(*) FROM asset_owners WHERE customer_id = $1", string(customer)); n != 1 {
+	if n := queryInt(t, conn, "SELECT count(*) FROM asset_owners WHERE customer_id = $1", customer.String()); n != 1 {
 		t.Errorf("owners of the customer = %d, want 1", n)
 	}
 	if n := queryInt(t, conn, "SELECT count(*) FROM asset_owners"); n != 2 {
@@ -98,7 +97,7 @@ func TestAssetOwnersAreSharedWithinACustomer(t *testing.T) {
 func TestUpdateImportedKeepsStateAndDeclarations(t *testing.T) {
 	t.Parallel()
 	db := pgtest.NewDB(t)
-	src := newSource(t, db, inventory.CustomerID(uuid.NewString()))
+	src := newSource(t, db, newCustomer())
 	ref := inventory.SourceReference{Source: src.ID(), RecordID: "1"}
 	state := inventory.AssetState{DeclaredOwner: "declared@example.com", DeclaredExposure: inventory.Internal}
 	stored, err := inventory.RestoreAsset(ref, mustImported(t, fullParams()), state)
@@ -131,7 +130,7 @@ func TestUpdateImportedKeepsStateAndDeclarations(t *testing.T) {
 func TestUpdateActiveKeepsFirstInactiveTime(t *testing.T) {
 	t.Parallel()
 	db, conn := newDBWithConn(t)
-	src := newSource(t, db, inventory.CustomerID(uuid.NewString()))
+	src := newSource(t, db, newCustomer())
 	a, err := inventory.NewAsset(inventory.SourceReference{Source: src.ID(), RecordID: "1"}, mustImported(t, fullParams()))
 	if err != nil {
 		t.Fatal(err)
@@ -175,7 +174,7 @@ func TestUpdateActiveKeepsFirstInactiveTime(t *testing.T) {
 func TestUpdatesOfMissingAssetFail(t *testing.T) {
 	t.Parallel()
 	db := pgtest.NewDB(t)
-	src := newSource(t, db, inventory.CustomerID(uuid.NewString()))
+	src := newSource(t, db, newCustomer())
 	a, err := inventory.NewAsset(inventory.SourceReference{Source: src.ID(), RecordID: "missing"}, mustImported(t, fullParams()))
 	if err != nil {
 		t.Fatal(err)

@@ -14,8 +14,8 @@ type Asset struct {
 }
 
 func NewAsset(ref SourceReference, imported ImportedAsset) (*Asset, error) {
-	if blank(string(ref.Source)) {
-		return nil, fmt.Errorf("%w: empty source", ErrInvalidSourceReference)
+	if ref.Source == (CMDBSourceID{}) {
+		return nil, fmt.Errorf("%w: zero source", ErrInvalidSourceReference)
 	}
 	if blank(ref.RecordID) {
 		return nil, fmt.Errorf("%w: empty record id", ErrInvalidSourceReference)
@@ -53,14 +53,14 @@ func (a *Asset) Ref() SourceReference { return a.ref }
 func (a *Asset) Imported() ImportedAsset { return a.imported }
 
 func (a *Asset) Owner() (OwnerEmail, bool) {
-	if !a.declaredOwner.blank() {
+	if !blank(string(a.declaredOwner)) {
 		return a.declaredOwner, true
 	}
 	return a.imported.Owner()
 }
 
 func (a *Asset) DeclaredOwner() (OwnerEmail, bool) {
-	if a.declaredOwner.blank() {
+	if blank(string(a.declaredOwner)) {
 		return "", false
 	}
 	return a.declaredOwner, true
@@ -69,7 +69,7 @@ func (a *Asset) DeclaredOwner() (OwnerEmail, bool) {
 func (a *Asset) Exposure() Exposure { return a.declaredExposure }
 
 func (a *Asset) DeclareOwner(o OwnerEmail) error {
-	if o.blank() {
+	if blank(string(o)) {
 		return ErrEmptyOwnerEmail
 	}
 	a.declaredOwner = o

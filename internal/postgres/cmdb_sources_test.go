@@ -16,7 +16,7 @@ func TestCMDBSourceRoundTrip(t *testing.T) {
 	t.Parallel()
 	db := pgtest.NewDB(t)
 	ctx := context.Background()
-	src, err := inventory.NewCMDBSource(inventory.CMDBSourceID(uuid.NewString()), inventory.CustomerID(uuid.NewString()), "itop")
+	src, err := inventory.NewCMDBSource(inventory.CMDBSourceID(uuid.New()), newCustomer(), "itop")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +44,7 @@ func TestCMDBSourceNotFound(t *testing.T) {
 	t.Parallel()
 	db := pgtest.NewDB(t)
 	err := db.InTx(context.Background(), func(tx *postgres.Tx) error {
-		_, _, err := tx.CMDBSource(context.Background(), inventory.CMDBSourceID(uuid.NewString()))
+		_, _, err := tx.CMDBSource(context.Background(), inventory.CMDBSourceID(uuid.New()))
 		return err
 	})
 	if !errors.Is(err, postgres.ErrNotFound) {

@@ -116,7 +116,7 @@ func (a ImportedAsset) OperatingSystem() (SoftwareComponent, bool) {
 func (a ImportedAsset) Criticality() Criticality { return a.criticality }
 
 func (a ImportedAsset) Owner() (OwnerEmail, bool) {
-	if a.owner.blank() {
+	if blank(string(a.owner)) {
 		return "", false
 	}
 	return a.owner, true

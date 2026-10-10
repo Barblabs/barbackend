@@ -155,6 +155,4 @@ func (e Exposure) String() string {
 
 type OwnerEmail string
 
-func (o OwnerEmail) blank() bool { return blank(string(o)) }
-
 func blank(s string) bool { return strings.TrimSpace(s) == "" }

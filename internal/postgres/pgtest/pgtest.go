@@ -108,6 +108,18 @@ func NewDB(t *testing.T) *postgres.DB {
 	return db
 }
 
+// Conn opens a raw connection to url, for asserting on rows a store does not expose.
+func Conn(t *testing.T, url string) *pgx.Conn {
+	t.Helper()
+	ctx := context.Background()
+	conn, err := pgx.Connect(ctx, url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = conn.Close(ctx) })
+	return conn
+}
+
 func exec(ctx context.Context, sql string) error {
 	conn, err := pgx.Connect(ctx, url("postgres"))
 	if err != nil {

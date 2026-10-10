@@ -15,13 +15,12 @@ func TestNewAsset(t *testing.T) {
 		imported inventory.ImportedAsset
 		want     error
 	}{
-		{"valid", inventory.SourceReference{Source: "s", RecordID: "1"}, imported, nil},
-		{"empty source", inventory.SourceReference{RecordID: "1"}, imported, inventory.ErrInvalidSourceReference},
-		{"whitespace source", inventory.SourceReference{Source: " ", RecordID: "1"}, imported, inventory.ErrInvalidSourceReference},
-		{"empty record id", inventory.SourceReference{Source: "s"}, imported, inventory.ErrInvalidSourceReference},
-		{"whitespace record id", inventory.SourceReference{Source: "s", RecordID: "\t"}, imported, inventory.ErrInvalidSourceReference},
+		{"valid", inventory.SourceReference{Source: sourceID, RecordID: "1"}, imported, nil},
+		{"zero source", inventory.SourceReference{RecordID: "1"}, imported, inventory.ErrInvalidSourceReference},
+		{"empty record id", inventory.SourceReference{Source: sourceID}, imported, inventory.ErrInvalidSourceReference},
+		{"whitespace record id", inventory.SourceReference{Source: sourceID, RecordID: "\t"}, imported, inventory.ErrInvalidSourceReference},
 		{"empty reference", inventory.SourceReference{}, imported, inventory.ErrInvalidSourceReference},
-		{"zero imported asset", inventory.SourceReference{Source: "s", RecordID: "1"}, inventory.ImportedAsset{}, inventory.ErrZeroImportedAsset},
+		{"zero imported asset", inventory.SourceReference{Source: sourceID, RecordID: "1"}, inventory.ImportedAsset{}, inventory.ErrZeroImportedAsset},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -261,7 +260,7 @@ func TestAssetReplaceImportedNewOwnerWithoutDeclaration(t *testing.T) {
 }
 
 func TestRestoreAsset(t *testing.T) {
-	ref := inventory.SourceReference{Source: "s", RecordID: "1"}
+	ref := inventory.SourceReference{Source: sourceID, RecordID: "1"}
 	imported := mustImported(t, validParams())
 	tests := []struct {
 		name  string
@@ -271,7 +270,7 @@ func TestRestoreAsset(t *testing.T) {
 	}{
 		{"active without declarations", ref, inventory.AssetState{Active: true}, nil},
 		{"inactive with declarations", ref, inventory.AssetState{DeclaredOwner: "o@example.com", DeclaredExposure: inventory.Internal}, nil},
-		{"invalid reference", inventory.SourceReference{Source: "s"}, inventory.AssetState{Active: true}, inventory.ErrInvalidSourceReference},
+		{"invalid reference", inventory.SourceReference{Source: sourceID}, inventory.AssetState{Active: true}, inventory.ErrInvalidSourceReference},
 		{"out of range exposure", ref, inventory.AssetState{DeclaredExposure: 42}, inventory.ErrInvalidExposure},
 	}
 	for _, tt := range tests {

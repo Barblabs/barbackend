@@ -9,7 +9,7 @@ Review rules for judgement calls that no linter checks. Apply every rule to the 
 - **Invariants live in constructors**: types whose invariants matter keep unexported fields, are built by a validating constructor, and reject their zero value where it would mean "unset".
 - **Blank means `strings.TrimSpace(s) == ""`**; stored text stays raw, as the CMDB Source wrote it.
 - **Defensive copies**: slices and pointers are copied on the way in and on the way out.
-- **One home per rule**: a check used in more than one place is a single unexported function (for example `OwnerEmail.blank`).
+- **One home per rule**: a check used in more than one place is a single unexported function (for example `blank`).
 
 ## Tests
 

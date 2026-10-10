@@ -11,10 +11,7 @@ import (
 
 // CreateAsset stores a new Asset with its imported values, state and Declarations.
 func (t *Tx) CreateAsset(ctx context.Context, a *inventory.Asset) error {
-	source, err := parseUUID(string(a.Ref().Source))
-	if err != nil {
-		return err
-	}
+	source := uuid.UUID(a.Ref().Source)
 	imported, err := t.importedColumns(ctx, source, a.Imported())
 	if err != nil {
 		return err
@@ -47,10 +44,7 @@ func (t *Tx) CreateAsset(ctx context.Context, a *inventory.Asset) error {
 // UpdateImported replaces an existing Asset's imported values; its state and
 // Declarations are left as stored.
 func (t *Tx) UpdateImported(ctx context.Context, a *inventory.Asset) error {
-	source, err := parseUUID(string(a.Ref().Source))
-	if err != nil {
-		return err
-	}
+	source := uuid.UUID(a.Ref().Source)
 	imported, err := t.importedColumns(ctx, source, a.Imported())
 	if err != nil {
 		return err
@@ -72,10 +66,7 @@ func (t *Tx) UpdateImported(ctx context.Context, a *inventory.Asset) error {
 
 // UpdateActive stores whether an existing Asset is Active.
 func (t *Tx) UpdateActive(ctx context.Context, a *inventory.Asset) error {
-	source, err := parseUUID(string(a.Ref().Source))
-	if err != nil {
-		return err
-	}
+	source := uuid.UUID(a.Ref().Source)
 	rows, err := t.q.UpdateAssetActive(ctx, sqlcgen.UpdateAssetActiveParams{
 		CmdbSourceID: source,
 		RecordID:     a.Ref().RecordID,
@@ -92,10 +83,7 @@ func (t *Tx) UpdateActive(ctx context.Context, a *inventory.Asset) error {
 
 // Assets returns every Asset of a CMDB Source, Active or not, ordered by record id.
 func (t *Tx) Assets(ctx context.Context, id inventory.CMDBSourceID) ([]*inventory.Asset, error) {
-	source, err := parseUUID(string(id))
-	if err != nil {
-		return nil, err
-	}
+	source := uuid.UUID(id)
 	rows, err := t.q.ListAssets(ctx, source)
 	if err != nil {
 		return nil, fmt.Errorf("list assets of %s: %w", id, err)

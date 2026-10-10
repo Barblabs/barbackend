@@ -5,9 +5,11 @@ import (
 	"testing"
 
 	"barbackend/internal/inventory"
+	"github.com/google/uuid"
 )
 
 func TestNewCMDBSource(t *testing.T) {
+	customerID := inventory.CustomerID(uuid.New())
 	tests := []struct {
 		name     string
 		id       inventory.CMDBSourceID
@@ -15,10 +17,10 @@ func TestNewCMDBSource(t *testing.T) {
 		provider inventory.CMDBProvider
 		want     error
 	}{
-		{"valid", "s", "c", "p", nil},
-		{"blank id", " ", "c", "p", inventory.ErrInvalidCMDBSource},
-		{"blank customer", "s", "", "p", inventory.ErrInvalidCMDBSource},
-		{"blank provider", "s", "c", "\t", inventory.ErrInvalidCMDBSource},
+		{"valid", sourceID, customerID, "p", nil},
+		{"zero id", inventory.CMDBSourceID{}, customerID, "p", inventory.ErrInvalidCMDBSource},
+		{"zero customer", sourceID, inventory.CustomerID{}, "p", inventory.ErrInvalidCMDBSource},
+		{"blank provider", sourceID, customerID, "\t", inventory.ErrInvalidCMDBSource},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

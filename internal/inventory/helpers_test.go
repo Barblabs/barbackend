@@ -4,7 +4,10 @@ import (
 	"testing"
 
 	"barbackend/internal/inventory"
+	"github.com/google/uuid"
 )
+
+var sourceID = inventory.CMDBSourceID(uuid.New())
 
 func validParams() inventory.ImportedAssetParams {
 	return inventory.ImportedAssetParams{Name: "srv-01", Kind: inventory.Server}
@@ -21,7 +24,7 @@ func mustImported(t *testing.T, p inventory.ImportedAssetParams) inventory.Impor
 
 func newAsset(t *testing.T, p inventory.ImportedAssetParams) *inventory.Asset {
 	t.Helper()
-	a, err := inventory.NewAsset(inventory.SourceReference{Source: "src", RecordID: "1"}, mustImported(t, p))
+	a, err := inventory.NewAsset(inventory.SourceReference{Source: sourceID, RecordID: "1"}, mustImported(t, p))
 	if err != nil {
 		t.Fatal(err)
 	}
