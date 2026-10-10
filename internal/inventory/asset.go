@@ -27,7 +27,7 @@ func NewAsset(ref SourceReference, imported ImportedAsset) (*Asset, error) {
 }
 
 // AssetState is what barbattack itself holds about an Asset, as opposed to
-// its imported values. A blank owner or an Unknown exposure means no Declaration.
+// its imported values. A zero owner or an Unknown exposure means no Declaration.
 type AssetState struct {
 	Active           bool
 	DeclaredOwner    OwnerEmail
@@ -53,15 +53,15 @@ func (a *Asset) Ref() SourceReference { return a.ref }
 func (a *Asset) Imported() ImportedAsset { return a.imported }
 
 func (a *Asset) Owner() (OwnerEmail, bool) {
-	if !blank(string(a.declaredOwner)) {
+	if !a.declaredOwner.isZero() {
 		return a.declaredOwner, true
 	}
 	return a.imported.Owner()
 }
 
 func (a *Asset) DeclaredOwner() (OwnerEmail, bool) {
-	if blank(string(a.declaredOwner)) {
-		return "", false
+	if a.declaredOwner.isZero() {
+		return OwnerEmail{}, false
 	}
 	return a.declaredOwner, true
 }
@@ -69,14 +69,14 @@ func (a *Asset) DeclaredOwner() (OwnerEmail, bool) {
 func (a *Asset) Exposure() Exposure { return a.declaredExposure }
 
 func (a *Asset) DeclareOwner(o OwnerEmail) error {
-	if blank(string(o)) {
+	if o.isZero() {
 		return ErrEmptyOwnerEmail
 	}
 	a.declaredOwner = o
 	return nil
 }
 
-func (a *Asset) ClearOwnerDeclaration() { a.declaredOwner = "" }
+func (a *Asset) ClearOwnerDeclaration() { a.declaredOwner = OwnerEmail{} }
 
 func (a *Asset) DeclareExposure(e Exposure) error {
 	if !e.valid() || e == ExposureUnknown {

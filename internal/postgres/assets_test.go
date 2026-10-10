@@ -12,7 +12,7 @@ import (
 	"barbackend/internal/postgres/pgtest"
 )
 
-func fullParams() inventory.ImportedAssetParams {
+func fullParams(t *testing.T) inventory.ImportedAssetParams {
 	return inventory.ImportedAssetParams{
 		Name:        "srv-01",
 		Description: "Billing API",
@@ -24,7 +24,7 @@ func fullParams() inventory.ImportedAssetParams {
 			{Role: inventory.Application, Name: "custom agent"},
 		},
 		Criticality: inventory.CriticalityHigh,
-		Owner:       "owner@example.com",
+		Owner:       mustOwner(t, "owner@example.com"),
 		Retired:     true,
 	}
 }
@@ -37,7 +37,7 @@ func TestAssetRoundTrip(t *testing.T) {
 		state    inventory.AssetState
 	}{
 		{"minimal and active", minimal, inventory.AssetState{Active: true}},
-		{"everything set and inactive", fullParams(), inventory.AssetState{DeclaredOwner: "declared@example.com", DeclaredExposure: inventory.InternetFacing}},
+		{"everything set and inactive", fullParams(t), inventory.AssetState{DeclaredOwner: mustOwner(t, "declared@example.com"), DeclaredExposure: inventory.InternetFacing}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -67,7 +67,7 @@ func TestAssetOwnersAreSharedWithinACustomer(t *testing.T) {
 	second := newSource(t, db, customer)
 	other := newSource(t, db, newCustomer())
 
-	p := inventory.ImportedAssetParams{Name: "pc", Kind: inventory.Workstation, Owner: "owner@example.com"}
+	p := inventory.ImportedAssetParams{Name: "pc", Kind: inventory.Workstation, Owner: mustOwner(t, "owner@example.com")}
 	inTx(t, db, func(tx *postgres.Tx) error {
 		for i, src := range []inventory.CMDBSource{first, first, second, other} {
 			a, err := inventory.NewAsset(inventory.SourceReference{Source: src.ID(), RecordID: string(rune('a' + i))}, mustImported(t, p))
@@ -75,7 +75,7 @@ func TestAssetOwnersAreSharedWithinACustomer(t *testing.T) {
 				return err
 			}
 			if i == 1 {
-				if err := a.DeclareOwner("owner@example.com"); err != nil {
+				if err := a.DeclareOwner(mustOwner(t, "Owner@Example.com")); err != nil {
 					return err
 				}
 			}
@@ -99,8 +99,8 @@ func TestUpdateImportedKeepsStateAndDeclarations(t *testing.T) {
 	db := pgtest.NewDB(t)
 	src := newSource(t, db, newCustomer())
 	ref := inventory.SourceReference{Source: src.ID(), RecordID: "1"}
-	state := inventory.AssetState{DeclaredOwner: "declared@example.com", DeclaredExposure: inventory.Internal}
-	stored, err := inventory.RestoreAsset(ref, mustImported(t, fullParams()), state)
+	state := inventory.AssetState{DeclaredOwner: mustOwner(t, "declared@example.com"), DeclaredExposure: inventory.Internal}
+	stored, err := inventory.RestoreAsset(ref, mustImported(t, fullParams(t)), state)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,7 +131,7 @@ func TestUpdateActiveKeepsFirstInactiveTime(t *testing.T) {
 	t.Parallel()
 	db, conn := newDBWithConn(t)
 	src := newSource(t, db, newCustomer())
-	a, err := inventory.NewAsset(inventory.SourceReference{Source: src.ID(), RecordID: "1"}, mustImported(t, fullParams()))
+	a, err := inventory.NewAsset(inventory.SourceReference{Source: src.ID(), RecordID: "1"}, mustImported(t, fullParams(t)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,7 +175,7 @@ func TestUpdatesOfMissingAssetFail(t *testing.T) {
 	t.Parallel()
 	db := pgtest.NewDB(t)
 	src := newSource(t, db, newCustomer())
-	a, err := inventory.NewAsset(inventory.SourceReference{Source: src.ID(), RecordID: "missing"}, mustImported(t, fullParams()))
+	a, err := inventory.NewAsset(inventory.SourceReference{Source: src.ID(), RecordID: "missing"}, mustImported(t, fullParams(t)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -187,25 +187,6 @@ func TestUpdatesOfMissingAssetFail(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			if err := db.InTx(context.Background(), update); !errors.Is(err, postgres.ErrNotFound) {
 				t.Errorf("err = %v, want ErrNotFound", err)
-			}
-		})
-	}
-}
-
-func TestUnnormalizedOwnerEmailIsRejected(t *testing.T) {
-	t.Parallel()
-	db := pgtest.NewDB(t)
-	src := newSource(t, db, newCustomer())
-	for _, email := range []inventory.OwnerEmail{"Alice@example.com", " alice@example.com"} {
-		t.Run(string(email), func(t *testing.T) {
-			p := inventory.ImportedAssetParams{Name: "pc", Kind: inventory.Workstation, Owner: email}
-			a, err := inventory.NewAsset(inventory.SourceReference{Source: src.ID(), RecordID: "1"}, mustImported(t, p))
-			if err != nil {
-				t.Fatal(err)
-			}
-			err = db.InTx(context.Background(), func(tx *postgres.Tx) error { return tx.CreateAsset(context.Background(), a) })
-			if err == nil {
-				t.Error("CreateAsset succeeded, want the owner email check to reject it")
 			}
 		})
 	}

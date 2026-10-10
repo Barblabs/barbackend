@@ -48,9 +48,9 @@ func TestNewAsset(t *testing.T) {
 }
 
 func TestAssetOwner(t *testing.T) {
-	imported := inventory.OwnerEmail("imported@example.com")
-	declared := inventory.OwnerEmail("declared@example.com")
-	none := inventory.OwnerEmail("")
+	imported := mustOwner(t, "imported@example.com")
+	declared := mustOwner(t, "declared@example.com")
+	none := inventory.OwnerEmail{}
 
 	tests := []struct {
 		name     string
@@ -159,8 +159,8 @@ func TestAssetRetiredDoesNotAffectActive(t *testing.T) {
 }
 
 func TestAssetReplaceImported(t *testing.T) {
-	imported := inventory.OwnerEmail("imported@example.com")
-	declared := inventory.OwnerEmail("declared@example.com")
+	imported := mustOwner(t, "imported@example.com")
+	declared := mustOwner(t, "declared@example.com")
 
 	p := validParams()
 	p.Owner = imported
@@ -198,17 +198,15 @@ func TestAssetReplaceImported(t *testing.T) {
 }
 
 func TestAssetDeclareBlankOwner(t *testing.T) {
-	imported := inventory.OwnerEmail("imported@example.com")
-	declared := inventory.OwnerEmail("declared@example.com")
+	imported := mustOwner(t, "imported@example.com")
+	declared := mustOwner(t, "declared@example.com")
 
 	p := validParams()
 	p.Owner = imported
 	a := newAsset(t, p)
 
-	for _, blank := range []inventory.OwnerEmail{"", "   "} {
-		if err := a.DeclareOwner(blank); !errors.Is(err, inventory.ErrEmptyOwnerEmail) {
-			t.Fatalf("DeclareOwner(%q) err = %v, want ErrEmptyOwnerEmail", blank, err)
-		}
+	if err := a.DeclareOwner(inventory.OwnerEmail{}); !errors.Is(err, inventory.ErrEmptyOwnerEmail) {
+		t.Fatalf("DeclareOwner(zero) err = %v, want ErrEmptyOwnerEmail", err)
 	}
 	if o, ok := a.Owner(); !ok || o != imported {
 		t.Errorf("Owner() = %v, %v; want imported", o, ok)
@@ -217,7 +215,7 @@ func TestAssetDeclareBlankOwner(t *testing.T) {
 	if err := a.DeclareOwner(declared); err != nil {
 		t.Fatal(err)
 	}
-	if err := a.DeclareOwner(""); err == nil {
+	if err := a.DeclareOwner(inventory.OwnerEmail{}); err == nil {
 		t.Fatal("expected error")
 	}
 	if o, ok := a.Owner(); !ok || o != declared {
@@ -226,7 +224,7 @@ func TestAssetDeclareBlankOwner(t *testing.T) {
 }
 
 func TestAssetReplaceImportedRejectsZero(t *testing.T) {
-	owner := inventory.OwnerEmail("o@example.com")
+	owner := mustOwner(t, "o@example.com")
 	p := validParams()
 	p.Owner = owner
 	a := newAsset(t, p)
@@ -244,8 +242,8 @@ func TestAssetReplaceImportedRejectsZero(t *testing.T) {
 }
 
 func TestAssetReplaceImportedNewOwnerWithoutDeclaration(t *testing.T) {
-	first := inventory.OwnerEmail("first@example.com")
-	second := inventory.OwnerEmail("second@example.com")
+	first := mustOwner(t, "first@example.com")
+	second := mustOwner(t, "second@example.com")
 	p := validParams()
 	p.Owner = first
 	a := newAsset(t, p)
@@ -269,7 +267,7 @@ func TestRestoreAsset(t *testing.T) {
 		want  error
 	}{
 		{"active without declarations", ref, inventory.AssetState{Active: true}, nil},
-		{"inactive with declarations", ref, inventory.AssetState{DeclaredOwner: "o@example.com", DeclaredExposure: inventory.Internal}, nil},
+		{"inactive with declarations", ref, inventory.AssetState{DeclaredOwner: mustOwner(t, "o@example.com"), DeclaredExposure: inventory.Internal}, nil},
 		{"invalid reference", inventory.SourceReference{Source: sourceID}, inventory.AssetState{Active: true}, inventory.ErrInvalidSourceReference},
 		{"out of range exposure", ref, inventory.AssetState{DeclaredExposure: 42}, inventory.ErrInvalidExposure},
 	}
@@ -292,16 +290,17 @@ func TestRestoreAsset(t *testing.T) {
 }
 
 func TestAssetDeclaredOwnerIgnoresImported(t *testing.T) {
+	declared := mustOwner(t, "declared@example.com")
 	p := validParams()
-	p.Owner = "imported@example.com"
+	p.Owner = mustOwner(t, "imported@example.com")
 	a := newAsset(t, p)
 	if got, ok := a.DeclaredOwner(); ok {
-		t.Fatalf("DeclaredOwner() = %q, want none", got)
+		t.Fatalf("DeclaredOwner() = %v, want none", got)
 	}
-	if err := a.DeclareOwner("declared@example.com"); err != nil {
+	if err := a.DeclareOwner(declared); err != nil {
 		t.Fatal(err)
 	}
-	if got, ok := a.DeclaredOwner(); !ok || got != "declared@example.com" {
-		t.Errorf("DeclaredOwner() = %q, %v; want declared@example.com, true", got, ok)
+	if got, ok := a.DeclaredOwner(); !ok || got != declared {
+		t.Errorf("DeclaredOwner() = %v, %v; want %v, true", got, ok, declared)
 	}
 }

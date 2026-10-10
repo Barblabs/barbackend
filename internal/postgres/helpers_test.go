@@ -71,3 +71,12 @@ func queryInt(t *testing.T, conn *pgx.Conn, sql string, args ...any) int {
 	}
 	return n
 }
+
+func mustOwner(t *testing.T, email string) inventory.OwnerEmail {
+	t.Helper()
+	o, err := inventory.NewOwnerEmail(email)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return o
+}

@@ -105,13 +105,21 @@ func (t *Tx) Assets(ctx context.Context, id inventory.CMDBSourceID) ([]*inventor
 }
 
 func restoreAsset(ref inventory.SourceReference, row sqlcgen.ListAssetsRow, software []inventory.SoftwareComponent) (*inventory.Asset, error) {
+	importedOwner, err := ownerEmail(row.ImportedOwner)
+	if err != nil {
+		return nil, err
+	}
+	declaredOwner, err := ownerEmail(row.DeclaredOwner)
+	if err != nil {
+		return nil, err
+	}
 	p := inventory.ImportedAssetParams{
 		Name:        row.Name,
 		Description: row.Description,
 		Kind:        inventory.AssetKind(row.KindID),
 		Software:    software,
 		Criticality: inventory.Criticality(valueOrZero(row.CriticalityID)),
-		Owner:       inventory.OwnerEmail(valueOrZero(row.ImportedOwner)),
+		Owner:       importedOwner,
 		Retired:     row.Retired,
 	}
 	if row.HardwareVendor != nil && row.HardwareModel != nil {
@@ -123,9 +131,17 @@ func restoreAsset(ref inventory.SourceReference, row sqlcgen.ListAssetsRow, soft
 	}
 	return inventory.RestoreAsset(ref, imported, inventory.AssetState{
 		Active:           row.Active,
-		DeclaredOwner:    inventory.OwnerEmail(valueOrZero(row.DeclaredOwner)),
+		DeclaredOwner:    declaredOwner,
 		DeclaredExposure: inventory.Exposure(valueOrZero(row.DeclaredExposureID)),
 	})
+}
+
+// ownerEmail maps a nullable email column; NULL is the zero OwnerEmail, meaning no owner.
+func ownerEmail(email *string) (inventory.OwnerEmail, error) {
+	if email == nil {
+		return inventory.OwnerEmail{}, nil
+	}
+	return inventory.NewOwnerEmail(*email)
 }
 
 func (t *Tx) software(ctx context.Context, source uuid.UUID) (map[string][]inventory.SoftwareComponent, error) {
@@ -209,7 +225,7 @@ func (t *Tx) declaredOwnerID(ctx context.Context, source uuid.UUID, a *inventory
 }
 
 func (t *Tx) ownerID(ctx context.Context, source uuid.UUID, email inventory.OwnerEmail) (int64, error) {
-	id, err := t.q.UpsertAssetOwner(ctx, sqlcgen.UpsertAssetOwnerParams{CmdbSourceID: source, Email: string(email)})
+	id, err := t.q.UpsertAssetOwner(ctx, sqlcgen.UpsertAssetOwnerParams{CmdbSourceID: source, Email: email.String()})
 	if err != nil {
 		return 0, fmt.Errorf("upsert asset owner %s: %w", email, err)
 	}

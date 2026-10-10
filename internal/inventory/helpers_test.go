@@ -30,3 +30,12 @@ func newAsset(t *testing.T, p inventory.ImportedAssetParams) *inventory.Asset {
 	}
 	return a
 }
+
+func mustOwner(t *testing.T, email string) inventory.OwnerEmail {
+	t.Helper()
+	o, err := inventory.NewOwnerEmail(email)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return o
+}

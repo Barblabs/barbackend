@@ -153,6 +153,24 @@ func (e Exposure) String() string {
 	}
 }
 
-type OwnerEmail string
+// OwnerEmail identifies an Asset Owner. Emails differing only in case or
+// surrounding space name the same person (ADR 0003), so every edge gets the
+// same canonical form from here. The zero value means no owner.
+type OwnerEmail struct {
+	address string
+}
+
+// NewOwnerEmail does not check email syntax: that belongs to the edge that
+// receives it.
+func NewOwnerEmail(s string) (OwnerEmail, error) {
+	if blank(s) {
+		return OwnerEmail{}, ErrEmptyOwnerEmail
+	}
+	return OwnerEmail{address: strings.ToLower(strings.TrimSpace(s))}, nil
+}
+
+func (o OwnerEmail) String() string { return o.address }
+
+func (o OwnerEmail) isZero() bool { return o == OwnerEmail{} }
 
 func blank(s string) bool { return strings.TrimSpace(s) == "" }

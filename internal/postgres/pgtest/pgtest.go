@@ -47,8 +47,9 @@ func run(m *testing.M) int {
 		return 1
 	}
 	var log bytes.Buffer
+	// Matches the major version production runs.
 	pg := embeddedpostgres.NewDatabase(embeddedpostgres.DefaultConfig().
-		Version(embeddedpostgres.V17).
+		Version(embeddedpostgres.V15).
 		Port(port).
 		RuntimePath(filepath.Join(dir, "runtime")).
 		Logger(&log))

@@ -100,7 +100,7 @@ func TestImportedAssetZeroValues(t *testing.T) {
 }
 
 func TestImportedAssetGetters(t *testing.T) {
-	owner := inventory.OwnerEmail("a@b.c")
+	owner := mustOwner(t, "a@b.c")
 	p := inventory.ImportedAssetParams{
 		Name: "n", Description: "d", Kind: inventory.Server,
 		Hardware:    &inventory.Hardware{Vendor: "Dell", Model: "R740"},
@@ -140,15 +140,6 @@ func TestImportedAssetHardwareStoredRaw(t *testing.T) {
 	a := mustImported(t, p)
 	if hw, ok := a.Hardware(); !ok || hw != (inventory.Hardware{Vendor: " Dell ", Model: ""}) {
 		t.Errorf("Hardware() = %+v, %v; want {Vendor:\" Dell \" Model:\"\"}, true", hw, ok)
-	}
-}
-
-func TestImportedAssetBlankOwner(t *testing.T) {
-	p := validParams()
-	p.Owner = "   "
-	a := mustImported(t, p)
-	if o, ok := a.Owner(); ok {
-		t.Errorf("Owner() = %v, want none", o)
 	}
 }
 

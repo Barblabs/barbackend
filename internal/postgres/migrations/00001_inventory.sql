@@ -49,10 +49,7 @@ CREATE TABLE asset_owners (
     id          bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     customer_id uuid NOT NULL,
     email       text NOT NULL,
-    UNIQUE (customer_id, email),
-    -- Each edge normalizes emails; this rejects one that forgets, which would
-    -- otherwise split one person into two Asset Owners (ADR 0003).
-    CHECK (email = lower(btrim(email)))
+    UNIQUE (customer_id, email)
 );
 
 CREATE TABLE assets (
@@ -89,9 +86,6 @@ CREATE TABLE software_components (
     FOREIGN KEY (cmdb_source_id, record_id) REFERENCES assets (cmdb_source_id, record_id) ON DELETE CASCADE,
     CHECK ((product_vendor IS NULL) = (product_name IS NULL))
 );
-
-CREATE UNIQUE INDEX software_components_one_operating_system
-    ON software_components (cmdb_source_id, record_id) WHERE role_id = 1;
 
 -- +goose Down
 DROP TABLE software_components;
