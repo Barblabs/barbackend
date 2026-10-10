@@ -57,3 +57,17 @@ func (q *Queries) InsertCMDBSource(ctx context.Context, arg InsertCMDBSourcePara
 	)
 	return err
 }
+
+const lockCMDBSource = `-- name: LockCMDBSource :one
+SELECT id
+FROM cmdb_sources
+WHERE id = $1
+FOR UPDATE
+`
+
+func (q *Queries) LockCMDBSource(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockCMDBSource, id)
+	var id_2 uuid.UUID
+	err := row.Scan(&id_2)
+	return id_2, err
+}

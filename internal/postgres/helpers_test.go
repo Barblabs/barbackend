@@ -3,6 +3,7 @@ package postgres_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"barbackend/internal/inventory"
 	"barbackend/internal/postgres"
@@ -44,12 +45,47 @@ func mustImported(t *testing.T, p inventory.ImportedAssetParams) inventory.Impor
 func assets(t *testing.T, db *postgres.DB, src inventory.CMDBSourceID) []*inventory.Asset {
 	t.Helper()
 	var got []*inventory.Asset
-	inTx(t, db, func(tx *postgres.Tx) error {
+	inSource(t, db, src, func(tx *postgres.SourceTx) error {
 		var err error
-		got, err = tx.Assets(context.Background(), src)
+		got, err = tx.Assets(context.Background())
 		return err
 	})
 	return got
+}
+
+func inSource(t *testing.T, db *postgres.DB, src inventory.CMDBSourceID, fn func(*postgres.SourceTx) error) {
+	t.Helper()
+	if err := db.InLockedSource(context.Background(), src, time.Now(), fn); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// syncRecords saves the reconciliation of the stored Assets with a snapshot
+// of records, as a Sync does.
+func syncRecords(t *testing.T, db *postgres.DB, src inventory.CMDBSourceID, records ...inventory.Record) inventory.Reconciliation {
+	t.Helper()
+	var r inventory.Reconciliation
+	inSource(t, db, src, func(tx *postgres.SourceTx) error {
+		existing, err := tx.Assets(context.Background())
+		if err != nil {
+			return err
+		}
+		r, err = inventory.Reconcile(src, existing, inventory.Snapshot{Records: records})
+		if err != nil {
+			return err
+		}
+		return save(tx, r)
+	})
+	return r
+}
+
+func save(tx *postgres.SourceTx, r inventory.Reconciliation) error {
+	now := time.Now()
+	run, err := inventory.SucceededRun(r, now, now)
+	if err != nil {
+		return err
+	}
+	return tx.Save(context.Background(), r, run)
 }
 
 func newDBWithConn(t *testing.T) (*postgres.DB, *pgx.Conn) {

@@ -6,3 +6,9 @@ VALUES ($1, $2, $3, $4);
 SELECT id, customer_id, provider, settings
 FROM cmdb_sources
 WHERE id = $1;
+
+-- name: LockCMDBSource :one
+SELECT id
+FROM cmdb_sources
+WHERE id = $1
+FOR UPDATE;

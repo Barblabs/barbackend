@@ -6,3 +6,10 @@ INSERT INTO sync_runs (
     @cmdb_source_id, @started_at, @finished_at, @outcome_id,
     @created, @updated, @deactivated, @reactivated, @skipped, @skipped_records, @error
 );
+
+-- name: SucceededRunStartedAfter :one
+SELECT EXISTS (
+    SELECT 1
+    FROM sync_runs
+    WHERE cmdb_source_id = @cmdb_source_id AND outcome_id = @outcome_id AND started_at > @started_at
+);

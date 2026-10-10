@@ -2,99 +2,36 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"time"
 
 	"barbackend/internal/inventory"
 	"barbackend/internal/postgres/sqlcgen"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
-// CreateAsset stores a new Asset with its imported values, state and Declarations.
-func (t *Tx) CreateAsset(ctx context.Context, a *inventory.Asset) error {
-	source := uuid.UUID(a.Ref().Source)
-	imported, err := t.importedColumns(ctx, source, a.Imported())
-	if err != nil {
-		return err
-	}
-	declaredOwner, err := t.declaredOwnerID(ctx, source, a)
-	if err != nil {
-		return err
-	}
-	err = t.q.InsertAsset(ctx, sqlcgen.InsertAssetParams{
-		CmdbSourceID:       source,
-		RecordID:           a.Ref().RecordID,
-		Name:               imported.Name,
-		Description:        imported.Description,
-		KindID:             imported.KindID,
-		HardwareVendor:     imported.HardwareVendor,
-		HardwareModel:      imported.HardwareModel,
-		CriticalityID:      imported.CriticalityID,
-		ImportedOwnerID:    imported.ImportedOwnerID,
-		Retired:            imported.Retired,
-		DeclaredOwnerID:    declaredOwner,
-		DeclaredExposureID: nullableID(a.Exposure(), inventory.ExposureUnknown),
-		Active:             a.Active(),
-	})
-	if err != nil {
-		return fmt.Errorf("insert asset %v: %w", a.Ref(), err)
-	}
-	return t.insertSoftware(ctx, source, a.Ref().RecordID, a.Imported().Software())
+// SourceTx reads and writes the Assets of one locked CMDB Source.
+type SourceTx struct {
+	q      *sqlcgen.Queries
+	source inventory.CMDBSourceID
 }
 
-// UpdateImported replaces an existing Asset's imported values; its state and
-// Declarations are left as stored.
-func (t *Tx) UpdateImported(ctx context.Context, a *inventory.Asset) error {
-	source := uuid.UUID(a.Ref().Source)
-	imported, err := t.importedColumns(ctx, source, a.Imported())
-	if err != nil {
-		return err
-	}
-	imported.CmdbSourceID = source
-	imported.RecordID = a.Ref().RecordID
-	rows, err := t.q.UpdateAssetImported(ctx, imported)
-	if err != nil {
-		return fmt.Errorf("update asset %v: %w", a.Ref(), err)
-	}
-	if rows == 0 {
-		return fmt.Errorf("asset %v: %w", a.Ref(), ErrNotFound)
-	}
-	if err := t.q.DeleteSoftwareComponents(ctx, sqlcgen.DeleteSoftwareComponentsParams{CmdbSourceID: source, RecordID: a.Ref().RecordID}); err != nil {
-		return fmt.Errorf("delete software of asset %v: %w", a.Ref(), err)
-	}
-	return t.insertSoftware(ctx, source, a.Ref().RecordID, a.Imported().Software())
-}
-
-// UpdateActive stores whether an existing Asset is Active.
-func (t *Tx) UpdateActive(ctx context.Context, a *inventory.Asset) error {
-	source := uuid.UUID(a.Ref().Source)
-	rows, err := t.q.UpdateAssetActive(ctx, sqlcgen.UpdateAssetActiveParams{
-		CmdbSourceID: source,
-		RecordID:     a.Ref().RecordID,
-		Active:       a.Active(),
-	})
-	if err != nil {
-		return fmt.Errorf("update asset %v: %w", a.Ref(), err)
-	}
-	if rows == 0 {
-		return fmt.Errorf("asset %v: %w", a.Ref(), ErrNotFound)
-	}
-	return nil
-}
-
-// Assets returns every Asset of a CMDB Source, Active or not, ordered by record id.
-func (t *Tx) Assets(ctx context.Context, id inventory.CMDBSourceID) ([]*inventory.Asset, error) {
-	source := uuid.UUID(id)
+// Assets returns every Asset of the CMDB Source, Active or not, ordered by record id.
+func (t *SourceTx) Assets(ctx context.Context) ([]*inventory.Asset, error) {
+	source := uuid.UUID(t.source)
 	rows, err := t.q.ListAssets(ctx, source)
 	if err != nil {
-		return nil, fmt.Errorf("list assets of %s: %w", id, err)
+		return nil, fmt.Errorf("list assets of %s: %w", t.source, err)
 	}
-	software, err := t.software(ctx, source)
+	software, err := t.software(ctx)
 	if err != nil {
 		return nil, err
 	}
 	assets := make([]*inventory.Asset, 0, len(rows))
 	for _, row := range rows {
-		ref := inventory.SourceReference{Source: id, RecordID: row.RecordID}
+		ref := inventory.SourceReference{Source: t.source, RecordID: row.RecordID}
 		a, err := restoreAsset(ref, row, software[row.RecordID])
 		if err != nil {
 			return nil, fmt.Errorf("restore asset %v: %w", ref, err)
@@ -102,6 +39,252 @@ func (t *Tx) Assets(ctx context.Context, id inventory.CMDBSourceID) ([]*inventor
 		assets = append(assets, a)
 	}
 	return assets, nil
+}
+
+// Save writes the changes of a Reconciliation and the successful Sync Run
+// that produced it. Updates write only imported values and the Active state,
+// so Declarations stay as stored. Each kind of write is one statement for all
+// Assets, so a Sync takes the same number of round trips at any size.
+func (t *SourceTx) Save(ctx context.Context, r inventory.Reconciliation, run inventory.SyncRun) error {
+	switch {
+	case r.Source() != t.source || run.Source() != t.source:
+		return fmt.Errorf("save to %s: reconciliation of %s, run of %s", t.source, r.Source(), run.Source())
+	case run.Outcome() != inventory.SyncSucceeded:
+		return fmt.Errorf("save to %s: run outcome is %s", t.source, run.Outcome())
+	}
+	changes := r.Changes()
+	owners, err := t.upsertOwners(ctx, changes)
+	if err != nil {
+		return err
+	}
+	if err := t.insertCreated(ctx, changes, owners); err != nil {
+		return err
+	}
+	if err := t.updateImported(ctx, changes, owners); err != nil {
+		return err
+	}
+	if err := t.replaceSoftware(ctx, changes); err != nil {
+		return err
+	}
+	if err := t.updateActive(ctx, changes); err != nil {
+		return err
+	}
+	return recordSyncRun(ctx, t.q, run)
+}
+
+// ownerIDs maps an Asset Owner's email to its row id.
+type ownerIDs map[string]int64
+
+func (ids ownerIDs) ref(owner inventory.OwnerEmail, ok bool) *int64 {
+	if !ok {
+		return nil
+	}
+	id := ids[owner.String()]
+	return &id
+}
+
+// upsertOwners stores every Asset Owner the changes write. Only created Assets
+// write a declared owner: updates keep the stored Declarations.
+func (t *SourceTx) upsertOwners(ctx context.Context, changes []inventory.Change) (ownerIDs, error) {
+	seen := map[string]bool{}
+	var emails []string
+	add := func(owner inventory.OwnerEmail, ok bool) {
+		if ok && !seen[owner.String()] {
+			seen[owner.String()] = true
+			emails = append(emails, owner.String())
+		}
+	}
+	for _, c := range changes {
+		if c.Created || c.ImportedChanged {
+			add(c.Asset.Imported().Owner())
+		}
+		if c.Created {
+			add(c.Asset.DeclaredOwner())
+		}
+	}
+	if len(emails) == 0 {
+		return nil, nil
+	}
+	rows, err := t.q.UpsertAssetOwners(ctx, sqlcgen.UpsertAssetOwnersParams{CmdbSourceID: uuid.UUID(t.source), Emails: emails})
+	if err != nil {
+		return nil, fmt.Errorf("upsert asset owners of %s: %w", t.source, err)
+	}
+	ids := make(ownerIDs, len(rows))
+	for _, row := range rows {
+		ids[row.Email] = row.ID
+	}
+	return ids, nil
+}
+
+func (t *SourceTx) insertCreated(ctx context.Context, changes []inventory.Change, owners ownerIDs) error {
+	var created []*inventory.Asset
+	for _, c := range changes {
+		if c.Created {
+			created = append(created, c.Asset)
+		}
+	}
+	if len(created) == 0 {
+		return nil
+	}
+	var inactiveSince *time.Time
+	for _, a := range created {
+		if !a.Active() {
+			now, err := t.q.TransactionTime(ctx)
+			if err != nil {
+				return fmt.Errorf("read transaction time: %w", err)
+			}
+			inactiveSince = &now
+			break
+		}
+	}
+	rows := make([]sqlcgen.InsertAssetsParams, len(created))
+	for i, a := range created {
+		imported := importedColumns(t.source, a, owners)
+		rows[i] = sqlcgen.InsertAssetsParams{
+			CmdbSourceID:       imported.CmdbSourceID,
+			RecordID:           imported.RecordID,
+			Name:               imported.Name,
+			Description:        imported.Description,
+			KindID:             imported.KindID,
+			HardwareVendor:     imported.HardwareVendor,
+			HardwareModel:      imported.HardwareModel,
+			CriticalityID:      imported.CriticalityID,
+			ImportedOwnerID:    imported.ImportedOwnerID,
+			Retired:            imported.Retired,
+			DeclaredOwnerID:    owners.ref(a.DeclaredOwner()),
+			DeclaredExposureID: nullableID(a.Exposure(), inventory.ExposureUnknown),
+		}
+		if !a.Active() {
+			rows[i].InactiveSince = inactiveSince
+		}
+	}
+	if _, err := t.q.InsertAssets(ctx, rows); err != nil {
+		return fmt.Errorf("insert assets of %s: %w", t.source, err)
+	}
+	return nil
+}
+
+func (t *SourceTx) updateImported(ctx context.Context, changes []inventory.Change, owners ownerIDs) error {
+	var rows []sqlcgen.UpdateAssetImportedParams
+	for _, c := range changes {
+		if c.ImportedChanged {
+			rows = append(rows, importedColumns(t.source, c.Asset, owners))
+		}
+	}
+	if len(rows) == 0 {
+		return nil
+	}
+	var err error
+	t.q.UpdateAssetImported(ctx, rows).QueryRow(func(i int, _ string, rowErr error) {
+		if err != nil || rowErr == nil {
+			return
+		}
+		ref := inventory.SourceReference{Source: t.source, RecordID: rows[i].RecordID}
+		if errors.Is(rowErr, pgx.ErrNoRows) {
+			err = fmt.Errorf("asset %v: %w", ref, ErrNotFound)
+		} else {
+			err = fmt.Errorf("update asset %v: %w", ref, rowErr)
+		}
+	})
+	return err
+}
+
+// replaceSoftware rewrites the Software Components of every Asset whose
+// imported values were written: they have no identity to update in place.
+func (t *SourceTx) replaceSoftware(ctx context.Context, changes []inventory.Change) error {
+	source := uuid.UUID(t.source)
+	var replaced []string
+	var rows []sqlcgen.InsertSoftwareComponentsParams
+	for _, c := range changes {
+		if !c.Created && !c.ImportedChanged {
+			continue
+		}
+		recordID := c.Asset.Ref().RecordID
+		if c.ImportedChanged {
+			replaced = append(replaced, recordID)
+		}
+		for i, sc := range c.Asset.Imported().Software() {
+			row := sqlcgen.InsertSoftwareComponentsParams{
+				CmdbSourceID: source,
+				RecordID:     recordID,
+				Position:     int16(i),
+				RoleID:       int16(sc.Role),
+				Name:         sc.Name,
+				Version:      sc.Version,
+			}
+			if sc.Product != nil {
+				row.ProductVendor, row.ProductName = &sc.Product.Vendor, &sc.Product.Name
+			}
+			rows = append(rows, row)
+		}
+	}
+	if len(replaced) > 0 {
+		err := t.q.DeleteSoftwareComponents(ctx, sqlcgen.DeleteSoftwareComponentsParams{CmdbSourceID: source, RecordIds: replaced})
+		if err != nil {
+			return fmt.Errorf("delete software of %s: %w", t.source, err)
+		}
+	}
+	if len(rows) > 0 {
+		if _, err := t.q.InsertSoftwareComponents(ctx, rows); err != nil {
+			return fmt.Errorf("insert software of %s: %w", t.source, err)
+		}
+	}
+	return nil
+}
+
+func (t *SourceTx) updateActive(ctx context.Context, changes []inventory.Change) error {
+	var deactivated, reactivated []string
+	for _, c := range changes {
+		switch {
+		case !c.ActiveChanged:
+		case c.Asset.Active():
+			reactivated = append(reactivated, c.Asset.Ref().RecordID)
+		default:
+			deactivated = append(deactivated, c.Asset.Ref().RecordID)
+		}
+	}
+	source := uuid.UUID(t.source)
+	if len(deactivated) > 0 {
+		n, err := t.q.DeactivateAssets(ctx, sqlcgen.DeactivateAssetsParams{CmdbSourceID: source, RecordIds: deactivated})
+		if err := t.allUpdated("deactivate", deactivated, n, err); err != nil {
+			return err
+		}
+	}
+	if len(reactivated) > 0 {
+		n, err := t.q.ReactivateAssets(ctx, sqlcgen.ReactivateAssetsParams{CmdbSourceID: source, RecordIds: reactivated})
+		if err := t.allUpdated("reactivate", reactivated, n, err); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (t *SourceTx) allUpdated(action string, recordIDs []string, updated int64, err error) error {
+	if err != nil {
+		return fmt.Errorf("%s assets of %s: %w", action, t.source, err)
+	}
+	if missing := int64(len(recordIDs)) - updated; missing > 0 {
+		return fmt.Errorf("%s assets of %s: %d of %d: %w", action, t.source, missing, len(recordIDs), ErrNotFound)
+	}
+	return nil
+}
+
+func importedColumns(source inventory.CMDBSourceID, a *inventory.Asset, owners ownerIDs) sqlcgen.UpdateAssetImportedParams {
+	imported := a.Imported()
+	p := sqlcgen.UpdateAssetImportedParams{
+		CmdbSourceID:    uuid.UUID(source),
+		RecordID:        a.Ref().RecordID,
+		Name:            imported.Name(),
+		Description:     imported.Description(),
+		KindID:          int16(imported.Kind()),
+		CriticalityID:   nullableID(imported.Criticality(), inventory.CriticalityUnknown),
+		ImportedOwnerID: owners.ref(imported.Owner()),
+		Retired:         imported.Retired(),
+	}
+	if hw, ok := imported.Hardware(); ok {
+		p.HardwareVendor, p.HardwareModel = &hw.Vendor, &hw.Model
+	}
+	return p
 }
 
 func restoreAsset(ref inventory.SourceReference, row sqlcgen.ListAssetsRow, software []inventory.SoftwareComponent) (*inventory.Asset, error) {
@@ -144,10 +327,10 @@ func ownerEmail(email *string) (inventory.OwnerEmail, error) {
 	return inventory.NewOwnerEmail(*email)
 }
 
-func (t *Tx) software(ctx context.Context, source uuid.UUID) (map[string][]inventory.SoftwareComponent, error) {
-	rows, err := t.q.ListSoftwareComponents(ctx, source)
+func (t *SourceTx) software(ctx context.Context) (map[string][]inventory.SoftwareComponent, error) {
+	rows, err := t.q.ListSoftwareComponents(ctx, uuid.UUID(t.source))
 	if err != nil {
-		return nil, fmt.Errorf("list software of %s: %w", source, err)
+		return nil, fmt.Errorf("list software of %s: %w", t.source, err)
 	}
 	byRecord := make(map[string][]inventory.SoftwareComponent)
 	for _, row := range rows {
@@ -162,74 +345,6 @@ func (t *Tx) software(ctx context.Context, source uuid.UUID) (map[string][]inven
 		byRecord[row.RecordID] = append(byRecord[row.RecordID], c)
 	}
 	return byRecord, nil
-}
-
-func (t *Tx) insertSoftware(ctx context.Context, source uuid.UUID, recordID string, software []inventory.SoftwareComponent) error {
-	if len(software) == 0 {
-		return nil
-	}
-	rows := make([]sqlcgen.InsertSoftwareComponentsParams, len(software))
-	for i, c := range software {
-		rows[i] = sqlcgen.InsertSoftwareComponentsParams{
-			CmdbSourceID: source,
-			RecordID:     recordID,
-			Position:     int16(i),
-			RoleID:       int16(c.Role),
-			Name:         c.Name,
-			Version:      c.Version,
-		}
-		if c.Product != nil {
-			rows[i].ProductVendor = &c.Product.Vendor
-			rows[i].ProductName = &c.Product.Name
-		}
-	}
-	if _, err := t.q.InsertSoftwareComponents(ctx, rows); err != nil {
-		return fmt.Errorf("insert software of asset %s: %w", recordID, err)
-	}
-	return nil
-}
-
-// importedColumns fills the imported columns shared by insert and update,
-// creating the imported Asset Owner if it does not exist yet.
-func (t *Tx) importedColumns(ctx context.Context, source uuid.UUID, imported inventory.ImportedAsset) (sqlcgen.UpdateAssetImportedParams, error) {
-	p := sqlcgen.UpdateAssetImportedParams{
-		Name:          imported.Name(),
-		Description:   imported.Description(),
-		KindID:        int16(imported.Kind()),
-		CriticalityID: nullableID(imported.Criticality(), inventory.CriticalityUnknown),
-		Retired:       imported.Retired(),
-	}
-	if hw, ok := imported.Hardware(); ok {
-		p.HardwareVendor, p.HardwareModel = &hw.Vendor, &hw.Model
-	}
-	if owner, ok := imported.Owner(); ok {
-		id, err := t.ownerID(ctx, source, owner)
-		if err != nil {
-			return p, err
-		}
-		p.ImportedOwnerID = &id
-	}
-	return p, nil
-}
-
-func (t *Tx) declaredOwnerID(ctx context.Context, source uuid.UUID, a *inventory.Asset) (*int64, error) {
-	owner, ok := a.DeclaredOwner()
-	if !ok {
-		return nil, nil
-	}
-	id, err := t.ownerID(ctx, source, owner)
-	if err != nil {
-		return nil, err
-	}
-	return &id, nil
-}
-
-func (t *Tx) ownerID(ctx context.Context, source uuid.UUID, email inventory.OwnerEmail) (int64, error) {
-	id, err := t.q.UpsertAssetOwner(ctx, sqlcgen.UpsertAssetOwnerParams{CmdbSourceID: source, Email: email.String()})
-	if err != nil {
-		return 0, fmt.Errorf("upsert asset owner %s: %w", email, err)
-	}
-	return id, nil
 }
 
 // nullableID stores a catalog value, or NULL for the value meaning unknown or undeclared (ADR 0006).

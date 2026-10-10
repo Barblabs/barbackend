@@ -52,3 +52,24 @@ func (q *Queries) InsertSyncRun(ctx context.Context, arg InsertSyncRunParams) er
 	)
 	return err
 }
+
+const succeededRunStartedAfter = `-- name: SucceededRunStartedAfter :one
+SELECT EXISTS (
+    SELECT 1
+    FROM sync_runs
+    WHERE cmdb_source_id = $1 AND outcome_id = $2 AND started_at > $3
+)
+`
+
+type SucceededRunStartedAfterParams struct {
+	CmdbSourceID uuid.UUID
+	OutcomeID    int16
+	StartedAt    time.Time
+}
+
+func (q *Queries) SucceededRunStartedAfter(ctx context.Context, arg SucceededRunStartedAfterParams) (bool, error) {
+	row := q.db.QueryRow(ctx, succeededRunStartedAfter, arg.CmdbSourceID, arg.OutcomeID, arg.StartedAt)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}

@@ -6,8 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"time"
 
+	"barbackend/internal/inventory"
 	"barbackend/internal/postgres/sqlcgen"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
@@ -15,7 +18,10 @@ import (
 	"github.com/pressly/goose/v3/lock"
 )
 
-var ErrNotFound = errors.New("not found")
+var (
+	ErrNotFound   = errors.New("not found")
+	ErrSuperseded = errors.New("superseded by a later successful sync")
+)
 
 //go:embed migrations/*.sql
 var migrations embed.FS
@@ -64,6 +70,35 @@ func (db *DB) Migrate(ctx context.Context) error {
 func (db *DB) InTx(ctx context.Context, fn func(*Tx) error) error {
 	return pgx.BeginFunc(ctx, db.pool, func(tx pgx.Tx) error {
 		return fn(&Tx{q: sqlcgen.New(tx)})
+	})
+}
+
+// InLockedSource runs fn in one transaction holding a row lock on the CMDB
+// Source, so two Syncs of one source never write at the same time. A Sync
+// started before the source's latest successful one holds an older snapshot,
+// so it fails with ErrSuperseded instead of overwriting newer imported values.
+func (db *DB) InLockedSource(ctx context.Context, id inventory.CMDBSourceID, startedAt time.Time, fn func(*SourceTx) error) error {
+	return pgx.BeginFunc(ctx, db.pool, func(tx pgx.Tx) error {
+		q := sqlcgen.New(tx)
+		_, err := q.LockCMDBSource(ctx, uuid.UUID(id))
+		if errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("cmdb source %s: %w", id, ErrNotFound)
+		}
+		if err != nil {
+			return fmt.Errorf("lock cmdb source %s: %w", id, err)
+		}
+		superseded, err := q.SucceededRunStartedAfter(ctx, sqlcgen.SucceededRunStartedAfterParams{
+			CmdbSourceID: uuid.UUID(id),
+			OutcomeID:    int16(inventory.SyncSucceeded),
+			StartedAt:    startedAt,
+		})
+		if err != nil {
+			return fmt.Errorf("check later syncs of %s: %w", id, err)
+		}
+		if superseded {
+			return fmt.Errorf("sync of %s started at %v: %w", id, startedAt, ErrSuperseded)
+		}
+		return fn(&SourceTx{q: q, source: id})
 	})
 }
 
