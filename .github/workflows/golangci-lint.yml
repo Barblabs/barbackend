@@ -18,9 +18,13 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
+          # The workflow file keys a separate cache per workflow: they build
+          # different things, and with a shared key whichever workflow saves
+          # first leaves the other compiling from scratch on every run.
           cache-dependency-path: |
             go.sum
             tools.sum
+            .github/workflows/golangci-lint.yml
       # Pinned in tools.mod, so CI and local runs use the same linter version.
       - name: golangci-lint
         run: go tool -modfile=tools.mod golangci-lint run ./...
