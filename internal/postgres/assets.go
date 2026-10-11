@@ -13,14 +13,14 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// SourceTx reads and writes the Assets of one locked CMDB Source.
-type SourceTx struct {
+// sourceTx reads and writes the Assets of one locked CMDB Source.
+type sourceTx struct {
 	q      *sqlcgen.Queries
 	source inventory.CMDBSourceID
 }
 
-// Assets returns every Asset of the CMDB Source, Active or not, ordered by record id.
-func (t *SourceTx) Assets(ctx context.Context) ([]*inventory.Asset, error) {
+// assets returns every Asset of the CMDB Source, Active or not, ordered by record id.
+func (t *sourceTx) assets(ctx context.Context) ([]*inventory.Asset, error) {
 	source := uuid.UUID(t.source)
 	rows, err := t.q.ListAssets(ctx, source)
 	if err != nil {
@@ -42,11 +42,11 @@ func (t *SourceTx) Assets(ctx context.Context) ([]*inventory.Asset, error) {
 	return assets, nil
 }
 
-// Save writes the changes of a Reconciliation. Updates write only imported
+// save writes the changes of a Reconciliation. Updates write only imported
 // values and the Active state, so Declarations stay as stored. Each kind of
 // write is one statement for all Assets, so a Sync takes the same number of
 // round trips at any size.
-func (t *SourceTx) Save(ctx context.Context, r inventory.Reconciliation) error {
+func (t *sourceTx) save(ctx context.Context, r inventory.Reconciliation) error {
 	// Only this transaction's CMDB Source is locked.
 	if r.Source() != t.source {
 		return fmt.Errorf("save to %s: reconciliation of %s", t.source, r.Source())
@@ -82,7 +82,7 @@ func (ids ownerIDs) ref(owner inventory.OwnerEmail, ok bool) *int64 {
 // upsertOwners stores the imported Asset Owner of every Asset whose imported
 // values are written. A created Asset has no Declarations yet, and updates
 // keep the stored ones.
-func (t *SourceTx) upsertOwners(ctx context.Context, written []*inventory.Asset) (ownerIDs, error) {
+func (t *sourceTx) upsertOwners(ctx context.Context, written []*inventory.Asset) (ownerIDs, error) {
 	seen := map[string]bool{}
 	var emails []string
 	add := func(owner inventory.OwnerEmail, ok bool) {
@@ -108,7 +108,7 @@ func (t *SourceTx) upsertOwners(ctx context.Context, written []*inventory.Asset)
 	return ids, nil
 }
 
-func (t *SourceTx) insertCreated(ctx context.Context, created []*inventory.Asset, owners ownerIDs) error {
+func (t *sourceTx) insertCreated(ctx context.Context, created []*inventory.Asset, owners ownerIDs) error {
 	if len(created) == 0 {
 		return nil
 	}
@@ -148,7 +148,7 @@ func (t *SourceTx) insertCreated(ctx context.Context, created []*inventory.Asset
 	return nil
 }
 
-func (t *SourceTx) updateImported(ctx context.Context, updated []*inventory.Asset, owners ownerIDs) error {
+func (t *sourceTx) updateImported(ctx context.Context, updated []*inventory.Asset, owners ownerIDs) error {
 	if len(updated) == 0 {
 		return nil
 	}
@@ -173,7 +173,7 @@ func (t *SourceTx) updateImported(ctx context.Context, updated []*inventory.Asse
 
 // replaceSoftware writes the Software Components of every created Asset and
 // rewrites those of every updated one: they have no identity to update in place.
-func (t *SourceTx) replaceSoftware(ctx context.Context, created, updated []*inventory.Asset) error {
+func (t *sourceTx) replaceSoftware(ctx context.Context, created, updated []*inventory.Asset) error {
 	source := uuid.UUID(t.source)
 	var rows []sqlcgen.InsertSoftwareComponentsParams
 	for _, a := range slices.Concat(created, updated) {
@@ -207,7 +207,7 @@ func (t *SourceTx) replaceSoftware(ctx context.Context, created, updated []*inve
 	return nil
 }
 
-func (t *SourceTx) updateActive(ctx context.Context, deactivated, reactivated []*inventory.Asset) error {
+func (t *sourceTx) updateActive(ctx context.Context, deactivated, reactivated []*inventory.Asset) error {
 	source := uuid.UUID(t.source)
 	if len(deactivated) > 0 {
 		n, err := t.q.DeactivateAssets(ctx, sqlcgen.DeactivateAssetsParams{CmdbSourceID: source, RecordIds: recordIDs(deactivated)})
@@ -224,7 +224,7 @@ func (t *SourceTx) updateActive(ctx context.Context, deactivated, reactivated []
 	return nil
 }
 
-func (t *SourceTx) allUpdated(action string, want int, updated int64, err error) error {
+func (t *sourceTx) allUpdated(action string, want int, updated int64, err error) error {
 	if err != nil {
 		return fmt.Errorf("%s assets of %s: %w", action, t.source, err)
 	}
@@ -298,7 +298,7 @@ func ownerEmail(email *string) (inventory.OwnerEmail, error) {
 	return inventory.NewOwnerEmail(*email)
 }
 
-func (t *SourceTx) software(ctx context.Context) (map[string][]inventory.SoftwareComponent, error) {
+func (t *sourceTx) software(ctx context.Context) (map[string][]inventory.SoftwareComponent, error) {
 	rows, err := t.q.ListSoftwareComponents(ctx, uuid.UUID(t.source))
 	if err != nil {
 		return nil, fmt.Errorf("list software of %s: %w", t.source, err)

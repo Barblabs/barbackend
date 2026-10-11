@@ -78,38 +78,71 @@ func (db *DB) InTx(ctx context.Context, fn func(*Tx) error) error {
 	})
 }
 
-// InLockedSource runs fn in one transaction holding a row lock on the CMDB
-// Source, so two Syncs of one source never write at the same time: while the
-// lock is held, it fails at once with ErrSyncInProgress. A Sync
-// started before the source's latest successful one holds an older snapshot,
-// so it fails with ErrSuperseded instead of overwriting newer imported values.
-func (db *DB) InLockedSource(ctx context.Context, id inventory.CMDBSourceID, startedAt time.Time, fn func(*SourceTx) error) error {
-	return pgx.BeginFunc(ctx, db.pool, func(tx pgx.Tx) error {
+// CommitSync is the transactional end of a Sync. It locks the CMDB Source,
+// passes its stored Assets to reconcile, saves the Reconciliation and records
+// its succeeded Sync Run, all in one transaction. reconcile runs while the
+// lock is held, so it must do no I/O; its error rolls everything back.
+//
+// While another Sync holds the lock, CommitSync fails at once with
+// ErrSyncInProgress. A Sync started before the source's latest successful one
+// holds an older snapshot, so it fails with ErrSuperseded instead of
+// overwriting newer imported values. That check reads succeeded Sync Runs,
+// which is why only CommitSync records them, together with their changes.
+func (db *DB) CommitSync(ctx context.Context, id inventory.CMDBSourceID, started time.Time, reconcile func(existing []*inventory.Asset) (inventory.Reconciliation, error)) (inventory.SyncRun, error) {
+	var run inventory.SyncRun
+	err := pgx.BeginFunc(ctx, db.pool, func(tx pgx.Tx) error {
 		q := sqlcgen.New(tx)
-		_, err := q.LockCMDBSource(ctx, uuid.UUID(id))
-		if errors.Is(err, pgx.ErrNoRows) {
-			return fmt.Errorf("cmdb source %s: %w", id, ErrNotFound)
+		if err := lockSource(ctx, q, id, started); err != nil {
+			return err
 		}
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == lockNotAvailable {
-			return fmt.Errorf("cmdb source %s: %w", id, ErrSyncInProgress)
-		}
+		st := &sourceTx{q: q, source: id}
+		existing, err := st.assets(ctx)
 		if err != nil {
-			return fmt.Errorf("lock cmdb source %s: %w", id, err)
+			return err
 		}
-		superseded, err := q.SucceededRunStartedAfter(ctx, sqlcgen.SucceededRunStartedAfterParams{
-			CmdbSourceID: uuid.UUID(id),
-			OutcomeID:    int16(inventory.SyncSucceeded),
-			StartedAt:    startedAt,
-		})
+		r, err := reconcile(existing)
 		if err != nil {
-			return fmt.Errorf("check later syncs of %s: %w", id, err)
+			return fmt.Errorf("reconcile %s: %w", id, err)
 		}
-		if superseded {
-			return fmt.Errorf("sync of %s started at %v: %w", id, startedAt, ErrSuperseded)
+		if err := st.save(ctx, r); err != nil {
+			return err
 		}
-		return fn(&SourceTx{q: q, source: id})
+		run, err = inventory.SucceededRun(r, started, time.Now())
+		if err != nil {
+			return err
+		}
+		return recordSyncRun(ctx, q, run)
 	})
+	if err != nil {
+		return inventory.SyncRun{}, err
+	}
+	return run, nil
+}
+
+func lockSource(ctx context.Context, q *sqlcgen.Queries, id inventory.CMDBSourceID, started time.Time) error {
+	_, err := q.LockCMDBSource(ctx, uuid.UUID(id))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("cmdb source %s: %w", id, ErrNotFound)
+	}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == lockNotAvailable {
+		return fmt.Errorf("cmdb source %s: %w", id, ErrSyncInProgress)
+	}
+	if err != nil {
+		return fmt.Errorf("lock cmdb source %s: %w", id, err)
+	}
+	superseded, err := q.SucceededRunStartedAfter(ctx, sqlcgen.SucceededRunStartedAfterParams{
+		CmdbSourceID: uuid.UUID(id),
+		OutcomeID:    int16(inventory.SyncSucceeded),
+		StartedAt:    started,
+	})
+	if err != nil {
+		return fmt.Errorf("check later syncs of %s: %w", id, err)
+	}
+	if superseded {
+		return fmt.Errorf("sync of %s started at %v: %w", id, started, ErrSuperseded)
+	}
+	return nil
 }
 
 type Tx struct {

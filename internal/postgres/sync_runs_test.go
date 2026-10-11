@@ -14,7 +14,6 @@ import (
 
 func TestSyncRunRoundTrip(t *testing.T) {
 	started := time.Date(2026, 10, 10, 12, 0, 0, 0, time.UTC)
-	finished := started.Add(time.Minute)
 	type row struct {
 		Started, Finished time.Time
 		Outcome           int16
@@ -24,43 +23,40 @@ func TestSyncRunRoundTrip(t *testing.T) {
 	}
 	failure := "cmdb unreachable"
 	tests := []struct {
-		name string
-		run  func(t *testing.T, src inventory.CMDBSourceID) inventory.SyncRun
-		want row
+		name   string
+		record func(t *testing.T, db *postgres.DB, src inventory.CMDBSourceID) inventory.SyncRun
+		want   row
 	}{
 		{
 			name: "succeeded",
-			run: func(t *testing.T, src inventory.CMDBSourceID) inventory.SyncRun {
-				r, err := inventory.Reconcile(src, nil, inventory.Snapshot{
+			record: func(t *testing.T, db *postgres.DB, src inventory.CMDBSourceID) inventory.SyncRun {
+				run, err := db.CommitSync(context.Background(), src, started, reconcileWith(src, inventory.Snapshot{
 					Records: []inventory.Record{{RecordID: "1", Imported: mustImported(t, fullParams(t))}},
 					Skipped: []inventory.SkippedRecord{{RecordID: "2", Reason: "no name"}},
-				})
-				if err != nil {
-					t.Fatal(err)
-				}
-				run, err := inventory.SucceededRun(r, started, finished)
+				}))
 				if err != nil {
 					t.Fatal(err)
 				}
 				return run
 			},
 			want: row{
-				Started: started, Finished: finished, Outcome: int16(inventory.SyncSucceeded),
+				Outcome: int16(inventory.SyncSucceeded),
 				Counts:  [5]int{1, 0, 0, 0, 1},
 				Skipped: []inventory.SkippedRecord{{RecordID: "2", Reason: "no name"}},
 			},
 		},
 		{
 			name: "failed",
-			run: func(t *testing.T, src inventory.CMDBSourceID) inventory.SyncRun {
-				run, err := inventory.FailedRun(src, started, finished, errors.New(failure))
+			record: func(t *testing.T, db *postgres.DB, src inventory.CMDBSourceID) inventory.SyncRun {
+				run, err := inventory.FailedRun(src, started, started.Add(time.Minute), errors.New(failure))
 				if err != nil {
 					t.Fatal(err)
 				}
+				inTx(t, db, func(tx *postgres.Tx) error { return tx.RecordFailedSync(context.Background(), run) })
 				return run
 			},
 			want: row{
-				Started: started, Finished: finished, Outcome: int16(inventory.SyncFailed),
+				Outcome: int16(inventory.SyncFailed),
 				Skipped: []inventory.SkippedRecord{}, Error: &failure,
 			},
 		},
@@ -70,9 +66,8 @@ func TestSyncRunRoundTrip(t *testing.T) {
 			t.Parallel()
 			db, conn := newDBWithConn(t)
 			src := newSource(t, db, newCustomer())
-			run := tt.run(t, src.ID())
 
-			inTx(t, db, func(tx *postgres.Tx) error { return tx.RecordSyncRun(context.Background(), run) })
+			run := tt.record(t, db, src.ID())
 
 			var got row
 			var skipped []byte
@@ -99,40 +94,36 @@ func TestSyncRunRoundTrip(t *testing.T) {
 				got.Skipped = append(got.Skipped, inventory.SkippedRecord{RecordID: r.RecordID, Reason: r.Reason})
 			}
 			got.Started, got.Finished = got.Started.UTC(), got.Finished.UTC()
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("row = %+v, want %+v", got, tt.want)
+			want := tt.want
+			// Postgres keeps microseconds; CommitSync reads the finish time from the clock.
+			want.Started, want.Finished = run.Started().UTC().Truncate(time.Microsecond), run.Finished().UTC().Truncate(time.Microsecond)
+			if !reflect.DeepEqual(got, want) {
+				t.Errorf("row = %+v, want %+v", got, want)
 			}
 		})
 	}
 }
 
-func TestRecordSyncRunOfAnotherSourceRollsBackSave(t *testing.T) {
+func TestRecordFailedSyncRejectsSucceededRun(t *testing.T) {
 	t.Parallel()
 	db, conn := newDBWithConn(t)
-	customer := newCustomer()
-	locked := newSource(t, db, customer)
-	other := newSource(t, db, customer)
+	src := newSource(t, db, newCustomer())
+	r, err := inventory.Reconcile(src.ID(), nil, inventory.Snapshot{})
+	if err != nil {
+		t.Fatal(err)
+	}
 	now := time.Now()
+	run, err := inventory.SucceededRun(r, now, now)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	err := db.InLockedSource(context.Background(), locked.ID(), now, func(tx *postgres.SourceTx) error {
-		r, err := inventory.Reconcile(locked.ID(), nil, inventory.Snapshot{Records: []inventory.Record{record(t, "1", fullParams(t))}})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := tx.Save(context.Background(), r); err != nil {
-			t.Fatal(err)
-		}
-		run, err := inventory.FailedRun(other.ID(), now, now, errors.New("cmdb unreachable"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		return tx.RecordSyncRun(context.Background(), run)
-	})
+	err = db.InTx(context.Background(), func(tx *postgres.Tx) error { return tx.RecordFailedSync(context.Background(), run) })
 
 	if err == nil {
-		t.Error("err = nil, want an error for a sync run of another source")
+		t.Error("err = nil, want an error for a succeeded run")
 	}
-	if n := queryInt(t, conn, "SELECT count(*) FROM assets") + queryInt(t, conn, "SELECT count(*) FROM sync_runs"); n != 0 {
-		t.Errorf("rows written = %d, want 0", n)
+	if n := queryInt(t, conn, "SELECT count(*) FROM sync_runs"); n != 0 {
+		t.Errorf("sync runs = %d, want 0", n)
 	}
 }

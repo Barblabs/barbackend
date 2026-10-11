@@ -2,6 +2,7 @@ package postgres_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -42,39 +43,48 @@ func mustImported(t *testing.T, p inventory.ImportedAssetParams) inventory.Impor
 	return a
 }
 
+var errReadOnly = errors.New("read only")
+
+// assets reads the stored Assets through the interface a Sync uses, then
+// aborts so nothing is written.
 func assets(t *testing.T, db *postgres.DB, src inventory.CMDBSourceID) []*inventory.Asset {
 	t.Helper()
 	var got []*inventory.Asset
-	inSource(t, db, src, func(tx *postgres.SourceTx) error {
-		var err error
-		got, err = tx.Assets(context.Background())
-		return err
+	_, err := db.CommitSync(context.Background(), src, time.Now(), func(existing []*inventory.Asset) (inventory.Reconciliation, error) {
+		got = existing
+		return inventory.Reconciliation{}, errReadOnly
 	})
+	if !errors.Is(err, errReadOnly) {
+		t.Fatal(err)
+	}
 	return got
 }
 
-func inSource(t *testing.T, db *postgres.DB, src inventory.CMDBSourceID, fn func(*postgres.SourceTx) error) {
-	t.Helper()
-	if err := db.InLockedSource(context.Background(), src, time.Now(), fn); err != nil {
-		t.Fatal(err)
+// reconcileWith reconciles the stored Assets with s, as a Sync does.
+func reconcileWith(src inventory.CMDBSourceID, s inventory.Snapshot) func([]*inventory.Asset) (inventory.Reconciliation, error) {
+	return func(existing []*inventory.Asset) (inventory.Reconciliation, error) {
+		return inventory.Reconcile(src, existing, s)
 	}
 }
 
-// syncRecords saves the reconciliation of the stored Assets with a snapshot
-// of records, as a Sync does.
+func commitSync(t *testing.T, db *postgres.DB, src inventory.CMDBSourceID, reconcile func([]*inventory.Asset) (inventory.Reconciliation, error)) inventory.SyncRun {
+	t.Helper()
+	run, err := db.CommitSync(context.Background(), src, time.Now(), reconcile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return run
+}
+
+// syncRecords commits a Sync of a snapshot of records.
 func syncRecords(t *testing.T, db *postgres.DB, src inventory.CMDBSourceID, records ...inventory.Record) inventory.Reconciliation {
 	t.Helper()
 	var r inventory.Reconciliation
-	inSource(t, db, src, func(tx *postgres.SourceTx) error {
-		existing, err := tx.Assets(context.Background())
-		if err != nil {
-			return err
-		}
-		r, err = inventory.Reconcile(src, existing, inventory.Snapshot{Records: records})
-		if err != nil {
-			return err
-		}
-		return tx.Save(context.Background(), r)
+	reconcile := reconcileWith(src, inventory.Snapshot{Records: records})
+	commitSync(t, db, src, func(existing []*inventory.Asset) (inventory.Reconciliation, error) {
+		var err error
+		r, err = reconcile(existing)
+		return r, err
 	})
 	return r
 }
