@@ -29,7 +29,7 @@ func (s *Sources) Add(ctx context.Context, customer inventory.CustomerID, provid
 	if err != nil {
 		return inventory.CMDBSource{}, err
 	}
-	if err := p.ValidateSettings(settings); err != nil {
+	if _, err := p.ParseSettings(settings); err != nil {
 		return inventory.CMDBSource{}, fmt.Errorf("settings for %s: %w", provider, err)
 	}
 	src, err := inventory.NewCMDBSource(inventory.CMDBSourceID(uuid.New()), customer, provider)
@@ -65,17 +65,18 @@ func (s *Sources) Sync(ctx context.Context, id inventory.CMDBSourceID) (inventor
 }
 
 // sync reads the snapshot before locking the source, so a slow CMDB Provider
-// never holds the lock. Settings are validated again because a provider may
+// never holds the lock. Settings are parsed again because a provider may
 // have tightened its rules since the source was added.
 func (s *Sources) sync(ctx context.Context, src inventory.CMDBSource, settings json.RawMessage, started time.Time) (inventory.SyncRun, error) {
 	p, err := s.provider(src.Provider())
 	if err != nil {
 		return inventory.SyncRun{}, err
 	}
-	if err := p.ValidateSettings(settings); err != nil {
+	parsed, err := p.ParseSettings(settings)
+	if err != nil {
 		return inventory.SyncRun{}, fmt.Errorf("settings of %s: %w", src.ID(), err)
 	}
-	snapshot, err := p.Snapshot(ctx, settings)
+	snapshot, err := parsed.Snapshot(ctx)
 	if err != nil {
 		return inventory.SyncRun{}, fmt.Errorf("snapshot of %s: %w", src.ID(), err)
 	}

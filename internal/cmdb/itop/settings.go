@@ -108,7 +108,7 @@ func (a authDocument) validate() error {
 	return nil
 }
 
-// auth reads the secrets at Sync time rather than in ValidateSettings,
+// auth reads the secrets at Sync time rather than in ParseSettings,
 // because the process adding a source is not the one that syncs it.
 func (a authDocument) auth() (rest.Auth, error) {
 	if a.Mode == basicAuth {
