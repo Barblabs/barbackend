@@ -9,8 +9,8 @@ import (
 
 func TestApplications(t *testing.T) {
 	lk := lookups{software: map[string]software{
-		"2": {name: "Oracle DB engine", version: "19c"},
-		"5": {name: "OpenSSH", version: "9.6p1"},
+		"2": {Name: "Oracle DB engine", Version: "19c"},
+		"5": {Name: "OpenSSH", Version: "9.6p1"},
 	}}
 	app := func(name, version string) inventory.SoftwareComponent {
 		return inventory.SoftwareComponent{Role: inventory.Application, Name: name, Version: version}

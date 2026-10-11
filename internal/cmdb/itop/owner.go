@@ -20,10 +20,11 @@ func owner(c ci, lk lookups) inventory.OwnerEmail {
 			only = ct.ID
 		}
 	}
-	if len(persons) != 1 || !validEmail(lk.emails[only]) {
+	address := lk.persons[only].Email
+	if len(persons) != 1 || !validEmail(address) {
 		return inventory.OwnerEmail{}
 	}
-	email, err := inventory.NewOwnerEmail(lk.emails[only])
+	email, err := inventory.NewOwnerEmail(address)
 	if err != nil {
 		return inventory.OwnerEmail{}
 	}

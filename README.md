@@ -36,7 +36,7 @@ Run `./barbackend` with no arguments to print the usage.
 
 The provider validates the settings before the source is stored. Prints the new CMDB Source ID.
 
-Providers are registered in `cmd/barbackend/providers.go`.
+Providers are registered in `providers()` in `cmd/barbackend/app.go`.
 
 #### iTop (`--provider itop`)
 

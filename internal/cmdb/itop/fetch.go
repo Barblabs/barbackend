@@ -43,20 +43,6 @@ var instanceClasses = map[string]bool{
 	"OtherSoftware": true,
 }
 
-type personDocument struct {
-	Email string `json:"email"`
-}
-
-type softwareDocument struct {
-	Name    string `json:"name"`
-	Version string `json:"version"`
-}
-
-type iosVersionDocument struct {
-	Brand string `json:"brand_name"`
-	Name  string `json:"name"`
-}
-
 // fetch reads every ci of the in-scope classes, then the records they
 // reference in bulk, so the number of queries depends on the number of
 // distinct references rather than on the number of cis.
@@ -109,16 +95,13 @@ func fetchLookups(ctx context.Context, c *rest.Client, cis []ci) (lookups, error
 	}
 	var lk lookups
 	var err error
-	if lk.emails, err = getByID(ctx, c, "Person", []string{"email"}, personIDs,
-		func(d personDocument) string { return d.Email }); err != nil {
+	if lk.persons, err = getByID[person](ctx, c, "Person", []string{"email"}, personIDs); err != nil {
 		return lookups{}, err
 	}
-	if lk.software, err = getByID(ctx, c, "Software", []string{"name", "version"}, softwareIDs,
-		func(d softwareDocument) software { return software{name: d.Name, version: d.Version} }); err != nil {
+	if lk.software, err = getByID[software](ctx, c, "Software", []string{"name", "version"}, softwareIDs); err != nil {
 		return lookups{}, err
 	}
-	if lk.iosVersions, err = getByID(ctx, c, "IOSVersion", []string{"brand_name", "name"}, iosVersionIDs,
-		func(d iosVersionDocument) iosVersion { return iosVersion{brand: d.Brand, version: d.Name} }); err != nil {
+	if lk.iosVersions, err = getByID[iosVersion](ctx, c, "IOSVersion", []string{"brand_name", "name"}, iosVersionIDs); err != nil {
 		return lookups{}, err
 	}
 	return lk, nil
@@ -126,7 +109,7 @@ func fetchLookups(ctx context.Context, c *rest.Client, cis []ci) (lookups, error
 
 // getByID reads the objects of class whose keys are in ids, skipping blank
 // keys. A referenced object deleted since the cis were read is simply absent.
-func getByID[D, T any](ctx context.Context, c *rest.Client, class string, fields []string, ids map[string]bool, convert func(D) T) (map[string]T, error) {
+func getByID[T any](ctx context.Context, c *rest.Client, class string, fields []string, ids map[string]bool) (map[string]T, error) {
 	delete(ids, blankKey)
 	delete(ids, "")
 	// Sorted so the same instance always produces the same requests.
@@ -144,11 +127,11 @@ func getByID[D, T any](ctx context.Context, c *rest.Client, class string, fields
 			return nil, err
 		}
 		for _, o := range objects {
-			var doc D
-			if err := decode(o, fields, &doc); err != nil {
+			var record T
+			if err := decode(o, fields, &record); err != nil {
 				return nil, err
 			}
-			byID[o.Key] = convert(doc)
+			byID[o.Key] = record
 		}
 	}
 	return byID, nil
