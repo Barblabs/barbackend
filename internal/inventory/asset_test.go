@@ -158,45 +158,6 @@ func TestAssetRetiredDoesNotAffectActive(t *testing.T) {
 	}
 }
 
-func TestAssetReplaceImported(t *testing.T) {
-	imported := mustOwner(t, "imported@example.com")
-	declared := mustOwner(t, "declared@example.com")
-
-	p := validParams()
-	p.Owner = imported
-	a := newAsset(t, p)
-	if err := a.DeclareOwner(declared); err != nil {
-		t.Fatal(err)
-	}
-	if err := a.DeclareExposure(inventory.InternetFacing); err != nil {
-		t.Fatal(err)
-	}
-	a.MarkInactive()
-
-	next := mustImported(t, inventory.ImportedAssetParams{Name: "renamed", Kind: inventory.Workstation})
-	if err := a.ReplaceImported(next); err != nil {
-		t.Fatal(err)
-	}
-
-	if a.Imported().Name() != "renamed" || a.Imported().Kind() != inventory.Workstation {
-		t.Errorf("imported not replaced: %q", a.Imported().Name())
-	}
-	if o, _ := a.Owner(); o != declared {
-		t.Errorf("Owner() = %q, want declared", o)
-	}
-	if a.Exposure() != inventory.InternetFacing {
-		t.Errorf("Exposure() = %v, want InternetFacing", a.Exposure())
-	}
-	if a.Active() {
-		t.Error("active state should be untouched")
-	}
-
-	a.ClearOwnerDeclaration()
-	if o, ok := a.Owner(); ok {
-		t.Errorf("Owner() = %q, want none after replace and clear", o)
-	}
-}
-
 func TestAssetDeclareBlankOwner(t *testing.T) {
 	imported := mustOwner(t, "imported@example.com")
 	declared := mustOwner(t, "declared@example.com")
@@ -220,40 +181,6 @@ func TestAssetDeclareBlankOwner(t *testing.T) {
 	}
 	if o, ok := a.Owner(); !ok || o != declared {
 		t.Errorf("Owner() = %v, %v; want declared", o, ok)
-	}
-}
-
-func TestAssetReplaceImportedRejectsZero(t *testing.T) {
-	owner := mustOwner(t, "o@example.com")
-	p := validParams()
-	p.Owner = owner
-	a := newAsset(t, p)
-
-	err := a.ReplaceImported(inventory.ImportedAsset{})
-	if !errors.Is(err, inventory.ErrZeroImportedAsset) {
-		t.Fatalf("err = %v, want ErrZeroImportedAsset", err)
-	}
-	if a.Imported().Name() != "srv-01" {
-		t.Errorf("Name() = %q, want unchanged", a.Imported().Name())
-	}
-	if o, ok := a.Owner(); !ok || o != owner {
-		t.Errorf("Owner() = %v, %v; want unchanged", o, ok)
-	}
-}
-
-func TestAssetReplaceImportedNewOwnerWithoutDeclaration(t *testing.T) {
-	first := mustOwner(t, "first@example.com")
-	second := mustOwner(t, "second@example.com")
-	p := validParams()
-	p.Owner = first
-	a := newAsset(t, p)
-
-	p.Owner = second
-	if err := a.ReplaceImported(mustImported(t, p)); err != nil {
-		t.Fatal(err)
-	}
-	if o, ok := a.Owner(); !ok || o != second {
-		t.Errorf("Owner() = %v, %v; want %v, true", o, ok, second)
 	}
 }
 

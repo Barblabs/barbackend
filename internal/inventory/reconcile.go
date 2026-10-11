@@ -54,6 +54,9 @@ func (r Reconciliation) Counts() SyncCounts {
 // Source and a complete Snapshot of it. It takes ownership of existing and
 // changes those Assets in place; on error none of them has been changed.
 func Reconcile(source CMDBSourceID, existing []*Asset, s Snapshot) (Reconciliation, error) {
+	if source == (CMDBSourceID{}) {
+		return Reconciliation{}, fmt.Errorf("%w: zero source", ErrInvalidSourceReference)
+	}
 	stored, err := indexExisting(source, existing)
 	if err != nil {
 		return Reconciliation{}, err
@@ -63,17 +66,15 @@ func Reconcile(source CMDBSourceID, existing []*Asset, s Snapshot) (Reconciliati
 		return Reconciliation{}, err
 	}
 
+	// Every input has been checked, so nothing below can fail halfway through
+	// changing the Assets.
 	r := Reconciliation{source: source, skipped: slices.Clone(s.Skipped)}
 	present := make(map[string]bool, len(s.Records))
 	for _, rec := range s.Records {
 		present[rec.RecordID] = true
 		a, ok := stored[rec.RecordID]
 		if !ok {
-			created, err := create(source, rec)
-			if err != nil {
-				return Reconciliation{}, err
-			}
-			r.created = append(r.created, created)
+			r.created = append(r.created, create(source, rec))
 			continue
 		}
 		r.update(a, rec.Imported)
@@ -133,24 +134,20 @@ func validateSnapshot(s Snapshot) (map[string]bool, error) {
 	return skipped, nil
 }
 
-func create(source CMDBSourceID, rec Record) (*Asset, error) {
-	a, err := NewAsset(SourceReference{Source: source, RecordID: rec.RecordID}, rec.Imported)
-	if err != nil {
-		return nil, fmt.Errorf("record %q: %w", rec.RecordID, err)
+// create skips NewAsset: Reconcile has already checked everything it checks.
+func create(source CMDBSourceID, rec Record) *Asset {
+	return &Asset{
+		ref:      SourceReference{Source: source, RecordID: rec.RecordID},
+		imported: rec.Imported,
+		active:   !rec.Imported.Retired(),
 	}
-	if rec.Imported.Retired() {
-		a.MarkInactive()
-	}
-	return a, nil
 }
 
 // update keeps an Asset present in the Snapshot Active exactly when its
 // record is not reported as retired.
 func (r *Reconciliation) update(a *Asset, imported ImportedAsset) {
 	if !a.Imported().equal(imported) {
-		// ReplaceImported only rejects a zero ImportedAsset, which
-		// validateSnapshot has already ruled out.
-		_ = a.ReplaceImported(imported)
+		a.imported = imported
 		r.updated = append(r.updated, a)
 	}
 	r.setActive(a, !imported.Retired())
