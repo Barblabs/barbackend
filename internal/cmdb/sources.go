@@ -89,8 +89,14 @@ func (s *Sources) sync(ctx context.Context, src inventory.CMDBSource, settings j
 		if err != nil {
 			return err
 		}
-		run, err = tx.Save(ctx, r, started, time.Now())
-		return err
+		if err := tx.Save(ctx, r); err != nil {
+			return err
+		}
+		run, err = inventory.SucceededRun(r, started, time.Now())
+		if err != nil {
+			return err
+		}
+		return tx.RecordSyncRun(ctx, run)
 	})
 	return run, err
 }

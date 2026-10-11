@@ -74,15 +74,9 @@ func syncRecords(t *testing.T, db *postgres.DB, src inventory.CMDBSourceID, reco
 		if err != nil {
 			return err
 		}
-		return save(tx, r)
+		return tx.Save(context.Background(), r)
 	})
 	return r
-}
-
-func save(tx *postgres.SourceTx, r inventory.Reconciliation) error {
-	now := time.Now()
-	_, err := tx.Save(context.Background(), r, now, now)
-	return err
 }
 
 func newDBWithConn(t *testing.T) (*postgres.DB, *pgx.Conn) {

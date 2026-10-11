@@ -105,3 +105,34 @@ func TestSyncRunRoundTrip(t *testing.T) {
 		})
 	}
 }
+
+func TestRecordSyncRunOfAnotherSourceRollsBackSave(t *testing.T) {
+	t.Parallel()
+	db, conn := newDBWithConn(t)
+	customer := newCustomer()
+	locked := newSource(t, db, customer)
+	other := newSource(t, db, customer)
+	now := time.Now()
+
+	err := db.InLockedSource(context.Background(), locked.ID(), now, func(tx *postgres.SourceTx) error {
+		r, err := inventory.Reconcile(locked.ID(), nil, inventory.Snapshot{Records: []inventory.Record{record(t, "1", fullParams(t))}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := tx.Save(context.Background(), r); err != nil {
+			t.Fatal(err)
+		}
+		run, err := inventory.FailedRun(other.ID(), now, now, errors.New("cmdb unreachable"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return tx.RecordSyncRun(context.Background(), run)
+	})
+
+	if err == nil {
+		t.Error("err = nil, want an error for a sync run of another source")
+	}
+	if n := queryInt(t, conn, "SELECT count(*) FROM assets") + queryInt(t, conn, "SELECT count(*) FROM sync_runs"); n != 0 {
+		t.Errorf("rows written = %d, want 0", n)
+	}
+}
