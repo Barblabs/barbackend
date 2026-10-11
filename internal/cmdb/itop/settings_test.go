@@ -9,7 +9,7 @@ import (
 	"barbackend/internal/cmdb/itop"
 )
 
-func TestValidateSettings(t *testing.T) {
+func TestParseSettings(t *testing.T) {
 	tests := []struct {
 		name     string
 		settings string
@@ -37,7 +37,7 @@ func TestValidateSettings(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			if err := (itop.Provider{}).ValidateSettings(json.RawMessage(tt.settings)); !errors.Is(err, tt.want) {
+			if _, err := (itop.Provider{}).ParseSettings(json.RawMessage(tt.settings)); !errors.Is(err, tt.want) {
 				t.Errorf("err = %v, want %v", err, tt.want)
 			}
 		})
@@ -58,7 +58,11 @@ func TestSnapshotNeedsSecret(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Setenv(tt.env, "")
-			_, err := (itop.Provider{}).Snapshot(context.Background(), json.RawMessage(tt.settings))
+			settings, err := (itop.Provider{}).ParseSettings(json.RawMessage(tt.settings))
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = settings.Snapshot(context.Background())
 			if !errors.Is(err, itop.ErrMissingSecret) {
 				t.Fatalf("err = %v, want %v", err, itop.ErrMissingSecret)
 			}

@@ -6,22 +6,18 @@ import (
 	"context"
 	"encoding/json"
 
+	"barbackend/internal/cmdb"
 	"barbackend/internal/cmdb/itop/rest"
 	"barbackend/internal/inventory"
 )
 
 type Provider struct{}
 
-func (Provider) ValidateSettings(raw json.RawMessage) error {
-	_, err := parseSettings(raw)
-	return err
+func (Provider) ParseSettings(raw json.RawMessage) (cmdb.Settings, error) {
+	return parseSettings(raw)
 }
 
-func (Provider) Snapshot(ctx context.Context, raw json.RawMessage) (inventory.Snapshot, error) {
-	s, err := parseSettings(raw)
-	if err != nil {
-		return inventory.Snapshot{}, err
-	}
+func (s settings) Snapshot(ctx context.Context) (inventory.Snapshot, error) {
 	auth, err := s.auth.auth()
 	if err != nil {
 		return inventory.Snapshot{}, err

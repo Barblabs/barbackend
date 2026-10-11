@@ -25,17 +25,17 @@ type fakeProvider struct {
 	err      error
 }
 
-func (f *fakeProvider) ValidateSettings(settings json.RawMessage) error {
+func (f *fakeProvider) ParseSettings(settings json.RawMessage) (cmdb.Settings, error) {
 	var s struct {
 		URL string `json:"url"`
 	}
 	if err := json.Unmarshal(settings, &s); err != nil || s.URL == "" {
-		return errInvalidSettings
+		return nil, errInvalidSettings
 	}
-	return nil
+	return f, nil
 }
 
-func (f *fakeProvider) Snapshot(context.Context, json.RawMessage) (inventory.Snapshot, error) {
+func (f *fakeProvider) Snapshot(context.Context) (inventory.Snapshot, error) {
 	return f.snapshot, f.err
 }
 
