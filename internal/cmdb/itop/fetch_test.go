@@ -18,7 +18,7 @@ import (
 	"barbackend/internal/cmdb/itop/rest"
 )
 
-var record = flag.Bool("record", false, "re-record testdata/fetch from the iTop named by ITOP_URL, ITOP_USER and ITOP_PASSWORD (source .env.itop)")
+var record = flag.Bool("record", false, "re-record testdata/fetch from the iTop named by ITOP_URL, ITOP_USER and ITOP_PASSWORD (source .env)")
 
 // recording maps each request's json_data to iTop's response. Requests are
 // deterministic for a given instance, so a replay answers exactly them.
