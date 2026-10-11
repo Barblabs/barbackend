@@ -1,4 +1,4 @@
-package cmdb_test
+package sources_test
 
 import (
 	"context"

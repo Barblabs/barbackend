@@ -1,4 +1,4 @@
-package cmdb_test
+package sources_test
 
 import (
 	"context"
@@ -11,6 +11,7 @@ import (
 	"barbackend/internal/inventory"
 	"barbackend/internal/postgres"
 	"barbackend/internal/postgres/pgtest"
+	"barbackend/internal/sources"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -43,7 +44,7 @@ type env struct {
 	db       *postgres.DB
 	conn     *pgx.Conn
 	provider *fakeProvider
-	sources  *cmdb.Sources
+	sources  *sources.Service
 }
 
 func newEnv(t *testing.T) env {
@@ -55,7 +56,7 @@ func newEnv(t *testing.T) env {
 	}
 	t.Cleanup(db.Close)
 	p := &fakeProvider{}
-	return env{db: db, conn: pgtest.Conn(t, url), provider: p, sources: cmdb.NewSources(db, cmdb.Providers{fake: p})}
+	return env{db: db, conn: pgtest.Conn(t, url), provider: p, sources: sources.New(db, cmdb.Providers{fake: p})}
 }
 
 func (e env) addSource(t *testing.T) inventory.CMDBSource {

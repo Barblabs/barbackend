@@ -1,14 +1,7 @@
 package main
 
-import (
-	"context"
-)
+import "context"
 
-func migrate(ctx context.Context) error {
-	db, err := openDB(ctx)
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-	return db.Migrate(ctx)
+func migrate(ctx context.Context, _ []string) error {
+	return withApp(ctx, func(a app) error { return a.db.Migrate(ctx) })
 }

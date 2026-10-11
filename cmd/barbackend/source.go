@@ -7,16 +7,15 @@ import (
 	"flag"
 	"fmt"
 
-	"barbackend/internal/cmdb"
 	"barbackend/internal/inventory"
 	"github.com/google/uuid"
 )
 
-const sourceUsage = "usage: barbackend source add --customer <uuid> --provider <id> --settings '<json>'"
+const sourceSynopsis = "source add --customer <uuid> --provider <id> --settings '<json>'"
 
 func source(ctx context.Context, args []string) error {
 	if len(args) == 0 || args[0] != "add" {
-		return errors.New(sourceUsage)
+		return errors.New("usage: barbackend " + sourceSynopsis)
 	}
 	flags := flag.NewFlagSet("source add", flag.ExitOnError)
 	customer := flags.String("customer", "", "`uuid` of the Customer the CMDB Source belongs to")
@@ -31,16 +30,12 @@ func source(ctx context.Context, args []string) error {
 	if !json.Valid([]byte(*settings)) {
 		return errors.New("--settings is not valid JSON")
 	}
-	db, err := openDB(ctx)
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-
-	src, err := cmdb.NewSources(db, providers()).Add(ctx, inventory.CustomerID(customerID), inventory.CMDBProvider(*provider), json.RawMessage(*settings))
-	if err != nil {
-		return err
-	}
-	fmt.Println(src.ID())
-	return nil
+	return withApp(ctx, func(a app) error {
+		src, err := a.sources.Add(ctx, inventory.CustomerID(customerID), inventory.CMDBProvider(*provider), json.RawMessage(*settings))
+		if err != nil {
+			return err
+		}
+		fmt.Println(src.ID())
+		return nil
+	})
 }

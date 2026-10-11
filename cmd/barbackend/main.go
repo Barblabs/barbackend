@@ -6,42 +6,65 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
+	"syscall"
 )
 
-const usage = `usage: barbackend <command>
+type command struct {
+	name    string
+	summary string
+	// synopsis is the command line after "barbackend", shown when the
+	// command takes arguments.
+	synopsis string
+	run      func(ctx context.Context, args []string) error
+}
 
-commands:
-  serve     run the HTTP server
-  migrate   apply database migrations
-  source    add a CMDB Source: source add --customer <uuid> --provider <id> --settings '<json>'
-  sync      sync a CMDB Source: sync --source <uuid>
+var commands = []command{
+	{name: "serve", summary: "run the HTTP server", run: serve},
+	{name: "migrate", summary: "apply database migrations", run: migrate},
+	{name: "source", summary: "add a CMDB Source", synopsis: sourceSynopsis, run: source},
+	{name: "sync", summary: "sync a CMDB Source", synopsis: syncSynopsis, run: syncSource},
+}
 
-migrate, source and sync need DATABASE_URL.`
+func usage() string {
+	var b strings.Builder
+	b.WriteString("usage: barbackend <command>\n\ncommands:\n")
+	for _, c := range commands {
+		line := c.summary
+		if c.synopsis != "" {
+			line += ": " + c.synopsis
+		}
+		fmt.Fprintf(&b, "  %-10s%s\n", c.name, line)
+	}
+	b.WriteString("\nmigrate, source and sync need DATABASE_URL.")
+	return b.String()
+}
+
+func lookup(name string) (command, bool) {
+	for _, c := range commands {
+		if c.name == name {
+			return c, true
+		}
+	}
+	return command{}, false
+}
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, usage)
+		fmt.Fprintln(os.Stderr, usage())
 		os.Exit(2)
 	}
-	// Canceling on interrupt lets an interrupted Sync record its failed run.
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	cmd, ok := lookup(os.Args[1])
+	if !ok {
+		fmt.Fprintln(os.Stderr, usage())
+		os.Exit(2)
+	}
+	// Canceling on interrupt or termination lets an interrupted Sync record
+	// its failed run and the server shut down gracefully. SIGTERM is how
+	// container runtimes and systemd stop a process.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	args := os.Args[2:]
-	var err error
-	switch os.Args[1] {
-	case "serve":
-		err = serve()
-	case "migrate":
-		err = migrate(ctx)
-	case "source":
-		err = source(ctx, args)
-	case "sync":
-		err = syncSource(ctx, args)
-	default:
-		fmt.Fprintln(os.Stderr, usage)
-		os.Exit(2)
-	}
-	if err != nil {
-		log.Fatalf("%s: %v", os.Args[1], err)
+	if err := cmd.run(ctx, os.Args[2:]); err != nil {
+		log.Fatalf("%s: %v", cmd.name, err)
 	}
 }
