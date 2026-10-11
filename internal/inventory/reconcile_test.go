@@ -179,6 +179,46 @@ func TestReconcileErrorsChangeNoAsset(t *testing.T) {
 	}
 }
 
+// A Sync replaces imported values only, so Declarations survive it, and
+// clearing one afterwards falls back to the newly imported value (ADR 0004).
+func TestReconcileKeepsDeclarations(t *testing.T) {
+	declared := mustOwner(t, "declared@example.com")
+	first := with(validParams(), func(p *inventory.ImportedAssetParams) { p.Owner = mustOwner(t, "first@example.com") })
+	second := with(first, func(p *inventory.ImportedAssetParams) { p.Owner = mustOwner(t, "second@example.com") })
+	a := newAsset(t, first)
+	if err := a.DeclareOwner(declared); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.DeclareExposure(inventory.InternetFacing); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := inventory.Reconcile(sourceID, []*inventory.Asset{a}, snapshot(t, recs("1", second)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := recordIDs(r.Updated()); !reflect.DeepEqual(got, ids("1")) {
+		t.Fatalf("updated = %v, want [1]", got)
+	}
+	if o, _ := a.Owner(); o != declared {
+		t.Errorf("Owner() = %v, want the declared owner", o)
+	}
+	if a.Exposure() != inventory.InternetFacing {
+		t.Errorf("Exposure() = %v, want InternetFacing", a.Exposure())
+	}
+	a.ClearOwnerDeclaration()
+	if o, _ := a.Owner(); o.String() != "second@example.com" {
+		t.Errorf("Owner() after clearing = %v, want the newly imported owner", o)
+	}
+}
+
+func TestReconcileRejectsZeroSource(t *testing.T) {
+	_, err := inventory.Reconcile(inventory.CMDBSourceID{}, nil, inventory.Snapshot{})
+	if !errors.Is(err, inventory.ErrInvalidSourceReference) {
+		t.Fatalf("err = %v, want ErrInvalidSourceReference", err)
+	}
+}
+
 func with(p inventory.ImportedAssetParams, mutate func(*inventory.ImportedAssetParams)) inventory.ImportedAssetParams {
 	mutate(&p)
 	return p

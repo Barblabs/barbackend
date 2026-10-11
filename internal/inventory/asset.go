@@ -88,14 +88,6 @@ func (a *Asset) DeclareExposure(e Exposure) error {
 
 func (a *Asset) ClearExposureDeclaration() { a.declaredExposure = ExposureUnknown }
 
-func (a *Asset) ReplaceImported(imported ImportedAsset) error {
-	if imported.isZero() {
-		return ErrZeroImportedAsset
-	}
-	a.imported = imported
-	return nil
-}
-
 func (a *Asset) Active() bool { return a.active }
 
 func (a *Asset) MarkInactive() { a.active = false }
