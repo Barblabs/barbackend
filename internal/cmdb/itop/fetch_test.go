@@ -167,19 +167,19 @@ func TestFetchSeededInstance(t *testing.T) {
 
 	// Team 52 and 53 are contacts too, but only Persons are looked up.
 	wantLookups := lookups{
-		emails: map[string]string{
-			"5": "alice.milliat@customer.com", "8": "boris.vian@it.com", "18": "george.sand@it.com",
-			"46": "victor.hugo@it.com", "54": "", "55": "Test.MixedCase@IT.com",
+		persons: map[string]person{
+			"5": {Email: "alice.milliat@customer.com"}, "8": {Email: "boris.vian@it.com"}, "18": {Email: "george.sand@it.com"},
+			"46": {Email: "victor.hugo@it.com"}, "54": {Email: ""}, "55": {Email: "Test.MixedCase@IT.com"},
 		},
 		software: map[string]software{
-			"1": {name: "MySql", version: "8"},
-			"2": {name: "Oracle DB engine", version: "19c"},
-			"3": {name: "RabbitMQ", version: "3.12.13"},
-			"4": {name: "Chrome", version: "120.0.6099.109"},
-			"5": {name: "OpenSSH", version: "9.6p1"},
-			"6": {name: "Apache HTTP Server", version: "2.4.58"},
+			"1": {Name: "MySql", Version: "8"},
+			"2": {Name: "Oracle DB engine", Version: "19c"},
+			"3": {Name: "RabbitMQ", Version: "3.12.13"},
+			"4": {Name: "Chrome", Version: "120.0.6099.109"},
+			"5": {Name: "OpenSSH", Version: "9.6p1"},
+			"6": {Name: "Apache HTTP Server", Version: "2.4.58"},
 		},
-		iosVersions: map[string]iosVersion{"90": {brand: "Cisco", version: "15.2(7)E"}},
+		iosVersions: map[string]iosVersion{"90": {Brand: "Cisco", Name: "15.2(7)E"}},
 	}
 	if !reflect.DeepEqual(lk, wantLookups) {
 		t.Errorf("lookups:\n got %+v\nwant %+v", lk, wantLookups)

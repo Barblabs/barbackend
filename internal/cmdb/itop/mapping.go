@@ -90,7 +90,7 @@ func operatingSystem(c ci, lk lookups) (inventory.SoftwareComponent, bool) {
 	name, version := c.OSFamily, c.OSVersion
 	if c.Class == "NetworkDevice" {
 		ios := lk.iosVersions[c.IOSVersionID]
-		name, version = ios.brand, ios.version
+		name, version = ios.Brand, ios.Name
 	}
 	if blank(name) {
 		return inventory.SoftwareComponent{}, false

@@ -7,16 +7,16 @@ import (
 )
 
 func TestOwner(t *testing.T) {
-	lk := lookups{emails: map[string]string{
-		"1": "alice@it.com",
-		"2": "bob@it.com",
-		"3": "",
-		"4": "Test.MixedCase@IT.com",
-		"5": "not-an-email",
-		"6": "Alice <alice@it.com>",
-		"7": "alice@it.com, bob@it.com",
-		"8": "alice@",
-		"9": " alice@it.com ",
+	lk := lookups{persons: map[string]person{
+		"1": {Email: "alice@it.com"},
+		"2": {Email: "bob@it.com"},
+		"3": {Email: ""},
+		"4": {Email: "Test.MixedCase@IT.com"},
+		"5": {Email: "not-an-email"},
+		"6": {Email: "Alice <alice@it.com>"},
+		"7": {Email: "alice@it.com, bob@it.com"},
+		"8": {Email: "alice@"},
+		"9": {Email: " alice@it.com "},
 	}}
 	person := func(id string) contact { return contact{ID: id, Class: "Person"} }
 	team := contact{ID: "50", Class: "Team"}

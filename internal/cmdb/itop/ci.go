@@ -34,21 +34,27 @@ type instance struct {
 	SoftwareID string `json:"software_id"`
 }
 
-type software struct {
-	name    string
-	version string
+// person, software and iosVersion are the records the cis reference by id,
+// decoded from their JSON fields like a ci.
+type person struct {
+	Email string `json:"email"`
 }
 
-// iosVersion is a Network Device's operating system, named by its brand
-// because iTop stores no OS name for it.
+type software struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
+}
+
+// iosVersion is a Network Device's operating system. iTop stores no OS name
+// for it, so it is named by its brand and its Name is the version.
 type iosVersion struct {
-	brand   string
-	version string
+	Brand string `json:"brand_name"`
+	Name  string `json:"name"`
 }
 
 // lookups holds the records the cis reference by id, read in bulk.
 type lookups struct {
-	emails      map[string]string
+	persons     map[string]person
 	software    map[string]software
 	iosVersions map[string]iosVersion
 }

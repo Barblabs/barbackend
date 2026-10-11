@@ -26,7 +26,7 @@ func redHat() []inventory.SoftwareComponent {
 }
 
 func TestSnapshotMapsRecords(t *testing.T) {
-	cisco := lookups{iosVersions: map[string]iosVersion{"90": {brand: "Cisco", version: "15.2(7)E"}}}
+	cisco := lookups{iosVersions: map[string]iosVersion{"90": {Brand: "Cisco", Name: "15.2(7)E"}}}
 	hpe := inventory.Hardware{Vendor: "HPE", Model: "DL380"}
 	tests := []struct {
 		name string
