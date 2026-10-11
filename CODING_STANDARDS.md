@@ -20,6 +20,7 @@ Review rules for judgement calls that no linter checks. Apply every rule to the 
 ## Tests
 
 - **Black-box**: `package <name>_test`, exercising only the exported interface, table-driven where cases share a shape.
+  - Exception: a CMDB Provider adapter tests its internals (decoding and mapping raw records) white-box, because its only exported entry point is a Provider that needs a live or replayed CMDB.
 - **Shared helpers** sit in `helpers_test.go`.
 - **Each test earns its place**: it covers a case no other test covers; a check that cannot fail (for example mutating a string copy) is removed.
 

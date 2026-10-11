@@ -30,20 +30,20 @@ func snapshot(cis []ci, lk lookups) inventory.Snapshot {
 	for _, c := range cis {
 		imported, err := importedAsset(c, lk)
 		if err != nil {
-			s.Skipped = append(s.Skipped, inventory.SkippedRecord{RecordID: c.key, Reason: err.Error()})
+			s.Skipped = append(s.Skipped, inventory.SkippedRecord{RecordID: c.Key, Reason: err.Error()})
 			continue
 		}
-		s.Records = append(s.Records, inventory.Record{RecordID: c.key, Imported: imported})
+		s.Records = append(s.Records, inventory.Record{RecordID: c.Key, Imported: imported})
 	}
 	return s
 }
 
 func importedAsset(c ci, lk lookups) (inventory.ImportedAsset, error) {
-	kind, ok := kinds[c.class]
+	kind, ok := kinds[c.Class]
 	if !ok {
-		return inventory.ImportedAsset{}, fmt.Errorf("class %s is not imported", c.class)
+		return inventory.ImportedAsset{}, fmt.Errorf("class %s is not imported", c.Class)
 	}
-	crit, err := criticality(c.criticality)
+	crit, err := criticality(c.Criticality)
 	if err != nil {
 		return inventory.ImportedAsset{}, err
 	}
@@ -53,14 +53,14 @@ func importedAsset(c ci, lk lookups) (inventory.ImportedAsset, error) {
 	}
 	components = append(components, applications(c, lk)...)
 	return inventory.NewImportedAsset(inventory.ImportedAssetParams{
-		Name:        c.name,
-		Description: c.description,
+		Name:        c.Name,
+		Description: c.Description,
 		Kind:        kind,
 		Hardware:    hardware(c, kind),
 		Software:    components,
 		Criticality: crit,
 		Owner:       owner(c, lk),
-		Retired:     c.status == retiredStatus,
+		Retired:     c.Status == retiredStatus,
 	})
 }
 
@@ -81,15 +81,15 @@ func hardware(c ci, kind inventory.AssetKind) inventory.Hardware {
 	if !kind.Physical() {
 		return inventory.Hardware{}
 	}
-	return inventory.Hardware{Vendor: c.brand, Model: c.model}
+	return inventory.Hardware{Vendor: c.Brand, Model: c.Model}
 }
 
 // operatingSystem names a Network Device's OS after its IOSVersion's brand,
 // because iTop has no OS family for network devices (ADR 0002).
 func operatingSystem(c ci, lk lookups) (inventory.SoftwareComponent, bool) {
-	name, version := c.osFamily, c.osVersion
-	if c.class == "NetworkDevice" {
-		ios := lk.iosVersions[c.iosVersionID]
+	name, version := c.OSFamily, c.OSVersion
+	if c.Class == "NetworkDevice" {
+		ios := lk.iosVersions[c.IOSVersionID]
 		name, version = ios.brand, ios.version
 	}
 	if blank(name) {

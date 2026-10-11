@@ -1,36 +1,37 @@
 package itop
 
-// ci is a configuration item of an in-scope iTop class, as read before
-// mapping. Fields hold iTop's raw values: "" for a blank string or a blank
-// external key's name, and a nil criticality for the JSON null iTop returns
-// when business_criticity is blank.
+// ci is a configuration item of an in-scope iTop class, decoded from its
+// JSON fields before mapping. Fields hold iTop's raw values: "" for a blank
+// string or a blank external key's name, and a nil Criticality for the JSON
+// null iTop returns when business_criticity is blank. Key and Class come from
+// the object envelope, not from the fields.
 type ci struct {
-	key          string
-	class        string
-	name         string
-	description  string
-	status       string
-	criticality  *string
-	brand        string
-	model        string
-	osFamily     string
-	osVersion    string
-	iosVersionID string
-	contacts     []contact
-	instances    []instance
+	Key          string     `json:"-"`
+	Class        string     `json:"-"`
+	Name         string     `json:"name"`
+	Description  string     `json:"description"`
+	Status       string     `json:"status"`
+	Criticality  *string    `json:"business_criticity"`
+	Brand        string     `json:"brand_name"`
+	Model        string     `json:"model_name"`
+	OSFamily     string     `json:"osfamily_name"`
+	OSVersion    string     `json:"osversion_name"`
+	IOSVersionID string     `json:"iosversion_id"`
+	Contacts     []contact  `json:"contacts_list"`
+	Instances    []instance `json:"softwares_list"`
 }
 
 type contact struct {
-	id    string
-	class string
+	ID    string `json:"contact_id"`
+	Class string `json:"contact_id_finalclass_recall"`
 }
 
-// instance is a SoftwareInstance linked to a ci. softwareID is "0" when it
+// instance is a SoftwareInstance linked to a ci. SoftwareID is "0" when it
 // links to no Software.
 type instance struct {
-	class      string
-	name       string
-	softwareID string
+	Class      string `json:"finalclass"`
+	Name       string `json:"name"`
+	SoftwareID string `json:"software_id"`
 }
 
 type software struct {

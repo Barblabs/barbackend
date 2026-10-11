@@ -9,9 +9,9 @@ import "barbackend/internal/inventory"
 // Component (ADR 0002).
 func applications(c ci, lk lookups) []inventory.SoftwareComponent {
 	var apps []inventory.SoftwareComponent
-	for _, in := range c.instances {
-		app := inventory.SoftwareComponent{Role: inventory.Application, Name: in.name}
-		if sw, ok := lk.software[in.softwareID]; ok {
+	for _, in := range c.Instances {
+		app := inventory.SoftwareComponent{Role: inventory.Application, Name: in.Name}
+		if sw, ok := lk.software[in.SoftwareID]; ok {
 			app.Name, app.Version = sw.name, sw.version
 		}
 		apps = append(apps, app)
