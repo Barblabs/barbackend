@@ -8,6 +8,10 @@ Keep entries concise and useful across future sessions. Point to authoritative f
 - `docs/adr/` Read adrs that touch the area you are working in. If your output contradicts an existing ADR, surface it rather than overriding.
 - When a domain term or decision changes, use the `domain-modeling` skill to update both.
 
+## Architecture
+
+- Package layers and where new features go: ADR 0008. `depguard` in `.golangci.yaml` enforces the import direction; if a rule blocks you, move the code to the right layer rather than loosening the rule.
+
 ## Database
 
 - Schema lives in `internal/postgres/migrations` (goose); queries in `internal/postgres/queries`. After editing either, run `go tool -modfile=tools.mod sqlc generate`; never edit `internal/postgres/sqlcgen`.

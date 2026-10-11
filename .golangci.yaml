@@ -2,6 +2,66 @@ version: "2"
 
 linters:
   default: standard
+  enable:
+    - depguard
+  settings:
+    # Package layering from ADR 0008. In lax mode the longest matching prefix
+    # wins, so denying all of barbackend/internal and allowing specific layers
+    # also forbids layers that do not exist yet.
+    depguard:
+      rules:
+        inventory:
+          list-mode: lax
+          files:
+            - "**/internal/inventory/**"
+          allow:
+            - barbackend/internal/inventory
+          deny:
+            - pkg: barbackend/internal
+              desc: inventory is the pure domain and imports no other layer (ADR 0008)
+            - pkg: net/http
+              desc: inventory is the pure domain and does no I/O (ADR 0008)
+            - pkg: database/sql
+              desc: inventory is the pure domain and does no I/O (ADR 0008)
+            - pkg: github.com/jackc/pgx
+              desc: inventory is the pure domain and does no I/O (ADR 0008)
+        cmdb:
+          list-mode: lax
+          files:
+            - "**/internal/cmdb/**"
+          allow:
+            - barbackend/internal/cmdb
+            - barbackend/internal/inventory
+          deny:
+            - pkg: barbackend/internal
+              desc: CMDB Provider adapters depend only on the seam and inventory, never on persistence or use cases (ADR 0008)
+            - pkg: github.com/jackc/pgx
+              desc: CMDB Provider adapters never touch the database (ADR 0008)
+        postgres:
+          list-mode: lax
+          files:
+            - "**/internal/postgres/**"
+          allow:
+            - barbackend/internal/inventory
+            - barbackend/internal/postgres
+          deny:
+            - pkg: barbackend/internal
+              desc: persistence depends only on inventory; use cases call it, not the reverse (ADR 0008)
+        httpapi:
+          files:
+            - "**/internal/**"
+            - "!**/internal/httpapi/**"
+          deny:
+            - pkg: barbackend/internal/httpapi
+              desc: only cmd wires the HTTP API (ADR 0008)
+        gin:
+          files:
+            - $all
+            - "!**/cmd/**"
+            - "!**/internal/httpapi/**"
+          deny:
+            - pkg: github.com/gin-gonic/gin
+              desc: only cmd and internal/httpapi are HTTP transport (ADR 0008)
 
 formatters:
   enable:
