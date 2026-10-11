@@ -50,7 +50,7 @@ func TestCreatedAssetRoundTrip(t *testing.T) {
 
 			r := syncRecords(t, db, src.ID(), record(t, "42", tt.imported))
 
-			want := r.Changes()[0].Asset
+			want := r.Created()[0]
 			if got := assets(t, db, src.ID()); len(got) != 1 || !reflect.DeepEqual(got[0], want) {
 				t.Errorf("assets = %+v, want [%+v]", got, want)
 			}

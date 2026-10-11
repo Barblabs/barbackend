@@ -11,49 +11,43 @@ var (
 	ErrInvalidExistingAssets = errors.New("invalid existing assets")
 )
 
-// Change is one Asset a Reconciliation creates or modifies. A created Asset
-// is new as a whole, so its other flags are false.
-type Change struct {
-	Asset           *Asset
-	Created         bool
-	ImportedChanged bool
-	ActiveChanged   bool
-}
-
 type SyncCounts struct {
 	Created, Updated, Deactivated, Reactivated, Skipped int
 }
 
 // Reconciliation is built only by Reconcile, so whoever stores it can rely on
-// its Changes being consistent with one Snapshot of one CMDB Source.
+// its Assets being consistent with one Snapshot of one CMDB Source. Updated
+// Assets are those whose imported values changed; an Updated Asset can also be
+// Deactivated or Reactivated, while a Created Asset is in no other list.
 type Reconciliation struct {
-	source  CMDBSourceID
-	changes []Change
-	skipped []SkippedRecord
+	source      CMDBSourceID
+	created     []*Asset
+	updated     []*Asset
+	deactivated []*Asset
+	reactivated []*Asset
+	skipped     []SkippedRecord
 }
 
 func (r Reconciliation) Source() CMDBSourceID { return r.source }
 
-func (r Reconciliation) Changes() []Change { return slices.Clone(r.changes) }
+func (r Reconciliation) Created() []*Asset { return slices.Clone(r.created) }
+
+func (r Reconciliation) Updated() []*Asset { return slices.Clone(r.updated) }
+
+func (r Reconciliation) Deactivated() []*Asset { return slices.Clone(r.deactivated) }
+
+func (r Reconciliation) Reactivated() []*Asset { return slices.Clone(r.reactivated) }
 
 func (r Reconciliation) Skipped() []SkippedRecord { return slices.Clone(r.skipped) }
 
 func (r Reconciliation) Counts() SyncCounts {
-	counts := SyncCounts{Skipped: len(r.skipped)}
-	for _, c := range r.changes {
-		switch {
-		case c.Created:
-			counts.Created++
-		case c.ActiveChanged && c.Asset.Active():
-			counts.Reactivated++
-		case c.ActiveChanged:
-			counts.Deactivated++
-		}
-		if c.ImportedChanged {
-			counts.Updated++
-		}
+	return SyncCounts{
+		Created:     len(r.created),
+		Updated:     len(r.updated),
+		Deactivated: len(r.deactivated),
+		Reactivated: len(r.reactivated),
+		Skipped:     len(r.skipped),
 	}
-	return counts
 }
 
 // Reconcile applies the Sync rules (ADR 0005) to the stored Assets of one CMDB
@@ -75,23 +69,20 @@ func Reconcile(source CMDBSourceID, existing []*Asset, s Snapshot) (Reconciliati
 		present[rec.RecordID] = true
 		a, ok := stored[rec.RecordID]
 		if !ok {
-			c, err := create(source, rec)
+			created, err := create(source, rec)
 			if err != nil {
 				return Reconciliation{}, err
 			}
-			r.changes = append(r.changes, c)
+			r.created = append(r.created, created)
 			continue
 		}
-		if c := update(a, rec.Imported); c.ImportedChanged || c.ActiveChanged {
-			r.changes = append(r.changes, c)
-		}
+		r.update(a, rec.Imported)
 	}
 	// A Skipped Record is still in the CMDB Source, so its Asset is not missing.
 	for _, a := range existing {
 		id := a.Ref().RecordID
-		if !present[id] && !skipped[id] && a.Active() {
-			a.MarkInactive()
-			r.changes = append(r.changes, Change{Asset: a, ActiveChanged: true})
+		if !present[id] && !skipped[id] {
+			r.setActive(a, false)
 		}
 	}
 	return r, nil
@@ -142,34 +133,36 @@ func validateSnapshot(s Snapshot) (map[string]bool, error) {
 	return skipped, nil
 }
 
-func create(source CMDBSourceID, rec Record) (Change, error) {
+func create(source CMDBSourceID, rec Record) (*Asset, error) {
 	a, err := NewAsset(SourceReference{Source: source, RecordID: rec.RecordID}, rec.Imported)
 	if err != nil {
-		return Change{}, fmt.Errorf("record %q: %w", rec.RecordID, err)
+		return nil, fmt.Errorf("record %q: %w", rec.RecordID, err)
 	}
 	if rec.Imported.Retired() {
 		a.MarkInactive()
 	}
-	return Change{Asset: a, Created: true}, nil
+	return a, nil
 }
 
 // update keeps an Asset present in the Snapshot Active exactly when its
 // record is not reported as retired.
-func update(a *Asset, imported ImportedAsset) Change {
-	c := Change{Asset: a}
+func (r *Reconciliation) update(a *Asset, imported ImportedAsset) {
 	if !a.Imported().equal(imported) {
 		// ReplaceImported only rejects a zero ImportedAsset, which
 		// validateSnapshot has already ruled out.
 		_ = a.ReplaceImported(imported)
-		c.ImportedChanged = true
+		r.updated = append(r.updated, a)
 	}
-	switch active := !imported.Retired(); {
+	r.setActive(a, !imported.Retired())
+}
+
+func (r *Reconciliation) setActive(a *Asset, active bool) {
+	switch {
 	case active && !a.Active():
 		a.Reactivate()
-		c.ActiveChanged = true
+		r.reactivated = append(r.reactivated, a)
 	case !active && a.Active():
 		a.MarkInactive()
-		c.ActiveChanged = true
+		r.deactivated = append(r.deactivated, a)
 	}
-	return c
 }
