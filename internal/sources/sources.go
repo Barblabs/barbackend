@@ -81,26 +81,9 @@ func (s *Service) sync(ctx context.Context, src inventory.CMDBSource, settings j
 	if err != nil {
 		return inventory.SyncRun{}, fmt.Errorf("snapshot of %s: %w", src.ID(), err)
 	}
-	var run inventory.SyncRun
-	err = s.db.InLockedSource(ctx, src.ID(), started, func(tx *postgres.SourceTx) error {
-		existing, err := tx.Assets(ctx)
-		if err != nil {
-			return err
-		}
-		r, err := inventory.Reconcile(src.ID(), existing, snapshot)
-		if err != nil {
-			return err
-		}
-		if err := tx.Save(ctx, r); err != nil {
-			return err
-		}
-		run, err = inventory.SucceededRun(r, started, time.Now())
-		if err != nil {
-			return err
-		}
-		return tx.RecordSyncRun(ctx, run)
+	return s.db.CommitSync(ctx, src.ID(), started, func(existing []*inventory.Asset) (inventory.Reconciliation, error) {
+		return inventory.Reconcile(src.ID(), existing, snapshot)
 	})
-	return run, err
 }
 
 // recordFailure records the failed run even when ctx was canceled, since the
@@ -109,7 +92,7 @@ func (s *Service) recordFailure(ctx context.Context, id inventory.CMDBSourceID, 
 	ctx = context.WithoutCancel(ctx)
 	run, err := inventory.FailedRun(id, started, time.Now(), cause)
 	if err == nil {
-		err = s.db.InTx(ctx, func(tx *postgres.Tx) error { return tx.RecordSyncRun(ctx, run) })
+		err = s.db.InTx(ctx, func(tx *postgres.Tx) error { return tx.RecordFailedSync(ctx, run) })
 	}
 	if err != nil {
 		err = fmt.Errorf("record failed sync run: %w", err)

@@ -10,16 +10,11 @@ import (
 	"github.com/google/uuid"
 )
 
-func (t *Tx) RecordSyncRun(ctx context.Context, run inventory.SyncRun) error {
-	return recordSyncRun(ctx, t.q, run)
-}
-
-// RecordSyncRun records a run in the transaction that saved its changes, so
-// both commit or neither does.
-func (t *SourceTx) RecordSyncRun(ctx context.Context, run inventory.SyncRun) error {
-	// Only this transaction's CMDB Source is locked.
-	if run.Source() != t.source {
-		return fmt.Errorf("record in %s: sync run of %s", t.source, run.Source())
+// RecordFailedSync records a Sync that changed no Asset. It refuses a
+// succeeded run: those are recorded only by CommitSync, with their changes.
+func (t *Tx) RecordFailedSync(ctx context.Context, run inventory.SyncRun) error {
+	if run.Outcome() != inventory.SyncFailed {
+		return fmt.Errorf("record failed sync of %s: run %s", run.Source(), run.Outcome())
 	}
 	return recordSyncRun(ctx, t.q, run)
 }

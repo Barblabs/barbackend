@@ -68,15 +68,18 @@ func (e env) addSource(t *testing.T) inventory.CMDBSource {
 	return src
 }
 
+var errReadOnly = errors.New("read only")
+
+// assets reads the stored Assets through the interface a Sync uses, then
+// aborts so nothing is written.
 func (e env) assets(t *testing.T, src inventory.CMDBSourceID) []*inventory.Asset {
 	t.Helper()
 	var got []*inventory.Asset
-	err := e.db.InLockedSource(context.Background(), src, time.Now(), func(tx *postgres.SourceTx) error {
-		var err error
-		got, err = tx.Assets(context.Background())
-		return err
+	_, err := e.db.CommitSync(context.Background(), src, time.Now(), func(existing []*inventory.Asset) (inventory.Reconciliation, error) {
+		got = existing
+		return inventory.Reconciliation{}, errReadOnly
 	})
-	if err != nil {
+	if !errors.Is(err, errReadOnly) {
 		t.Fatal(err)
 	}
 	return got

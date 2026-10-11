@@ -154,12 +154,8 @@ func TestDeactivationKeepsFirstInactiveTime(t *testing.T) {
 
 	// A reconciliation that still sees the Asset as Active deactivates it again.
 	stale := restore(t, src.ID(), "1", retired, true)
-	inSource(t, db, src.ID(), func(tx *postgres.SourceTx) error {
-		r, err := inventory.Reconcile(src.ID(), []*inventory.Asset{stale}, inventory.Snapshot{})
-		if err != nil {
-			return err
-		}
-		return tx.Save(context.Background(), r)
+	commitSync(t, db, src.ID(), func([]*inventory.Asset) (inventory.Reconciliation, error) {
+		return inventory.Reconcile(src.ID(), []*inventory.Asset{stale}, inventory.Snapshot{})
 	})
 	if again := inactiveSince(); again == nil || !again.Equal(*first) {
 		t.Errorf("inactive_since = %v after deactivating again, want %v", again, first)
@@ -205,12 +201,9 @@ func TestSaveOfMissingAssetFails(t *testing.T) {
 				s.Records = append(s.Records, record(t, "missing", p))
 			}
 
-			err := db.InLockedSource(context.Background(), src.ID(), time.Now(), func(tx *postgres.SourceTx) error {
-				r, err := inventory.Reconcile(src.ID(), []*inventory.Asset{restore(t, src.ID(), "missing", active, tt.active)}, s)
-				if err != nil {
-					return err
-				}
-				return tx.Save(context.Background(), r)
+			ghost := restore(t, src.ID(), "missing", active, tt.active)
+			_, err := db.CommitSync(context.Background(), src.ID(), time.Now(), func([]*inventory.Asset) (inventory.Reconciliation, error) {
+				return inventory.Reconcile(src.ID(), []*inventory.Asset{ghost}, s)
 			})
 			if !errors.Is(err, postgres.ErrNotFound) {
 				t.Errorf("err = %v, want ErrNotFound", err)
@@ -219,70 +212,70 @@ func TestSaveOfMissingAssetFails(t *testing.T) {
 	}
 }
 
-func TestInLockedSourceOfMissingSource(t *testing.T) {
+func TestCommitSyncOfMissingSource(t *testing.T) {
 	t.Parallel()
 	db := pgtest.NewDB(t)
-	err := db.InLockedSource(context.Background(), inventory.CMDBSourceID(uuid.New()), time.Now(), func(*postgres.SourceTx) error { return nil })
+	id := inventory.CMDBSourceID(uuid.New())
+	_, err := db.CommitSync(context.Background(), id, time.Now(), reconcileWith(id, inventory.Snapshot{}))
 	if !errors.Is(err, postgres.ErrNotFound) {
 		t.Errorf("err = %v, want ErrNotFound", err)
 	}
 }
 
-func TestInLockedSourceRejectsSupersededSync(t *testing.T) {
+func TestCommitSyncRejectsSupersededSync(t *testing.T) {
 	t.Parallel()
 	db := pgtest.NewDB(t)
 	src := newSource(t, db, newCustomer())
 	start := time.Date(2026, 10, 10, 12, 0, 0, 0, time.UTC)
 	later := start.Add(time.Hour)
-	recordRun := func(run inventory.SyncRun, err error) {
-		t.Helper()
-		if err != nil {
-			t.Fatal(err)
-		}
-		inTx(t, db, func(tx *postgres.Tx) error { return tx.RecordSyncRun(context.Background(), run) })
-	}
-	lock := func(startedAt time.Time) error {
-		return db.InLockedSource(context.Background(), src.ID(), startedAt, func(*postgres.SourceTx) error { return nil })
+	commitAt := func(started time.Time) error {
+		_, err := db.CommitSync(context.Background(), src.ID(), started, reconcileWith(src.ID(), inventory.Snapshot{}))
+		return err
 	}
 
-	recordRun(inventory.FailedRun(src.ID(), later, later, errors.New("cmdb unreachable")))
-	if err := lock(start); err != nil {
-		t.Errorf("after a later failed run: err = %v, want nil", err)
-	}
-
-	r, err := inventory.Reconcile(src.ID(), nil, inventory.Snapshot{})
+	failed, err := inventory.FailedRun(src.ID(), later, later, errors.New("cmdb unreachable"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	recordRun(inventory.SucceededRun(r, later, later))
-	if err := lock(start); !errors.Is(err, postgres.ErrSuperseded) {
+	inTx(t, db, func(tx *postgres.Tx) error { return tx.RecordFailedSync(context.Background(), failed) })
+	if err := commitAt(start); err != nil {
+		t.Errorf("after a later failed run: err = %v, want nil", err)
+	}
+
+	if err := commitAt(later); err != nil {
+		t.Fatal(err)
+	}
+	if err := commitAt(start); !errors.Is(err, postgres.ErrSuperseded) {
 		t.Errorf("after a later successful run: err = %v, want ErrSuperseded", err)
 	}
-	if err := lock(later.Add(time.Second)); err != nil {
+	if err := commitAt(later.Add(time.Second)); err != nil {
 		t.Errorf("after an earlier successful run: err = %v, want nil", err)
 	}
 }
 
-func TestInLockedSourceFailsWhileLocked(t *testing.T) {
+func TestCommitSyncFailsWhileLocked(t *testing.T) {
 	t.Parallel()
 	db := pgtest.NewDB(t)
 	src := newSource(t, db, newCustomer())
-	lock := func() error {
-		return db.InLockedSource(context.Background(), src.ID(), time.Now(), func(*postgres.SourceTx) error { return nil })
+	reconcile := reconcileWith(src.ID(), inventory.Snapshot{})
+	commit := func() error {
+		_, err := db.CommitSync(context.Background(), src.ID(), time.Now(), reconcile)
+		return err
 	}
 
 	locked, release := make(chan struct{}), make(chan struct{})
 	done := make(chan error)
 	go func() {
-		done <- db.InLockedSource(context.Background(), src.ID(), time.Now(), func(*postgres.SourceTx) error {
+		_, err := db.CommitSync(context.Background(), src.ID(), time.Now(), func(existing []*inventory.Asset) (inventory.Reconciliation, error) {
 			close(locked)
 			<-release
-			return nil
+			return reconcile(existing)
 		})
+		done <- err
 	}()
 	<-locked
 
-	if err := lock(); !errors.Is(err, postgres.ErrSyncInProgress) {
+	if err := commit(); !errors.Is(err, postgres.ErrSyncInProgress) {
 		t.Errorf("err = %v, want ErrSyncInProgress", err)
 	}
 
@@ -290,24 +283,20 @@ func TestInLockedSourceFailsWhileLocked(t *testing.T) {
 	if err := <-done; err != nil {
 		t.Fatal(err)
 	}
-	if err := lock(); err != nil {
+	if err := commit(); err != nil {
 		t.Errorf("after release: err = %v, want nil", err)
 	}
 }
 
-func TestSaveOfAnotherSourceFails(t *testing.T) {
+func TestCommitSyncOfAnotherSourceFails(t *testing.T) {
 	t.Parallel()
 	db, conn := newDBWithConn(t)
 	customer := newCustomer()
 	locked := newSource(t, db, customer)
 	other := newSource(t, db, customer)
 
-	err := db.InLockedSource(context.Background(), locked.ID(), time.Now(), func(tx *postgres.SourceTx) error {
-		r, err := inventory.Reconcile(other.ID(), nil, inventory.Snapshot{Records: []inventory.Record{record(t, "1", fullParams(t))}})
-		if err != nil {
-			t.Fatal(err)
-		}
-		return tx.Save(context.Background(), r)
+	_, err := db.CommitSync(context.Background(), locked.ID(), time.Now(), func([]*inventory.Asset) (inventory.Reconciliation, error) {
+		return inventory.Reconcile(other.ID(), nil, inventory.Snapshot{Records: []inventory.Record{record(t, "1", fullParams(t))}})
 	})
 
 	if err == nil {
