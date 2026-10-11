@@ -20,7 +20,11 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-const template = "barb_template"
+const (
+	template = "barb_template"
+	// Matches the major version production runs.
+	version = embeddedpostgres.V15
+)
 
 var (
 	port uint32
@@ -46,16 +50,39 @@ func run(m *testing.M) int {
 		fmt.Fprintln(os.Stderr, "pgtest:", err)
 		return 1
 	}
+	shared, err := sharedBinariesDir()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "pgtest:", err)
+		return 1
+	}
+	binaries := shared
+	staged := !extracted(shared)
+	if staged {
+		// Extract into a private directory and publish it by rename once
+		// Postgres has stopped, so packages starting concurrently and
+		// interrupted runs never see a partial extraction. The removal only
+		// matters when the publish did not happen or lost to another package.
+		binaries, err = os.MkdirTemp(filepath.Dir(shared), "staging-")
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "pgtest:", err)
+			return 1
+		}
+		defer func() { _ = os.RemoveAll(binaries) }()
+	}
+
 	var log bytes.Buffer
-	// Matches the major version production runs.
 	pg := embeddedpostgres.NewDatabase(embeddedpostgres.DefaultConfig().
-		Version(embeddedpostgres.V15).
+		Version(version).
 		Port(port).
+		BinariesPath(binaries).
 		RuntimePath(filepath.Join(dir, "runtime")).
 		Logger(&log))
 	if err := pg.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "pgtest: start postgres: %v\n%s", err, log.String())
 		return 1
+	}
+	if staged {
+		defer func() { _ = os.Rename(binaries, shared) }()
 	}
 	defer func() { _ = pg.Stop() }()
 
@@ -64,6 +91,28 @@ func run(m *testing.M) int {
 		return 1
 	}
 	return m.Run()
+}
+
+// sharedBinariesDir is where the Postgres binaries stay extracted between
+// runs. embedded-postgres would otherwise decompress its archive on every
+// start, which takes tens of seconds under -race.
+func sharedBinariesDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("find binaries directory: %w", err)
+	}
+	// embedded-postgres caches its downloaded archives here too, so one
+	// directory holds everything a test run needs.
+	cache := filepath.Join(home, ".embedded-postgres-go")
+	if err := os.MkdirAll(cache, 0o755); err != nil {
+		return "", fmt.Errorf("create binaries directory: %w", err)
+	}
+	return filepath.Join(cache, "binaries-"+string(version)), nil
+}
+
+func extracted(binaries string) bool {
+	_, err := os.Stat(filepath.Join(binaries, "bin", "pg_ctl"))
+	return err == nil
 }
 
 func createTemplate(ctx context.Context) error {
