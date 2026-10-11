@@ -18,8 +18,6 @@ import (
 	"barbackend/internal/cmdb/itop/rest"
 )
 
-// fetch returns unexported types, so its tests sit inside the package.
-
 var record = flag.Bool("record", false, "re-record testdata/fetch from the iTop named by ITOP_URL, ITOP_USER and ITOP_PASSWORD (source .env.itop)")
 
 // recording maps each request's json_data to iTop's response. Requests are
@@ -116,8 +114,8 @@ func TestFetchSeededInstance(t *testing.T) {
 	byName := map[string]ci{}
 	var names []string
 	for _, c := range cis {
-		byName[c.name] = c
-		names = append(names, c.name)
+		byName[c.Name] = c
+		names = append(names, c.Name)
 	}
 	wantNames := []string{
 		"Server1", "Server2", "Server3", "Server4", "Server5",
@@ -131,36 +129,39 @@ func TestFetchSeededInstance(t *testing.T) {
 
 	want := []ci{
 		{
-			key: "3", class: "Server", name: "Server3", status: "production", criticality: ptr("low"),
-			brand: "HPE", model: "DL380", osFamily: "vCenter Server", osVersion: "2022",
-			contacts:  []contact{{id: "18", class: "Person"}, {id: "53", class: "Team"}},
-			instances: []instance{{class: "Middleware", name: "RabbitMQ", softwareID: "3"}},
+			Key: "3", Class: "Server", Name: "Server3", Status: "production", Criticality: ptr("low"),
+			Brand: "HPE", Model: "DL380", OSFamily: "vCenter Server", OSVersion: "2022",
+			Contacts:  []contact{{ID: "18", Class: "Person"}, {ID: "53", Class: "Team"}},
+			Instances: []instance{{Class: "Middleware", Name: "RabbitMQ", SoftwareID: "3"}},
 		},
 		{
-			key: "21", class: "VirtualMachine", name: "VM1", status: "production", criticality: ptr("medium"),
-			osFamily: "vCenter Server", osVersion: "2022",
-			contacts:  []contact{{id: "52", class: "Team"}},
-			instances: []instance{{class: "WebServer", name: "Apache", softwareID: "0"}},
+			Key: "21", Class: "VirtualMachine", Name: "VM1", Status: "production", Criticality: ptr("medium"),
+			OSFamily: "vCenter Server", OSVersion: "2022",
+			Contacts:  []contact{{ID: "52", Class: "Team"}},
+			Instances: []instance{{Class: "WebServer", Name: "Apache", SoftwareID: "0"}},
 		},
 		{
-			key: "33", class: "PC", name: "PC-MIXED", status: "production",
-			brand: "Lenovo", model: "ThinkPad T14", osFamily: "Ubuntu", osVersion: "22.04 LTS",
-			contacts: []contact{{id: "55", class: "Person"}},
+			Key: "33", Class: "PC", Name: "PC-MIXED", Status: "production",
+			Brand: "Lenovo", Model: "ThinkPad T14", OSFamily: "Ubuntu", OSVersion: "22.04 LTS",
+			Contacts:  []contact{{ID: "55", Class: "Person"}},
+			Instances: []instance{},
 		},
 		{
-			key: "34", class: "PC", name: "PC-OLD", status: "obsolete", criticality: ptr("medium"),
-			osFamily: "Windows", osVersion: "10",
-			contacts: []contact{{id: "54", class: "Person"}},
+			Key: "34", Class: "PC", Name: "PC-OLD", Status: "obsolete", Criticality: ptr("medium"),
+			OSFamily: "Windows", OSVersion: "10",
+			Contacts:  []contact{{ID: "54", Class: "Person"}},
+			Instances: []instance{},
 		},
 		{
-			key: "40", class: "NetworkDevice", name: "Router2", status: "production", criticality: ptr("high"),
-			brand: "Cisco", model: "Cisco 6500", iosVersionID: "90",
-			contacts: []contact{{id: "46", class: "Person"}},
+			Key: "40", Class: "NetworkDevice", Name: "Router2", Status: "production", Criticality: ptr("high"),
+			Brand: "Cisco", Model: "Cisco 6500", IOSVersionID: "90",
+			Contacts:  []contact{{ID: "46", Class: "Person"}},
+			Instances: []instance{},
 		},
 	}
 	for _, w := range want {
-		if got := byName[w.name]; !reflect.DeepEqual(got, w) {
-			t.Errorf("%s:\n got %+v\nwant %+v", w.name, got, w)
+		if got := byName[w.Name]; !reflect.DeepEqual(got, w) {
+			t.Errorf("%s:\n got %+v\nwant %+v", w.Name, got, w)
 		}
 	}
 
@@ -186,20 +187,19 @@ func TestFetchSeededInstance(t *testing.T) {
 }
 
 // iTop ships no SoftwareInstance class outside the kept ones, so the filter
-// is tested on a hand-written document.
-func TestNewCIKeepsOnlySoftwareComponentClasses(t *testing.T) {
-	var doc ciDocument
-	raw := `{"softwares_list": [
+// is tested on a hand-written object.
+func TestDecodeCIKeepsOnlySoftwareComponentClasses(t *testing.T) {
+	fields := `{"softwares_list": [
 		{"finalclass": "DBServer", "name": "Postgres", "software_id": "7"},
 		{"finalclass": "CustomInstance", "name": "Agent", "software_id": "8"}
 	]}`
-	if err := json.Unmarshal([]byte(raw), &doc); err != nil {
+	c, err := decodeCI(rest.Object{Class: "Server", Key: "1", Fields: json.RawMessage(fields)}, []string{"softwares_list"})
+	if err != nil {
 		t.Fatal(err)
 	}
-	got := newCI(rest.Object{Class: "Server", Key: "1"}, doc).instances
-	want := []instance{{class: "DBServer", name: "Postgres", softwareID: "7"}}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("instances = %+v, want %+v", got, want)
+	want := []instance{{Class: "DBServer", Name: "Postgres", SoftwareID: "7"}}
+	if !reflect.DeepEqual(c.Instances, want) {
+		t.Errorf("instances = %+v, want %+v", c.Instances, want)
 	}
 }
 
@@ -215,9 +215,9 @@ func TestDecodeRejectsMissingField(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var doc ciDocument
+			var c ci
 			o := rest.Object{Class: "Server", Key: "1", Fields: json.RawMessage(tt.fields)}
-			if err := decode(o, []string{"name", "status"}, &doc); err == nil {
+			if err := decode(o, []string{"name", "status"}, &c); err == nil {
 				t.Error("err = nil, want a failure naming the missing field")
 			}
 		})

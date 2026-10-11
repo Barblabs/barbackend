@@ -18,8 +18,8 @@ func TestOwner(t *testing.T) {
 		"8": "alice@",
 		"9": " alice@it.com ",
 	}}
-	person := func(id string) contact { return contact{id: id, class: "Person"} }
-	team := contact{id: "50", class: "Team"}
+	person := func(id string) contact { return contact{ID: id, Class: "Person"} }
+	team := contact{ID: "50", Class: "Team"}
 	tests := []struct {
 		name     string
 		contacts []contact
@@ -50,7 +50,7 @@ func TestOwner(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			if got := owner(ci{contacts: tt.contacts}, lk); got != want {
+			if got := owner(ci{Contacts: tt.contacts}, lk); got != want {
 				t.Errorf("owner = %q, want %q", got, want)
 			}
 		})

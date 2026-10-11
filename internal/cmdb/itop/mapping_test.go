@@ -12,8 +12,8 @@ import (
 // rule reads.
 func mapped(class string, change func(*ci)) ci {
 	c := ci{
-		key: "7", class: class, name: "Server1", description: "  Billing database\n", status: "production",
-		criticality: ptr("low"), brand: "HPE", model: "DL380", osFamily: "Red Hat", osVersion: "9",
+		Key: "7", Class: class, Name: "Server1", Description: "  Billing database\n", Status: "production",
+		Criticality: ptr("low"), Brand: "HPE", Model: "DL380", OSFamily: "Red Hat", OSVersion: "9",
 	}
 	if change != nil {
 		change(&c)
@@ -44,7 +44,7 @@ func TestSnapshotMapsRecords(t *testing.T) {
 		},
 		{
 			name: "virtual machine has no hardware",
-			ci:   mapped("VirtualMachine", func(c *ci) { c.brand, c.model = "", "" }),
+			ci:   mapped("VirtualMachine", func(c *ci) { c.Brand, c.Model = "", "" }),
 			want: inventory.ImportedAssetParams{
 				Name: "Server1", Description: "  Billing database\n", Kind: inventory.VirtualMachine,
 				Software: redHat(), Criticality: inventory.CriticalityLow,
@@ -60,7 +60,7 @@ func TestSnapshotMapsRecords(t *testing.T) {
 		},
 		{
 			name: "obsolete is retired",
-			ci:   mapped("Server", func(c *ci) { c.status = "obsolete" }),
+			ci:   mapped("Server", func(c *ci) { c.Status = "obsolete" }),
 			want: inventory.ImportedAssetParams{
 				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server,
 				Hardware: hpe, Software: redHat(), Criticality: inventory.CriticalityLow, Retired: true,
@@ -68,7 +68,7 @@ func TestSnapshotMapsRecords(t *testing.T) {
 		},
 		{
 			name: "implementation is not retired",
-			ci:   mapped("Server", func(c *ci) { c.status = "implementation" }),
+			ci:   mapped("Server", func(c *ci) { c.Status = "implementation" }),
 			want: inventory.ImportedAssetParams{
 				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server,
 				Hardware: hpe, Software: redHat(), Criticality: inventory.CriticalityLow,
@@ -76,7 +76,7 @@ func TestSnapshotMapsRecords(t *testing.T) {
 		},
 		{
 			name: "high criticality",
-			ci:   mapped("Server", func(c *ci) { c.criticality = ptr("high") }),
+			ci:   mapped("Server", func(c *ci) { c.Criticality = ptr("high") }),
 			want: inventory.ImportedAssetParams{
 				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server,
 				Hardware: hpe, Software: redHat(), Criticality: inventory.CriticalityHigh,
@@ -84,7 +84,7 @@ func TestSnapshotMapsRecords(t *testing.T) {
 		},
 		{
 			name: "medium criticality",
-			ci:   mapped("Server", func(c *ci) { c.criticality = ptr("medium") }),
+			ci:   mapped("Server", func(c *ci) { c.Criticality = ptr("medium") }),
 			want: inventory.ImportedAssetParams{
 				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server,
 				Hardware: hpe, Software: redHat(), Criticality: inventory.CriticalityMedium,
@@ -92,7 +92,7 @@ func TestSnapshotMapsRecords(t *testing.T) {
 		},
 		{
 			name: "blank criticality is unknown",
-			ci:   mapped("Server", func(c *ci) { c.criticality = nil }),
+			ci:   mapped("Server", func(c *ci) { c.Criticality = nil }),
 			want: inventory.ImportedAssetParams{
 				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server,
 				Hardware: hpe, Software: redHat(), Criticality: inventory.CriticalityUnknown,
@@ -100,7 +100,7 @@ func TestSnapshotMapsRecords(t *testing.T) {
 		},
 		{
 			name: "hardware with only a vendor",
-			ci:   mapped("Server", func(c *ci) { c.model = "" }),
+			ci:   mapped("Server", func(c *ci) { c.Model = "" }),
 			want: inventory.ImportedAssetParams{
 				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server,
 				Hardware: inventory.Hardware{Vendor: "HPE"}, Software: redHat(), Criticality: inventory.CriticalityLow,
@@ -108,7 +108,7 @@ func TestSnapshotMapsRecords(t *testing.T) {
 		},
 		{
 			name: "no hardware when vendor and model are blank",
-			ci:   mapped("PC", func(c *ci) { c.brand, c.model = "", " " }),
+			ci:   mapped("PC", func(c *ci) { c.Brand, c.Model = "", " " }),
 			want: inventory.ImportedAssetParams{
 				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Workstation,
 				Software: redHat(), Criticality: inventory.CriticalityLow,
@@ -116,7 +116,7 @@ func TestSnapshotMapsRecords(t *testing.T) {
 		},
 		{
 			name: "no operating system when its name is blank",
-			ci:   mapped("Server", func(c *ci) { c.osFamily = "" }),
+			ci:   mapped("Server", func(c *ci) { c.OSFamily = "" }),
 			want: inventory.ImportedAssetParams{
 				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server,
 				Hardware: hpe, Criticality: inventory.CriticalityLow,
@@ -125,7 +125,7 @@ func TestSnapshotMapsRecords(t *testing.T) {
 		{
 			name: "network device os is its IOSVersion",
 			ci: mapped("NetworkDevice", func(c *ci) {
-				c.brand, c.model, c.osFamily, c.osVersion, c.iosVersionID = "Cisco", "Cisco 6500", "", "", "90"
+				c.Brand, c.Model, c.OSFamily, c.OSVersion, c.IOSVersionID = "Cisco", "Cisco 6500", "", "", "90"
 			}),
 			lk: cisco,
 			want: inventory.ImportedAssetParams{
@@ -138,7 +138,7 @@ func TestSnapshotMapsRecords(t *testing.T) {
 		{
 			name: "network device without IOSVersion has no os",
 			ci: mapped("NetworkDevice", func(c *ci) {
-				c.osFamily, c.osVersion, c.iosVersionID = "", "", blankKey
+				c.OSFamily, c.OSVersion, c.IOSVersionID = "", "", blankKey
 			}),
 			lk: cisco,
 			want: inventory.ImportedAssetParams{
@@ -167,8 +167,8 @@ func TestSnapshotSkipsRecords(t *testing.T) {
 		ci     ci
 		reason string
 	}{
-		{"unknown criticality", mapped("Server", func(c *ci) { c.criticality = ptr("critical") }), `business_criticity "critical"`},
-		{"rejected by the domain", mapped("Server", func(c *ci) { c.name = " " }), inventory.ErrEmptyName.Error()},
+		{"unknown criticality", mapped("Server", func(c *ci) { c.Criticality = ptr("critical") }), `business_criticity "critical"`},
+		{"rejected by the domain", mapped("Server", func(c *ci) { c.Name = " " }), inventory.ErrEmptyName.Error()},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -185,8 +185,8 @@ func TestSnapshotSkipsRecords(t *testing.T) {
 
 // A Skipped Record does not stop the records after it from being imported.
 func TestSnapshotKeepsMappingAfterASkippedRecord(t *testing.T) {
-	skipped := mapped("Server", func(c *ci) { c.key, c.name = "1", "" })
-	kept := mapped("Server", func(c *ci) { c.key = "2" })
+	skipped := mapped("Server", func(c *ci) { c.Key, c.Name = "1", "" })
+	kept := mapped("Server", func(c *ci) { c.Key = "2" })
 	got := snapshot([]ci{skipped, kept}, lookups{})
 	if len(got.Skipped) != 1 || got.Skipped[0].RecordID != "1" || len(got.Records) != 1 || got.Records[0].RecordID != "2" {
 		t.Errorf("snapshot = %+v, want record 1 skipped and record 2 kept", got)

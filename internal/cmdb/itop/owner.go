@@ -14,10 +14,10 @@ import (
 func owner(c ci, lk lookups) inventory.OwnerEmail {
 	persons := map[string]bool{}
 	var only string
-	for _, ct := range c.contacts {
-		if ct.class == "Person" {
-			persons[ct.id] = true
-			only = ct.id
+	for _, ct := range c.Contacts {
+		if ct.Class == "Person" {
+			persons[ct.ID] = true
+			only = ct.ID
 		}
 	}
 	if len(persons) != 1 || !validEmail(lk.emails[only]) {

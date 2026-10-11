@@ -23,32 +23,32 @@ func TestApplications(t *testing.T) {
 		{"none", nil, nil},
 		{
 			"named after the linked Software, not the instance",
-			[]instance{{class: "DBServer", name: "MySQL", softwareID: "2"}},
+			[]instance{{Class: "DBServer", Name: "MySQL", SoftwareID: "2"}},
 			[]inventory.SoftwareComponent{app("Oracle DB engine", "19c")},
 		},
 		{
 			"no linked Software keeps the instance name",
-			[]instance{{class: "WebServer", name: "Apache", softwareID: blankKey}},
+			[]instance{{Class: "WebServer", Name: "Apache", SoftwareID: blankKey}},
 			[]inventory.SoftwareComponent{app("Apache", "")},
 		},
 		{
 			"Software deleted since the CI was read keeps the instance name",
-			[]instance{{class: "DBServer", name: "MySQL", softwareID: "99"}},
+			[]instance{{Class: "DBServer", Name: "MySQL", SoftwareID: "99"}},
 			[]inventory.SoftwareComponent{app("MySQL", "")},
 		},
 		{
 			"one per instance",
 			[]instance{
-				{class: "DBServer", name: "MySQL", softwareID: "2"},
-				{class: "OtherSoftware", name: "OpenSSH", softwareID: "5"},
-				{class: "WebServer", name: "IIS", softwareID: blankKey},
+				{Class: "DBServer", Name: "MySQL", SoftwareID: "2"},
+				{Class: "OtherSoftware", Name: "OpenSSH", SoftwareID: "5"},
+				{Class: "WebServer", Name: "IIS", SoftwareID: blankKey},
 			},
 			[]inventory.SoftwareComponent{app("Oracle DB engine", "19c"), app("OpenSSH", "9.6p1"), app("IIS", "")},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := applications(ci{instances: tt.instances}, lk); !reflect.DeepEqual(got, tt.want) {
+			if got := applications(ci{Instances: tt.instances}, lk); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("applications = %+v, want %+v", got, tt.want)
 			}
 		})

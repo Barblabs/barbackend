@@ -43,27 +43,6 @@ var instanceClasses = map[string]bool{
 	"OtherSoftware": true,
 }
 
-type ciDocument struct {
-	Name         string  `json:"name"`
-	Description  string  `json:"description"`
-	Status       string  `json:"status"`
-	Criticality  *string `json:"business_criticity"`
-	Brand        string  `json:"brand_name"`
-	Model        string  `json:"model_name"`
-	OSFamily     string  `json:"osfamily_name"`
-	OSVersion    string  `json:"osversion_name"`
-	IOSVersionID string  `json:"iosversion_id"`
-	Contacts     []struct {
-		ID    string `json:"contact_id"`
-		Class string `json:"contact_id_finalclass_recall"`
-	} `json:"contacts_list"`
-	Instances []struct {
-		Class      string `json:"finalclass"`
-		Name       string `json:"name"`
-		SoftwareID string `json:"software_id"`
-	} `json:"softwares_list"`
-}
-
 type personDocument struct {
 	Email string `json:"email"`
 }
@@ -89,11 +68,11 @@ func fetch(ctx context.Context, c *rest.Client) ([]ci, lookups, error) {
 			return nil, lookups{}, err
 		}
 		for _, o := range objects {
-			var doc ciDocument
-			if err := decode(o, class.fields, &doc); err != nil {
+			c, err := decodeCI(o, class.fields)
+			if err != nil {
 				return nil, lookups{}, err
 			}
-			cis = append(cis, newCI(o, doc))
+			cis = append(cis, c)
 		}
 	}
 	lk, err := fetchLookups(ctx, c, cis)
@@ -103,43 +82,30 @@ func fetch(ctx context.Context, c *rest.Client) ([]ci, lookups, error) {
 	return cis, lk, nil
 }
 
-func newCI(o rest.Object, doc ciDocument) ci {
-	c := ci{
-		key:          o.Key,
-		class:        o.Class,
-		name:         doc.Name,
-		description:  doc.Description,
-		status:       doc.Status,
-		criticality:  doc.Criticality,
-		brand:        doc.Brand,
-		model:        doc.Model,
-		osFamily:     doc.OSFamily,
-		osVersion:    doc.OSVersion,
-		iosVersionID: doc.IOSVersionID,
+// decodeCI keeps only the instances of instanceClasses, so mapping never
+// sees a SoftwareInstance that is not a Software Component.
+func decodeCI(o rest.Object, fields []string) (ci, error) {
+	var c ci
+	if err := decode(o, fields, &c); err != nil {
+		return ci{}, err
 	}
-	for _, ct := range doc.Contacts {
-		c.contacts = append(c.contacts, contact{id: ct.ID, class: ct.Class})
-	}
-	for _, in := range doc.Instances {
-		if instanceClasses[in.Class] {
-			c.instances = append(c.instances, instance{class: in.Class, name: in.Name, softwareID: in.SoftwareID})
-		}
-	}
-	return c
+	c.Key, c.Class = o.Key, o.Class
+	c.Instances = slices.DeleteFunc(c.Instances, func(in instance) bool { return !instanceClasses[in.Class] })
+	return c, nil
 }
 
 func fetchLookups(ctx context.Context, c *rest.Client, cis []ci) (lookups, error) {
 	personIDs, softwareIDs, iosVersionIDs := map[string]bool{}, map[string]bool{}, map[string]bool{}
 	for _, item := range cis {
-		for _, ct := range item.contacts {
-			if ct.class == "Person" {
-				personIDs[ct.id] = true
+		for _, ct := range item.Contacts {
+			if ct.Class == "Person" {
+				personIDs[ct.ID] = true
 			}
 		}
-		for _, in := range item.instances {
-			softwareIDs[in.softwareID] = true
+		for _, in := range item.Instances {
+			softwareIDs[in.SoftwareID] = true
 		}
-		iosVersionIDs[item.iosVersionID] = true
+		iosVersionIDs[item.IOSVersionID] = true
 	}
 	var lk lookups
 	var err error
