@@ -42,41 +42,30 @@ func (t *SourceTx) Assets(ctx context.Context) ([]*inventory.Asset, error) {
 	return assets, nil
 }
 
-// Save writes the changes of a Reconciliation and records the successful
-// Sync Run that produced it. Updates write only imported values and the
-// Active state, so Declarations stay as stored. Each kind of write is one
-// statement for all Assets, so a Sync takes the same number of round trips at
-// any size.
-func (t *SourceTx) Save(ctx context.Context, r inventory.Reconciliation, started, finished time.Time) (inventory.SyncRun, error) {
+// Save writes the changes of a Reconciliation. Updates write only imported
+// values and the Active state, so Declarations stay as stored. Each kind of
+// write is one statement for all Assets, so a Sync takes the same number of
+// round trips at any size.
+func (t *SourceTx) Save(ctx context.Context, r inventory.Reconciliation) error {
 	// Only this transaction's CMDB Source is locked.
 	if r.Source() != t.source {
-		return inventory.SyncRun{}, fmt.Errorf("save to %s: reconciliation of %s", t.source, r.Source())
-	}
-	run, err := inventory.SucceededRun(r, started, finished)
-	if err != nil {
-		return inventory.SyncRun{}, err
+		return fmt.Errorf("save to %s: reconciliation of %s", t.source, r.Source())
 	}
 	created, updated := r.Created(), r.Updated()
 	owners, err := t.upsertOwners(ctx, slices.Concat(created, updated))
 	if err != nil {
-		return inventory.SyncRun{}, err
+		return err
 	}
 	if err := t.insertCreated(ctx, created, owners); err != nil {
-		return inventory.SyncRun{}, err
+		return err
 	}
 	if err := t.updateImported(ctx, updated, owners); err != nil {
-		return inventory.SyncRun{}, err
+		return err
 	}
 	if err := t.replaceSoftware(ctx, created, updated); err != nil {
-		return inventory.SyncRun{}, err
+		return err
 	}
-	if err := t.updateActive(ctx, r.Deactivated(), r.Reactivated()); err != nil {
-		return inventory.SyncRun{}, err
-	}
-	if err := recordSyncRun(ctx, t.q, run); err != nil {
-		return inventory.SyncRun{}, err
-	}
-	return run, nil
+	return t.updateActive(ctx, r.Deactivated(), r.Reactivated())
 }
 
 // ownerIDs maps an Asset Owner's email to its row id.

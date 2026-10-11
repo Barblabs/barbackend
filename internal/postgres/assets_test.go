@@ -139,7 +139,7 @@ func TestDeactivationKeepsFirstInactiveTime(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		return save(tx, r)
+		return tx.Save(context.Background(), r)
 	})
 	if again := inactiveSince(); again == nil || !again.Equal(*first) {
 		t.Errorf("inactive_since = %v after deactivating again, want %v", again, first)
@@ -190,7 +190,7 @@ func TestSaveOfMissingAssetFails(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				return save(tx, r)
+				return tx.Save(context.Background(), r)
 			})
 			if !errors.Is(err, postgres.ErrNotFound) {
 				t.Errorf("err = %v, want ErrNotFound", err)
@@ -287,7 +287,7 @@ func TestSaveOfAnotherSourceFails(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		return save(tx, r)
+		return tx.Save(context.Background(), r)
 	})
 
 	if err == nil {

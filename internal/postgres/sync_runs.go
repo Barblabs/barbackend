@@ -14,6 +14,16 @@ func (t *Tx) RecordSyncRun(ctx context.Context, run inventory.SyncRun) error {
 	return recordSyncRun(ctx, t.q, run)
 }
 
+// RecordSyncRun records a run in the transaction that saved its changes, so
+// both commit or neither does.
+func (t *SourceTx) RecordSyncRun(ctx context.Context, run inventory.SyncRun) error {
+	// Only this transaction's CMDB Source is locked.
+	if run.Source() != t.source {
+		return fmt.Errorf("record in %s: sync run of %s", t.source, run.Source())
+	}
+	return recordSyncRun(ctx, t.q, run)
+}
+
 type skippedRecord struct {
 	RecordID string `json:"record_id"`
 	Reason   string `json:"reason"`
