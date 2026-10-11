@@ -5,8 +5,8 @@ import (
 	"flag"
 	"fmt"
 
-	"barbackend/internal/cmdb"
 	"barbackend/internal/inventory"
+	"barbackend/internal/sources"
 	"github.com/google/uuid"
 )
 
@@ -25,7 +25,7 @@ func syncSource(ctx context.Context, args []string) error {
 	}
 	defer db.Close()
 
-	run, err := cmdb.NewSources(db, providers()).Sync(ctx, inventory.CMDBSourceID(id))
+	run, err := sources.New(db, providers()).Sync(ctx, inventory.CMDBSourceID(id))
 	if err != nil {
 		return err
 	}

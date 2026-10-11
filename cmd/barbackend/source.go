@@ -7,8 +7,8 @@ import (
 	"flag"
 	"fmt"
 
-	"barbackend/internal/cmdb"
 	"barbackend/internal/inventory"
+	"barbackend/internal/sources"
 	"github.com/google/uuid"
 )
 
@@ -37,7 +37,7 @@ func source(ctx context.Context, args []string) error {
 	}
 	defer db.Close()
 
-	src, err := cmdb.NewSources(db, providers()).Add(ctx, inventory.CustomerID(customerID), inventory.CMDBProvider(*provider), json.RawMessage(*settings))
+	src, err := sources.New(db, providers()).Add(ctx, inventory.CustomerID(customerID), inventory.CMDBProvider(*provider), json.RawMessage(*settings))
 	if err != nil {
 		return err
 	}

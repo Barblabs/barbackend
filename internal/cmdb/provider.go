@@ -1,10 +1,11 @@
-// Package cmdb syncs CMDB Sources through the adapter of their CMDB Provider
-// (ADR 0007).
+// Package cmdb is the seam every CMDB Provider adapter implements (ADR 0007).
 package cmdb
 
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 
 	"barbackend/internal/inventory"
 )
@@ -26,4 +27,14 @@ type Settings interface {
 	Snapshot(ctx context.Context) (inventory.Snapshot, error)
 }
 
+var ErrUnknownProvider = errors.New("unknown cmdb provider")
+
 type Providers map[inventory.CMDBProvider]Provider
+
+func (ps Providers) Lookup(name inventory.CMDBProvider) (Provider, error) {
+	p, ok := ps[name]
+	if !ok {
+		return nil, fmt.Errorf("%w: %q", ErrUnknownProvider, name)
+	}
+	return p, nil
+}

@@ -1,4 +1,6 @@
-package cmdb
+// Package sources holds the use cases on CMDB Sources: adding one and
+// syncing its Assets.
+package sources
 
 import (
 	"context"
@@ -7,25 +9,24 @@ import (
 	"fmt"
 	"time"
 
+	"barbackend/internal/cmdb"
 	"barbackend/internal/inventory"
 	"barbackend/internal/postgres"
 	"github.com/google/uuid"
 )
 
-var ErrUnknownProvider = errors.New("unknown cmdb provider")
-
-// Sources adds CMDB Sources and syncs their Assets.
-type Sources struct {
+// Service adds CMDB Sources and syncs their Assets.
+type Service struct {
 	db        *postgres.DB
-	providers Providers
+	providers cmdb.Providers
 }
 
-func NewSources(db *postgres.DB, providers Providers) *Sources {
-	return &Sources{db: db, providers: providers}
+func New(db *postgres.DB, providers cmdb.Providers) *Service {
+	return &Service{db: db, providers: providers}
 }
 
-func (s *Sources) Add(ctx context.Context, customer inventory.CustomerID, provider inventory.CMDBProvider, settings json.RawMessage) (inventory.CMDBSource, error) {
-	p, err := s.provider(provider)
+func (s *Service) Add(ctx context.Context, customer inventory.CustomerID, provider inventory.CMDBProvider, settings json.RawMessage) (inventory.CMDBSource, error) {
+	p, err := s.providers.Lookup(provider)
 	if err != nil {
 		return inventory.CMDBSource{}, err
 	}
@@ -45,7 +46,7 @@ func (s *Sources) Add(ctx context.Context, customer inventory.CustomerID, provid
 // Sync brings the Assets of a CMDB Source in line with a full snapshot of it.
 // Every failure after the source is read is recorded as a failed Sync Run,
 // which changed no Asset.
-func (s *Sources) Sync(ctx context.Context, id inventory.CMDBSourceID) (inventory.SyncRun, error) {
+func (s *Service) Sync(ctx context.Context, id inventory.CMDBSourceID) (inventory.SyncRun, error) {
 	started := time.Now()
 	var src inventory.CMDBSource
 	var settings json.RawMessage
@@ -67,8 +68,8 @@ func (s *Sources) Sync(ctx context.Context, id inventory.CMDBSourceID) (inventor
 // sync reads the snapshot before locking the source, so a slow CMDB Provider
 // never holds the lock. Settings are parsed again because a provider may
 // have tightened its rules since the source was added.
-func (s *Sources) sync(ctx context.Context, src inventory.CMDBSource, settings json.RawMessage, started time.Time) (inventory.SyncRun, error) {
-	p, err := s.provider(src.Provider())
+func (s *Service) sync(ctx context.Context, src inventory.CMDBSource, settings json.RawMessage, started time.Time) (inventory.SyncRun, error) {
+	p, err := s.providers.Lookup(src.Provider())
 	if err != nil {
 		return inventory.SyncRun{}, err
 	}
@@ -104,7 +105,7 @@ func (s *Sources) sync(ctx context.Context, src inventory.CMDBSource, settings j
 
 // recordFailure records the failed run even when ctx was canceled, since the
 // cancellation may be the failure being recorded.
-func (s *Sources) recordFailure(ctx context.Context, id inventory.CMDBSourceID, started time.Time, cause error) error {
+func (s *Service) recordFailure(ctx context.Context, id inventory.CMDBSourceID, started time.Time, cause error) error {
 	ctx = context.WithoutCancel(ctx)
 	run, err := inventory.FailedRun(id, started, time.Now(), cause)
 	if err == nil {
@@ -114,12 +115,4 @@ func (s *Sources) recordFailure(ctx context.Context, id inventory.CMDBSourceID, 
 		err = fmt.Errorf("record failed sync run: %w", err)
 	}
 	return errors.Join(cause, err)
-}
-
-func (s *Sources) provider(name inventory.CMDBProvider) (Provider, error) {
-	p, ok := s.providers[name]
-	if !ok {
-		return nil, fmt.Errorf("%w: %q", ErrUnknownProvider, name)
-	}
-	return p, nil
 }
