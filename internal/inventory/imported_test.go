@@ -11,7 +11,7 @@ import (
 func TestNewImportedAsset(t *testing.T) {
 	osc := inventory.SoftwareComponent{Role: inventory.OperatingSystem, Name: "Ubuntu", Version: "22.04"}
 	app := inventory.SoftwareComponent{Role: inventory.Application, Name: "nginx"}
-	hw := &inventory.Hardware{Vendor: "Dell", Model: "R740"}
+	hw := inventory.Hardware{Vendor: "Dell", Model: "R740"}
 
 	tests := []struct {
 		name   string
@@ -27,12 +27,12 @@ func TestNewImportedAsset(t *testing.T) {
 		{"hardware on workstation", func(p *inventory.ImportedAssetParams) { p.Kind = inventory.Workstation; p.Hardware = hw }, nil},
 		{"hardware on network device", func(p *inventory.ImportedAssetParams) { p.Kind = inventory.NetworkDevice; p.Hardware = hw }, nil},
 		{"hardware on vm", func(p *inventory.ImportedAssetParams) { p.Kind = inventory.VirtualMachine; p.Hardware = hw }, inventory.ErrHardwareOnVirtual},
-		{"empty hardware", func(p *inventory.ImportedAssetParams) { p.Hardware = &inventory.Hardware{} }, inventory.ErrInvalidHardware},
-		{"whitespace hardware", func(p *inventory.ImportedAssetParams) {
-			p.Hardware = &inventory.Hardware{Vendor: " \t", Model: "\n "}
-		}, inventory.ErrInvalidHardware},
-		{"hardware with only vendor", func(p *inventory.ImportedAssetParams) { p.Hardware = &inventory.Hardware{Vendor: "Dell"} }, nil},
-		{"hardware with only model", func(p *inventory.ImportedAssetParams) { p.Hardware = &inventory.Hardware{Model: "R740"} }, nil},
+		{"whitespace hardware on vm", func(p *inventory.ImportedAssetParams) {
+			p.Kind = inventory.VirtualMachine
+			p.Hardware = inventory.Hardware{Vendor: " \t", Model: "\n "}
+		}, nil},
+		{"hardware with only vendor", func(p *inventory.ImportedAssetParams) { p.Hardware = inventory.Hardware{Vendor: "Dell"} }, nil},
+		{"hardware with only model", func(p *inventory.ImportedAssetParams) { p.Hardware = inventory.Hardware{Model: "R740"} }, nil},
 		{"vm without hardware", func(p *inventory.ImportedAssetParams) { p.Kind = inventory.VirtualMachine }, nil},
 		{"one os and app", func(p *inventory.ImportedAssetParams) { p.Software = []inventory.SoftwareComponent{osc, app} }, nil},
 		{"two os", func(p *inventory.ImportedAssetParams) { p.Software = []inventory.SoftwareComponent{osc, osc} }, inventory.ErrMultipleOperatingSystems},
@@ -47,19 +47,22 @@ func TestNewImportedAsset(t *testing.T) {
 			p.Software = []inventory.SoftwareComponent{{Role: inventory.Application, Name: "  "}}
 		}, inventory.ErrInvalidSoftware},
 		{"product with empty vendor", func(p *inventory.ImportedAssetParams) {
-			p.Software = []inventory.SoftwareComponent{{Role: inventory.Application, Name: "x", Product: &inventory.Product{Name: "n"}}}
+			p.Software = []inventory.SoftwareComponent{{Role: inventory.Application, Name: "x", Product: inventory.Product{Name: "n"}}}
 		}, inventory.ErrInvalidSoftware},
 		{"product with empty name", func(p *inventory.ImportedAssetParams) {
-			p.Software = []inventory.SoftwareComponent{{Role: inventory.Application, Name: "x", Product: &inventory.Product{Vendor: "v"}}}
+			p.Software = []inventory.SoftwareComponent{{Role: inventory.Application, Name: "x", Product: inventory.Product{Vendor: "v"}}}
 		}, inventory.ErrInvalidSoftware},
 		{"product with whitespace vendor", func(p *inventory.ImportedAssetParams) {
-			p.Software = []inventory.SoftwareComponent{{Role: inventory.Application, Name: "x", Product: &inventory.Product{Vendor: " ", Name: "n"}}}
+			p.Software = []inventory.SoftwareComponent{{Role: inventory.Application, Name: "x", Product: inventory.Product{Vendor: " ", Name: "n"}}}
 		}, inventory.ErrInvalidSoftware},
 		{"product with whitespace name", func(p *inventory.ImportedAssetParams) {
-			p.Software = []inventory.SoftwareComponent{{Role: inventory.Application, Name: "x", Product: &inventory.Product{Vendor: "v", Name: "\t"}}}
+			p.Software = []inventory.SoftwareComponent{{Role: inventory.Application, Name: "x", Product: inventory.Product{Vendor: "v", Name: "\t"}}}
 		}, inventory.ErrInvalidSoftware},
+		{"whitespace product", func(p *inventory.ImportedAssetParams) {
+			p.Software = []inventory.SoftwareComponent{{Role: inventory.Application, Name: "x", Product: inventory.Product{Vendor: " ", Name: "\t"}}}
+		}, nil},
 		{"identified product", func(p *inventory.ImportedAssetParams) {
-			p.Software = []inventory.SoftwareComponent{{Role: inventory.Application, Name: "x", Product: &inventory.Product{Vendor: "v", Name: "n"}}}
+			p.Software = []inventory.SoftwareComponent{{Role: inventory.Application, Name: "x", Product: inventory.Product{Vendor: "v", Name: "n"}}}
 		}, nil},
 		{"criticality high", func(p *inventory.ImportedAssetParams) { p.Criticality = inventory.CriticalityHigh }, nil},
 		{"criticality out of range", func(p *inventory.ImportedAssetParams) { p.Criticality = 42 }, inventory.ErrInvalidCriticality},
@@ -103,7 +106,7 @@ func TestImportedAssetGetters(t *testing.T) {
 	owner := mustOwner(t, "a@b.c")
 	p := inventory.ImportedAssetParams{
 		Name: "n", Description: "d", Kind: inventory.Server,
-		Hardware:    &inventory.Hardware{Vendor: "Dell", Model: "R740"},
+		Hardware:    inventory.Hardware{Vendor: "Dell", Model: "R740"},
 		Software:    []inventory.SoftwareComponent{{Role: inventory.OperatingSystem, Name: "Ubuntu", Version: "22.04"}},
 		Criticality: inventory.CriticalityLow, Owner: owner, Retired: true,
 	}
@@ -136,10 +139,24 @@ func TestImportedAssetGetters(t *testing.T) {
 
 func TestImportedAssetHardwareStoredRaw(t *testing.T) {
 	p := validParams()
-	p.Hardware = &inventory.Hardware{Vendor: " Dell ", Model: ""}
+	p.Hardware = inventory.Hardware{Vendor: " Dell ", Model: ""}
 	a := mustImported(t, p)
 	if hw, ok := a.Hardware(); !ok || hw != (inventory.Hardware{Vendor: " Dell ", Model: ""}) {
 		t.Errorf("Hardware() = %+v, %v; want {Vendor:\" Dell \" Model:\"\"}, true", hw, ok)
+	}
+}
+
+func TestImportedAssetBlankHardwareAndProductAreNone(t *testing.T) {
+	p := validParams()
+	p.Hardware = inventory.Hardware{Vendor: " \t", Model: "\n "}
+	p.Software = []inventory.SoftwareComponent{{Role: inventory.Application, Name: "x", Product: inventory.Product{Vendor: " ", Name: "\t"}}}
+	a := mustImported(t, p)
+	if hw, ok := a.Hardware(); ok {
+		t.Errorf("Hardware() = %+v, true; want none", hw)
+	}
+	want := []inventory.SoftwareComponent{{Role: inventory.Application, Name: "x"}}
+	if got := a.Software(); !reflect.DeepEqual(got, want) {
+		t.Errorf("Software() = %+v, want %+v", got, want)
 	}
 }
 
@@ -172,27 +189,22 @@ func TestImportedAssetOperatingSystem(t *testing.T) {
 func TestImportedAssetIsolation(t *testing.T) {
 	p := inventory.ImportedAssetParams{
 		Name: "n", Kind: inventory.Server,
-		Hardware: &inventory.Hardware{Vendor: "Dell", Model: "R740"},
 		Software: []inventory.SoftwareComponent{
-			{Role: inventory.OperatingSystem, Name: "Ubuntu", Product: &inventory.Product{Vendor: "Canonical", Name: "Ubuntu"}},
+			{Role: inventory.OperatingSystem, Name: "Ubuntu", Product: inventory.Product{Vendor: "Canonical", Name: "Ubuntu"}},
 		},
 	}
 	a := mustImported(t, p)
 
-	p.Hardware.Vendor = "X"
 	p.Software[0].Name = "X"
 	p.Software[0].Product.Name = "X"
 
 	sw := a.Software()
 	sw[0].Name = "Y"
 	sw[0].Product.Vendor = "Y"
-	osc, _ := a.OperatingSystem()
-	osc.Product.Name = "Y"
 
-	hw, _ := a.Hardware()
 	got := a.Software()[0]
-	if hw.Vendor != "Dell" || got.Name != "Ubuntu" || got.Product.Vendor != "Canonical" || got.Product.Name != "Ubuntu" {
-		t.Errorf("internal state was mutated: hw=%+v sw=%+v", hw, got)
+	if got.Name != "Ubuntu" || got.Product != (inventory.Product{Vendor: "Canonical", Name: "Ubuntu"}) {
+		t.Errorf("internal state was mutated: sw=%+v", got)
 	}
 }
 
@@ -202,8 +214,9 @@ func TestSoftwareComponentIdentified(t *testing.T) {
 		c    inventory.SoftwareComponent
 		want bool
 	}{
-		{"identified", inventory.SoftwareComponent{Name: "x", Product: &inventory.Product{Vendor: "v", Name: "n"}}, true},
+		{"identified", inventory.SoftwareComponent{Name: "x", Product: inventory.Product{Vendor: "v", Name: "n"}}, true},
 		{"unidentified", inventory.SoftwareComponent{Name: "x"}, false},
+		{"blank product", inventory.SoftwareComponent{Name: "x", Product: inventory.Product{Vendor: " ", Name: "\t"}}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

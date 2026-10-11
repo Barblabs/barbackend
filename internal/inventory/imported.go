@@ -9,7 +9,7 @@ type ImportedAssetParams struct {
 	Name        string
 	Description string
 	Kind        AssetKind
-	Hardware    *Hardware
+	Hardware    Hardware
 	Software    []SoftwareComponent
 	Criticality Criticality
 	Owner       OwnerEmail
@@ -20,7 +20,7 @@ type ImportedAsset struct {
 	name        string
 	description string
 	kind        AssetKind
-	hardware    *Hardware
+	hardware    Hardware
 	software    []SoftwareComponent
 	criticality Criticality
 	owner       OwnerEmail
@@ -34,24 +34,28 @@ func NewImportedAsset(p ImportedAssetParams) (ImportedAsset, error) {
 	if !p.Kind.valid() {
 		return ImportedAsset{}, fmt.Errorf("%w: %d", ErrInvalidKind, int(p.Kind))
 	}
-	if p.Hardware != nil && !p.Kind.Physical() {
-		return ImportedAsset{}, fmt.Errorf("%w: %s", ErrHardwareOnVirtual, p.Kind)
+	hardware := p.Hardware
+	if hardware.absent() {
+		hardware = Hardware{}
 	}
-	if p.Hardware != nil && blank(p.Hardware.Vendor) && blank(p.Hardware.Model) {
-		return ImportedAsset{}, fmt.Errorf("%w: neither vendor nor model is set", ErrInvalidHardware)
+	if hardware != (Hardware{}) && !p.Kind.Physical() {
+		return ImportedAsset{}, fmt.Errorf("%w: %s", ErrHardwareOnVirtual, p.Kind)
 	}
 	if !p.Criticality.valid() {
 		return ImportedAsset{}, fmt.Errorf("%w: %d", ErrInvalidCriticality, int(p.Criticality))
 	}
+	software := slices.Clone(p.Software)
 	systems := 0
-	for i, c := range p.Software {
+	for i, c := range software {
 		if !c.Role.valid() {
 			return ImportedAsset{}, fmt.Errorf("%w: component %d has role %d", ErrInvalidSoftware, i, int(c.Role))
 		}
 		if blank(c.Name) {
 			return ImportedAsset{}, fmt.Errorf("%w: component %d has no name", ErrInvalidSoftware, i)
 		}
-		if c.Product != nil && (blank(c.Product.Vendor) || blank(c.Product.Name)) {
+		if c.Product.absent() {
+			software[i].Product = Product{}
+		} else if blank(c.Product.Vendor) || blank(c.Product.Name) {
 			return ImportedAsset{}, fmt.Errorf("%w: component %d has a product without vendor or name", ErrInvalidSoftware, i)
 		}
 		if c.Role == OperatingSystem {
@@ -62,28 +66,16 @@ func NewImportedAsset(p ImportedAssetParams) (ImportedAsset, error) {
 		return ImportedAsset{}, ErrMultipleOperatingSystems
 	}
 
-	a := ImportedAsset{
+	return ImportedAsset{
 		name:        p.Name,
 		description: p.Description,
 		kind:        p.Kind,
-		software:    cloneSoftware(p.Software),
+		hardware:    hardware,
+		software:    software,
 		criticality: p.Criticality,
 		owner:       p.Owner,
 		retired:     p.Retired,
-	}
-	if p.Hardware != nil {
-		h := *p.Hardware
-		a.hardware = &h
-	}
-	return a, nil
-}
-
-func cloneSoftware(in []SoftwareComponent) []SoftwareComponent {
-	out := slices.Clone(in)
-	for i := range out {
-		out[i] = out[i].clone()
-	}
-	return out
+	}, nil
 }
 
 // A blank name is enough to detect the zero value: NewImportedAsset rejects it.
@@ -95,34 +87,26 @@ func (a ImportedAsset) equal(b ImportedAsset) bool {
 	return a.name == b.name &&
 		a.description == b.description &&
 		a.kind == b.kind &&
-		equalValues(a.hardware, b.hardware) &&
+		a.hardware == b.hardware &&
 		a.criticality == b.criticality &&
 		a.owner == b.owner &&
 		a.retired == b.retired &&
 		sameComponents(a.software, b.software)
 }
 
-func equalValues[T comparable](a, b *T) bool {
-	if a == nil || b == nil {
-		return a == b
-	}
-	return *a == *b
-}
-
 func sameComponents(a, b []SoftwareComponent) bool {
 	if len(a) != len(b) {
 		return false
 	}
-	counts := make(map[componentKey]int, len(a))
+	counts := make(map[SoftwareComponent]int, len(a))
 	for _, c := range a {
-		counts[c.key()]++
+		counts[c]++
 	}
 	for _, c := range b {
-		k := c.key()
-		if counts[k] == 0 {
+		if counts[c] == 0 {
 			return false
 		}
-		counts[k]--
+		counts[c]--
 	}
 	return true
 }
@@ -134,18 +118,15 @@ func (a ImportedAsset) Description() string { return a.description }
 func (a ImportedAsset) Kind() AssetKind { return a.kind }
 
 func (a ImportedAsset) Hardware() (Hardware, bool) {
-	if a.hardware == nil {
-		return Hardware{}, false
-	}
-	return *a.hardware, true
+	return a.hardware, a.hardware != Hardware{}
 }
 
-func (a ImportedAsset) Software() []SoftwareComponent { return cloneSoftware(a.software) }
+func (a ImportedAsset) Software() []SoftwareComponent { return slices.Clone(a.software) }
 
 func (a ImportedAsset) OperatingSystem() (SoftwareComponent, bool) {
 	for _, c := range a.software {
 		if c.Role == OperatingSystem {
-			return c.clone(), true
+			return c, true
 		}
 	}
 	return SoftwareComponent{}, false

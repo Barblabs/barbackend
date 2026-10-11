@@ -27,7 +27,7 @@ func TestReconcile(t *testing.T) {
 	osc := inventory.SoftwareComponent{Role: inventory.OperatingSystem, Name: "Ubuntu", Version: "22.04"}
 	app := inventory.SoftwareComponent{Role: inventory.Application, Name: "nginx", Version: "1.24"}
 	identified := app
-	identified.Product = &inventory.Product{Vendor: "f5", Name: "nginx"}
+	identified.Product = inventory.Product{Vendor: "f5", Name: "nginx"}
 
 	base := validParams()
 	renamed := with(base, func(p *inventory.ImportedAssetParams) { p.Name = "srv-01-renamed" })
@@ -37,9 +37,9 @@ func TestReconcile(t *testing.T) {
 	duplicated := with(base, func(p *inventory.ImportedAssetParams) { p.Software = []inventory.SoftwareComponent{osc, app, app} })
 	identifiedSoftware := with(base, func(p *inventory.ImportedAssetParams) { p.Software = []inventory.SoftwareComponent{osc, identified} })
 	hardware := with(base, func(p *inventory.ImportedAssetParams) {
-		p.Hardware = &inventory.Hardware{Vendor: "Dell", Model: "R740"}
+		p.Hardware = inventory.Hardware{Vendor: "Dell", Model: "R740"}
 	})
-	otherHardware := with(base, func(p *inventory.ImportedAssetParams) { p.Hardware = &inventory.Hardware{Vendor: "HP", Model: "R740"} })
+	otherHardware := with(base, func(p *inventory.ImportedAssetParams) { p.Hardware = inventory.Hardware{Vendor: "HP", Model: "R740"} })
 
 	tests := []struct {
 		name     string

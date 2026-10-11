@@ -77,11 +77,11 @@ func criticality(raw *string) (inventory.Criticality, error) {
 	return crit, nil
 }
 
-func hardware(c ci, kind inventory.AssetKind) *inventory.Hardware {
-	if !kind.Physical() || blank(c.brand) && blank(c.model) {
-		return nil
+func hardware(c ci, kind inventory.AssetKind) inventory.Hardware {
+	if !kind.Physical() {
+		return inventory.Hardware{}
 	}
-	return &inventory.Hardware{Vendor: c.brand, Model: c.model}
+	return inventory.Hardware{Vendor: c.brand, Model: c.model}
 }
 
 // operatingSystem names a Network Device's OS after its IOSVersion's brand,
