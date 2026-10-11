@@ -187,7 +187,7 @@ func (t *SourceTx) replaceSoftware(ctx context.Context, created, updated []*inve
 				Name:         sc.Name,
 				Version:      sc.Version,
 			}
-			if sc.Product != nil {
+			if sc.Identified() {
 				row.ProductVendor, row.ProductName = &sc.Product.Vendor, &sc.Product.Name
 			}
 			rows = append(rows, row)
@@ -273,13 +273,11 @@ func restoreAsset(ref inventory.SourceReference, row sqlcgen.ListAssetsRow, soft
 		Name:        row.Name,
 		Description: row.Description,
 		Kind:        inventory.AssetKind(row.KindID),
+		Hardware:    inventory.Hardware{Vendor: valueOrZero(row.HardwareVendor), Model: valueOrZero(row.HardwareModel)},
 		Software:    software,
 		Criticality: inventory.Criticality(valueOrZero(row.CriticalityID)),
 		Owner:       importedOwner,
 		Retired:     row.Retired,
-	}
-	if row.HardwareVendor != nil && row.HardwareModel != nil {
-		p.Hardware = &inventory.Hardware{Vendor: *row.HardwareVendor, Model: *row.HardwareModel}
 	}
 	imported, err := inventory.NewImportedAsset(p)
 	if err != nil {
@@ -311,9 +309,7 @@ func (t *SourceTx) software(ctx context.Context) (map[string][]inventory.Softwar
 			Role:    inventory.SoftwareRole(row.RoleID),
 			Name:    row.Name,
 			Version: row.Version,
-		}
-		if row.ProductVendor != nil && row.ProductName != nil {
-			c.Product = &inventory.Product{Vendor: *row.ProductVendor, Name: *row.ProductName}
+			Product: inventory.Product{Vendor: valueOrZero(row.ProductVendor), Name: valueOrZero(row.ProductName)},
 		}
 		byRecord[row.RecordID] = append(byRecord[row.RecordID], c)
 	}

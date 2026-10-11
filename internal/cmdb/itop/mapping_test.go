@@ -27,7 +27,7 @@ func redHat() []inventory.SoftwareComponent {
 
 func TestSnapshotMapsRecords(t *testing.T) {
 	cisco := lookups{iosVersions: map[string]iosVersion{"90": {brand: "Cisco", version: "15.2(7)E"}}}
-	hpe := &inventory.Hardware{Vendor: "HPE", Model: "DL380"}
+	hpe := inventory.Hardware{Vendor: "HPE", Model: "DL380"}
 	tests := []struct {
 		name string
 		ci   ci
@@ -103,7 +103,7 @@ func TestSnapshotMapsRecords(t *testing.T) {
 			ci:   mapped("Server", func(c *ci) { c.model = "" }),
 			want: inventory.ImportedAssetParams{
 				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server,
-				Hardware: &inventory.Hardware{Vendor: "HPE"}, Software: redHat(), Criticality: inventory.CriticalityLow,
+				Hardware: inventory.Hardware{Vendor: "HPE"}, Software: redHat(), Criticality: inventory.CriticalityLow,
 			},
 		},
 		{
@@ -130,7 +130,7 @@ func TestSnapshotMapsRecords(t *testing.T) {
 			lk: cisco,
 			want: inventory.ImportedAssetParams{
 				Name: "Server1", Description: "  Billing database\n", Kind: inventory.NetworkDevice,
-				Hardware:    &inventory.Hardware{Vendor: "Cisco", Model: "Cisco 6500"},
+				Hardware:    inventory.Hardware{Vendor: "Cisco", Model: "Cisco 6500"},
 				Software:    []inventory.SoftwareComponent{{Role: inventory.OperatingSystem, Name: "Cisco", Version: "15.2(7)E"}},
 				Criticality: inventory.CriticalityLow,
 			},

@@ -18,9 +18,9 @@ func fullParams(t *testing.T) inventory.ImportedAssetParams {
 		Name:        "srv-01",
 		Description: "Billing API",
 		Kind:        inventory.Server,
-		Hardware:    &inventory.Hardware{Vendor: "Dell", Model: ""},
+		Hardware:    inventory.Hardware{Vendor: "Dell", Model: ""},
 		Software: []inventory.SoftwareComponent{
-			{Role: inventory.Application, Name: "nginx", Version: "1.24", Product: &inventory.Product{Vendor: "f5", Name: "nginx"}},
+			{Role: inventory.Application, Name: "nginx", Version: "1.24", Product: inventory.Product{Vendor: "f5", Name: "nginx"}},
 			{Role: inventory.OperatingSystem, Name: "Ubuntu", Version: "22.04 LTS"},
 			{Role: inventory.Application, Name: "custom agent"},
 		},
@@ -55,6 +55,26 @@ func TestCreatedAssetRoundTrip(t *testing.T) {
 				t.Errorf("assets = %+v, want [%+v]", got, want)
 			}
 		})
+	}
+}
+
+func TestAbsentHardwareAndProductAreStoredAsNull(t *testing.T) {
+	t.Parallel()
+	db, conn := newDBWithConn(t)
+	src := newSource(t, db, newCustomer())
+	p := inventory.ImportedAssetParams{
+		Name:     "srv-01",
+		Kind:     inventory.Server,
+		Software: []inventory.SoftwareComponent{{Role: inventory.Application, Name: "custom agent"}},
+	}
+
+	syncRecords(t, db, src.ID(), record(t, "1", p))
+
+	if n := queryInt(t, conn, "SELECT count(*) FROM assets WHERE hardware_vendor IS NULL AND hardware_model IS NULL"); n != 1 {
+		t.Errorf("assets without hardware columns = %d, want 1", n)
+	}
+	if n := queryInt(t, conn, "SELECT count(*) FROM software_components WHERE product_vendor IS NULL AND product_name IS NULL"); n != 1 {
+		t.Errorf("software components without product columns = %d, want 1", n)
 	}
 }
 

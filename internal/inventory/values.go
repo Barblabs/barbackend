@@ -11,7 +11,6 @@ var (
 	ErrInvalidKind              = errors.New("invalid asset kind")
 	ErrEmptyName                = errors.New("asset name is required")
 	ErrHardwareOnVirtual        = errors.New("virtual machine cannot have hardware")
-	ErrInvalidHardware          = errors.New("invalid hardware")
 	ErrInvalidSoftware          = errors.New("invalid software component")
 	ErrMultipleOperatingSystems = errors.New("asset has more than one operating system")
 	ErrInvalidCriticality       = errors.New("invalid criticality")
@@ -54,9 +53,12 @@ func (k AssetKind) String() string {
 	}
 }
 
+// Hardware with both fields blank is no hardware, as is the zero value.
 type Hardware struct {
 	Vendor, Model string
 }
+
+func (h Hardware) absent() bool { return blank(h.Vendor) && blank(h.Model) }
 
 type SoftwareRole int
 
@@ -81,43 +83,21 @@ func (r SoftwareRole) String() string {
 
 // Product has no version on purpose: the version stays on the SoftwareComponent,
 // so one Product covers every version threat intelligence may name.
+// A Product with both fields blank is no Product, as is the zero value.
 type Product struct {
 	Vendor, Name string
 }
+
+func (p Product) absent() bool { return blank(p.Vendor) && blank(p.Name) }
 
 type SoftwareComponent struct {
 	Role    SoftwareRole
 	Name    string
 	Version string
-	Product *Product
+	Product Product
 }
 
-func (c SoftwareComponent) Identified() bool { return c.Product != nil }
-
-func (c SoftwareComponent) clone() SoftwareComponent {
-	if c.Product != nil {
-		p := *c.Product
-		c.Product = &p
-	}
-	return c
-}
-
-// componentKey is a SoftwareComponent by value, usable as a map key.
-type componentKey struct {
-	role       SoftwareRole
-	name       string
-	version    string
-	identified bool
-	product    Product
-}
-
-func (c SoftwareComponent) key() componentKey {
-	k := componentKey{role: c.Role, name: c.Name, version: c.Version}
-	if c.Product != nil {
-		k.identified, k.product = true, *c.Product
-	}
-	return k
-}
+func (c SoftwareComponent) Identified() bool { return !c.Product.absent() }
 
 type Criticality int
 
