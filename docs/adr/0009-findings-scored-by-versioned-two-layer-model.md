@@ -21,13 +21,13 @@ A Finding always gets a Score. A missing input never lowers it silently: it take
 |---|---|---|
 | CVSS base score | α = 0.7 | `cvss_estimated` |
 | EPSS | β = 0 | `epss_pending` |
-| KEV catalog older than expected | γ from the last catalog read | `kev_stale` |
+| KEV catalog older than expected, or never read | γ from the last catalog read (0 if none) | `kev_stale` |
 | Criticality is Unknown | m = 1.0 | `criticality_unknown` |
 | Exposure is Unknown (not declared) | m = 1.0 | `exposure_undeclared` |
 
 A KEV catalog that failed to download is not the same as a CVE that is not listed. Unknown Criticality and Exposure take the highest multiplier, so missing context never makes a Finding look safer than it is.
 
-CVSS is taken from the first source that has it: the NVD Primary score, then the CNA's Secondary score, then cve.org (including CISA Vulnrichment). Its source and CVSS version are stored with the Score. Since 2026-04-15, NVD leaves most new CVEs without a CVSS score unless the CNA provides one, so `cvss_estimated` is expected to be common.
+CVSS is taken from the first source that has it: the NVD Primary score, then the CNA's Secondary score, then cve.org (including CISA Vulnrichment). Only the base score is stored with the Score, not its source or CVSS version, so the Vulnerability's data stays the single source of truth for them. Since 2026-04-15, NVD leaves most new CVEs without a CVSS score unless the CNA provides one, so `cvss_estimated` is expected to be common.
 
 ## Considered Options
 
