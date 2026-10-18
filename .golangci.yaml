@@ -4,7 +4,19 @@ linters:
   default: standard
   enable:
     - depguard
+    - dupl
+    - gocognit
+    - gosec
   settings:
+    # Sonar's threshold for Go. Production code only: table-driven tests score
+    # high from their structure, not from tangled logic.
+    gocognit:
+      min-complexity: 15
+    gosec:
+      excludes:
+        # Every flagged conversion narrows a domain enum or a per-Sync Run count
+        # into its Postgres column type; none can approach the column's range.
+        - G115
     # Package layering from ADR 0008. In lax mode the longest matching prefix
     # wins, so denying all of barbackend/internal and allowing specific layers
     # also forbids layers that do not exist yet.
@@ -91,6 +103,14 @@ linters:
           deny:
             - pkg: github.com/gin-gonic/gin
               desc: only cmd and internal/httpapi are HTTP transport (ADR 0008)
+  exclusions:
+    rules:
+      # Test helpers read and write fixtures and record against a real iTop
+      # on purpose, which gosec reads as file inclusion and SSRF.
+      - path: _test\.go
+        linters:
+          - gocognit
+          - gosec
 
 formatters:
   enable:
