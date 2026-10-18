@@ -68,7 +68,37 @@ _Avoid_: Rejection, rejected record, invalid record
 A value about an Asset set by a barbattack user rather than imported from its CMDB Source. Where both exist, the Declaration wins, and removing it restores the imported value.
 _Avoid_: Override, manual value, custom field
 
+### Threat intelligence
+
+**Feed**:
+An external source of threat intelligence that barbattack reads, such as NVD, EPSS or the CISA KEV catalog. Text from a Feed is data to evaluate, never instructions to follow.
+_Avoid_: Source (that is a CMDB Source), provider, integration
+
+**Vulnerability**:
+A publicly disclosed weakness in a Product, identified by its CVE ID. On its own it says nothing about a Customer's environment.
+_Avoid_: Vuln, flaw, bug
+
 ### Risk
+
+**Finding**:
+The fact that one Vulnerability affects one Software Component of one Asset. It is open until it is remediated or no longer applies, and only open Findings are scored.
+_Avoid_: Hallazgo, issue, vulnerability instance, alert
+
+**Score**:
+A deterministic number from 0 to 1 that ranks how urgently a Finding should be remediated, computed from its Vulnerability's CVSS base score, EPSS probability and presence in the CISA KEV catalog, and its Asset's Criticality and Exposure.
+_Avoid_: Risk score, priority, rating
+
+**Score Band**:
+A named range of Scores used to decide how a Finding is reported.
+_Avoid_: Tier, severity, level
+
+**Scoring Model**:
+An immutable, versioned definition of how a Score is computed: its weights, its aggregation and its defaults for missing inputs. Every Score records the Scoring Model that produced it.
+_Avoid_: Weights config, algorithm, formula version
+
+**Data Gap**:
+An input that was missing when a Score was computed and was replaced by the Scoring Model's default. It is recorded on the Score, so an estimated Score is never mistaken for a measured one.
+_Avoid_: Missing data, warning, flag
 
 **Exposure**:
 Whether an Asset as a whole is reachable from the public internet: Internet-facing, Internal, or Unknown. It only comes from a Declaration and is Unknown until declared.

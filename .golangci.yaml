@@ -25,6 +25,22 @@ linters:
               desc: inventory is the pure domain and does no I/O (ADR 0008)
             - pkg: github.com/jackc/pgx
               desc: inventory is the pure domain and does no I/O (ADR 0008)
+        scoring:
+          list-mode: lax
+          files:
+            - "**/internal/scoring/**"
+          allow:
+            - barbackend/internal/inventory
+            - barbackend/internal/scoring
+          deny:
+            - pkg: barbackend/internal
+              desc: scoring is a pure domain package that imports only inventory (ADR 0008, ADR 0009)
+            - pkg: net/http
+              desc: scoring is pure and does no I/O (ADR 0009)
+            - pkg: database/sql
+              desc: scoring is pure and does no I/O (ADR 0009)
+            - pkg: github.com/jackc/pgx
+              desc: scoring is pure and does no I/O (ADR 0009)
         cmdb:
           list-mode: lax
           files:
