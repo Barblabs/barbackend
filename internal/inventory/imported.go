@@ -44,26 +44,9 @@ func NewImportedAsset(p ImportedAssetParams) (ImportedAsset, error) {
 	if !p.Criticality.valid() {
 		return ImportedAsset{}, fmt.Errorf("%w: %d", ErrInvalidCriticality, int(p.Criticality))
 	}
-	software := slices.Clone(p.Software)
-	systems := 0
-	for i, c := range software {
-		if !c.Role.valid() {
-			return ImportedAsset{}, fmt.Errorf("%w: component %d has role %d", ErrInvalidSoftware, i, int(c.Role))
-		}
-		if blank(c.Name) {
-			return ImportedAsset{}, fmt.Errorf("%w: component %d has no name", ErrInvalidSoftware, i)
-		}
-		if c.Product.absent() {
-			software[i].Product = Product{}
-		} else if blank(c.Product.Vendor) || blank(c.Product.Name) {
-			return ImportedAsset{}, fmt.Errorf("%w: component %d has a product without vendor or name", ErrInvalidSoftware, i)
-		}
-		if c.Role == OperatingSystem {
-			systems++
-		}
-	}
-	if systems > 1 {
-		return ImportedAsset{}, ErrMultipleOperatingSystems
+	software, err := newSoftware(p.Software)
+	if err != nil {
+		return ImportedAsset{}, err
 	}
 
 	return ImportedAsset{
@@ -76,6 +59,31 @@ func NewImportedAsset(p ImportedAssetParams) (ImportedAsset, error) {
 		owner:       p.Owner,
 		retired:     p.Retired,
 	}, nil
+}
+
+func newSoftware(components []SoftwareComponent) ([]SoftwareComponent, error) {
+	software := slices.Clone(components)
+	systems := 0
+	for i, c := range software {
+		if !c.Role.valid() {
+			return nil, fmt.Errorf("%w: component %d has role %d", ErrInvalidSoftware, i, int(c.Role))
+		}
+		if blank(c.Name) {
+			return nil, fmt.Errorf("%w: component %d has no name", ErrInvalidSoftware, i)
+		}
+		if c.Product.absent() {
+			software[i].Product = Product{}
+		} else if blank(c.Product.Vendor) || blank(c.Product.Name) {
+			return nil, fmt.Errorf("%w: component %d has a product without vendor or name", ErrInvalidSoftware, i)
+		}
+		if c.Role == OperatingSystem {
+			systems++
+		}
+	}
+	if systems > 1 {
+		return nil, ErrMultipleOperatingSystems
+	}
+	return software, nil
 }
 
 // A blank name is enough to detect the zero value: NewImportedAsset rejects it.

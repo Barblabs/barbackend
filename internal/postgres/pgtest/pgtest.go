@@ -104,7 +104,7 @@ func sharedBinariesDir() (string, error) {
 	// embedded-postgres caches its downloaded archives here too, so one
 	// directory holds everything a test run needs.
 	cache := filepath.Join(home, ".embedded-postgres-go")
-	if err := os.MkdirAll(cache, 0o755); err != nil {
+	if err := os.MkdirAll(cache, 0o750); err != nil {
 		return "", fmt.Errorf("create binaries directory: %w", err)
 	}
 	return filepath.Join(cache, "binaries-"+string(version)), nil
