@@ -16,15 +16,24 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
+        id: setup-go
         with:
           go-version-file: go.mod
-          # The workflow file keys a separate cache per workflow: they build
-          # different things, and with a shared key whichever workflow saves
-          # first leaves the other compiling from scratch on every run.
-          cache-dependency-path: |
-            go.sum
-            tools.sum
-            .github/workflows/test.yml
+          # setup-go keys its cache on go.sum, so it is saved once and then hit
+          # forever. Go trims build cache entries unused for 5 days, so a frozen
+          # cache ends up deleted on restore and every run compiles from scratch.
+          cache: false
+      # Keyed per commit and saved only from the default branch: every merge
+      # refreshes the cache, and PRs reuse the latest one without adding their own.
+      # The job name keeps lint and test apart, since they build different things.
+      - name: restore go cache
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-${{ github.job }}-${{ runner.os }}-${{ steps.setup-go.outputs.go-version }}-${{ github.sha }}
+          restore-keys: go-${{ github.job }}-${{ runner.os }}-${{ steps.setup-go.outputs.go-version }}-
       # Pinned in tools.mod, so CI and local runs use the same sqlc version.
       - name: check sqlc output is up to date
         run: go tool -modfile=tools.mod sqlc diff
@@ -37,3 +46,11 @@ jobs:
           key: embedded-postgres-${{ runner.os }}-${{ hashFiles('go.sum', 'internal/postgres/pgtest/pgtest.go') }}
       - name: go test
         run: go test -race ./...
+      - name: save go cache
+        if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-${{ github.job }}-${{ runner.os }}-${{ steps.setup-go.outputs.go-version }}-${{ github.sha }}
