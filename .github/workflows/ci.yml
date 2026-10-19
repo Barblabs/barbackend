@@ -1,21 +1,21 @@
-name: test
+name: ci
 on:
   push:
     branches:
       - main
-      - master
   pull_request:
 
 permissions:
   contents: read
 
 jobs:
-  test:
-    name: test
+  lint:
+    name: lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
+      - &setup-go
+        uses: actions/setup-go@v6
         id: setup-go
         with:
           go-version-file: go.mod
@@ -25,18 +25,36 @@ jobs:
           cache: false
       # Keyed per commit and saved only from the default branch: every merge
       # refreshes the cache, and PRs reuse the latest one without adding their own.
-      # The job name keeps lint and test apart, since they build different things.
-      - name: restore go cache
+      # The job id keeps lint and test apart, since they build different things.
+      - &restore-go-cache
+        name: restore go cache
         uses: actions/cache/restore@v6
         with:
-          path: |
+          path: &go-cache-path |
             ~/go/pkg/mod
             ~/.cache/go-build
-          key: go-${{ github.job }}-${{ runner.os }}-${{ steps.setup-go.outputs.go-version }}-${{ github.sha }}
+          key: &go-cache-key go-${{ github.job }}-${{ runner.os }}-${{ steps.setup-go.outputs.go-version }}-${{ github.sha }}
           restore-keys: go-${{ github.job }}-${{ runner.os }}-${{ steps.setup-go.outputs.go-version }}-
-      # Pinned in tools.mod, so CI and local runs use the same sqlc version.
+      # Tools are pinned in tools.mod, so CI and local runs use the same versions.
+      - name: golangci-lint
+        run: go tool -modfile=tools.mod golangci-lint run ./...
       - name: check sqlc output is up to date
         run: go tool -modfile=tools.mod sqlc diff
+      - &save-go-cache
+        name: save go cache
+        if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
+        uses: actions/cache/save@v6
+        with:
+          path: *go-cache-path
+          key: *go-cache-key
+
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - *setup-go
+      - *restore-go-cache
       # pgtest downloads and extracts the Postgres binaries on first start; they
       # only change with the embedded-postgres module or the pinned version.
       - name: cache embedded postgres
@@ -46,11 +64,4 @@ jobs:
           key: embedded-postgres-${{ runner.os }}-${{ hashFiles('go.sum', 'internal/postgres/pgtest/pgtest.go') }}
       - name: go test
         run: go test -race ./...
-      - name: save go cache
-        if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
-        uses: actions/cache/save@v6
-        with:
-          path: |
-            ~/go/pkg/mod
-            ~/.cache/go-build
-          key: go-${{ github.job }}-${{ runner.os }}-${{ steps.setup-go.outputs.go-version }}-${{ github.sha }}
+      - *save-go-cache
