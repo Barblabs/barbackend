@@ -65,6 +65,36 @@ linters:
               desc: CMDB Provider adapters depend only on the seam and inventory, never on persistence or use cases (ADR 0008)
             - pkg: github.com/jackc/pgx
               desc: CMDB Provider adapters never touch the database (ADR 0008)
+        stixext:
+          list-mode: lax
+          files:
+            - "**/internal/stixext/**"
+          allow:
+            - barbackend/internal/stixext
+          deny:
+            - pkg: barbackend/internal
+              desc: stixext is pure and imports no other layer (ADR 0010)
+        feeds:
+          list-mode: lax
+          files:
+            - "**/internal/feeds/**"
+          allow:
+            - barbackend/internal/feeds
+            - barbackend/internal/stixext
+          deny:
+            - pkg: barbackend/internal
+              desc: Feed adapters depend only on the seam and stixext, never on persistence or transports (ADR 0008, ADR 0010)
+        ingest:
+          list-mode: lax
+          files:
+            - "**/internal/ingest/**"
+          allow:
+            - barbackend/internal/ingest
+            - barbackend/internal/feeds
+            - barbackend/internal/stixext
+          deny:
+            - pkg: barbackend/internal
+              desc: the ingest use case calls the Feed seam, never persistence or transports (ADR 0008, ADR 0011)
         postgres:
           list-mode: lax
           files:

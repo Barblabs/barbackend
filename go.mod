@@ -3,6 +3,7 @@ module barbackend
 go 1.27.2
 
 require (
+	github.com/TcM1911/stix2 v0.10.4
 	github.com/fergusstrange/embedded-postgres v1.34.0
 	github.com/gin-gonic/gin v1.12.0
 	github.com/google/uuid v1.6.0
