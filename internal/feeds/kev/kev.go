@@ -13,7 +13,6 @@ import (
 
 	"barbackend/internal/feeds"
 	"barbackend/internal/stixext"
-
 	"github.com/TcM1911/stix2"
 )
 
