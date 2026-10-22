@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"barbackend/internal/httpapi"
+	"barbackend/internal/ingest"
 )
 
 const (
@@ -19,6 +20,16 @@ const (
 )
 
 func serve(ctx context.Context, _ []string) error {
+	svc, err := ingest.New(registeredFeeds()...)
+	if err != nil {
+		return err
+	}
+	feedsDone := make(chan struct{})
+	go func() {
+		defer close(feedsDone)
+		svc.Run(ctx)
+	}()
+
 	srv := &http.Server{
 		Addr:              listenAddr(),
 		Handler:           httpapi.New(),
@@ -37,6 +48,11 @@ func serve(ctx context.Context, _ []string) error {
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		return err
+	}
+	select {
+	case <-feedsDone:
+	case <-shutdownCtx.Done():
+		return errors.New("feeds did not stop")
 	}
 	if err := <-serveErr; !errors.Is(err, http.ErrServerClosed) {
 		return err
