@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"regexp"
 	"strings"
 	"time"
 
@@ -20,8 +19,6 @@ const (
 	defaultURL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
 	dateLayout = "2006-01-02"
 )
-
-var cveIDPattern = regexp.MustCompile(`^CVE-\d{4}-\d{4,}$`)
 
 // Adapter fetches and normalizes the KEV catalog.
 type Adapter struct {
@@ -86,8 +83,8 @@ func (a *Adapter) fetch(ctx context.Context) (catalog, error) {
 }
 
 func vulnerability(e entry, catalogVersion string, released time.Time) (*stix2.Vulnerability, bool, error) {
-	id := strings.ToUpper(strings.TrimSpace(e.CVEID))
-	if !cveIDPattern.MatchString(id) {
+	id, ok := stixext.CVEID(e.CVEID)
+	if !ok {
 		log.Printf("kev: skipping %q: not a CVE ID", e.CVEID)
 		return nil, false, nil
 	}

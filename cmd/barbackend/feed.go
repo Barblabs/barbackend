@@ -10,12 +10,16 @@ import (
 	"time"
 
 	"barbackend/internal/feeds/kev"
+	"barbackend/internal/feeds/nvd"
 	"barbackend/internal/ingest"
 )
 
 const feedSynopsis = "pull [--feed <name>]"
 
-const kevInterval = time.Hour
+const (
+	kevInterval = time.Hour
+	nvdInterval = 2 * time.Hour
+)
 
 func feed(ctx context.Context, args []string) error {
 	if len(args) == 0 || args[0] != "pull" {
@@ -57,9 +61,16 @@ func pullFeeds(ctx context.Context, out io.Writer, feeds []ingest.Feed, name str
 }
 
 func registeredFeeds() []ingest.Feed {
-	return []ingest.Feed{{
-		Name:     "kev",
-		Interval: kevInterval,
-		Pull:     kev.New(nil, "").Pull,
-	}}
+	return []ingest.Feed{
+		{
+			Name:     "kev",
+			Interval: kevInterval,
+			Pull:     kev.New(nil, "").Pull,
+		},
+		{
+			Name:     "nvd",
+			Interval: nvdInterval,
+			Pull:     nvd.New(nil, "", os.Getenv("NVD_API_KEY")).Pull,
+		},
+	}
 }
