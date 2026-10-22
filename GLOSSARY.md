@@ -20,6 +20,14 @@ _Avoid_: CMDB type, vendor
 One connected instance of a CMDB Provider, belonging to a Customer.
 _Avoid_: Integration, connector, connection
 
+**Connected CMDB Source**:
+The CMDB Source a Customer currently syncs its Assets from. A Customer has at most one; switching CMDBs means disconnecting it and connecting another.
+_Avoid_: Active connection, current integration
+
+**Disconnected CMDB Source**:
+A CMDB Source that is no longer synced. It is never deleted, its Assets become Inactive Assets, and connecting the same CMDB again creates a new CMDB Source.
+_Avoid_: Deleted source, removed source, inactive source
+
 **Asset**:
 A host-level thing in a Customer's environment that barbattack monitors for threats: a server, virtual machine, workstation or network device. It mirrors exactly one record in one CMDB Source, and is an operational configuration item, never a financial or procurement record.
 _Avoid_: CI, configuration item, device, host, machine
@@ -49,7 +57,7 @@ A Software Component that has not been matched to a Product, so barbattack canno
 _Avoid_: Unknown software, unmatched
 
 **Inactive Asset**:
-An Asset that barbattack has stopped monitoring, normally because its CMDB Source reports it as retired or no longer contains it. It is kept for history; being reported as retired is an imported value, not the same as being Inactive.
+An Asset that barbattack has stopped monitoring, normally because its CMDB Source reports it as retired or no longer contains it, or because its CMDB Source was disconnected. It is kept for history; being reported as retired is an imported value, not the same as being Inactive.
 _Avoid_: Deleted, obsolete, retired, archived
 
 **Sync**:
