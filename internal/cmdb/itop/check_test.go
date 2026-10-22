@@ -1,4 +1,4 @@
-package itop
+package itop_test
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"barbackend/internal/cmdb"
+	"barbackend/internal/cmdb/itop"
 )
 
 const (
@@ -37,11 +38,11 @@ func reply(body string) http.HandlerFunc {
 
 func checkCredentials(ctx context.Context, t *testing.T, url, password string) error {
 	t.Helper()
-	settings, credentials, err := Provider{}.FromLogin(cmdb.Login{URL: url, User: fakeUser, Password: password})
+	settings, credentials, err := itop.Provider{}.FromLogin(cmdb.Login{URL: url, User: fakeUser, Password: password})
 	if err != nil {
 		t.Fatal(err)
 	}
-	parsed, err := Provider{}.ParseSettings(settings, credentials)
+	parsed, err := itop.Provider{}.ParseSettings(settings, credentials)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +81,7 @@ func TestCheckCredentialsFailureCodes(t *testing.T) {
 			name: "user without the REST profile",
 			url: serve(reply(`{"code":1,"message":"Error: This user is not authorized to use the web services. ` +
 				`(The profile REST Services User is required to access the REST web services)"}`)),
-			want: missingRESTProfile,
+			want: "missing_rest_profile",
 		},
 		{
 			name: "connection refused",

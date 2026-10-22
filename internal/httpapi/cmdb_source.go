@@ -47,8 +47,6 @@ func (h cmdbSourceHandler) get(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, newCMDBSourceResponse(src))
 }
 
-// loginRequest is the same for every CMDB Provider, so adding one does not
-// change the API.
 type loginRequest struct {
 	Provider string `json:"provider" binding:"required"`
 	URL      string `json:"url" binding:"required"`

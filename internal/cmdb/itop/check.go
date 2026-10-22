@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"net"
 	"strings"
 	"time"
 
@@ -34,12 +33,10 @@ func (s settings) CheckCredentials(ctx context.Context) error {
 }
 
 // classify turns a failed check into a Failure. A canceled check is not the
-// CMDB's fault, so it stays an error.
+// CMDB's fault, so it stays an error. Any other failure left is the transport
+// failing, such as DNS, a refused connection, a timeout or a dropped reply.
 func (s settings) classify(err error) error {
-	var (
-		apiErr *rest.APIError
-		netErr net.Error
-	)
+	var apiErr *rest.APIError
 	switch {
 	case err == nil:
 		return nil
@@ -53,10 +50,8 @@ func (s settings) classify(err error) error {
 		return s.failure(cmdb.UnexpectedResponse, "the URL does not answer like iTop", err)
 	case isTLSError(err):
 		return s.failure(cmdb.TLSError, "the TLS handshake with iTop failed", err)
-	case errors.As(err, &netErr):
-		return s.failure(cmdb.Unreachable, "iTop is unreachable", err)
 	default:
-		return err
+		return s.failure(cmdb.Unreachable, "iTop is unreachable", err)
 	}
 }
 

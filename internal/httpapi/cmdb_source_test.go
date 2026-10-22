@@ -105,11 +105,6 @@ func TestTestCMDBSourceCredentials(t *testing.T) {
 			checkErr: &cmdb.Failure{Code: cmdb.InvalidCredentials, Message: "the cmdb rejected the user or password"},
 			want:     `{"ok":false,"code":"invalid_credentials","error":"the cmdb rejected the user or password"}`,
 		},
-		{
-			name:     "provider-specific code",
-			checkErr: &cmdb.Failure{Code: "missing_rest_profile", Message: "the user lacks a profile"},
-			want:     `{"ok":false,"code":"missing_rest_profile","error":"the user lacks a profile"}`,
-		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -158,6 +153,18 @@ func TestTestCMDBSourceCredentialsRejectsInvalidRequests(t *testing.T) {
 				t.Errorf("response = %d %s, want 400 with an error", rec.Code, rec.Body)
 			}
 		})
+	}
+}
+
+func TestTestCMDBSourceCredentialsHidesInternalErrors(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	e.provider.CheckErr = errors.New("check broke")
+
+	rec := e.testCredentials(validLogin())
+
+	if rec.Code != http.StatusInternalServerError || strings.Contains(rec.Body.String(), "check broke") {
+		t.Errorf("response = %d %s, want 500 without the cause", rec.Code, rec.Body)
 	}
 }
 

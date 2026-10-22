@@ -17,23 +17,18 @@ import (
 	"time"
 )
 
-// ErrAPI is an error reported by iTop itself, such as an invalid login or
-// query. iTop reports them with HTTP 200 and a non-zero code. Every ErrAPI
-// is an *APIError.
-var ErrAPI = errors.New("itop api error")
-
 // ErrUnexpectedResponse is a reply that is not iTop REST JSON, such as an
 // error page or a server that is not iTop.
 var ErrUnexpectedResponse = errors.New("unexpected itop response")
 
+// APIError is an error reported by iTop itself, such as an invalid login or
+// query. iTop reports them with HTTP 200 and a non-zero code.
 type APIError struct {
 	Code    int
 	Message string
 }
 
-func (e *APIError) Error() string { return fmt.Sprintf("%v %d: %s", ErrAPI, e.Code, e.Message) }
-
-func (e *APIError) Is(target error) bool { return target == ErrAPI }
+func (e *APIError) Error() string { return fmt.Sprintf("itop api error %d: %s", e.Code, e.Message) }
 
 // apiVersion 1.4 is the first with limit and page on core/get (iTop 2.7).
 const apiVersion = "1.4"
