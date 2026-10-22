@@ -25,7 +25,7 @@ func TestCORS(t *testing.T) {
 			req := httptest.NewRequest(tt.method, "/cmdb/source", nil)
 			req.Header.Set("Origin", tt.origin)
 			if tt.method == http.MethodOptions {
-				req.Header.Set("Access-Control-Request-Method", http.MethodPut)
+				req.Header.Set("Access-Control-Request-Method", http.MethodGet)
 				req.Header.Set("Access-Control-Request-Headers", "content-type")
 			}
 
@@ -37,8 +37,8 @@ func TestCORS(t *testing.T) {
 			if got := rec.Header().Get("Access-Control-Allow-Origin"); got != tt.wantOrigin {
 				t.Errorf("Access-Control-Allow-Origin = %q, want %q", got, tt.wantOrigin)
 			}
-			allowsPut := rec.Header().Get("Access-Control-Allow-Methods") != ""
-			if want := tt.wantStatus == http.StatusNoContent; allowsPut != want {
+			allowsMethods := rec.Header().Get("Access-Control-Allow-Methods") != ""
+			if want := tt.wantStatus == http.StatusNoContent; allowsMethods != want {
 				t.Errorf("Access-Control-Allow-Methods = %q, want set: %v", rec.Header().Get("Access-Control-Allow-Methods"), want)
 			}
 		})

@@ -2,7 +2,6 @@ package httpapi_test
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -10,33 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"barbackend/internal/cmdb/cmdbtest"
 	"barbackend/internal/inventory"
 )
-
-type cmdbSource struct {
-	Provider        string     `json:"provider"`
-	URL             string     `json:"url"`
-	User            string     `json:"user"`
-	LastSync        *time.Time `json:"lastSync"`
-	LastSyncFailure *struct {
-		At    time.Time `json:"at"`
-		Error string    `json:"error"`
-	} `json:"lastSyncFailure"`
-}
-
-func (e env) getCMDBSource(t *testing.T) (cmdbSource, string) {
-	t.Helper()
-	rec := e.do(httptest.NewRequest(http.MethodGet, "/cmdb/source", nil))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d %s, want 200", rec.Code, rec.Body)
-	}
-	var got cmdbSource
-	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
-		t.Fatal(err)
-	}
-	return got, rec.Body.String()
-}
 
 func TestGetCMDBSourceWithoutConnectedSource(t *testing.T) {
 	t.Parallel()
@@ -55,14 +29,11 @@ func TestGetCMDBSource(t *testing.T) {
 	e := newEnv(t)
 	e.addSource(t, e.customer)
 
-	got, body := e.getCMDBSource(t)
+	_, body := e.getCMDBSource(t)
 
 	want := `{"provider":"fake","url":"http://cmdb","user":"admin","lastSync":null,"lastSyncFailure":null}`
 	if body != want {
 		t.Errorf("body = %s, want %s", body, want)
-	}
-	if strings.Contains(body, cmdbtest.Secret) || got.Provider != string(cmdbtest.Name) {
-		t.Errorf("body = %s, want the fake source without its secret", body)
 	}
 }
 

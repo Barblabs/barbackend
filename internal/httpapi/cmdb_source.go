@@ -18,9 +18,11 @@ type cmdbSourceHandler struct {
 // cmdbSourceResponse never carries credentials: a password sent to the
 // dashboard could leak from it.
 type cmdbSourceResponse struct {
-	Provider        string               `json:"provider"`
-	URL             string               `json:"url"`
-	User            string               `json:"user"`
+	Provider string `json:"provider"`
+	URL      string `json:"url"`
+	// User is null for a source that authenticates without one, such as
+	// with a token.
+	User            *string              `json:"user"`
 	LastSync        *time.Time           `json:"lastSync"`
 	LastSyncFailure *syncFailureResponse `json:"lastSyncFailure"`
 }
@@ -46,7 +48,10 @@ func (h cmdbSourceHandler) get(ctx *gin.Context) {
 }
 
 func newCMDBSourceResponse(src sources.ConnectedSource) cmdbSourceResponse {
-	resp := cmdbSourceResponse{Provider: string(src.Provider), URL: src.URL, User: src.User}
+	resp := cmdbSourceResponse{Provider: string(src.Provider), URL: src.URL}
+	if src.User != "" {
+		resp.User = &src.User
+	}
 	if !src.LastSync.IsZero() {
 		resp.LastSync = &src.LastSync
 	}

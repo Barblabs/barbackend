@@ -10,8 +10,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// corsMethods lists the methods the router serves.
 var (
-	corsMethods = strings.Join([]string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete}, ", ")
+	corsMethods = strings.Join([]string{http.MethodGet}, ", ")
 	corsMaxAge  = strconv.Itoa(int((10 * time.Minute).Seconds()))
 )
 

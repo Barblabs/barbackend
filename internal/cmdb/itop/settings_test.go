@@ -61,8 +61,6 @@ func TestParseSettings(t *testing.T) {
 	}
 }
 
-// A Snapshot authenticates with the credentials it was parsed with. The fake
-// iTop refuses anything else, as iTop does with HTTP 200 and a non-zero code.
 func TestDescribe(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -85,6 +83,8 @@ func TestDescribe(t *testing.T) {
 	}
 }
 
+// A Snapshot authenticates with the credentials it was parsed with. The fake
+// iTop refuses anything else, as iTop does with HTTP 200 and a non-zero code.
 func TestSnapshotAuthenticatesWithCredentials(t *testing.T) {
 	tests := []struct {
 		name        string

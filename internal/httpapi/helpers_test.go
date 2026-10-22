@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"barbackend/internal/cmdb/cmdbtest"
 	"barbackend/internal/encryption"
@@ -71,4 +72,28 @@ func (e env) do(req *http.Request) *httptest.ResponseRecorder {
 	rec := httptest.NewRecorder()
 	e.router.ServeHTTP(rec, req)
 	return rec
+}
+
+type cmdbSource struct {
+	Provider        string     `json:"provider"`
+	URL             string     `json:"url"`
+	User            string     `json:"user"`
+	LastSync        *time.Time `json:"lastSync"`
+	LastSyncFailure *struct {
+		At    time.Time `json:"at"`
+		Error string    `json:"error"`
+	} `json:"lastSyncFailure"`
+}
+
+func (e env) getCMDBSource(t *testing.T) (cmdbSource, string) {
+	t.Helper()
+	rec := e.do(httptest.NewRequest(http.MethodGet, "/cmdb/source", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d %s, want 200", rec.Code, rec.Body)
+	}
+	var got cmdbSource
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	return got, rec.Body.String()
 }
