@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"barbackend/internal/feeds"
-
 	"github.com/TcM1911/stix2"
 )
 
