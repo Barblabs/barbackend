@@ -6,9 +6,10 @@ Packages are split by role, not by feature, and each layer may only import the l
 cmd/barbackend/        flags, usage, wiring only
 internal/
   httpapi/             router + handlers           -> use-case packages
-  sources/             use cases on CMDB Sources   -> cmdb, inventory, postgres
+  sources/             use cases on CMDB Sources   -> cmdb, encryption, inventory, postgres
   cmdb/                CMDB Provider seam          -> inventory
     <provider>/        adapters                    -> cmdb, inventory, own subpackages
+  encryption/          sealing credentials         -> nothing internal
   postgres/            all persistence             -> inventory
   inventory/           pure domain                 -> nothing internal
 ```

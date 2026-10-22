@@ -2,12 +2,15 @@ package sources_test
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"testing"
 	"time"
 
 	"barbackend/internal/cmdb"
+	"barbackend/internal/encryption"
 	"barbackend/internal/inventory"
 	"barbackend/internal/postgres"
 	"barbackend/internal/postgres/pgtest"
@@ -18,21 +21,38 @@ import (
 
 const fake inventory.CMDBProvider = "fake"
 
-var errInvalidSettings = errors.New("settings need a url")
+var (
+	errInvalidSettings    = errors.New("settings need a url")
+	errInvalidCredentials = errors.New("credentials need a secret")
+)
 
-// fakeProvider returns whatever snapshot or error the test sets.
+const (
+	validSettings    = `{"url": "http://cmdb"}`
+	validCredentials = `{"secret": "hunter2"}`
+)
+
+// fakeProvider returns whatever snapshot or error the test sets, and keeps
+// the credentials it last parsed.
 type fakeProvider struct {
-	snapshot inventory.Snapshot
-	err      error
+	snapshot    inventory.Snapshot
+	err         error
+	credentials string
 }
 
-func (f *fakeProvider) ParseSettings(settings json.RawMessage) (cmdb.Settings, error) {
+func (f *fakeProvider) ParseSettings(settings, credentials json.RawMessage) (cmdb.Settings, error) {
 	var s struct {
 		URL string `json:"url"`
 	}
 	if err := json.Unmarshal(settings, &s); err != nil || s.URL == "" {
 		return nil, errInvalidSettings
 	}
+	var c struct {
+		Secret string `json:"secret"`
+	}
+	if err := json.Unmarshal(credentials, &c); err != nil || c.Secret == "" {
+		return nil, errInvalidCredentials
+	}
+	f.credentials = c.Secret
 	return f, nil
 }
 
@@ -56,12 +76,28 @@ func newEnv(t *testing.T) env {
 	}
 	t.Cleanup(db.Close)
 	p := &fakeProvider{}
-	return env{db: db, conn: pgtest.Conn(t, url), provider: p, sources: sources.New(db, cmdb.Providers{fake: p})}
+	return env{db: db, conn: pgtest.Conn(t, url), provider: p, sources: sources.New(db, cmdb.Providers{fake: p}, newKey(t))}
+}
+
+// withKey is a server on the same database started with another key.
+func (e env) withKey(key encryption.Key) *sources.Service {
+	return sources.New(e.db, cmdb.Providers{fake: e.provider}, key)
+}
+
+func newKey(t *testing.T) encryption.Key {
+	t.Helper()
+	raw := make([]byte, 32)
+	_, _ = rand.Read(raw)
+	key, err := encryption.ParseKey(base64.StdEncoding.EncodeToString(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return key
 }
 
 func (e env) addSource(t *testing.T) inventory.CMDBSource {
 	t.Helper()
-	src, err := e.sources.Add(context.Background(), newCustomer(), fake, json.RawMessage(`{"url": "http://cmdb"}`))
+	src, err := e.sources.Add(context.Background(), newCustomer(), fake, json.RawMessage(validSettings), json.RawMessage(validCredentials))
 	if err != nil {
 		t.Fatal(err)
 	}

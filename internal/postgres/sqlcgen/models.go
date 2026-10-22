@@ -40,11 +40,12 @@ type AssetOwner struct {
 }
 
 type CmdbSource struct {
-	ID         uuid.UUID
-	CustomerID uuid.UUID
-	Provider   string
-	Settings   []byte
-	CreatedAt  time.Time
+	ID          uuid.UUID
+	CustomerID  uuid.UUID
+	Provider    string
+	Settings    []byte
+	CreatedAt   time.Time
+	Credentials []byte
 }
 
 type Criticality struct {

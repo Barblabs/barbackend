@@ -12,16 +12,17 @@ import (
 )
 
 const getCMDBSource = `-- name: GetCMDBSource :one
-SELECT id, customer_id, provider, settings
+SELECT id, customer_id, provider, settings, credentials
 FROM cmdb_sources
 WHERE id = $1
 `
 
 type GetCMDBSourceRow struct {
-	ID         uuid.UUID
-	CustomerID uuid.UUID
-	Provider   string
-	Settings   []byte
+	ID          uuid.UUID
+	CustomerID  uuid.UUID
+	Provider    string
+	Settings    []byte
+	Credentials []byte
 }
 
 func (q *Queries) GetCMDBSource(ctx context.Context, id uuid.UUID) (GetCMDBSourceRow, error) {
@@ -32,20 +33,22 @@ func (q *Queries) GetCMDBSource(ctx context.Context, id uuid.UUID) (GetCMDBSourc
 		&i.CustomerID,
 		&i.Provider,
 		&i.Settings,
+		&i.Credentials,
 	)
 	return i, err
 }
 
 const insertCMDBSource = `-- name: InsertCMDBSource :exec
-INSERT INTO cmdb_sources (id, customer_id, provider, settings)
-VALUES ($1, $2, $3, $4)
+INSERT INTO cmdb_sources (id, customer_id, provider, settings, credentials)
+VALUES ($1, $2, $3, $4, $5)
 `
 
 type InsertCMDBSourceParams struct {
-	ID         uuid.UUID
-	CustomerID uuid.UUID
-	Provider   string
-	Settings   []byte
+	ID          uuid.UUID
+	CustomerID  uuid.UUID
+	Provider    string
+	Settings    []byte
+	Credentials []byte
 }
 
 func (q *Queries) InsertCMDBSource(ctx context.Context, arg InsertCMDBSourceParams) error {
@@ -54,6 +57,7 @@ func (q *Queries) InsertCMDBSource(ctx context.Context, arg InsertCMDBSourcePara
 		arg.CustomerID,
 		arg.Provider,
 		arg.Settings,
+		arg.Credentials,
 	)
 	return err
 }

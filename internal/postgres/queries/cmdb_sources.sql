@@ -1,9 +1,9 @@
 -- name: InsertCMDBSource :exec
-INSERT INTO cmdb_sources (id, customer_id, provider, settings)
-VALUES ($1, $2, $3, $4);
+INSERT INTO cmdb_sources (id, customer_id, provider, settings, credentials)
+VALUES ($1, $2, $3, $4, $5);
 
 -- name: GetCMDBSource :one
-SELECT id, customer_id, provider, settings
+SELECT id, customer_id, provider, settings, credentials
 FROM cmdb_sources
 WHERE id = $1;
 

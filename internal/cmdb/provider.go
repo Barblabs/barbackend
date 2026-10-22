@@ -12,10 +12,10 @@ import (
 
 // Provider is the adapter of one CMDB Provider.
 type Provider interface {
-	// ParseSettings validates a CMDB Source's connection settings, which only
-	// the adapter can parse. It does no I/O and reads no secrets, so a source
-	// can be validated by a process that will never sync it.
-	ParseSettings(settings json.RawMessage) (Settings, error)
+	// ParseSettings validates a CMDB Source's connection settings and its
+	// decrypted credentials, both of which only the adapter can parse. It does
+	// no I/O, so a source can be validated without reaching its CMDB.
+	ParseSettings(settings, credentials json.RawMessage) (Settings, error)
 }
 
 // Settings are the parsed connection settings of one CMDB Source. Only

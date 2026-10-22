@@ -13,16 +13,12 @@ import (
 
 type Provider struct{}
 
-func (Provider) ParseSettings(raw json.RawMessage) (cmdb.Settings, error) {
-	return parseSettings(raw)
+func (Provider) ParseSettings(settings, credentials json.RawMessage) (cmdb.Settings, error) {
+	return parseSettings(settings, credentials)
 }
 
 func (s settings) Snapshot(ctx context.Context) (inventory.Snapshot, error) {
-	auth, err := s.auth.auth()
-	if err != nil {
-		return inventory.Snapshot{}, err
-	}
-	cis, lk, err := fetch(ctx, rest.New(s.baseURL, auth, rest.Options{}))
+	cis, lk, err := fetch(ctx, rest.New(s.baseURL, s.auth, rest.Options{}))
 	if err != nil {
 		return inventory.Snapshot{}, err
 	}

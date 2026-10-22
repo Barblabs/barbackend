@@ -95,6 +95,15 @@ linters:
           deny:
             - pkg: barbackend/internal
               desc: the ingest use case calls the Feed seam, never persistence or transports (ADR 0008, ADR 0011)
+        encryption:
+          list-mode: lax
+          files:
+            - "**/internal/encryption/**"
+          allow:
+            - barbackend/internal/encryption
+          deny:
+            - pkg: barbackend/internal
+              desc: encryption imports no other layer; the sources use case seals and opens credentials with it (ADR 0008, ADR 0012)
         postgres:
           list-mode: lax
           files:

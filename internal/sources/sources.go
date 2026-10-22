@@ -10,37 +10,52 @@ import (
 	"time"
 
 	"barbackend/internal/cmdb"
+	"barbackend/internal/encryption"
 	"barbackend/internal/inventory"
 	"barbackend/internal/postgres"
 	"github.com/google/uuid"
 )
 
-// Service adds CMDB Sources and syncs their Assets.
+// Service adds CMDB Sources and syncs their Assets. It seals their
+// credentials with key, so adapters only ever see them decrypted (ADR 0012).
 type Service struct {
 	db        *postgres.DB
 	providers cmdb.Providers
+	key       encryption.Key
 }
 
-func New(db *postgres.DB, providers cmdb.Providers) *Service {
-	return &Service{db: db, providers: providers}
+func New(db *postgres.DB, providers cmdb.Providers, key encryption.Key) *Service {
+	return &Service{db: db, providers: providers, key: key}
 }
 
-func (s *Service) Add(ctx context.Context, customer inventory.CustomerID, provider inventory.CMDBProvider, settings json.RawMessage) (inventory.CMDBSource, error) {
+// Add stores a CMDB Source with plain settings and sealed credentials, after
+// its CMDB Provider has validated both.
+func (s *Service) Add(ctx context.Context, customer inventory.CustomerID, provider inventory.CMDBProvider, settings, credentials json.RawMessage) (inventory.CMDBSource, error) {
 	p, err := s.providers.Lookup(provider)
 	if err != nil {
 		return inventory.CMDBSource{}, err
 	}
-	if _, err := p.ParseSettings(settings); err != nil {
+	if _, err := p.ParseSettings(settings, credentials); err != nil {
 		return inventory.CMDBSource{}, fmt.Errorf("settings for %s: %w", provider, err)
 	}
 	src, err := inventory.NewCMDBSource(inventory.CMDBSourceID(uuid.New()), customer, provider)
 	if err != nil {
 		return inventory.CMDBSource{}, err
 	}
-	if err := s.db.InTx(ctx, func(tx *postgres.Tx) error { return tx.CreateCMDBSource(ctx, src, settings) }); err != nil {
+	sealed, err := s.key.Seal(credentials, sealedFor(src.ID()))
+	if err != nil {
+		return inventory.CMDBSource{}, fmt.Errorf("seal credentials: %w", err)
+	}
+	if err := s.db.InTx(ctx, func(tx *postgres.Tx) error { return tx.CreateCMDBSource(ctx, src, settings, sealed) }); err != nil {
 		return inventory.CMDBSource{}, err
 	}
 	return src, nil
+}
+
+// sealedFor binds credentials to their CMDB Source, so sealed credentials
+// copied to another source fail to open.
+func sealedFor(id inventory.CMDBSourceID) []byte {
+	return []byte(id.String())
 }
 
 // Sync brings the Assets of a CMDB Source in line with a full snapshot of it.
@@ -48,17 +63,16 @@ func (s *Service) Add(ctx context.Context, customer inventory.CustomerID, provid
 // which changed no Asset.
 func (s *Service) Sync(ctx context.Context, id inventory.CMDBSourceID) (inventory.SyncRun, error) {
 	started := time.Now()
-	var src inventory.CMDBSource
-	var settings json.RawMessage
+	var stored postgres.StoredCMDBSource
 	err := s.db.InTx(ctx, func(tx *postgres.Tx) error {
 		var err error
-		src, settings, err = tx.CMDBSource(ctx, id)
+		stored, err = tx.CMDBSource(ctx, id)
 		return err
 	})
 	if err != nil {
 		return inventory.SyncRun{}, err
 	}
-	run, err := s.sync(ctx, src, settings, started)
+	run, err := s.sync(ctx, stored, started)
 	if err != nil {
 		return inventory.SyncRun{}, s.recordFailure(ctx, id, started, err)
 	}
@@ -68,12 +82,17 @@ func (s *Service) Sync(ctx context.Context, id inventory.CMDBSourceID) (inventor
 // sync reads the snapshot before locking the source, so a slow CMDB Provider
 // never holds the lock. Settings are parsed again because a provider may
 // have tightened its rules since the source was added.
-func (s *Service) sync(ctx context.Context, src inventory.CMDBSource, settings json.RawMessage, started time.Time) (inventory.SyncRun, error) {
+func (s *Service) sync(ctx context.Context, stored postgres.StoredCMDBSource, started time.Time) (inventory.SyncRun, error) {
+	src := stored.Source
 	p, err := s.providers.Lookup(src.Provider())
 	if err != nil {
 		return inventory.SyncRun{}, err
 	}
-	parsed, err := p.ParseSettings(settings)
+	credentials, err := s.key.Open(stored.Credentials, sealedFor(src.ID()))
+	if err != nil {
+		return inventory.SyncRun{}, fmt.Errorf("credentials of %s: %w", src.ID(), err)
+	}
+	parsed, err := p.ParseSettings(stored.Settings, credentials)
 	if err != nil {
 		return inventory.SyncRun{}, fmt.Errorf("settings of %s: %w", src.ID(), err)
 	}

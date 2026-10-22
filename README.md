@@ -16,6 +16,8 @@ go build ./cmd/barbackend
 
 # migrate, source and sync need a database
 export DATABASE_URL="postgres://user:pass@localhost:5432/barbackend?sslmode=disable"
+# source and sync seal and open CMDB Source credentials with this key (ADR 0012)
+export CREDENTIALS_KEY="$(openssl rand -base64 32)"
 
 ./barbackend migrate   # apply migrations in internal/postgres/migrations
 ./barbackend serve     # HTTP server, only GET /ping for now (gin, :8080 unless PORT is set)
@@ -31,10 +33,12 @@ Run `./barbackend` with no arguments to print the usage.
 ./barbackend source add \
   --customer <customer-uuid> \
   --provider <provider-id> \
-  --settings '<json>'
+  --settings '<json>' < credentials.json
 ```
 
-The provider validates the settings before the source is stored. Prints the new CMDB Source ID.
+Settings are plain JSON and hold no secret. The credentials are a JSON document read from stdin, so secrets stay out of the process list and shell history. The provider validates both before the source is stored, and the credentials are stored encrypted with `CREDENTIALS_KEY`. Prints the new CMDB Source ID.
+
+Keep `CREDENTIALS_KEY` safe: credentials stored with a lost key cannot be recovered, and their sources must be added again. A Sync with no key, or another key, fails and is recorded as a failed Sync Run.
 
 Providers are registered in `providers()` in `cmd/barbackend/app.go`.
 
@@ -43,15 +47,15 @@ Providers are registered in `providers()` in `cmd/barbackend/app.go`.
 Reads every Server, Virtual Machine, PC and Network Device in the instance through the REST API (version 1.4, iTop 2.7 or later). The user needs the REST Services User profile and read access to those classes.
 
 ```bash
-./barbackend source add --customer <customer-uuid> --provider itop \
-  --settings '{"url": "https://itop.example.com", "auth": {"mode": "basic", "user": "barb-reader", "password_env": "ITOP_PASSWORD"}}'
+jq -n --arg password "$ITOP_PASSWORD" '{$password}' | ./barbackend source add --customer <customer-uuid> --provider itop \
+  --settings '{"url": "https://itop.example.com", "auth": {"mode": "basic", "user": "barb-reader"}}'
 ```
 
 - `url`: the iTop root, with or without a path (`https://example.com/itop`); no credentials, query or fragment.
-- `auth.mode: "basic"`: `user` and `password_env`, the environment variable holding the password.
-- `auth.mode: "token"`: `token_env`, the environment variable holding a token from the authent-token extension.
+- `auth.mode: "basic"`: settings take `user`, credentials are `{"password": "..."}`.
+- `auth.mode: "token"`: settings take nothing else, credentials are `{"token": "..."}`, a token from the authent-token extension.
 
-Settings are stored in plain text, so they only name the variables. Secrets are read when `sync` runs, so the variable must be set in the process that syncs, not the one that adds the source.
+To type the password instead, run the command without a pipe, enter `{"password": "..."}` and press Ctrl-D.
 
 ### Sync a CMDB Source
 
