@@ -83,11 +83,15 @@ func TestAssetOwnersAreSharedWithinACustomer(t *testing.T) {
 	db, conn := newDBWithConn(t)
 	customer := newCustomer()
 	first := newSource(t, db, customer)
-	second := newSource(t, db, customer)
 	other := newSource(t, db, newCustomer())
 	p := inventory.ImportedAssetParams{Name: "pc", Kind: inventory.Workstation, Owner: mustOwner(t, "owner@example.com")}
 
 	syncRecords(t, db, first.ID(), record(t, "a", p), record(t, "b", p))
+	// A Customer that switches CMDBs keeps its owners on the new CMDB Source.
+	if _, err := conn.Exec(context.Background(), "UPDATE cmdb_sources SET disconnected_at = now() WHERE id = $1", first.ID().String()); err != nil {
+		t.Fatal(err)
+	}
+	second := newSource(t, db, customer)
 	syncRecords(t, db, second.ID(), record(t, "a", p))
 	syncRecords(t, db, other.ID(), record(t, "a", p))
 
@@ -291,9 +295,8 @@ func TestCommitSyncFailsWhileLocked(t *testing.T) {
 func TestCommitSyncOfAnotherSourceFails(t *testing.T) {
 	t.Parallel()
 	db, conn := newDBWithConn(t)
-	customer := newCustomer()
-	locked := newSource(t, db, customer)
-	other := newSource(t, db, customer)
+	locked := newSource(t, db, newCustomer())
+	other := newSource(t, db, newCustomer())
 
 	_, err := db.CommitSync(context.Background(), locked.ID(), time.Now(), func([]*inventory.Asset) (inventory.Reconciliation, error) {
 		return inventory.Reconcile(other.ID(), nil, inventory.Snapshot{Records: []inventory.Record{record(t, "1", fullParams(t))}})

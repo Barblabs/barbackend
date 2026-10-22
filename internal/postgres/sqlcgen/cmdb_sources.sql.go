@@ -38,6 +38,33 @@ func (q *Queries) GetCMDBSource(ctx context.Context, id uuid.UUID) (GetCMDBSourc
 	return i, err
 }
 
+const getConnectedCMDBSource = `-- name: GetConnectedCMDBSource :one
+SELECT id, customer_id, provider, settings, credentials
+FROM cmdb_sources
+WHERE customer_id = $1 AND disconnected_at IS NULL
+`
+
+type GetConnectedCMDBSourceRow struct {
+	ID          uuid.UUID
+	CustomerID  uuid.UUID
+	Provider    string
+	Settings    []byte
+	Credentials []byte
+}
+
+func (q *Queries) GetConnectedCMDBSource(ctx context.Context, customerID uuid.UUID) (GetConnectedCMDBSourceRow, error) {
+	row := q.db.QueryRow(ctx, getConnectedCMDBSource, customerID)
+	var i GetConnectedCMDBSourceRow
+	err := row.Scan(
+		&i.ID,
+		&i.CustomerID,
+		&i.Provider,
+		&i.Settings,
+		&i.Credentials,
+	)
+	return i, err
+}
+
 const insertCMDBSource = `-- name: InsertCMDBSource :exec
 INSERT INTO cmdb_sources (id, customer_id, provider, settings, credentials)
 VALUES ($1, $2, $3, $4, $5)

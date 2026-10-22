@@ -3,12 +3,16 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"barbackend/internal/httpapi"
+	"barbackend/internal/inventory"
+	"github.com/google/uuid"
 )
 
 const (
@@ -19,9 +23,23 @@ const (
 )
 
 func serve(ctx context.Context, _ []string) error {
+	customer, err := customerID()
+	if err != nil {
+		return err
+	}
+	return withApp(ctx, func(a app) error {
+		return listen(ctx, httpapi.New(httpapi.Config{
+			Sources:        a.sources,
+			Customer:       customer,
+			AllowedOrigins: allowedOrigins(),
+		}))
+	})
+}
+
+func listen(ctx context.Context, handler http.Handler) error {
 	srv := &http.Server{
 		Addr:              listenAddr(),
-		Handler:           httpapi.New(),
+		Handler:           handler,
 		ReadHeaderTimeout: readHeaderTimeout,
 	}
 	serveErr := make(chan error, 1)
@@ -42,6 +60,27 @@ func serve(ctx context.Context, _ []string) error {
 		return err
 	}
 	return nil
+}
+
+// customerID is the Customer every request acts for until authentication
+// exists. Only local development may serve with it.
+func customerID() (inventory.CustomerID, error) {
+	id, err := uuid.Parse(os.Getenv("CUSTOMER_ID"))
+	if err != nil {
+		return inventory.CustomerID{}, fmt.Errorf("CUSTOMER_ID: %w", err)
+	}
+	return inventory.CustomerID(id), nil
+}
+
+// allowedOrigins reads CORS_ALLOWED_ORIGINS, a comma-separated list.
+func allowedOrigins() []string {
+	var origins []string
+	for o := range strings.SplitSeq(os.Getenv("CORS_ALLOWED_ORIGINS"), ",") {
+		if o = strings.TrimSpace(o); o != "" {
+			origins = append(origins, o)
+		}
+	}
+	return origins
 }
 
 func listenAddr() string {

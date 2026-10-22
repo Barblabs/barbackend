@@ -21,7 +21,7 @@ type command struct {
 }
 
 var commands = []command{
-	{name: "serve", summary: "run the HTTP server", run: serve},
+	{name: "serve", summary: "run the HTTP server", needsDB: true, run: serve},
 	{name: "feed", summary: "pull threat-intelligence Feeds", synopsis: feedSynopsis, run: feed},
 	{name: "migrate", summary: "apply database migrations", needsDB: true, run: migrate},
 	{name: "source", summary: "add a CMDB Source", synopsis: sourceSynopsis, needsDB: true, run: source},

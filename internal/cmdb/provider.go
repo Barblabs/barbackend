@@ -16,6 +16,17 @@ type Provider interface {
 	// decrypted credentials, both of which only the adapter can parse. It does
 	// no I/O, so a source can be validated without reaching its CMDB.
 	ParseSettings(settings, credentials json.RawMessage) (Settings, error)
+	// Describe reads what identifies a CMDB Source to a person from its
+	// plain settings alone, so showing a source never opens its credentials.
+	Describe(settings json.RawMessage) (Description, error)
+}
+
+// Description identifies a CMDB Source to a person. It holds no secret.
+type Description struct {
+	URL string
+	// User is empty when the source authenticates without one, such as with
+	// a token.
+	User string
 }
 
 // Settings are the parsed connection settings of one CMDB Source. Only

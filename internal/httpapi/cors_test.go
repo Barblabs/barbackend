@@ -1,0 +1,46 @@
+package httpapi_test
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"testing"
+)
+
+func TestCORS(t *testing.T) {
+	tests := []struct {
+		name       string
+		method     string
+		origin     string
+		wantStatus int
+		wantOrigin string
+	}{
+		{"preflight from allowed origin", http.MethodOptions, allowedOrigin, http.StatusNoContent, allowedOrigin},
+		{"preflight from other origin", http.MethodOptions, "http://evil.example", http.StatusForbidden, ""},
+		{"request from allowed origin", http.MethodGet, allowedOrigin, http.StatusOK, allowedOrigin},
+		{"request from other origin", http.MethodGet, "http://evil.example", http.StatusOK, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			req := httptest.NewRequest(tt.method, "/cmdb/source", nil)
+			req.Header.Set("Origin", tt.origin)
+			if tt.method == http.MethodOptions {
+				req.Header.Set("Access-Control-Request-Method", http.MethodPut)
+				req.Header.Set("Access-Control-Request-Headers", "content-type")
+			}
+
+			rec := newEnv(t).do(req)
+
+			if rec.Code != tt.wantStatus {
+				t.Errorf("status = %d, want %d", rec.Code, tt.wantStatus)
+			}
+			if got := rec.Header().Get("Access-Control-Allow-Origin"); got != tt.wantOrigin {
+				t.Errorf("Access-Control-Allow-Origin = %q, want %q", got, tt.wantOrigin)
+			}
+			allowsPut := rec.Header().Get("Access-Control-Allow-Methods") != ""
+			if want := tt.wantStatus == http.StatusNoContent; allowsPut != want {
+				t.Errorf("Access-Control-Allow-Methods = %q, want set: %v", rec.Header().Get("Access-Control-Allow-Methods"), want)
+			}
+		})
+	}
+}

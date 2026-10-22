@@ -1,5 +1,5 @@
-// Package sources holds the use cases on CMDB Sources: adding one and
-// syncing its Assets.
+// Package sources holds the use cases on CMDB Sources: adding one, showing
+// the Connected CMDB Source and syncing its Assets.
 package sources
 
 import (
@@ -19,6 +19,26 @@ import (
 // ErrNoCredentials is a CMDB Source added before credentials were stored
 // (ADR 0012): its secrets were never in the database, so it must be added again.
 var ErrNoCredentials = errors.New("cmdb source has no stored credentials, add it again")
+
+// ErrNotConnected is a Customer with no Connected CMDB Source.
+var ErrNotConnected = errors.New("customer has no connected cmdb source")
+
+// ConnectedSource is a Connected CMDB Source as a person sees it. It holds
+// no secret.
+type ConnectedSource struct {
+	Provider inventory.CMDBProvider
+	URL      string
+	User     string
+	// LastSync is when the latest successful Sync finished, zero if none did.
+	LastSync time.Time
+	// LastSyncFailure is set only while the latest Sync Run is a failed one.
+	LastSyncFailure *SyncFailure
+}
+
+type SyncFailure struct {
+	At    time.Time
+	Error string
+}
 
 // Service adds CMDB Sources and syncs their Assets. It seals their
 // credentials with key, so adapters only ever see them decrypted (ADR 0012).
@@ -54,6 +74,43 @@ func (s *Service) Add(ctx context.Context, customer inventory.CustomerID, provid
 		return inventory.CMDBSource{}, err
 	}
 	return src, nil
+}
+
+// ConnectedSource fails with ErrNotConnected when the Customer has no
+// Connected CMDB Source. It reads only plain settings, so it needs no key.
+func (s *Service) ConnectedSource(ctx context.Context, customer inventory.CustomerID) (ConnectedSource, error) {
+	var (
+		stored postgres.StoredCMDBSource
+		runs   postgres.LatestSyncRuns
+	)
+	err := s.db.InTx(ctx, func(tx *postgres.Tx) error {
+		var err error
+		if stored, err = tx.ConnectedCMDBSource(ctx, customer); err != nil {
+			return err
+		}
+		runs, err = tx.LatestSyncRuns(ctx, stored.Source.ID())
+		return err
+	})
+	if errors.Is(err, postgres.ErrNotFound) {
+		return ConnectedSource{}, fmt.Errorf("%w: %s", ErrNotConnected, customer)
+	}
+	if err != nil {
+		return ConnectedSource{}, err
+	}
+	src := stored.Source
+	p, err := s.providers.Lookup(src.Provider())
+	if err != nil {
+		return ConnectedSource{}, err
+	}
+	desc, err := p.Describe(stored.Settings)
+	if err != nil {
+		return ConnectedSource{}, fmt.Errorf("describe %s: %w", src.ID(), err)
+	}
+	view := ConnectedSource{Provider: src.Provider(), URL: desc.URL, User: desc.User, LastSync: runs.SucceededFinished}
+	if latest := runs.Latest; latest != nil && latest.Outcome == inventory.SyncFailed {
+		view.LastSyncFailure = &SyncFailure{At: latest.Finished, Error: latest.Failure}
+	}
+	return view, nil
 }
 
 // owner binds credentials to their CMDB Source, so sealed credentials copied

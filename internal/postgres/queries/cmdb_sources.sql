@@ -13,3 +13,8 @@ SELECT id
 FROM cmdb_sources
 WHERE id = $1
 FOR UPDATE NOWAIT;
+
+-- name: GetConnectedCMDBSource :one
+SELECT id, customer_id, provider, settings, credentials
+FROM cmdb_sources
+WHERE customer_id = $1 AND disconnected_at IS NULL;

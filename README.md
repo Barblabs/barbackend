@@ -14,14 +14,23 @@ Domain terms are defined in [`GLOSSARY.md`](GLOSSARY.md), design decisions in [`
 ```bash
 go build ./cmd/barbackend
 
-# migrate, source and sync need a database
+# migrate, serve, source and sync need a database
 export DATABASE_URL="postgres://user:pass@localhost:5432/barbackend?sslmode=disable"
-# source and sync seal and open CMDB Source credentials with this key (ADR 0012)
+# serve, source and sync seal and open CMDB Source credentials with this key (ADR 0012)
 export CREDENTIALS_KEY="$(openssl rand -base64 32)"
+# serve acts for this Customer until authentication exists, so it is for local dev only
+export CUSTOMER_ID=<customer-uuid>
+# browser origins allowed to call the HTTP API, comma-separated
+export CORS_ALLOWED_ORIGINS=http://localhost:5173
 
 ./barbackend migrate   # apply migrations in internal/postgres/migrations
-./barbackend serve     # HTTP server, only GET /ping for now (gin, :8080 unless PORT is set)
+./barbackend serve     # HTTP server (gin, :8080 unless PORT is set)
 ```
+
+### HTTP API
+
+- `GET /ping`: liveness.
+- `GET /cmdb/source`: the Customer's Connected CMDB Source as `{provider, url, user, lastSync, lastSyncFailure}`, or `null` if none is connected. `lastSync` is when the latest successful Sync Run finished; `lastSyncFailure` is `{at, error}` while the latest Sync Run is a failed one. Credentials are never returned.
 
 Run `./barbackend` with no arguments to print the usage.
 

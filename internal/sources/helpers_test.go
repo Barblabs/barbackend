@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"barbackend/internal/cmdb"
+	"barbackend/internal/cmdb/cmdbtest"
 	"barbackend/internal/encryption"
 	"barbackend/internal/inventory"
 	"barbackend/internal/postgres"
@@ -19,51 +19,16 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-const fake inventory.CMDBProvider = "fake"
-
-var (
-	errInvalidSettings    = errors.New("settings need a url")
-	errInvalidCredentials = errors.New("credentials need a secret")
-)
-
 const (
-	validSettings    = `{"url": "http://cmdb"}`
-	validCredentials = `{"secret": "hunter2"}`
+	fake             = cmdbtest.Name
+	validSettings    = cmdbtest.Settings
+	validCredentials = cmdbtest.Credentials
 )
-
-// fakeProvider returns whatever snapshot or error the test sets, and keeps
-// the credentials it last parsed.
-type fakeProvider struct {
-	snapshot    inventory.Snapshot
-	err         error
-	credentials string
-}
-
-func (f *fakeProvider) ParseSettings(settings, credentials json.RawMessage) (cmdb.Settings, error) {
-	var s struct {
-		URL string `json:"url"`
-	}
-	if err := json.Unmarshal(settings, &s); err != nil || s.URL == "" {
-		return nil, errInvalidSettings
-	}
-	var c struct {
-		Secret string `json:"secret"`
-	}
-	if err := json.Unmarshal(credentials, &c); err != nil || c.Secret == "" {
-		return nil, errInvalidCredentials
-	}
-	f.credentials = c.Secret
-	return f, nil
-}
-
-func (f *fakeProvider) Snapshot(context.Context) (inventory.Snapshot, error) {
-	return f.snapshot, f.err
-}
 
 type env struct {
 	db       *postgres.DB
 	conn     *pgx.Conn
-	provider *fakeProvider
+	provider *cmdbtest.Provider
 	sources  *sources.Service
 }
 
@@ -75,13 +40,13 @@ func newEnv(t *testing.T) env {
 		t.Fatal(err)
 	}
 	t.Cleanup(db.Close)
-	p := &fakeProvider{}
-	return env{db: db, conn: pgtest.Conn(t, url), provider: p, sources: sources.New(db, cmdb.Providers{fake: p}, newKey(t))}
+	p := &cmdbtest.Provider{}
+	return env{db: db, conn: pgtest.Conn(t, url), provider: p, sources: sources.New(db, p.Providers(), newKey(t))}
 }
 
 // withKey is a server on the same database started with another key.
 func (e env) withKey(key encryption.Key) *sources.Service {
-	return sources.New(e.db, cmdb.Providers{fake: e.provider}, key)
+	return sources.New(e.db, e.provider.Providers(), key)
 }
 
 func newKey(t *testing.T) encryption.Key {

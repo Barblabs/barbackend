@@ -47,15 +47,8 @@ type settings struct {
 }
 
 func parseSettings(rawSettings, rawCredentials json.RawMessage) (settings, error) {
-	var doc settingsDocument
-	if err := decodeStrict(rawSettings, &doc); err != nil {
-		return settings{}, fmt.Errorf("%w: %v", ErrInvalidSettings, err)
-	}
-	base, err := parseBaseURL(doc.URL)
+	doc, base, err := parseSettingsDocument(rawSettings)
 	if err != nil {
-		return settings{}, err
-	}
-	if err := doc.Auth.validate(); err != nil {
 		return settings{}, err
 	}
 	var creds credentialsDocument
@@ -67,6 +60,21 @@ func parseSettings(rawSettings, rawCredentials json.RawMessage) (settings, error
 		return settings{}, err
 	}
 	return settings{baseURL: base, auth: auth}, nil
+}
+
+func parseSettingsDocument(raw json.RawMessage) (settingsDocument, *url.URL, error) {
+	var doc settingsDocument
+	if err := decodeStrict(raw, &doc); err != nil {
+		return settingsDocument{}, nil, fmt.Errorf("%w: %v", ErrInvalidSettings, err)
+	}
+	base, err := parseBaseURL(doc.URL)
+	if err != nil {
+		return settingsDocument{}, nil, err
+	}
+	if err := doc.Auth.validate(); err != nil {
+		return settingsDocument{}, nil, err
+	}
+	return doc, base, nil
 }
 
 // decodeStrict rejects unknown fields so that a typo in an optional-looking

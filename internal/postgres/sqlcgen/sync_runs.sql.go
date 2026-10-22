@@ -53,6 +53,47 @@ func (q *Queries) InsertSyncRun(ctx context.Context, arg InsertSyncRunParams) er
 	return err
 }
 
+const latestSyncRun = `-- name: LatestSyncRun :one
+SELECT finished_at, outcome_id, failure
+FROM sync_runs
+WHERE cmdb_source_id = $1
+ORDER BY started_at DESC
+LIMIT 1
+`
+
+type LatestSyncRunRow struct {
+	FinishedAt time.Time
+	OutcomeID  int16
+	Failure    *string
+}
+
+func (q *Queries) LatestSyncRun(ctx context.Context, cmdbSourceID uuid.UUID) (LatestSyncRunRow, error) {
+	row := q.db.QueryRow(ctx, latestSyncRun, cmdbSourceID)
+	var i LatestSyncRunRow
+	err := row.Scan(&i.FinishedAt, &i.OutcomeID, &i.Failure)
+	return i, err
+}
+
+const latestSyncRunFinishedWithOutcome = `-- name: LatestSyncRunFinishedWithOutcome :one
+SELECT finished_at
+FROM sync_runs
+WHERE cmdb_source_id = $1 AND outcome_id = $2
+ORDER BY started_at DESC
+LIMIT 1
+`
+
+type LatestSyncRunFinishedWithOutcomeParams struct {
+	CmdbSourceID uuid.UUID
+	OutcomeID    int16
+}
+
+func (q *Queries) LatestSyncRunFinishedWithOutcome(ctx context.Context, arg LatestSyncRunFinishedWithOutcomeParams) (time.Time, error) {
+	row := q.db.QueryRow(ctx, latestSyncRunFinishedWithOutcome, arg.CmdbSourceID, arg.OutcomeID)
+	var finished_at time.Time
+	err := row.Scan(&finished_at)
+	return finished_at, err
+}
+
 const succeededRunStartedAfter = `-- name: SucceededRunStartedAfter :one
 SELECT EXISTS (
     SELECT 1

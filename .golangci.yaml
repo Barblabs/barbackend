@@ -116,10 +116,12 @@ linters:
               desc: persistence depends only on inventory; use cases call it, not the reverse (ADR 0008)
         # Handlers reach persistence and adapters only through use cases, so
         # each new use-case package is added to allow when httpapi serves it.
+        # Tests are exempt: they wire a real router on Postgres, as cmd does.
         httpapi-imports:
           list-mode: lax
           files:
             - "**/internal/httpapi/**"
+            - "!$test"
           allow:
             - barbackend/internal/httpapi
             - barbackend/internal/inventory

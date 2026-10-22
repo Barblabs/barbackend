@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"barbackend/internal/cmdb"
+	"barbackend/internal/cmdb/cmdbtest"
 	"barbackend/internal/encryption"
 	"barbackend/internal/inventory"
 	"barbackend/internal/postgres"
@@ -25,8 +26,8 @@ func TestAdd(t *testing.T) {
 		want        error
 	}{
 		{"valid", fake, validSettings, validCredentials, nil},
-		{"invalid settings", fake, `{}`, validCredentials, errInvalidSettings},
-		{"invalid credentials", fake, validSettings, `{}`, errInvalidCredentials},
+		{"invalid settings", fake, `{}`, validCredentials, cmdbtest.ErrInvalidSettings},
+		{"invalid credentials", fake, validSettings, `{}`, cmdbtest.ErrInvalidCredentials},
 		{"unknown provider", "servicenow", validSettings, validCredentials, cmdb.ErrUnknownProvider},
 	}
 	for _, tt := range tests {
@@ -57,7 +58,7 @@ func TestAdd(t *testing.T) {
 				if string(stored.Settings) != tt.settings {
 					t.Errorf("settings = %s, want %s", stored.Settings, tt.settings)
 				}
-				if len(stored.Credentials) == 0 || bytes.Contains(stored.Credentials, []byte("hunter2")) {
+				if len(stored.Credentials) == 0 || bytes.Contains(stored.Credentials, []byte(cmdbtest.Secret)) {
 					t.Errorf("stored credentials = %q, want ciphertext without the secret", stored.Credentials)
 				}
 				return nil
@@ -88,19 +89,19 @@ func TestSync(t *testing.T) {
 	e := newEnv(t)
 	src := e.addSource(t)
 	skipped := inventory.SkippedRecord{RecordID: "c", Reason: "no name"}
-	e.provider.snapshot = inventory.Snapshot{
+	e.provider.Snapshot = inventory.Snapshot{
 		Records: []inventory.Record{record(t, "a", "vm-a"), record(t, "b", "vm-b")},
 		Skipped: []inventory.SkippedRecord{skipped},
 	}
 
-	e.provider.credentials = ""
+	e.provider.Secret = ""
 
 	first, err := e.sources.Sync(context.Background(), src.ID())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if e.provider.credentials != "hunter2" {
-		t.Errorf("provider got secret %q, want the decrypted %q", e.provider.credentials, "hunter2")
+	if e.provider.Secret != cmdbtest.Secret {
+		t.Errorf("provider got secret %q, want the decrypted %q", e.provider.Secret, cmdbtest.Secret)
 	}
 	if want := (inventory.SyncCounts{Created: 2, Skipped: 1}); first.Outcome() != inventory.SyncSucceeded || first.Counts() != want {
 		t.Errorf("first run = %v %+v, want Succeeded %+v", first.Outcome(), first.Counts(), want)
@@ -116,7 +117,7 @@ func TestSync(t *testing.T) {
 		t.Errorf("recorded skip reason = %q, want %q", reason, skipped.Reason)
 	}
 
-	e.provider.snapshot = inventory.Snapshot{Records: []inventory.Record{record(t, "a", "vm-a-renamed")}}
+	e.provider.Snapshot = inventory.Snapshot{Records: []inventory.Record{record(t, "a", "vm-a-renamed")}}
 	second, err := e.sources.Sync(context.Background(), src.ID())
 	if err != nil {
 		t.Fatal(err)
@@ -149,13 +150,13 @@ func TestFailedSyncChangesNoAsset(t *testing.T) {
 			t.Parallel()
 			e := newEnv(t)
 			src := e.addSource(t)
-			e.provider.snapshot = inventory.Snapshot{Records: []inventory.Record{record(t, "a", "vm-a")}}
+			e.provider.Snapshot = inventory.Snapshot{Records: []inventory.Record{record(t, "a", "vm-a")}}
 			if _, err := e.sources.Sync(context.Background(), src.ID()); err != nil {
 				t.Fatal(err)
 			}
 			before := e.assets(t, src.ID())
 
-			e.provider.snapshot, e.provider.err = tt.snapshot, tt.err
+			e.provider.Snapshot, e.provider.Err = tt.snapshot, tt.err
 			_, err := e.sources.Sync(context.Background(), src.ID())
 
 			if err == nil || (tt.err != nil && !errors.Is(err, tt.err)) {
@@ -214,8 +215,8 @@ func TestSyncRevalidatesSettings(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := e.sources.Sync(context.Background(), src.ID()); !errors.Is(err, errInvalidSettings) {
-		t.Errorf("err = %v, want errInvalidSettings", err)
+	if _, err := e.sources.Sync(context.Background(), src.ID()); !errors.Is(err, cmdbtest.ErrInvalidSettings) {
+		t.Errorf("err = %v, want cmdbtest.ErrInvalidSettings", err)
 	}
 	if n := e.queryInt(t, "SELECT count(*) FROM sync_runs WHERE outcome_id = $1", int16(inventory.SyncFailed)); n != 1 {
 		t.Errorf("failed runs = %d, want 1", n)
@@ -236,7 +237,7 @@ func TestSyncWithoutTheKeyFails(t *testing.T) {
 			t.Parallel()
 			e := newEnv(t)
 			src := e.addSource(t)
-			e.provider.snapshot = inventory.Snapshot{Records: []inventory.Record{record(t, "a", "vm-a")}}
+			e.provider.Snapshot = inventory.Snapshot{Records: []inventory.Record{record(t, "a", "vm-a")}}
 
 			_, err := e.withKey(tt.key).Sync(context.Background(), src.ID())
 

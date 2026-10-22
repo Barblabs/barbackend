@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"barbackend/internal/cmdb"
 	"barbackend/internal/cmdb/itop"
 )
 
@@ -62,6 +63,28 @@ func TestParseSettings(t *testing.T) {
 
 // A Snapshot authenticates with the credentials it was parsed with. The fake
 // iTop refuses anything else, as iTop does with HTTP 200 and a non-zero code.
+func TestDescribe(t *testing.T) {
+	tests := []struct {
+		name     string
+		settings string
+		want     cmdb.Description
+		wantErr  error
+	}{
+		{"basic", basicSettings, cmdb.Description{URL: "http://localhost:8000", User: "barb-reader"}, nil},
+		{"token", tokenSettings, cmdb.Description{URL: "http://localhost:8000"}, nil},
+		{"invalid", `{"auth": {"mode": "token"}}`, cmdb.Description{}, itop.ErrInvalidSettings},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := (itop.Provider{}).Describe(json.RawMessage(tt.settings))
+			if !errors.Is(err, tt.wantErr) || got != tt.want {
+				t.Errorf("Describe = %+v, %v, want %+v, %v", got, err, tt.want, tt.wantErr)
+			}
+		})
+	}
+}
+
 func TestSnapshotAuthenticatesWithCredentials(t *testing.T) {
 	tests := []struct {
 		name        string

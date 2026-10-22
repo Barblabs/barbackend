@@ -56,3 +56,22 @@ func TestCMDBSourceNotFound(t *testing.T) {
 		t.Errorf("err = %v, want ErrNotFound", err)
 	}
 }
+
+func TestSecondConnectedCMDBSourceIsRefused(t *testing.T) {
+	t.Parallel()
+	db := pgtest.NewDB(t)
+	customer := newCustomer()
+	newSource(t, db, customer)
+	second, err := inventory.NewCMDBSource(inventory.CMDBSourceID(uuid.New()), customer, "itop")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = db.InTx(context.Background(), func(tx *postgres.Tx) error {
+		return tx.CreateCMDBSource(context.Background(), second, []byte(`{}`), []byte{})
+	})
+
+	if !errors.Is(err, postgres.ErrAlreadyConnected) {
+		t.Errorf("err = %v, want ErrAlreadyConnected", err)
+	}
+}

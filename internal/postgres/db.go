@@ -23,10 +23,15 @@ var (
 	ErrNotFound       = errors.New("not found")
 	ErrSuperseded     = errors.New("superseded by a later successful sync")
 	ErrSyncInProgress = errors.New("another sync of the cmdb source is running")
+	// ErrAlreadyConnected is a Customer that already has a Connected CMDB Source.
+	ErrAlreadyConnected = errors.New("customer already has a connected cmdb source")
 )
 
-// lockNotAvailable is the SQLSTATE of a NOWAIT lock that is already held.
-const lockNotAvailable = "55P03"
+const (
+	// lockNotAvailable is the SQLSTATE of a NOWAIT lock that is already held.
+	lockNotAvailable = "55P03"
+	uniqueViolation  = "23505"
+)
 
 //go:embed migrations/*.sql
 var migrations embed.FS
