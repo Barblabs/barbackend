@@ -37,8 +37,8 @@ type authDocument struct {
 }
 
 type credentialsDocument struct {
-	Password string `json:"password"`
-	Token    string `json:"token"`
+	Password string `json:"password,omitempty"`
+	Token    string `json:"token,omitempty"`
 }
 
 type settings struct {

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -96,4 +97,15 @@ func (e env) getCMDBSource(t *testing.T) (cmdbSource, string) {
 		t.Fatal(err)
 	}
 	return got, rec.Body.String()
+}
+
+// validLogin is a request body for the fake CMDB Provider; each call returns a
+// fresh map, so tests can edit it.
+func validLogin() map[string]string {
+	return map[string]string{"provider": string(cmdbtest.Name), "url": "http://cmdb", "user": "admin", "password": cmdbtest.Secret}
+}
+
+func (e env) testCredentials(login map[string]string) *httptest.ResponseRecorder {
+	body, _ := json.Marshal(login)
+	return e.do(httptest.NewRequest(http.MethodPost, "/cmdb/source/test", strings.NewReader(string(body))))
 }

@@ -47,6 +47,44 @@ func (h cmdbSourceHandler) get(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, newCMDBSourceResponse(src))
 }
 
+// loginRequest is the same for every CMDB Provider, so adding one does not
+// change the API.
+type loginRequest struct {
+	Provider string `json:"provider" binding:"required"`
+	URL      string `json:"url" binding:"required"`
+	User     string `json:"user" binding:"required"`
+	Password string `json:"password" binding:"required"`
+}
+
+// testResponse carries a failed check with 200, because a CMDB rejecting a
+// login is a normal result the dashboard shows inline. Code is stable for
+// translation; Error is shown for codes the dashboard does not know.
+type testResponse struct {
+	OK    bool   `json:"ok"`
+	Code  string `json:"code,omitempty"`
+	Error string `json:"error,omitempty"`
+}
+
+func (h cmdbSourceHandler) test(ctx *gin.Context) {
+	var req loginRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		badRequest(ctx, err)
+		return
+	}
+	err := h.sources.TestLogin(ctx.Request.Context(), inventory.CMDBProvider(req.Provider), sources.Login{URL: req.URL, User: req.User, Password: req.Password})
+	var failure *sources.Failure
+	switch {
+	case err == nil:
+		ctx.JSON(http.StatusOK, testResponse{OK: true})
+	case errors.As(err, &failure):
+		ctx.JSON(http.StatusOK, testResponse{Code: string(failure.Code), Error: failure.Message})
+	case errors.Is(err, sources.ErrInvalidLogin):
+		badRequest(ctx, err)
+	default:
+		internalError(ctx, err)
+	}
+}
+
 func newCMDBSourceResponse(src sources.ConnectedSource) cmdbSourceResponse {
 	resp := cmdbSourceResponse{Provider: string(src.Provider), URL: src.URL}
 	if src.User != "" {

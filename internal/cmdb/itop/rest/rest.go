@@ -18,8 +18,22 @@ import (
 )
 
 // ErrAPI is an error reported by iTop itself, such as an invalid login or
-// query. iTop reports them with HTTP 200 and a non-zero code.
+// query. iTop reports them with HTTP 200 and a non-zero code. Every ErrAPI
+// is an *APIError.
 var ErrAPI = errors.New("itop api error")
+
+// ErrUnexpectedResponse is a reply that is not iTop REST JSON, such as an
+// error page or a server that is not iTop.
+var ErrUnexpectedResponse = errors.New("unexpected itop response")
+
+type APIError struct {
+	Code    int
+	Message string
+}
+
+func (e *APIError) Error() string { return fmt.Sprintf("%v %d: %s", ErrAPI, e.Code, e.Message) }
+
+func (e *APIError) Is(target error) bool { return target == ErrAPI }
 
 // apiVersion 1.4 is the first with limit and page on core/get (iTop 2.7).
 const apiVersion = "1.4"
@@ -66,6 +80,22 @@ func New(baseURL *url.URL, auth Auth, opts Options) *Client {
 		http:     &http.Client{Timeout: opts.Timeout},
 		pageSize: opts.PageSize,
 	}
+}
+
+// Check makes the cheapest authenticated call iTop has, list_operations, so
+// a rejected login or a server that is not iTop fails without reading data.
+func (c *Client) Check(ctx context.Context) error {
+	resp, err := c.post(ctx, []byte(`{"operation":"list_operations"}`))
+	if err != nil {
+		return err
+	}
+	if resp.Code != 0 {
+		return &APIError{Code: resp.Code, Message: resp.Message}
+	}
+	if resp.Operations == nil {
+		return fmt.Errorf("%w: list_operations returned no operations", ErrUnexpectedResponse)
+	}
+	return nil
 }
 
 // Query selects objects of Class, optionally narrowed by an OQL condition.
@@ -131,6 +161,8 @@ type response struct {
 	Code    int                       `json:"code"`
 	Message string                    `json:"message"`
 	Objects map[string]responseObject `json:"objects"`
+	// Operations is only answered to list_operations.
+	Operations json.RawMessage `json:"operations"`
 }
 
 type responseObject struct {
@@ -164,13 +196,13 @@ func (c *Client) call(ctx context.Context, q Query, idRange string, fields []str
 		return nil, fmt.Errorf("%s: %w", oql, err)
 	}
 	if resp.Code != 0 {
-		return nil, fmt.Errorf("%s: %w %d: %s", oql, ErrAPI, resp.Code, resp.Message)
+		return nil, fmt.Errorf("%s: %w", oql, &APIError{Code: resp.Code, Message: resp.Message})
 	}
 	objects := make([]Object, 0, len(resp.Objects))
 	ids := make(map[string]int64, len(resp.Objects))
 	for _, o := range resp.Objects {
 		if o.Code != 0 {
-			return nil, fmt.Errorf("%s: object %s::%s: %w %d: %s", oql, o.Class, o.Key, ErrAPI, o.Code, o.Message)
+			return nil, fmt.Errorf("%s: object %s::%s: %w", oql, o.Class, o.Key, &APIError{Code: o.Code, Message: o.Message})
 		}
 		id, err := strconv.ParseInt(o.Key, 10, 64)
 		if err != nil {
@@ -207,12 +239,12 @@ func (c *Client) post(ctx context.Context, payload []byte) (response, error) {
 		return response{}, err
 	}
 	if res.StatusCode != http.StatusOK {
-		return response{}, fmt.Errorf("http %d: %.200s", res.StatusCode, body)
+		return response{}, fmt.Errorf("%w: http %d: %.200s", ErrUnexpectedResponse, res.StatusCode, body)
 	}
 	var r response
 	if err := json.Unmarshal(body, &r); err != nil {
 		// iTop answers fatal PHP errors with an HTML page and HTTP 200.
-		return response{}, fmt.Errorf("decode response: %w: %.200s", err, body)
+		return response{}, fmt.Errorf("%w: decode: %w: %.200s", ErrUnexpectedResponse, err, body)
 	}
 	return r, nil
 }

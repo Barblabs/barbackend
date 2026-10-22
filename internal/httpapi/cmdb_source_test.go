@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"barbackend/internal/cmdb"
 	"barbackend/internal/inventory"
 )
 
@@ -85,5 +86,88 @@ func TestGetCMDBSourceWithOnlyFailedSyncs(t *testing.T) {
 
 	if got, body := e.getCMDBSource(t); got.LastSync != nil || got.LastSyncFailure == nil {
 		t.Errorf("body = %s, want no lastSync and a failure", body)
+	}
+}
+
+func TestTestCMDBSourceCredentials(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		checkErr error
+		want     string
+	}{
+		{
+			name: "accepted",
+			want: `{"ok":true}`,
+		},
+		{
+			name:     "rejected",
+			checkErr: &cmdb.Failure{Code: cmdb.InvalidCredentials, Message: "the cmdb rejected the user or password"},
+			want:     `{"ok":false,"code":"invalid_credentials","error":"the cmdb rejected the user or password"}`,
+		},
+		{
+			name:     "provider-specific code",
+			checkErr: &cmdb.Failure{Code: "missing_rest_profile", Message: "the user lacks a profile"},
+			want:     `{"ok":false,"code":"missing_rest_profile","error":"the user lacks a profile"}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			e := newEnv(t)
+			e.provider.CheckErr = tt.checkErr
+
+			rec := e.testCredentials(validLogin())
+
+			if rec.Code != http.StatusOK || rec.Body.String() != tt.want {
+				t.Errorf("response = %d %s, want 200 %s", rec.Code, rec.Body, tt.want)
+			}
+			if e.provider.Secret != validLogin()["password"] {
+				t.Errorf("the provider checked secret %q, want the password sent", e.provider.Secret)
+			}
+			if _, body := e.getCMDBSource(t); body != "null" {
+				t.Errorf("after a test: GET /cmdb/source = %s, want null since nothing is stored", body)
+			}
+		})
+	}
+}
+
+func TestTestCMDBSourceCredentialsRejectsInvalidRequests(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		edit func(map[string]string)
+	}{
+		{"missing provider", func(l map[string]string) { delete(l, "provider") }},
+		{"unknown provider", func(l map[string]string) { l["provider"] = "servicenow" }},
+		{"missing url", func(l map[string]string) { delete(l, "url") }},
+		{"malformed url", func(l map[string]string) { l["url"] = "cmdb.example.com" }},
+		{"missing user", func(l map[string]string) { delete(l, "user") }},
+		{"missing password", func(l map[string]string) { delete(l, "password") }},
+	}
+	e := newEnv(t)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			login := validLogin()
+			tt.edit(login)
+
+			rec := e.testCredentials(login)
+
+			if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), `"error":`) {
+				t.Errorf("response = %d %s, want 400 with an error", rec.Code, rec.Body)
+			}
+		})
+	}
+}
+
+func TestTestCMDBSourceCredentialsRejectsMalformedJSON(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+
+	rec := e.do(httptest.NewRequest(http.MethodPost, "/cmdb/source/test", strings.NewReader(`{"provider":`)))
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("response = %d %s, want 400", rec.Code, rec.Body)
 	}
 }

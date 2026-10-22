@@ -1,5 +1,5 @@
-// Package sources holds the use cases on CMDB Sources: adding one, showing
-// the Connected CMDB Source and syncing its Assets.
+// Package sources holds the use cases on CMDB Sources: testing a login,
+// adding one, showing the Connected CMDB Source and syncing its Assets.
 package sources
 
 import (
@@ -22,6 +22,17 @@ var ErrNoCredentials = errors.New("cmdb source has no stored credentials, add it
 
 // ErrNotConnected is a Customer with no Connected CMDB Source.
 var ErrNotConnected = errors.New("customer has no connected cmdb source")
+
+// ErrInvalidLogin is a login its CMDB Provider rejects without reaching the
+// CMDB, such as a malformed URL, or one for an unknown provider.
+var ErrInvalidLogin = errors.New("invalid cmdb source login")
+
+// Login and Failure are the seam's, named here so that transports, which only
+// import use cases (ADR 0008), can use them.
+type (
+	Login   = cmdb.Login
+	Failure = cmdb.Failure
+)
 
 // ConnectedSource is a Connected CMDB Source as a person sees it. It holds
 // no secret.
@@ -74,6 +85,24 @@ func (s *Service) Add(ctx context.Context, customer inventory.CustomerID, provid
 		return inventory.CMDBSource{}, err
 	}
 	return src, nil
+}
+
+// TestLogin checks a login against its CMDB and stores nothing. A CMDB that
+// cannot be reached or rejects the login is a *Failure.
+func (s *Service) TestLogin(ctx context.Context, provider inventory.CMDBProvider, login Login) error {
+	p, err := s.providers.Lookup(provider)
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrInvalidLogin, err)
+	}
+	settings, credentials, err := p.FromLogin(login)
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrInvalidLogin, err)
+	}
+	parsed, err := p.ParseSettings(settings, credentials)
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrInvalidLogin, err)
+	}
+	return parsed.CheckCredentials(ctx)
 }
 
 // ConnectedSource fails with ErrNotConnected when the Customer has no

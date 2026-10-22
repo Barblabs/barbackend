@@ -27,7 +27,12 @@ func New(cfg Config) http.Handler {
 	})
 	h := cmdbSourceHandler{sources: cfg.Sources, customer: cfg.Customer}
 	router.GET("/cmdb/source", h.get)
+	router.POST("/cmdb/source/test", h.test)
 	return router
+}
+
+func badRequest(ctx *gin.Context, err error) {
+	ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 }
 
 // internalError hides the cause from the client; gin's logger prints it.
