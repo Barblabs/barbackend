@@ -16,6 +16,10 @@ import (
 	"github.com/google/uuid"
 )
 
+// ErrNoCredentials is a CMDB Source added before credentials were stored
+// (ADR 0012): its secrets were never in the database, so it must be added again.
+var ErrNoCredentials = errors.New("cmdb source has no stored credentials, add it again")
+
 // Service adds CMDB Sources and syncs their Assets. It seals their
 // credentials with key, so adapters only ever see them decrypted (ADR 0012).
 type Service struct {
@@ -36,13 +40,13 @@ func (s *Service) Add(ctx context.Context, customer inventory.CustomerID, provid
 		return inventory.CMDBSource{}, err
 	}
 	if _, err := p.ParseSettings(settings, credentials); err != nil {
-		return inventory.CMDBSource{}, fmt.Errorf("settings for %s: %w", provider, err)
+		return inventory.CMDBSource{}, fmt.Errorf("parse %s source: %w", provider, err)
 	}
 	src, err := inventory.NewCMDBSource(inventory.CMDBSourceID(uuid.New()), customer, provider)
 	if err != nil {
 		return inventory.CMDBSource{}, err
 	}
-	sealed, err := s.key.Seal(credentials, sealedFor(src.ID()))
+	sealed, err := s.key.Seal(credentials, owner(src.ID()))
 	if err != nil {
 		return inventory.CMDBSource{}, fmt.Errorf("seal credentials: %w", err)
 	}
@@ -52,9 +56,9 @@ func (s *Service) Add(ctx context.Context, customer inventory.CustomerID, provid
 	return src, nil
 }
 
-// sealedFor binds credentials to their CMDB Source, so sealed credentials
-// copied to another source fail to open.
-func sealedFor(id inventory.CMDBSourceID) []byte {
+// owner binds credentials to their CMDB Source, so sealed credentials copied
+// to another source fail to open.
+func owner(id inventory.CMDBSourceID) []byte {
 	return []byte(id.String())
 }
 
@@ -88,13 +92,16 @@ func (s *Service) sync(ctx context.Context, stored postgres.StoredCMDBSource, st
 	if err != nil {
 		return inventory.SyncRun{}, err
 	}
-	credentials, err := s.key.Open(stored.Credentials, sealedFor(src.ID()))
+	if len(stored.Credentials) == 0 {
+		return inventory.SyncRun{}, fmt.Errorf("%w: %s", ErrNoCredentials, src.ID())
+	}
+	credentials, err := s.key.Open(stored.Credentials, owner(src.ID()))
 	if err != nil {
 		return inventory.SyncRun{}, fmt.Errorf("credentials of %s: %w", src.ID(), err)
 	}
 	parsed, err := p.ParseSettings(stored.Settings, credentials)
 	if err != nil {
-		return inventory.SyncRun{}, fmt.Errorf("settings of %s: %w", src.ID(), err)
+		return inventory.SyncRun{}, fmt.Errorf("parse %s: %w", src.ID(), err)
 	}
 	snapshot, err := parsed.Snapshot(ctx)
 	if err != nil {

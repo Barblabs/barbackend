@@ -15,27 +15,34 @@ import (
 
 // app is everything a command may depend on, wired in one place.
 type app struct {
-	db      *postgres.DB
 	sources *sources.Service
 }
 
 // withApp opens the database only once the command has parsed its
 // arguments, so a usage error never waits on or reports a database error.
 func withApp(ctx context.Context, run func(app) error) error {
-	url := os.Getenv("DATABASE_URL")
-	if url == "" {
-		return errors.New("DATABASE_URL is not set")
-	}
 	key, err := encryptionKey()
 	if err != nil {
 		return err
+	}
+	return withDB(ctx, func(db *postgres.DB) error {
+		return run(app{sources: sources.New(db, providers(), key)})
+	})
+}
+
+// withDB is for commands that never touch credentials, so a bad
+// CREDENTIALS_KEY cannot block them.
+func withDB(ctx context.Context, run func(*postgres.DB) error) error {
+	url := os.Getenv("DATABASE_URL")
+	if url == "" {
+		return errors.New("DATABASE_URL is not set")
 	}
 	db, err := postgres.Open(ctx, url)
 	if err != nil {
 		return err
 	}
 	defer db.Close()
-	return run(app{db: db, sources: sources.New(db, providers(), key)})
+	return run(db)
 }
 
 // encryptionKey allows an unset key, so that a Sync without one is recorded

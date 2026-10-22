@@ -1,5 +1,6 @@
 // Package encryption seals CMDB Source credentials with AES-256-GCM (ADR
-// 0012). It is the only package that sees the key or a ciphertext.
+// 0012). It is the only package that encrypts or decrypts: callers pass the
+// key and sealed bytes through without reading them.
 package encryption
 
 import (
@@ -63,10 +64,10 @@ func keyID(raw []byte) []byte {
 	return sum[:keyIDSize]
 }
 
-// Seal encrypts plaintext into key id | nonce | ciphertext. The key id is
-// authenticated with the associated data, which binds the ciphertext to its
-// owner (such as a CMDB Source id), so it cannot be moved to another row.
-func (k Key) Seal(plaintext, associated []byte) ([]byte, error) {
+// Seal encrypts plaintext into key id | nonce | ciphertext. The key id and
+// owner (such as a CMDB Source id) are authenticated with it, so the
+// ciphertext cannot be moved to another owner.
+func (k Key) Seal(plaintext, owner []byte) ([]byte, error) {
 	if k.aead == nil {
 		return nil, ErrNoKey
 	}
@@ -75,11 +76,11 @@ func (k Key) Seal(plaintext, associated []byte) ([]byte, error) {
 		return nil, fmt.Errorf("nonce: %w", err)
 	}
 	out := append(bytes.Clone(k.id), nonce...)
-	return k.aead.Seal(out, nonce, plaintext, k.additional(associated)), nil
+	return k.aead.Seal(out, nonce, plaintext, k.authenticatedData(owner)), nil
 }
 
-// Open decrypts what Seal returned for the same associated data.
-func (k Key) Open(sealed, associated []byte) ([]byte, error) {
+// Open decrypts what Seal returned for the same owner.
+func (k Key) Open(sealed, owner []byte) ([]byte, error) {
 	if k.aead == nil {
 		return nil, ErrNoKey
 	}
@@ -90,13 +91,15 @@ func (k Key) Open(sealed, associated []byte) ([]byte, error) {
 	if id := sealed[:keyIDSize]; !bytes.Equal(id, k.id) {
 		return nil, fmt.Errorf("%w: key id %s, the encryption key is %s", ErrWrongKey, hex.EncodeToString(id), hex.EncodeToString(k.id))
 	}
-	plaintext, err := k.aead.Open(nil, sealed[keyIDSize:header], sealed[header:], k.additional(associated))
+	plaintext, err := k.aead.Open(nil, sealed[keyIDSize:header], sealed[header:], k.authenticatedData(owner))
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrCorrupt, err)
 	}
 	return plaintext, nil
 }
 
-func (k Key) additional(associated []byte) []byte {
-	return append(bytes.Clone(k.id), associated...)
+// authenticatedData starts with the fixed-size key id, so no key id and owner
+// pair can collide with another.
+func (k Key) authenticatedData(owner []byte) []byte {
+	return append(bytes.Clone(k.id), owner...)
 }

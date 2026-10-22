@@ -62,7 +62,7 @@ func parseSettings(rawSettings, rawCredentials json.RawMessage) (settings, error
 	if err := decodeStrict(rawCredentials, &creds); err != nil {
 		return settings{}, fmt.Errorf("%w: %v", ErrInvalidCredentials, err)
 	}
-	auth, err := doc.Auth.with(creds)
+	auth, err := doc.Auth.restAuth(creds)
 	if err != nil {
 		return settings{}, err
 	}
@@ -119,9 +119,9 @@ func (a authDocument) validate() error {
 	return nil
 }
 
-// with checks that the credentials hold exactly the secret the mode needs.
-// A secret is only empty or not: spaces may be part of a password.
-func (a authDocument) with(c credentialsDocument) (rest.Auth, error) {
+// restAuth checks that the credentials hold exactly the secret the mode
+// needs. A secret is only empty or not: spaces may be part of a password.
+func (a authDocument) restAuth(c credentialsDocument) (rest.Auth, error) {
 	if a.Mode == basicAuth {
 		if c.Password == "" || c.Token != "" {
 			return rest.Auth{}, fmt.Errorf("%w: basic auth needs a password and no token", ErrInvalidCredentials)
