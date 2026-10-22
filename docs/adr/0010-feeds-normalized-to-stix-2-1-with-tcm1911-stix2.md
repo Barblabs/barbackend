@@ -128,7 +128,7 @@ When a bundle is parsed, the library returns any extension it does not know as a
 - **Timestamps**: always UTC. `created` is when barbattack first minted the object. `modified` changes only when the object's content changes, so re-ingesting identical data leaves it alone. A Feed's own dates go inside its extension, never in `created` or `modified`.
 - **One current version**: store the latest version of each object by ID, and do not keep STIX version history. Score history (ADR 0009) already records what changed when it mattered.
 - **Markings**: all of today's Feeds are public, so every minted object gets the STIX 2.1 predefined TLP:CLEAR marking (`marking-definition--94868c89-83c2-464b-929b-a1a8aa3c8487`).
-- **Bad records**: a record that cannot be normalized (no valid CVE ID, an unparsable score) is skipped and logged with its reason. It does not fail the whole read. A read that cannot complete fails as a whole and changes nothing, like a failed Sync Run.
+- **Bad records**: a record that cannot be normalized (no valid CVE ID, an unparsable score) is skipped and logged with its reason. It does not fail the whole read. Adapters emit objects one at a time as they parse them, so a Feed never has to fit in memory. A read that cannot complete stops emitting; the objects already emitted stay, and deterministic IDs make a re-pull idempotent.
 - **Untrusted text**: descriptions, required actions and report text are stored as data and are never interpolated into an agent's instructions (see Feed in `GLOSSARY.md`).
 - **Validation**: the library's constructors check required properties. Adapter tests should also round-trip each produced bundle through `stix2.FromJSON` and assert on the decoded extensions.
 
