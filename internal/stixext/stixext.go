@@ -24,6 +24,8 @@ var (
 	KEVDefinitionID = ID(stix2.TypeExtensionDefinition, "kev/1")
 	// NVDDefinitionID is the nvd/1 extension definition.
 	NVDDefinitionID = ID(stix2.TypeExtensionDefinition, "nvd/1")
+	// EPSSDefinitionID is the epss/1 extension definition.
+	EPSSDefinitionID = ID(stix2.TypeExtensionDefinition, "epss/1")
 )
 
 // CVEID returns id trimmed and upper-cased, and whether it is a CVE ID.

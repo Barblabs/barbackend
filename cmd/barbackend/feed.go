@@ -11,6 +11,7 @@ import (
 
 	"barbackend/internal/feeds/attack"
 	"barbackend/internal/feeds/aws"
+	"barbackend/internal/feeds/epss"
 	"barbackend/internal/feeds/kev"
 	"barbackend/internal/feeds/nvd"
 	"barbackend/internal/ingest"
@@ -23,6 +24,7 @@ const (
 	nvdInterval    = 2 * time.Hour
 	attackInterval = 12 * time.Hour
 	awsInterval    = 6 * time.Hour
+	epssInterval   = 24 * time.Hour
 )
 
 func feed(ctx context.Context, args []string) error {
@@ -85,6 +87,11 @@ func registeredFeeds() []ingest.Feed {
 			Name:     "aws",
 			Interval: awsInterval,
 			Pull:     aws.New(nil, "").Pull,
+		},
+		{
+			Name:     "epss",
+			Interval: epssInterval,
+			Pull:     epss.New(nil, "").Pull,
 		},
 	}
 }
