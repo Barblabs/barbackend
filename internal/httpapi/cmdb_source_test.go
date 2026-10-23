@@ -437,12 +437,16 @@ func TestUpdateCMDBSource(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
 	src := e.addSource(t, e.customer)
+	synced := decode[syncResult](t, e.sync(context.Background()), http.StatusOK)
 
 	rec := e.sendLogin(http.MethodPut, "/cmdb/source", rotatedLogin())
 
 	got := decode[cmdbSource](t, rec, http.StatusOK)
 	if got.URL != "http://new-cmdb" || got.User != "new-admin" {
 		t.Errorf("body = %s, want the new url and user", rec.Body)
+	}
+	if got.LastSync == nil || !got.LastSync.Equal(synced.LastSync.Truncate(time.Microsecond)) {
+		t.Errorf("body = %s, want lastSync still %v, since the Sync history stays and the update runs no Sync", rec.Body, synced.LastSync)
 	}
 	if _, body := e.getCMDBSource(t); body != rec.Body.String() {
 		t.Errorf("GET /cmdb/source = %s, want the update response %s", body, rec.Body)

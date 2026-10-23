@@ -41,10 +41,10 @@ func (t *Tx) CreateCMDBSource(ctx context.Context, src inventory.CMDBSource, set
 	return nil
 }
 
-// ReplaceConnectedLogin replaces the settings and sealed credentials of a
+// UpdateConnectedLogin replaces the settings and sealed credentials of a
 // Connected CMDB Source, keeping its id and so its Assets. It fails with
 // ErrNotFound when the source is not connected.
-func (t *Tx) ReplaceConnectedLogin(ctx context.Context, id inventory.CMDBSourceID, settings json.RawMessage, credentials []byte) error {
+func (t *Tx) UpdateConnectedLogin(ctx context.Context, id inventory.CMDBSourceID, settings json.RawMessage, credentials []byte) error {
 	n, err := t.q.UpdateConnectedCMDBSourceLogin(ctx, sqlcgen.UpdateConnectedCMDBSourceLoginParams{
 		ID:          uuid.UUID(id),
 		Settings:    settings,

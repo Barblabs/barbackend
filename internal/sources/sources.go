@@ -148,12 +148,9 @@ func (s *Service) UpdateLogin(ctx context.Context, customer inventory.CustomerID
 	var stored postgres.StoredCMDBSource
 	err := s.db.InTx(ctx, func(tx *postgres.Tx) error {
 		var err error
-		stored, err = tx.ConnectedCMDBSource(ctx, customer)
+		stored, err = connected(ctx, tx, customer)
 		return err
 	})
-	if errors.Is(err, postgres.ErrNotFound) {
-		return ConnectedSource{}, fmt.Errorf("%w: %s", ErrNotConnected, customer)
-	}
 	if err != nil {
 		return ConnectedSource{}, err
 	}
@@ -169,7 +166,7 @@ func (s *Service) UpdateLogin(ctx context.Context, customer inventory.CustomerID
 	if err != nil {
 		return ConnectedSource{}, fmt.Errorf("seal credentials: %w", err)
 	}
-	err = s.db.InTx(ctx, func(tx *postgres.Tx) error { return tx.ReplaceConnectedLogin(ctx, id, settings, sealed) })
+	err = s.db.InTx(ctx, func(tx *postgres.Tx) error { return tx.UpdateConnectedLogin(ctx, id, settings, sealed) })
 	if errors.Is(err, postgres.ErrNotFound) {
 		return ConnectedSource{}, fmt.Errorf("%w: %s", ErrNotConnected, customer)
 	}
@@ -209,15 +206,12 @@ func (s *Service) ConnectedSource(ctx context.Context, customer inventory.Custom
 	)
 	err := s.db.InTx(ctx, func(tx *postgres.Tx) error {
 		var err error
-		if stored, err = tx.ConnectedCMDBSource(ctx, customer); err != nil {
+		if stored, err = connected(ctx, tx, customer); err != nil {
 			return err
 		}
 		runs, err = tx.LatestSyncRuns(ctx, stored.Source.ID())
 		return err
 	})
-	if errors.Is(err, postgres.ErrNotFound) {
-		return ConnectedSource{}, fmt.Errorf("%w: %s", ErrNotConnected, customer)
-	}
 	if err != nil {
 		return ConnectedSource{}, err
 	}
@@ -258,12 +252,18 @@ func (s *Service) Sync(ctx context.Context, id inventory.CMDBSourceID) (inventor
 // fails with ErrNotConnected when the Customer has none.
 func (s *Service) SyncConnected(ctx context.Context, customer inventory.CustomerID) (inventory.SyncRun, error) {
 	return s.syncSource(ctx, func(tx *postgres.Tx) (postgres.StoredCMDBSource, error) {
-		stored, err := tx.ConnectedCMDBSource(ctx, customer)
-		if errors.Is(err, postgres.ErrNotFound) {
-			return stored, fmt.Errorf("%w: %s", ErrNotConnected, customer)
-		}
-		return stored, err
+		return connected(ctx, tx, customer)
 	})
+}
+
+// connected reads the Customer's Connected CMDB Source, failing with
+// ErrNotConnected when there is none.
+func connected(ctx context.Context, tx *postgres.Tx, customer inventory.CustomerID) (postgres.StoredCMDBSource, error) {
+	stored, err := tx.ConnectedCMDBSource(ctx, customer)
+	if errors.Is(err, postgres.ErrNotFound) {
+		return stored, fmt.Errorf("%w: %s", ErrNotConnected, customer)
+	}
+	return stored, err
 }
 
 func (s *Service) syncSource(ctx context.Context, read func(*postgres.Tx) (postgres.StoredCMDBSource, error)) (inventory.SyncRun, error) {
