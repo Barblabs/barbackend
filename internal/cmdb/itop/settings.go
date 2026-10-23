@@ -7,15 +7,14 @@ import (
 	"fmt"
 	"io"
 	"net/url"
-	"os"
 	"strings"
 
 	"barbackend/internal/cmdb/itop/rest"
 )
 
 var (
-	ErrInvalidSettings = errors.New("invalid itop settings")
-	ErrMissingSecret   = errors.New("itop secret is not set")
+	ErrInvalidSettings    = errors.New("invalid itop settings")
+	ErrInvalidCredentials = errors.New("invalid itop credentials")
 )
 
 type authMode string
@@ -25,45 +24,71 @@ const (
 	tokenAuth authMode = "token"
 )
 
-// settingsDocument is the JSON stored on the CMDB Source. Secrets are never
-// stored: it names the environment variables that hold them.
+// settingsDocument is the plain JSON stored on the CMDB Source. It holds no
+// secret: those arrive decrypted as a credentialsDocument (ADR 0012).
 type settingsDocument struct {
 	URL  string       `json:"url"`
 	Auth authDocument `json:"auth"`
 }
 
 type authDocument struct {
-	Mode        authMode `json:"mode"`
-	User        string   `json:"user"`
-	PasswordEnv string   `json:"password_env"`
-	TokenEnv    string   `json:"token_env"`
+	Mode authMode `json:"mode"`
+	User string   `json:"user"`
+}
+
+type credentialsDocument struct {
+	Password string `json:"password,omitempty"`
+	Token    string `json:"token,omitempty"`
 }
 
 type settings struct {
 	baseURL *url.URL
-	auth    authDocument
+	auth    rest.Auth
 }
 
-// parseSettings rejects unknown fields so that a typo in an optional-looking
-// field fails when the source is added, not as a puzzling auth error later.
-func parseSettings(raw json.RawMessage) (settings, error) {
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	dec.DisallowUnknownFields()
-	var doc settingsDocument
-	if err := dec.Decode(&doc); err != nil {
-		return settings{}, fmt.Errorf("%w: %v", ErrInvalidSettings, err)
-	}
-	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
-		return settings{}, fmt.Errorf("%w: data after the settings object", ErrInvalidSettings)
-	}
-	base, err := parseBaseURL(doc.URL)
+func parseSettings(rawSettings, rawCredentials json.RawMessage) (settings, error) {
+	doc, base, err := parseSettingsDocument(rawSettings)
 	if err != nil {
 		return settings{}, err
 	}
-	if err := doc.Auth.validate(); err != nil {
+	var creds credentialsDocument
+	if err := decodeStrict(rawCredentials, &creds); err != nil {
+		return settings{}, fmt.Errorf("%w: %v", ErrInvalidCredentials, err)
+	}
+	auth, err := doc.Auth.restAuth(creds)
+	if err != nil {
 		return settings{}, err
 	}
-	return settings{baseURL: base, auth: doc.Auth}, nil
+	return settings{baseURL: base, auth: auth}, nil
+}
+
+func parseSettingsDocument(raw json.RawMessage) (settingsDocument, *url.URL, error) {
+	var doc settingsDocument
+	if err := decodeStrict(raw, &doc); err != nil {
+		return settingsDocument{}, nil, fmt.Errorf("%w: %v", ErrInvalidSettings, err)
+	}
+	base, err := parseBaseURL(doc.URL)
+	if err != nil {
+		return settingsDocument{}, nil, err
+	}
+	if err := doc.Auth.validate(); err != nil {
+		return settingsDocument{}, nil, err
+	}
+	return doc, base, nil
+}
+
+// decodeStrict rejects unknown fields so that a typo in an optional-looking
+// field fails when the source is added, not as a puzzling auth error later.
+func decodeStrict(raw json.RawMessage, v any) error {
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(v); err != nil {
+		return err
+	}
+	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
+		return errors.New("data after the object")
+	}
+	return nil
 }
 
 // parseBaseURL accepts a path because iTop is often served under one
@@ -78,7 +103,7 @@ func parseBaseURL(s string) (*url.URL, error) {
 		return nil, fmt.Errorf("%w: url %q is not an absolute http or https URL", ErrInvalidSettings, s)
 	}
 	if u.User != nil {
-		return nil, fmt.Errorf("%w: url has credentials, name them in auth instead", ErrInvalidSettings)
+		return nil, fmt.Errorf("%w: url has credentials, pass them as credentials instead", ErrInvalidSettings)
 	}
 	if u.RawQuery != "" || u.Fragment != "" {
 		return nil, fmt.Errorf("%w: url %q has a query or fragment", ErrInvalidSettings, s)
@@ -89,18 +114,12 @@ func parseBaseURL(s string) (*url.URL, error) {
 func (a authDocument) validate() error {
 	switch a.Mode {
 	case basicAuth:
-		if blank(a.User) || blank(a.PasswordEnv) {
-			return fmt.Errorf("%w: basic auth needs user and password_env", ErrInvalidSettings)
-		}
-		if a.TokenEnv != "" {
-			return fmt.Errorf("%w: basic auth does not take token_env", ErrInvalidSettings)
+		if blank(a.User) {
+			return fmt.Errorf("%w: basic auth needs user", ErrInvalidSettings)
 		}
 	case tokenAuth:
-		if blank(a.TokenEnv) {
-			return fmt.Errorf("%w: token auth needs token_env", ErrInvalidSettings)
-		}
-		if a.User != "" || a.PasswordEnv != "" {
-			return fmt.Errorf("%w: token auth does not take user or password_env", ErrInvalidSettings)
+		if a.User != "" {
+			return fmt.Errorf("%w: token auth does not take user", ErrInvalidSettings)
 		}
 	default:
 		return fmt.Errorf("%w: auth mode %q is not basic or token", ErrInvalidSettings, a.Mode)
@@ -108,23 +127,19 @@ func (a authDocument) validate() error {
 	return nil
 }
 
-// auth reads the secrets at Sync time rather than in ParseSettings,
-// because the process adding a source is not the one that syncs it.
-func (a authDocument) auth() (rest.Auth, error) {
+// restAuth checks that the credentials hold exactly the secret the mode
+// needs. A secret is only empty or not: spaces may be part of a password.
+func (a authDocument) restAuth(c credentialsDocument) (rest.Auth, error) {
 	if a.Mode == basicAuth {
-		password, err := secret(a.PasswordEnv)
-		return rest.BasicAuth(a.User, password), err
+		if c.Password == "" || c.Token != "" {
+			return rest.Auth{}, fmt.Errorf("%w: basic auth needs a password and no token", ErrInvalidCredentials)
+		}
+		return rest.BasicAuth(a.User, c.Password), nil
 	}
-	token, err := secret(a.TokenEnv)
-	return rest.TokenAuth(token), err
-}
-
-func secret(env string) (string, error) {
-	v := os.Getenv(env)
-	if v == "" {
-		return "", fmt.Errorf("%w: %s", ErrMissingSecret, env)
+	if c.Token == "" || c.Password != "" {
+		return rest.Auth{}, fmt.Errorf("%w: token auth needs a token and no password", ErrInvalidCredentials)
 	}
-	return v, nil
+	return rest.TokenAuth(c.Token), nil
 }
 
 func blank(s string) bool { return strings.TrimSpace(s) == "" }

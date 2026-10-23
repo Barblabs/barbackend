@@ -32,6 +32,17 @@ func (q *Queries) DeactivateAssets(ctx context.Context, arg DeactivateAssetsPara
 	return result.RowsAffected(), nil
 }
 
+const deactivateSourceAssets = `-- name: DeactivateSourceAssets :exec
+UPDATE assets
+SET inactive_since = coalesce(inactive_since, now())
+WHERE cmdb_source_id = $1
+`
+
+func (q *Queries) DeactivateSourceAssets(ctx context.Context, cmdbSourceID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deactivateSourceAssets, cmdbSourceID)
+	return err
+}
+
 const deleteSoftwareComponents = `-- name: DeleteSoftwareComponents :exec
 DELETE FROM software_components
 WHERE cmdb_source_id = $1 AND record_id = ANY($2::text[])

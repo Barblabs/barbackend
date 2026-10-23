@@ -181,8 +181,9 @@ func TestGetFails(t *testing.T) {
 			})
 			c := newClient(t, h, rest.BasicAuth("reader", "secret"), rest.Options{})
 			_, err := c.Get(context.Background(), rest.Query{Class: "Server"})
-			if err == nil || errors.Is(err, rest.ErrAPI) != tt.wantAPI {
-				t.Errorf("err = %v, want a failure that is ErrAPI: %v", err, tt.wantAPI)
+			var apiErr *rest.APIError
+			if err == nil || errors.As(err, &apiErr) != tt.wantAPI {
+				t.Errorf("err = %v, want a failure that is an APIError: %v", err, tt.wantAPI)
 			}
 		})
 	}

@@ -23,10 +23,20 @@ var (
 	ErrNotFound       = errors.New("not found")
 	ErrSuperseded     = errors.New("superseded by a later successful sync")
 	ErrSyncInProgress = errors.New("another sync of the cmdb source is running")
+	// ErrDisconnected is a Sync refused because its CMDB Source was
+	// disconnected: its Assets stay as the disconnect left them.
+	ErrDisconnected = errors.New("cmdb source is disconnected")
+	// ErrAlreadyConnected is a Customer that already has a Connected CMDB Source.
+	ErrAlreadyConnected = errors.New("customer already has a connected cmdb source")
+	// ErrNotConnected is a Customer with no Connected CMDB Source.
+	ErrNotConnected = errors.New("customer has no connected cmdb source")
 )
 
-// lockNotAvailable is the SQLSTATE of a NOWAIT lock that is already held.
-const lockNotAvailable = "55P03"
+const (
+	// lockNotAvailable is the SQLSTATE of a NOWAIT lock that is already held.
+	lockNotAvailable = "55P03"
+	uniqueViolation  = "23505"
+)
 
 //go:embed migrations/*.sql
 var migrations embed.FS
@@ -84,9 +94,11 @@ func (db *DB) InTx(ctx context.Context, fn func(*Tx) error) error {
 // lock is held, so it must do no I/O; its error rolls everything back.
 //
 // While another Sync holds the lock, CommitSync fails at once with
-// ErrSyncInProgress. A Sync started before the source's latest successful one
-// holds an older snapshot, so it fails with ErrSuperseded instead of
-// overwriting newer imported values. That check reads succeeded Sync Runs,
+// ErrSyncInProgress. A Sync of a Disconnected CMDB Source fails with
+// ErrDisconnected, even when the source was disconnected after the Sync read
+// it, because the disconnect takes the same lock. A Sync started before the
+// source's latest successful one holds an older snapshot, so it fails with
+// ErrSuperseded instead of overwriting newer imported values. That check reads succeeded Sync Runs,
 // which is why only CommitSync records them, together with their changes.
 func (db *DB) CommitSync(ctx context.Context, id inventory.CMDBSourceID, started time.Time, reconcile func(existing []*inventory.Asset) (inventory.Reconciliation, error)) (inventory.SyncRun, error) {
 	var run inventory.SyncRun
@@ -107,7 +119,8 @@ func (db *DB) CommitSync(ctx context.Context, id inventory.CMDBSourceID, started
 		if err := st.save(ctx, r); err != nil {
 			return err
 		}
-		run, err = inventory.SucceededRun(r, started, time.Now())
+		// Postgres keeps microseconds; the returned run must match the stored one.
+		run, err = inventory.SucceededRun(r, started, time.Now().Truncate(time.Microsecond))
 		if err != nil {
 			return err
 		}
@@ -120,16 +133,12 @@ func (db *DB) CommitSync(ctx context.Context, id inventory.CMDBSourceID, started
 }
 
 func lockSource(ctx context.Context, q *sqlcgen.Queries, id inventory.CMDBSourceID, started time.Time) error {
-	_, err := q.LockCMDBSource(ctx, uuid.UUID(id))
-	if errors.Is(err, pgx.ErrNoRows) {
-		return fmt.Errorf("cmdb source %s: %w", id, ErrNotFound)
-	}
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && pgErr.Code == lockNotAvailable {
-		return fmt.Errorf("cmdb source %s: %w", id, ErrSyncInProgress)
-	}
+	connected, err := q.LockCMDBSource(ctx, uuid.UUID(id))
 	if err != nil {
-		return fmt.Errorf("lock cmdb source %s: %w", id, err)
+		return lockError(fmt.Sprintf("cmdb source %s", id), ErrNotFound, err)
+	}
+	if !connected {
+		return fmt.Errorf("cmdb source %s: %w", id, ErrDisconnected)
 	}
 	superseded, err := q.SucceededRunStartedAfter(ctx, sqlcgen.SucceededRunStartedAfterParams{
 		CmdbSourceID: uuid.UUID(id),
@@ -143,6 +152,19 @@ func lockSource(ctx context.Context, q *sqlcgen.Queries, id inventory.CMDBSource
 		return fmt.Errorf("sync of %s started at %v: %w", id, started, ErrSuperseded)
 	}
 	return nil
+}
+
+// lockError maps a failed NOWAIT lock of the CMDB Source named source,
+// reporting a missing one as missing.
+func lockError(source string, missing, err error) error {
+	if errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("%s: %w", source, missing)
+	}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == lockNotAvailable {
+		return fmt.Errorf("%s: %w", source, ErrSyncInProgress)
+	}
+	return fmt.Errorf("lock %s: %w", source, err)
 }
 
 type Tx struct {

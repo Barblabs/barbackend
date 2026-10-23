@@ -13,3 +13,17 @@ SELECT EXISTS (
     FROM sync_runs
     WHERE cmdb_source_id = @cmdb_source_id AND outcome_id = @outcome_id AND started_at > @started_at
 );
+
+-- name: LatestSyncRun :one
+SELECT finished_at, outcome_id, failure
+FROM sync_runs
+WHERE cmdb_source_id = @cmdb_source_id
+ORDER BY started_at DESC
+LIMIT 1;
+
+-- name: LatestSyncRunFinishedWithOutcome :one
+SELECT finished_at
+FROM sync_runs
+WHERE cmdb_source_id = @cmdb_source_id AND outcome_id = @outcome_id
+ORDER BY started_at DESC
+LIMIT 1;
