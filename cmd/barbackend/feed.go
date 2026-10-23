@@ -9,6 +9,8 @@ import (
 	"os"
 	"time"
 
+	"barbackend/internal/feeds/attack"
+	"barbackend/internal/feeds/aws"
 	"barbackend/internal/feeds/kev"
 	"barbackend/internal/feeds/nvd"
 	"barbackend/internal/ingest"
@@ -17,8 +19,10 @@ import (
 const feedSynopsis = "pull [--feed <name>]"
 
 const (
-	kevInterval = time.Hour
-	nvdInterval = 2 * time.Hour
+	kevInterval    = time.Hour
+	nvdInterval    = 2 * time.Hour
+	attackInterval = 12 * time.Hour
+	awsInterval    = 6 * time.Hour
 )
 
 func feed(ctx context.Context, args []string) error {
@@ -71,6 +75,16 @@ func registeredFeeds() []ingest.Feed {
 			Name:     "nvd",
 			Interval: nvdInterval,
 			Pull:     nvd.New(nil, "", os.Getenv("NVD_API_KEY")).Pull,
+		},
+		{
+			Name:     "attack",
+			Interval: attackInterval,
+			Pull:     attack.New(nil, "").Pull,
+		},
+		{
+			Name:     "aws",
+			Interval: awsInterval,
+			Pull:     aws.New(nil, "").Pull,
 		},
 	}
 }
