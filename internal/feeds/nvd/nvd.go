@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"barbackend/internal/feeds"
+	"barbackend/internal/feeds/httpx"
 	"barbackend/internal/stixext"
 	"github.com/TcM1911/stix2"
 )
@@ -26,26 +27,22 @@ const (
 
 // Adapter fetches and normalizes NVD CVEs.
 type Adapter struct {
-	Client *http.Client
-	URL    string
-	APIKey string
+	httpx.Endpoint
 
 	pause time.Duration
 }
 
 // New returns an Adapter, defaulting the client and URL and pacing requests by the API key.
 func New(client *http.Client, url, apiKey string) *Adapter {
-	if client == nil {
-		client = http.DefaultClient
-	}
-	if strings.TrimSpace(url) == "" {
-		url = defaultURL
+	endpoint := httpx.NewEndpoint(client, url, defaultURL)
+	if apiKey != "" {
+		endpoint.SetHeader(http.Header{"apiKey": {apiKey}})
 	}
 	pause := 6 * time.Second
 	if apiKey != "" {
 		pause = 600 * time.Millisecond
 	}
-	return &Adapter{Client: client, URL: url, APIKey: apiKey, pause: pause}
+	return &Adapter{Endpoint: endpoint, pause: pause}
 }
 
 // Pull fetches every CVE modified in the last 24 hours and emits one Vulnerability per CVE.
@@ -93,21 +90,12 @@ func (a *Adapter) page(ctx context.Context, from, to time.Time, index int) (page
 	query.Set("lastModEndDate", to.Format(timeLayout))
 	query.Set("startIndex", strconv.Itoa(index))
 	query.Set("resultsPerPage", strconv.Itoa(pageSize))
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, a.URL+"?"+query.Encode(), nil)
+	endpoint := a.WithURL(a.URL() + "?" + query.Encode())
+	resp, err := endpoint.Get(ctx, "nvd")
 	if err != nil {
-		return page{}, fmt.Errorf("nvd: %w", err)
-	}
-	if a.APIKey != "" {
-		req.Header.Set("apiKey", a.APIKey)
-	}
-	resp, err := a.Client.Do(req)
-	if err != nil {
-		return page{}, fmt.Errorf("nvd: %w", err)
+		return page{}, err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return page{}, fmt.Errorf("nvd: %s: %s", a.URL, resp.Status)
-	}
 	var p page
 	if err := json.NewDecoder(resp.Body).Decode(&p); err != nil {
 		return page{}, fmt.Errorf("nvd: decode page %d: %w", index, err)
@@ -137,11 +125,13 @@ func vulnerability(c cve) (*stix2.Vulnerability, bool, error) {
 	}
 	published, err := parseTimestamp(c.Published)
 	if err != nil {
-		return nil, false, fmt.Errorf("nvd: %s: published %q: %w", id, c.Published, err)
+		log.Printf("nvd: skipping %s: published %q: %v", id, c.Published, err)
+		return nil, false, nil
 	}
 	modified, err := parseTimestamp(c.LastModified)
 	if err != nil {
-		return nil, false, fmt.Errorf("nvd: %s: last modified %q: %w", id, c.LastModified, err)
+		log.Printf("nvd: skipping %s: last modified %q: %v", id, c.LastModified, err)
+		return nil, false, nil
 	}
 	refs := make([]*stix2.ExternalReference, 0, len(c.References)+1)
 	refs = append(refs, &stix2.ExternalReference{Name: "cve", ExternalID: id})

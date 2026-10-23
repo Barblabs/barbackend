@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"barbackend/internal/feeds"
+	"barbackend/internal/feeds/httpx"
 	"barbackend/internal/stixext"
 	"github.com/TcM1911/stix2"
 )
@@ -21,19 +22,12 @@ var dateLayouts = []string{time.RFC1123Z, time.RFC1123, time.RFC822Z, time.RFC82
 
 // Adapter fetches the AWS Security Bulletins RSS feed.
 type Adapter struct {
-	Client *http.Client
-	URL    string
+	httpx.Endpoint
 }
 
 // New returns an Adapter, defaulting the client and URL when they are empty.
 func New(client *http.Client, url string) *Adapter {
-	if client == nil {
-		client = http.DefaultClient
-	}
-	if strings.TrimSpace(url) == "" {
-		url = defaultURL
-	}
-	return &Adapter{Client: client, URL: url}
+	return &Adapter{Endpoint: httpx.NewEndpoint(client, url, defaultURL)}
 }
 
 // Pull fetches the feed and emits one Report per bulletin.
@@ -58,18 +52,11 @@ func (a *Adapter) Pull(ctx context.Context, emit feeds.Emit) error {
 }
 
 func (a *Adapter) fetch(ctx context.Context) (rss, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, a.URL, nil)
+	resp, err := a.Get(ctx, "aws")
 	if err != nil {
-		return rss{}, fmt.Errorf("aws: %w", err)
-	}
-	resp, err := a.Client.Do(req)
-	if err != nil {
-		return rss{}, fmt.Errorf("aws: %w", err)
+		return rss{}, err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return rss{}, fmt.Errorf("aws: %s: %s", a.URL, resp.Status)
-	}
 	var f rss
 	if err := xml.NewDecoder(resp.Body).Decode(&f); err != nil {
 		return rss{}, fmt.Errorf("aws: decode feed: %w", err)
@@ -87,11 +74,19 @@ func report(item item) (*stix2.Report, bool, error) {
 	if err != nil {
 		return nil, false, fmt.Errorf("aws: %s: published %q: %w", guid, item.PubDate, err)
 	}
+	objects := make([]stix2.Identifier, 0)
+	for _, cve := range stixext.CVEIDs(item.Title + " " + item.Description) {
+		objects = append(objects, stixext.VulnerabilityID(cve))
+	}
+	if len(objects) == 0 {
+		log.Printf("aws: skipping %q: no CVE id", item.Title)
+		return nil, false, nil
+	}
 	refs := []*stix2.ExternalReference{
 		{Name: "aws", URL: item.Link},
 		{Name: "guid", ExternalID: guid},
 	}
-	r, err := stix2.NewReport(item.Title, &stix2.Timestamp{Time: published}, []stix2.Identifier{stixext.BarbattackID},
+	r, err := stix2.NewReport(item.Title, &stix2.Timestamp{Time: published}, objects,
 		stix2.OptionCreatedBy(stixext.BarbattackID),
 		stix2.OptionDescription(item.Description),
 		stix2.OptionExternalReferences(refs),
@@ -101,7 +96,6 @@ func report(item item) (*stix2.Report, bool, error) {
 		return nil, false, fmt.Errorf("aws: %s: %w", guid, err)
 	}
 	r.ID = stixext.ID(stix2.TypeReport, guid)
-	r.Objects = []stix2.Identifier{}
 	return r, true, nil
 }
 

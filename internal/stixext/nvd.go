@@ -1,10 +1,6 @@
 package stixext
 
-import (
-	"encoding/json"
-
-	"github.com/TcM1911/stix2"
-)
+import "github.com/TcM1911/stix2"
 
 // NVD is the nvd/1 property extension of a Vulnerability (ADR 0010).
 type NVD struct {
@@ -45,17 +41,5 @@ func NewNVD(n NVD) NVD {
 
 // NVDOf decodes the nvd/1 extension of v.
 func NVDOf(v *stix2.Vulnerability) (NVD, bool) {
-	raw, ok := v.Extensions[string(NVDDefinitionID)]
-	if !ok {
-		return NVD{}, false
-	}
-	data, err := json.Marshal(raw)
-	if err != nil {
-		return NVD{}, false
-	}
-	var n NVD
-	if err := json.Unmarshal(data, &n); err != nil {
-		return NVD{}, false
-	}
-	return n, true
+	return decodeExtension[NVD](v, NVDDefinitionID)
 }

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"barbackend/internal/feeds"
+	"barbackend/internal/feeds/httpx"
 	"barbackend/internal/stixext"
 	"github.com/TcM1911/stix2"
 )
@@ -26,35 +27,21 @@ const (
 
 // Adapter fetches the EPSS score snapshot.
 type Adapter struct {
-	Client *http.Client
-	URL    string
+	httpx.Endpoint
 }
 
 // New returns an Adapter, defaulting the client and URL when they are empty.
 func New(client *http.Client, url string) *Adapter {
-	if client == nil {
-		client = http.DefaultClient
-	}
-	if strings.TrimSpace(url) == "" {
-		url = defaultURL
-	}
-	return &Adapter{Client: client, URL: url}
+	return &Adapter{Endpoint: httpx.NewEndpoint(client, url, defaultURL)}
 }
 
 // Pull fetches the snapshot and emits one Vulnerability per score.
 func (a *Adapter) Pull(ctx context.Context, emit feeds.Emit) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, a.URL, nil)
+	resp, err := a.Get(ctx, "epss")
 	if err != nil {
-		return fmt.Errorf("epss: %w", err)
-	}
-	resp, err := a.Client.Do(req)
-	if err != nil {
-		return fmt.Errorf("epss: %w", err)
+		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("epss: %s: %s", a.URL, resp.Status)
-	}
 	gz, err := gzip.NewReader(resp.Body)
 	if err != nil {
 		return fmt.Errorf("epss: gzip: %w", err)

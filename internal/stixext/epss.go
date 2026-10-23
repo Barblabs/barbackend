@@ -1,10 +1,6 @@
 package stixext
 
-import (
-	"encoding/json"
-
-	"github.com/TcM1911/stix2"
-)
+import "github.com/TcM1911/stix2"
 
 // EPSS is the epss/1 property extension of a Vulnerability.
 type EPSS struct {
@@ -23,17 +19,5 @@ func NewEPSS(e EPSS) EPSS {
 
 // EPSSOf decodes the epss/1 extension of v.
 func EPSSOf(v *stix2.Vulnerability) (EPSS, bool) {
-	raw, ok := v.Extensions[string(EPSSDefinitionID)]
-	if !ok {
-		return EPSS{}, false
-	}
-	data, err := json.Marshal(raw)
-	if err != nil {
-		return EPSS{}, false
-	}
-	var e EPSS
-	if err := json.Unmarshal(data, &e); err != nil {
-		return EPSS{}, false
-	}
-	return e, true
+	return decodeExtension[EPSS](v, EPSSDefinitionID)
 }

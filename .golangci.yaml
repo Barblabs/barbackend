@@ -80,10 +80,11 @@ linters:
             - "**/internal/feeds/**"
           allow:
             - barbackend/internal/feeds
+            - barbackend/internal/feeds/httpx
             - barbackend/internal/stixext
           deny:
             - pkg: barbackend/internal
-              desc: Feed adapters depend only on the seam and stixext, never on persistence or transports (ADR 0008, ADR 0010)
+              desc: Feed adapters depend only on the seam, shared HTTP setup, and stixext, never on persistence or transports (ADR 0008, ADR 0010)
         ingest:
           list-mode: lax
           files:
