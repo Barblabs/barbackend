@@ -166,7 +166,6 @@ func TestReconcileErrorsChangeNoAsset(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Missing from every snapshot above, so it would be deactivated on success.
 			bystander := assetOf(t, sourceID, "bystander")
 			_, err := inventory.Reconcile(sourceID, append(tt.existing, bystander), tt.snapshot)
 			if !errors.Is(err, tt.want) {

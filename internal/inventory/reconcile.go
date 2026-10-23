@@ -66,8 +66,6 @@ func Reconcile(source CMDBSourceID, existing []*Asset, s Snapshot) (Reconciliati
 		return Reconciliation{}, err
 	}
 
-	// Every input has been checked, so nothing below can fail halfway through
-	// changing the Assets.
 	r := Reconciliation{source: source, skipped: slices.Clone(s.Skipped)}
 	present := make(map[string]bool, len(s.Records))
 	for _, rec := range s.Records {
@@ -79,7 +77,6 @@ func Reconcile(source CMDBSourceID, existing []*Asset, s Snapshot) (Reconciliati
 		}
 		r.update(a, rec.Imported)
 	}
-	// A Skipped Record is still in the CMDB Source, so its Asset is not missing.
 	for _, a := range existing {
 		id := a.Ref().RecordID
 		if !present[id] && !skipped[id] {

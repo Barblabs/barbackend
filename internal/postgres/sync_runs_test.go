@@ -86,7 +86,6 @@ func TestSyncRunRoundTrip(t *testing.T) {
 			if err := json.Unmarshal(skipped, &records); err != nil {
 				t.Fatal(err)
 			}
-			// A JSON null instead of [] leaves records nil, so got.Skipped stays nil.
 			if records != nil {
 				got.Skipped = []inventory.SkippedRecord{}
 			}

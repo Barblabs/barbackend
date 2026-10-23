@@ -165,7 +165,6 @@ func TestFetchSeededInstance(t *testing.T) {
 		}
 	}
 
-	// Team 52 and 53 are contacts too, but only Persons are looked up.
 	wantLookups := lookups{
 		persons: map[string]person{
 			"5": {Email: "alice.milliat@customer.com"}, "8": {Email: "boris.vian@it.com"}, "18": {Email: "george.sand@it.com"},

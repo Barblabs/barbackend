@@ -56,9 +56,8 @@ const (
 	notConnected     = "not_connected"
 	alreadyConnected = "already_connected"
 	syncInProgress   = "sync_in_progress"
-	// syncFailed is a failed Sync whose CMDB Provider did not classify why.
-	syncFailed    = "sync_failed"
-	internalError = "internal_error"
+	syncFailed       = "sync_failed"
+	internalError    = "internal_error"
 )
 
 // writeError answers the errors any endpoint may return. Handlers answer
@@ -78,7 +77,6 @@ func writeError(ctx *gin.Context, err error) {
 	case errors.Is(err, sources.ErrSyncInProgress):
 		ctx.JSON(http.StatusConflict, codedError{Code: syncInProgress, Error: err.Error()})
 	default:
-		// The cause stays out of the reply; gin's logger prints it.
 		_ = ctx.Error(err)
 		ctx.JSON(http.StatusInternalServerError, codedError{Code: internalError, Error: "internal server error"})
 	}

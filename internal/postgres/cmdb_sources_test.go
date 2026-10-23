@@ -21,7 +21,6 @@ func TestCMDBSourceRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Written in jsonb's canonical form, so it reads back byte for byte.
 	settings := json.RawMessage(`{"url": "http://localhost:8000"}`)
 	credentials := []byte{0, 1, 0xff}
 

@@ -87,7 +87,6 @@ func TestAssetOwnersAreSharedWithinACustomer(t *testing.T) {
 	p := inventory.ImportedAssetParams{Name: "pc", Kind: inventory.Workstation, Owner: mustOwner(t, "owner@example.com")}
 
 	syncRecords(t, db, first.ID(), record(t, "a", p), record(t, "b", p))
-	// A Customer that switches CMDBs keeps its owners on the new CMDB Source.
 	if _, err := conn.Exec(context.Background(), "UPDATE cmdb_sources SET disconnected_at = now() WHERE id = $1", first.ID().String()); err != nil {
 		t.Fatal(err)
 	}
@@ -156,7 +155,6 @@ func TestDeactivationKeepsFirstInactiveTime(t *testing.T) {
 		t.Fatal("inactive_since is NULL for an Asset created Inactive")
 	}
 
-	// A reconciliation that still sees the Asset as Active deactivates it again.
 	stale := restore(t, src.ID(), "1", retired, true)
 	commitSync(t, db, src.ID(), func([]*inventory.Asset) (inventory.Reconciliation, error) {
 		return inventory.Reconcile(src.ID(), []*inventory.Asset{stale}, inventory.Snapshot{})

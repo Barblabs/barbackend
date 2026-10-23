@@ -129,8 +129,6 @@ func (s *Service) Connect(ctx context.Context, customer inventory.CustomerID, pr
 	if _, err := s.Sync(ctx, src.ID()); err != nil && !errors.As(err, &failed) {
 		return ConnectedSource{}, err
 	}
-	// A Sync that failed because ctx ended still connected the source, so
-	// reading it must not fail for the same reason.
 	return s.ConnectedSource(context.WithoutCancel(ctx), customer)
 }
 
@@ -269,8 +267,6 @@ func (s *Service) Sync(ctx context.Context, id inventory.CMDBSourceID) (inventor
 	if err != nil {
 		return inventory.SyncRun{}, err
 	}
-	// Refused before reading the CMDB, which the admin may have disconnected
-	// to stop barbattack using its credentials.
 	if !stored.Connected {
 		return inventory.SyncRun{}, fmt.Errorf("%w: %s", ErrDisconnected, id)
 	}

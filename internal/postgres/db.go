@@ -33,7 +33,6 @@ var (
 )
 
 const (
-	// lockNotAvailable is the SQLSTATE of a NOWAIT lock that is already held.
 	lockNotAvailable = "55P03"
 	uniqueViolation  = "23505"
 )
@@ -66,7 +65,6 @@ func (db *DB) Migrate(ctx context.Context) error {
 	}
 	sqlDB := stdlib.OpenDBFromPool(db.pool)
 	defer func() { _ = sqlDB.Close() }()
-	// The advisory lock keeps two processes migrating at once from both applying a migration.
 	locker, err := lock.NewPostgresSessionLocker()
 	if err != nil {
 		return fmt.Errorf("create migration lock: %w", err)

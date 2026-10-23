@@ -19,8 +19,7 @@ type StoredCMDBSource struct {
 	Source      inventory.CMDBSource
 	Settings    json.RawMessage
 	Credentials []byte
-	// Connected is false for a Disconnected CMDB Source.
-	Connected bool
+	Connected   bool
 }
 
 // Settings and credentials are stored as given: only the CMDB Provider's

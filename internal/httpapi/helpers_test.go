@@ -28,8 +28,7 @@ const allowedOrigin = "http://localhost:5173"
 // env is a router wired as serve wires it, on its own database, acting for
 // customer.
 type env struct {
-	db *postgres.DB
-	// conn reaches what no use case exposes yet, such as Declarations.
+	db       *postgres.DB
 	conn     *pgx.Conn
 	customer inventory.CustomerID
 	provider *cmdbtest.Provider

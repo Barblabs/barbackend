@@ -47,7 +47,6 @@ func (t *sourceTx) assets(ctx context.Context) ([]*inventory.Asset, error) {
 // write is one statement for all Assets, so a Sync takes the same number of
 // round trips at any size.
 func (t *sourceTx) save(ctx context.Context, r inventory.Reconciliation) error {
-	// Only this transaction's CMDB Source is locked.
 	if r.Source() != t.source {
 		return fmt.Errorf("save to %s: reconciliation of %s", t.source, r.Source())
 	}

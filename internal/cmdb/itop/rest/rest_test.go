@@ -86,7 +86,6 @@ func newClient(t *testing.T, h http.Handler, auth rest.Auth, opts rest.Options) 
 
 func TestGetReadsEveryObjectOnce(t *testing.T) {
 	t.Parallel()
-	// Sparse ids, then a run denser than a page, so windows both grow and shrink.
 	ids := []int{1, 2, 3, 40, 900, 901, 902, 903, 904, 905, 906, 5000}
 	f := &fakeITop{t: t, ids: ids}
 	c := newClient(t, f, rest.BasicAuth("reader", "secret"), rest.Options{PageSize: 2})
@@ -191,7 +190,6 @@ func TestGetFails(t *testing.T) {
 
 func TestGetTimesOut(t *testing.T) {
 	t.Parallel()
-	// Reading the body lets the server notice the client giving up.
 	h := http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		_ = r.ParseForm()
 		<-r.Context().Done()

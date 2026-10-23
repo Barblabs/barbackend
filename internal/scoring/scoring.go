@@ -79,8 +79,8 @@ var Model1 = Model{
 func (m Model) Version() ModelVersion { return m.version }
 
 type Factors struct {
-	Alpha, Beta, Gamma    float64 // normalized CVSS, EPSS and KEV
-	Vulnerability         float64 // S, layer 1
+	Alpha, Beta, Gamma    float64
+	Vulnerability         float64
 	CriticalityMultiplier float64
 	ExposureMultiplier    float64
 }
@@ -102,7 +102,7 @@ func (m Model) Compute(in Inputs) (Score, error) {
 	case in.CVSS == nil:
 		f.Alpha = m.defaultCVSS
 		gaps = append(gaps, CVSSEstimated)
-	case !(*in.CVSS >= 0 && *in.CVSS <= 10): // also rejects NaN
+	case !(*in.CVSS >= 0 && *in.CVSS <= 10):
 		return Score{}, fmt.Errorf("%w: %v", ErrInvalidCVSS, *in.CVSS)
 	default:
 		f.Alpha = *in.CVSS / 10

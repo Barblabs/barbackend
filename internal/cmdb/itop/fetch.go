@@ -112,9 +112,7 @@ func fetchLookups(ctx context.Context, c *rest.Client, cis []ci) (lookups, error
 func getByID[T any](ctx context.Context, c *rest.Client, class string, fields []string, ids map[string]bool) (map[string]T, error) {
 	delete(ids, blankKey)
 	delete(ids, "")
-	// Sorted so the same instance always produces the same requests.
 	keys := slices.Sorted(maps.Keys(ids))
-	// The ids are interpolated into OQL, so anything but a number is refused.
 	for _, k := range keys {
 		if _, err := strconv.ParseUint(k, 10, 64); err != nil {
 			return nil, fmt.Errorf("itop: %s id %q is not numeric", class, k)

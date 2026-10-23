@@ -17,8 +17,6 @@ import (
 )
 
 const (
-	// readHeaderTimeout stops clients that send headers slowly from holding
-	// connections open.
 	readHeaderTimeout = 10 * time.Second
 	shutdownTimeout   = 10 * time.Second
 	syncTimeout       = 5 * time.Minute
