@@ -323,6 +323,7 @@ func TestSyncCMDBSourceExceedingTheTimeLimitFails(t *testing.T) {
 func TestSyncCMDBSourceCanceledByShutdownFails(t *testing.T) {
 	t.Parallel()
 	lifetime, shutdown := context.WithCancel(context.Background())
+	defer shutdown()
 	e := newEnv(t).withSyncContext(lifetime, time.Minute)
 	e.addSource(t, e.customer)
 	e.provider.Hanging = make(chan struct{})

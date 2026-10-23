@@ -7,8 +7,8 @@ ALTER TABLE cmdb_sources ADD COLUMN disconnected_at timestamptz;
 -- Every existing source predates stored credentials (00003), so none can
 -- sync again. They are disconnected, as a disconnect would, so their
 -- Customers can connect a new one.
-UPDATE cmdb_sources SET disconnected_at = now();
-UPDATE assets SET inactive_since = coalesce(inactive_since, now());
+UPDATE cmdb_sources SET disconnected_at = now() WHERE disconnected_at IS NULL;
+UPDATE assets SET inactive_since = now() WHERE inactive_since IS NULL;
 
 CREATE UNIQUE INDEX cmdb_sources_connected_customer_idx ON cmdb_sources (customer_id) WHERE disconnected_at IS NULL;
 
