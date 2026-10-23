@@ -32,6 +32,9 @@ const (
 type Provider struct {
 	Snapshot inventory.Snapshot
 	Err      error
+	// Hanging, if set, makes Snapshot close it and wait for its context to
+	// end, like a CMDB that never answers.
+	Hanging  chan struct{}
 	CheckErr error
 	Secret   string
 }
@@ -91,6 +94,11 @@ func (s snapshotter) CheckCredentials(context.Context) error {
 	return s.p.CheckErr
 }
 
-func (s snapshotter) Snapshot(context.Context) (inventory.Snapshot, error) {
+func (s snapshotter) Snapshot(ctx context.Context) (inventory.Snapshot, error) {
+	if s.p.Hanging != nil {
+		close(s.p.Hanging)
+		<-ctx.Done()
+		return inventory.Snapshot{}, ctx.Err()
+	}
 	return s.p.Snapshot, s.p.Err
 }

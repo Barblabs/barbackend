@@ -20,6 +20,7 @@ const (
 	// connections open.
 	readHeaderTimeout = 10 * time.Second
 	shutdownTimeout   = 10 * time.Second
+	syncTimeout       = 5 * time.Minute
 )
 
 func serve(ctx context.Context, _ []string) error {
@@ -32,6 +33,8 @@ func serve(ctx context.Context, _ []string) error {
 			Sources:        a.sources,
 			Customer:       customer,
 			AllowedOrigins: allowedOrigins(),
+			Lifetime:       ctx,
+			SyncTimeout:    syncTimeout,
 		}))
 	})
 }

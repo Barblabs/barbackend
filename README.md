@@ -31,6 +31,7 @@ export CORS_ALLOWED_ORIGINS=http://localhost:5173
 
 - `GET /ping`: liveness.
 - `GET /cmdb/source`: the Customer's Connected CMDB Source as `{provider, url, user, lastSync, lastSyncFailure}`, or `null` if none is connected. `lastSync` is when the latest successful Sync Run finished; `lastSyncFailure` is `{at, error}` while the latest Sync Run is a failed one. Credentials are never returned.
+- `POST /cmdb/source/sync`: runs a Sync of the Connected CMDB Source and answers `{lastSync, created, updated, deactivated, reactivated, skipped}`. The Sync outlives its request and is cancelled only by a 5-minute limit or server shutdown. Answers 404 if no source is connected, 409 `{code: "sync_in_progress", error}` while another Sync of it runs, and 502 `{code, error}` when the Sync fails, which is recorded as a failed Sync Run.
 
 Run `./barbackend` with no arguments to print the usage.
 

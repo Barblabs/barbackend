@@ -27,6 +27,18 @@ var ErrNotConnected = errors.New("customer has no connected cmdb source")
 // CMDB, such as a malformed URL, or one for an unknown provider.
 var ErrInvalidLogin = errors.New("invalid cmdb source login")
 
+// ErrSyncInProgress is a Sync refused because another Sync of the same CMDB
+// Source holds its lock.
+var ErrSyncInProgress = postgres.ErrSyncInProgress
+
+// SyncError is a Sync that failed after reading its CMDB Source. It was
+// recorded as a failed Sync Run, unless the error also holds why recording
+// failed.
+type SyncError struct{ Err error }
+
+func (e *SyncError) Error() string { return e.Err.Error() }
+func (e *SyncError) Unwrap() error { return e.Err }
+
 // Login and Failure are the seam's, named here so that transports, which only
 // import use cases (ADR 0008), can use them.
 type (
@@ -150,21 +162,44 @@ func owner(id inventory.CMDBSourceID) []byte {
 
 // Sync brings the Assets of a CMDB Source in line with a full snapshot of it.
 // Every failure after the source is read is recorded as a failed Sync Run,
-// which changed no Asset.
+// which changed no Asset, and returned as a *SyncError. A Sync refused with
+// ErrSyncInProgress is not recorded: it would report the running Sync as
+// failed, and recording it would wait for that Sync to release the source.
 func (s *Service) Sync(ctx context.Context, id inventory.CMDBSourceID) (inventory.SyncRun, error) {
+	return s.syncSource(ctx, func(tx *postgres.Tx) (postgres.StoredCMDBSource, error) {
+		return tx.CMDBSource(ctx, id)
+	})
+}
+
+// SyncConnected syncs the Customer's Connected CMDB Source as Sync does. It
+// fails with ErrNotConnected when the Customer has none.
+func (s *Service) SyncConnected(ctx context.Context, customer inventory.CustomerID) (inventory.SyncRun, error) {
+	return s.syncSource(ctx, func(tx *postgres.Tx) (postgres.StoredCMDBSource, error) {
+		stored, err := tx.ConnectedCMDBSource(ctx, customer)
+		if errors.Is(err, postgres.ErrNotFound) {
+			return stored, fmt.Errorf("%w: %s", ErrNotConnected, customer)
+		}
+		return stored, err
+	})
+}
+
+func (s *Service) syncSource(ctx context.Context, read func(*postgres.Tx) (postgres.StoredCMDBSource, error)) (inventory.SyncRun, error) {
 	started := time.Now()
 	var stored postgres.StoredCMDBSource
 	err := s.db.InTx(ctx, func(tx *postgres.Tx) error {
 		var err error
-		stored, err = tx.CMDBSource(ctx, id)
+		stored, err = read(tx)
 		return err
 	})
 	if err != nil {
 		return inventory.SyncRun{}, err
 	}
 	run, err := s.sync(ctx, stored, started)
+	if errors.Is(err, ErrSyncInProgress) {
+		return inventory.SyncRun{}, err
+	}
 	if err != nil {
-		return inventory.SyncRun{}, s.recordFailure(ctx, id, started, err)
+		return inventory.SyncRun{}, s.recordFailure(ctx, stored.Source.ID(), started, err)
 	}
 	return run, nil
 }
@@ -209,5 +244,5 @@ func (s *Service) recordFailure(ctx context.Context, id inventory.CMDBSourceID, 
 	if err != nil {
 		err = fmt.Errorf("record failed sync run: %w", err)
 	}
-	return errors.Join(cause, err)
+	return errors.Join(&SyncError{Err: cause}, err)
 }

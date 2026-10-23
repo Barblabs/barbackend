@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"time"
@@ -11,8 +12,10 @@ import (
 )
 
 type cmdbSourceHandler struct {
-	sources  *sources.Service
-	customer inventory.CustomerID
+	sources     *sources.Service
+	customer    inventory.CustomerID
+	lifetime    context.Context
+	syncTimeout time.Duration
 }
 
 // cmdbSourceResponse never carries credentials: a password sent to the
@@ -95,4 +98,67 @@ func newCMDBSourceResponse(src sources.ConnectedSource) cmdbSourceResponse {
 		resp.LastSyncFailure = &syncFailureResponse{At: f.At, Error: f.Error}
 	}
 	return resp
+}
+
+// syncResponse is the Sync Run of a successful Sync. LastSync is when it
+// finished, as GET /cmdb/source then reports it.
+type syncResponse struct {
+	LastSync    time.Time `json:"lastSync"`
+	Created     int       `json:"created"`
+	Updated     int       `json:"updated"`
+	Deactivated int       `json:"deactivated"`
+	Reactivated int       `json:"reactivated"`
+	Skipped     int       `json:"skipped"`
+}
+
+// codedError carries a Code stable for translation, as in testResponse.
+type codedError struct {
+	Code  string `json:"code"`
+	Error string `json:"error"`
+}
+
+const (
+	syncInProgress = "sync_in_progress"
+	// syncFailed is a failed Sync whose CMDB Provider did not classify why.
+	syncFailed = "sync_failed"
+)
+
+func (h cmdbSourceHandler) sync(ctx *gin.Context) {
+	syncCtx, cancel := context.WithTimeout(h.lifetime, h.syncTimeout)
+	defer cancel()
+	run, err := h.sources.SyncConnected(syncCtx, h.customer)
+	var failed *sources.SyncError
+	switch {
+	case err == nil:
+		ctx.JSON(http.StatusOK, newSyncResponse(run))
+	case errors.Is(err, sources.ErrNotConnected):
+		ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+	case errors.Is(err, sources.ErrSyncInProgress):
+		ctx.JSON(http.StatusConflict, codedError{Code: syncInProgress, Error: err.Error()})
+	case errors.As(err, &failed):
+		_ = ctx.Error(err)
+		ctx.JSON(http.StatusBadGateway, codedError{Code: failureCode(failed), Error: failed.Error()})
+	default:
+		internalError(ctx, err)
+	}
+}
+
+func failureCode(err *sources.SyncError) string {
+	var failure *sources.Failure
+	if errors.As(err, &failure) {
+		return string(failure.Code)
+	}
+	return syncFailed
+}
+
+func newSyncResponse(run inventory.SyncRun) syncResponse {
+	c := run.Counts()
+	return syncResponse{
+		LastSync:    run.Finished(),
+		Created:     c.Created,
+		Updated:     c.Updated,
+		Deactivated: c.Deactivated,
+		Reactivated: c.Reactivated,
+		Skipped:     c.Skipped,
+	}
 }
