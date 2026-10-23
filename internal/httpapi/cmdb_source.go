@@ -116,6 +116,28 @@ func (h cmdbSourceHandler) connect(ctx *gin.Context) {
 	}
 }
 
+func (h cmdbSourceHandler) update(ctx *gin.Context) {
+	var req loginRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		badRequest(ctx, err)
+		return
+	}
+	src, err := h.sources.UpdateLogin(ctx.Request.Context(), h.customer, inventory.CMDBProvider(req.Provider), req.login())
+	var failure *sources.Failure
+	switch {
+	case err == nil:
+		ctx.JSON(http.StatusOK, newCMDBSourceResponse(src))
+	case errors.As(err, &failure):
+		ctx.JSON(http.StatusUnprocessableEntity, codedError{Code: string(failure.Code), Error: failure.Message})
+	case errors.Is(err, sources.ErrNotConnected):
+		ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+	case errors.Is(err, sources.ErrInvalidLogin):
+		badRequest(ctx, err)
+	default:
+		internalError(ctx, err)
+	}
+}
+
 func newCMDBSourceResponse(src sources.ConnectedSource) cmdbSourceResponse {
 	resp := cmdbSourceResponse{Provider: string(src.Provider), URL: src.URL}
 	if src.User != "" {

@@ -10,9 +10,10 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// corsMethods lists the methods the router serves.
+// corsMethods lists the methods the router serves. POST is CORS-safelisted,
+// so browsers send it without the preflight allowing it.
 var (
-	corsMethods = strings.Join([]string{http.MethodGet}, ", ")
+	corsMethods = strings.Join([]string{http.MethodGet, http.MethodPut}, ", ")
 	corsMaxAge  = strconv.Itoa(int((10 * time.Minute).Seconds()))
 )
 

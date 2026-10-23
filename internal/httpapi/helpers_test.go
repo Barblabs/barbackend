@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -19,6 +20,7 @@ import (
 	"barbackend/internal/postgres/pgtest"
 	"barbackend/internal/sources"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 const allowedOrigin = "http://localhost:5173"
@@ -26,7 +28,9 @@ const allowedOrigin = "http://localhost:5173"
 // env is a router wired as serve wires it, on its own database, acting for
 // customer.
 type env struct {
-	db       *postgres.DB
+	db *postgres.DB
+	// conn reaches what no use case exposes yet, such as Declarations.
+	conn     *pgx.Conn
 	customer inventory.CustomerID
 	provider *cmdbtest.Provider
 	sources  *sources.Service
@@ -50,7 +54,8 @@ func newRouter(svc *sources.Service, customer inventory.CustomerID, lifetime con
 
 func newEnv(t *testing.T) env {
 	t.Helper()
-	db, err := postgres.Open(context.Background(), pgtest.URL(t))
+	url := pgtest.URL(t)
+	db, err := postgres.Open(context.Background(), url)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +64,7 @@ func newEnv(t *testing.T) env {
 	svc := sources.New(db, p.Providers(), newKey(t))
 	customer := newCustomer()
 	router := newRouter(svc, customer, context.Background(), time.Minute)
-	return env{db: db, customer: customer, provider: p, sources: svc, router: router}
+	return env{db: db, conn: pgtest.Conn(t, url), customer: customer, provider: p, sources: svc, router: router}
 }
 
 func newKey(t *testing.T) encryption.Key {
@@ -122,8 +127,25 @@ func validLogin() map[string]string {
 }
 
 func (e env) postLogin(path string, login map[string]string) *httptest.ResponseRecorder {
+	return e.sendLogin(http.MethodPost, path, login)
+}
+
+func (e env) sendLogin(method, path string, login map[string]string) *httptest.ResponseRecorder {
 	body, _ := json.Marshal(login)
-	return e.do(httptest.NewRequest(http.MethodPost, path, strings.NewReader(string(body))))
+	return e.do(httptest.NewRequest(method, path, strings.NewReader(string(body))))
+}
+
+// connected reads the Customer's Connected CMDB Source as stored.
+func (e env) connected(t *testing.T) postgres.StoredCMDBSource {
+	t.Helper()
+	var stored postgres.StoredCMDBSource
+	if err := e.db.InTx(context.Background(), func(tx *postgres.Tx) (err error) {
+		stored, err = tx.ConnectedCMDBSource(context.Background(), e.customer)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return stored
 }
 
 type syncResult struct {
@@ -187,4 +209,30 @@ func (e env) holdSyncLock(t *testing.T, src inventory.CMDBSourceID) (release fun
 			t.Fatal(err)
 		}
 	}
+}
+
+// rows reads every row of query as strings, for comparing before and after.
+func (e env) rows(t *testing.T, query string, args ...any) [][]string {
+	t.Helper()
+	rows, err := e.conn.Query(context.Background(), query, args...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var got [][]string
+	for rows.Next() {
+		values, err := rows.Values()
+		if err != nil {
+			t.Fatal(err)
+		}
+		row := make([]string, len(values))
+		for i, v := range values {
+			row[i] = fmt.Sprint(v)
+		}
+		got = append(got, row)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return got
 }

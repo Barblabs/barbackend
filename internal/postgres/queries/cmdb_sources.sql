@@ -18,3 +18,8 @@ FOR UPDATE NOWAIT;
 SELECT id, customer_id, provider, settings, credentials
 FROM cmdb_sources
 WHERE customer_id = $1 AND disconnected_at IS NULL;
+
+-- name: UpdateConnectedCMDBSourceLogin :execrows
+UPDATE cmdb_sources
+SET settings = $2, credentials = $3
+WHERE id = $1 AND disconnected_at IS NULL;

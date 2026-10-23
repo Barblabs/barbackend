@@ -3,6 +3,8 @@ package httpapi_test
 import (
 	"net/http"
 	"net/http/httptest"
+	"slices"
+	"strings"
 	"testing"
 )
 
@@ -42,5 +44,20 @@ func TestCORS(t *testing.T) {
 				t.Errorf("Access-Control-Allow-Methods = %q, want set: %v", rec.Header().Get("Access-Control-Allow-Methods"), want)
 			}
 		})
+	}
+}
+
+// PUT is not a CORS-safelisted method, so a browser sends it only once the
+// preflight allows it.
+func TestCORSPreflightAllowsPut(t *testing.T) {
+	t.Parallel()
+	req := httptest.NewRequest(http.MethodOptions, "/cmdb/source", nil)
+	req.Header.Set("Origin", allowedOrigin)
+	req.Header.Set("Access-Control-Request-Method", http.MethodPut)
+
+	rec := newEnv(t).do(req)
+
+	if got := rec.Header().Get("Access-Control-Allow-Methods"); !slices.Contains(strings.Split(got, ", "), http.MethodPut) {
+		t.Errorf("Access-Control-Allow-Methods = %q, want PUT", got)
 	}
 }

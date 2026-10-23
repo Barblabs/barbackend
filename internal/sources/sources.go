@@ -1,6 +1,6 @@
 // Package sources holds the use cases on CMDB Sources: testing a login,
-// connecting or adding one, showing the Connected CMDB Source and syncing
-// its Assets.
+// connecting or adding one, showing the Connected CMDB Source, replacing its
+// login and syncing its Assets.
 package sources
 
 import (
@@ -137,6 +137,46 @@ func (s *Service) Connect(ctx context.Context, customer inventory.CustomerID, pr
 	// A Sync that failed because ctx ended still connected the source, so
 	// reading it must not fail for the same reason.
 	return s.ConnectedSource(context.WithoutCancel(ctx), customer)
+}
+
+// UpdateLogin replaces the login of the Customer's Connected CMDB Source once
+// its CMDB accepts it, keeping the source and so its Assets and their
+// Declarations. It stores nothing when the check fails, and runs no Sync.
+// The provider must stay the same: another provider's Record IDs would not
+// match the Assets.
+func (s *Service) UpdateLogin(ctx context.Context, customer inventory.CustomerID, provider inventory.CMDBProvider, login Login) (ConnectedSource, error) {
+	var stored postgres.StoredCMDBSource
+	err := s.db.InTx(ctx, func(tx *postgres.Tx) error {
+		var err error
+		stored, err = tx.ConnectedCMDBSource(ctx, customer)
+		return err
+	})
+	if errors.Is(err, postgres.ErrNotFound) {
+		return ConnectedSource{}, fmt.Errorf("%w: %s", ErrNotConnected, customer)
+	}
+	if err != nil {
+		return ConnectedSource{}, err
+	}
+	id := stored.Source.ID()
+	if current := stored.Source.Provider(); provider != current {
+		return ConnectedSource{}, fmt.Errorf("%w: provider %s, but the connected cmdb source uses %s", ErrInvalidLogin, provider, current)
+	}
+	settings, credentials, err := s.checkLogin(ctx, provider, login)
+	if err != nil {
+		return ConnectedSource{}, err
+	}
+	sealed, err := s.key.Seal(credentials, owner(id))
+	if err != nil {
+		return ConnectedSource{}, fmt.Errorf("seal credentials: %w", err)
+	}
+	err = s.db.InTx(ctx, func(tx *postgres.Tx) error { return tx.ReplaceConnectedLogin(ctx, id, settings, sealed) })
+	if errors.Is(err, postgres.ErrNotFound) {
+		return ConnectedSource{}, fmt.Errorf("%w: %s", ErrNotConnected, customer)
+	}
+	if err != nil {
+		return ConnectedSource{}, err
+	}
+	return s.ConnectedSource(ctx, customer)
 }
 
 // checkLogin turns a login into the settings and credentials its CMDB

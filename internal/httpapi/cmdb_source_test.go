@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -13,7 +14,6 @@ import (
 	"barbackend/internal/cmdb"
 	"barbackend/internal/cmdb/cmdbtest"
 	"barbackend/internal/inventory"
-	"barbackend/internal/postgres"
 )
 
 func TestGetCMDBSourceWithoutConnectedSource(t *testing.T) {
@@ -132,7 +132,11 @@ func TestTestCMDBSourceCredentials(t *testing.T) {
 
 // loginEndpoints take a login as their body, so they reject the same
 // invalid requests.
-var loginEndpoints = []string{"/cmdb/source/test", "/cmdb/source"}
+var loginEndpoints = []struct{ method, path string }{
+	{http.MethodPost, "/cmdb/source/test"},
+	{http.MethodPost, "/cmdb/source"},
+	{http.MethodPut, "/cmdb/source"},
+}
 
 func TestLoginEndpointsRejectInvalidRequests(t *testing.T) {
 	t.Parallel()
@@ -148,14 +152,16 @@ func TestLoginEndpointsRejectInvalidRequests(t *testing.T) {
 		{"missing password", func(l map[string]string) { delete(l, "password") }},
 	}
 	e := newEnv(t)
-	for _, path := range loginEndpoints {
+	// Connected, so updating finds a source to check the login for.
+	e.addSource(t, e.customer)
+	for _, ep := range loginEndpoints {
 		for _, tt := range tests {
-			t.Run(path+" "+tt.name, func(t *testing.T) {
+			t.Run(ep.method+" "+ep.path+" "+tt.name, func(t *testing.T) {
 				t.Parallel()
 				login := validLogin()
 				tt.edit(login)
 
-				rec := e.postLogin(path, login)
+				rec := e.sendLogin(ep.method, ep.path, login)
 
 				if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), `"error":`) {
 					t.Errorf("response = %d %s, want 400 with an error", rec.Code, rec.Body)
@@ -180,11 +186,11 @@ func TestTestCMDBSourceCredentialsHidesInternalErrors(t *testing.T) {
 func TestLoginEndpointsRejectMalformedJSON(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
-	for _, path := range loginEndpoints {
-		rec := e.do(httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{"provider":`)))
+	for _, ep := range loginEndpoints {
+		rec := e.do(httptest.NewRequest(ep.method, ep.path, strings.NewReader(`{"provider":`)))
 
 		if rec.Code != http.StatusBadRequest {
-			t.Errorf("POST %s: response = %d %s, want 400", path, rec.Code, rec.Body)
+			t.Errorf("%s %s: response = %d %s, want 400", ep.method, ep.path, rec.Code, rec.Body)
 		}
 	}
 }
@@ -400,13 +406,7 @@ func TestConnectCMDBSourceStoresSealedCredentials(t *testing.T) {
 
 	decode[cmdbSource](t, e.postLogin("/cmdb/source", validLogin()), http.StatusOK)
 
-	var stored postgres.StoredCMDBSource
-	if err := e.db.InTx(context.Background(), func(tx *postgres.Tx) (err error) {
-		stored, err = tx.ConnectedCMDBSource(context.Background(), e.customer)
-		return err
-	}); err != nil {
-		t.Fatal(err)
-	}
+	stored := e.connected(t)
 	if len(stored.Credentials) == 0 || bytes.Contains(stored.Credentials, []byte(cmdbtest.Secret)) {
 		t.Errorf("stored credentials = %q, want ciphertext without the password", stored.Credentials)
 	}
@@ -425,5 +425,82 @@ func TestConnectCMDBSourceWithFirstSyncExceedingTheTimeLimit(t *testing.T) {
 	got := decode[cmdbSource](t, rec, http.StatusOK)
 	if got.LastSync != nil || got.LastSyncFailure == nil || !strings.Contains(got.LastSyncFailure.Error, context.DeadlineExceeded.Error()) {
 		t.Errorf("body = %s, want no lastSync and the deadline as the failure", rec.Body)
+	}
+}
+
+// rotatedLogin is validLogin with every field but the provider changed.
+func rotatedLogin() map[string]string {
+	return map[string]string{"provider": string(cmdbtest.Name), "url": "http://new-cmdb", "user": "new-admin", "password": "new-secret"}
+}
+
+func TestUpdateCMDBSource(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	src := e.addSource(t, e.customer)
+
+	rec := e.sendLogin(http.MethodPut, "/cmdb/source", rotatedLogin())
+
+	got := decode[cmdbSource](t, rec, http.StatusOK)
+	if got.URL != "http://new-cmdb" || got.User != "new-admin" {
+		t.Errorf("body = %s, want the new url and user", rec.Body)
+	}
+	if _, body := e.getCMDBSource(t); body != rec.Body.String() {
+		t.Errorf("GET /cmdb/source = %s, want the update response %s", body, rec.Body)
+	}
+	if id := e.connected(t).Source.ID(); id != src.ID() {
+		t.Errorf("connected source = %s, want the same source %s", id, src.ID())
+	}
+	if rec := e.sync(context.Background()); rec.Code != http.StatusOK || e.provider.Secret != "new-secret" {
+		t.Errorf("a later Sync = %d %s with secret %q, want 200 with the new password", rec.Code, rec.Body, e.provider.Secret)
+	}
+}
+
+func TestUpdateCMDBSourceWithRejectedCredentials(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	e.addSource(t, e.customer)
+	before := e.connected(t)
+	e.provider.CheckErr = &cmdb.Failure{Code: cmdb.InvalidCredentials, Message: "the cmdb rejected the user or password"}
+
+	rec := e.sendLogin(http.MethodPut, "/cmdb/source", rotatedLogin())
+
+	if want := `{"code":"invalid_credentials","error":"the cmdb rejected the user or password"}`; rec.Code != http.StatusUnprocessableEntity || rec.Body.String() != want {
+		t.Errorf("response = %d %s, want 422 %s", rec.Code, rec.Body, want)
+	}
+	if after := e.connected(t); !bytes.Equal(after.Settings, before.Settings) || !bytes.Equal(after.Credentials, before.Credentials) {
+		t.Errorf("stored source = %s %x, want unchanged %s %x", after.Settings, after.Credentials, before.Settings, before.Credentials)
+	}
+}
+
+func TestUpdateCMDBSourceWithoutConnectedSource(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	e.addSource(t, newCustomer())
+
+	rec := e.sendLogin(http.MethodPut, "/cmdb/source", rotatedLogin())
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("response = %d %s, want 404", rec.Code, rec.Body)
+	}
+}
+
+func TestUpdateCMDBSourceKeepsAssetsAndDeclarations(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	e.addSource(t, e.customer)
+	e.provider.Snapshot = inventory.Snapshot{Records: []inventory.Record{record(t, "a", "vm-a")}}
+	decode[syncResult](t, e.sync(context.Background()), http.StatusOK)
+	if _, err := e.conn.Exec(context.Background(), "UPDATE assets SET declared_exposure_id = $1", int16(inventory.Internal)); err != nil {
+		t.Fatal(err)
+	}
+	assets := func() [][]string {
+		return e.rows(t, "SELECT record_id, name, declared_exposure_id FROM assets WHERE cmdb_source_id = $1 ORDER BY record_id", e.connected(t).Source.ID().String())
+	}
+	before := assets()
+
+	decode[cmdbSource](t, e.sendLogin(http.MethodPut, "/cmdb/source", rotatedLogin()), http.StatusOK)
+
+	if after := assets(); !reflect.DeepEqual(after, before) {
+		t.Errorf("assets = %v, want unchanged %v", after, before)
 	}
 }

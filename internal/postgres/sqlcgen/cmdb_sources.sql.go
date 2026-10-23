@@ -103,3 +103,23 @@ func (q *Queries) LockCMDBSource(ctx context.Context, id uuid.UUID) (uuid.UUID, 
 	err := row.Scan(&id_2)
 	return id_2, err
 }
+
+const updateConnectedCMDBSourceLogin = `-- name: UpdateConnectedCMDBSourceLogin :execrows
+UPDATE cmdb_sources
+SET settings = $2, credentials = $3
+WHERE id = $1 AND disconnected_at IS NULL
+`
+
+type UpdateConnectedCMDBSourceLoginParams struct {
+	ID          uuid.UUID
+	Settings    []byte
+	Credentials []byte
+}
+
+func (q *Queries) UpdateConnectedCMDBSourceLogin(ctx context.Context, arg UpdateConnectedCMDBSourceLoginParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateConnectedCMDBSourceLogin, arg.ID, arg.Settings, arg.Credentials)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}

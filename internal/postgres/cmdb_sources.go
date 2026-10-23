@@ -41,6 +41,24 @@ func (t *Tx) CreateCMDBSource(ctx context.Context, src inventory.CMDBSource, set
 	return nil
 }
 
+// ReplaceConnectedLogin replaces the settings and sealed credentials of a
+// Connected CMDB Source, keeping its id and so its Assets. It fails with
+// ErrNotFound when the source is not connected.
+func (t *Tx) ReplaceConnectedLogin(ctx context.Context, id inventory.CMDBSourceID, settings json.RawMessage, credentials []byte) error {
+	n, err := t.q.UpdateConnectedCMDBSourceLogin(ctx, sqlcgen.UpdateConnectedCMDBSourceLoginParams{
+		ID:          uuid.UUID(id),
+		Settings:    settings,
+		Credentials: credentials,
+	})
+	if err != nil {
+		return fmt.Errorf("update login of cmdb source %s: %w", id, err)
+	}
+	if n == 0 {
+		return fmt.Errorf("connected cmdb source %s: %w", id, ErrNotFound)
+	}
+	return nil
+}
+
 // connectedCustomerIndex keeps a Customer to at most one Connected CMDB Source.
 const connectedCustomerIndex = "cmdb_sources_connected_customer_idx"
 
