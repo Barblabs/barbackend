@@ -25,7 +25,6 @@ func NewEndpoint(client *http.Client, url, defaultURL string) Endpoint {
 	return Endpoint{client: client, url: url}
 }
 
-// URL returns the endpoint URL.
 func (e Endpoint) URL() string {
 	return e.url
 }

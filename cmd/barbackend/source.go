@@ -15,8 +15,6 @@ import (
 
 const sourceSynopsis = "source add --customer <uuid> --provider <id> --settings '<json>' < <credentials json>"
 
-// maxCredentialsSize bounds what is read from stdin, so a mistaken pipe of a
-// large file fails instead of being sealed into the database.
 const maxCredentialsSize = 64 << 10
 
 func source(ctx context.Context, args []string) error {
@@ -53,8 +51,6 @@ func source(ctx context.Context, args []string) error {
 	})
 }
 
-// readCredentials reads the secrets from stdin rather than a flag, so they
-// never appear in the process list or the shell history.
 func readCredentials(r io.Reader) (json.RawMessage, error) {
 	raw, err := io.ReadAll(io.LimitReader(r, maxCredentialsSize+1))
 	if err != nil {

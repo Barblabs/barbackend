@@ -23,7 +23,6 @@ type DeactivateAssetsParams struct {
 	RecordIds    []string
 }
 
-// inactive_since keeps its original time when an Inactive Asset stays Inactive.
 func (q *Queries) DeactivateAssets(ctx context.Context, arg DeactivateAssetsParams) (int64, error) {
 	result, err := q.db.Exec(ctx, deactivateAssets, arg.CmdbSourceID, arg.RecordIds)
 	if err != nil {

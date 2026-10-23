@@ -34,8 +34,6 @@ type instance struct {
 	SoftwareID string `json:"software_id"`
 }
 
-// person, software and iosVersion are the records the cis reference by id,
-// decoded from their JSON fields like a ci.
 type person struct {
 	Email string `json:"email"`
 }
@@ -52,7 +50,6 @@ type iosVersion struct {
 	Name  string `json:"name"`
 }
 
-// lookups holds the records the cis reference by id, read in bulk.
 type lookups struct {
 	persons     map[string]person
 	software    map[string]software

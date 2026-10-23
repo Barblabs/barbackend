@@ -79,7 +79,6 @@ func (t *Tx) DisconnectCMDBSource(ctx context.Context, customer inventory.Custom
 	return nil
 }
 
-// connectedCustomerIndex keeps a Customer to at most one Connected CMDB Source.
 const connectedCustomerIndex = "cmdb_sources_connected_customer_idx"
 
 func (t *Tx) CMDBSource(ctx context.Context, id inventory.CMDBSourceID) (StoredCMDBSource, error) {

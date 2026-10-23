@@ -35,7 +35,6 @@ type Service struct {
 	feeds []Feed
 }
 
-// New registers feeds
 func New(feeds ...Feed) (*Service, error) {
 	seen := make(map[string]struct{}, len(feeds))
 	registered := make([]Feed, len(feeds))

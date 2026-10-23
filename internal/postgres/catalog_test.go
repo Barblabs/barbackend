@@ -11,7 +11,6 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// Catalog ids are the Go constants (ADR 0006); this catches either side drifting.
 func TestCatalogsMatchDomainConstants(t *testing.T) {
 	t.Parallel()
 	catalogs := map[string]map[int16]string{

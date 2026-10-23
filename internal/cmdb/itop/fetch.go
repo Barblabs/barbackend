@@ -12,8 +12,6 @@ import (
 	"barbackend/internal/cmdb/itop/rest"
 )
 
-// idsPerQuery bounds the IN list of one lookup query, keeping each request a
-// few kilobytes however many records the cis reference.
 const idsPerQuery = 200
 
 // blankKey is the value iTop gives an external key that references nothing.
@@ -33,8 +31,6 @@ func ciFields(classFields ...string) []string {
 	return append([]string{"name", "description", "status", "business_criticity", "contacts_list", "softwares_list"}, classFields...)
 }
 
-// instanceClasses are the SoftwareInstance classes imported as Software
-// Components; any other class in a softwares_list is ignored.
 var instanceClasses = map[string]bool{
 	"DBServer":      true,
 	"WebServer":     true,
@@ -43,9 +39,6 @@ var instanceClasses = map[string]bool{
 	"OtherSoftware": true,
 }
 
-// fetch reads every ci of the in-scope classes, then the records they
-// reference in bulk, so the number of queries depends on the number of
-// distinct references rather than on the number of cis.
 func fetch(ctx context.Context, c *rest.Client) ([]ci, lookups, error) {
 	var cis []ci
 	for _, class := range ciClasses {
@@ -68,8 +61,6 @@ func fetch(ctx context.Context, c *rest.Client) ([]ci, lookups, error) {
 	return cis, lk, nil
 }
 
-// decodeCI keeps only the instances of instanceClasses, so mapping never
-// sees a SoftwareInstance that is not a Software Component.
 func decodeCI(o rest.Object, fields []string) (ci, error) {
 	var c ci
 	if err := decode(o, fields, &c); err != nil {
@@ -107,14 +98,10 @@ func fetchLookups(ctx context.Context, c *rest.Client, cis []ci) (lookups, error
 	return lk, nil
 }
 
-// getByID reads the objects of class whose keys are in ids, skipping blank
-// keys. A referenced object deleted since the cis were read is simply absent.
 func getByID[T any](ctx context.Context, c *rest.Client, class string, fields []string, ids map[string]bool) (map[string]T, error) {
 	delete(ids, blankKey)
 	delete(ids, "")
-	// Sorted so the same instance always produces the same requests.
 	keys := slices.Sorted(maps.Keys(ids))
-	// The ids are interpolated into OQL, so anything but a number is refused.
 	for _, k := range keys {
 		if _, err := strconv.ParseUint(k, 10, 64); err != nil {
 			return nil, fmt.Errorf("itop: %s id %q is not numeric", class, k)

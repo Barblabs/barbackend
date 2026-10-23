@@ -25,11 +25,8 @@ import (
 
 const allowedOrigin = "http://localhost:5173"
 
-// env is a router wired as serve wires it, on its own database, acting for
-// customer.
 type env struct {
-	db *postgres.DB
-	// conn reaches what no use case exposes yet, such as Declarations.
+	db       *postgres.DB
 	conn     *pgx.Conn
 	customer inventory.CustomerID
 	provider *cmdbtest.Provider
@@ -80,7 +77,6 @@ func newKey(t *testing.T) encryption.Key {
 
 func newCustomer() inventory.CustomerID { return inventory.CustomerID(uuid.New()) }
 
-// addSource adds a CMDB Source for customer as the CLI does.
 func (e env) addSource(t *testing.T, customer inventory.CustomerID) inventory.CMDBSource {
 	t.Helper()
 	src, err := e.sources.Add(context.Background(), customer, cmdbtest.Name, json.RawMessage(cmdbtest.Settings), json.RawMessage(cmdbtest.Credentials))
@@ -120,8 +116,6 @@ func (e env) getCMDBSource(t *testing.T) (cmdbSource, string) {
 	return got, rec.Body.String()
 }
 
-// validLogin is a request body for the fake CMDB Provider; each call returns a
-// fresh map, so tests can edit it.
 func validLogin() map[string]string {
 	return map[string]string{"provider": string(cmdbtest.Name), "url": "http://cmdb", "user": "admin", "password": cmdbtest.Secret}
 }
@@ -135,7 +129,6 @@ func (e env) sendLogin(method, path string, login map[string]string) *httptest.R
 	return e.do(httptest.NewRequest(method, path, strings.NewReader(string(body))))
 }
 
-// connected reads the Customer's Connected CMDB Source as stored.
 func (e env) connected(t *testing.T) postgres.StoredCMDBSource {
 	t.Helper()
 	var stored postgres.StoredCMDBSource
@@ -162,12 +155,10 @@ type codedError struct {
 	Error string `json:"error"`
 }
 
-// sync runs a Sync of the Connected CMDB Source with a request bound to ctx.
 func (e env) sync(ctx context.Context) *httptest.ResponseRecorder {
 	return e.do(httptest.NewRequestWithContext(ctx, http.MethodPost, "/cmdb/source/sync", nil))
 }
 
-// decode fails t unless rec has status want and a body of type T.
 func decode[T any](t *testing.T, rec *httptest.ResponseRecorder, want int) T {
 	t.Helper()
 	var got T
@@ -189,8 +180,6 @@ func record(t *testing.T, id, name string) inventory.Record {
 	return inventory.Record{RecordID: id, Imported: imported}
 }
 
-// holdSyncLock holds the lock a Sync of src commits under, as a running Sync
-// does, until the returned func releases it.
 func (e env) holdSyncLock(t *testing.T, src inventory.CMDBSourceID) (release func()) {
 	t.Helper()
 	locked, unlock, done := make(chan struct{}), make(chan struct{}), make(chan error)
@@ -211,7 +200,6 @@ func (e env) holdSyncLock(t *testing.T, src inventory.CMDBSourceID) (release fun
 	}
 }
 
-// rows reads every row of query as strings, for comparing before and after.
 func (e env) rows(t *testing.T, query string, args ...any) [][]string {
 	t.Helper()
 	rows, err := e.conn.Query(context.Background(), query, args...)

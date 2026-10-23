@@ -172,8 +172,6 @@ type responseObject struct {
 	Fields  json.RawMessage `json:"fields"`
 }
 
-// call runs one core/get of the objects matching both q and idRange, at most
-// limit of them, ordered by key.
 func (c *Client) call(ctx context.Context, q Query, idRange string, fields []string, limit int) ([]Object, error) {
 	oql := fmt.Sprintf("SELECT %s WHERE %s", q.Class, idRange)
 	if q.Where != "" {

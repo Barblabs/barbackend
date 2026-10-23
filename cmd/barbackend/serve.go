@@ -17,8 +17,6 @@ import (
 )
 
 const (
-	// readHeaderTimeout stops clients that send headers slowly from holding
-	// connections open.
 	readHeaderTimeout = 10 * time.Second
 	shutdownTimeout   = 10 * time.Second
 	syncTimeout       = 5 * time.Minute
@@ -81,8 +79,6 @@ func listen(ctx context.Context, feedsDone <-chan struct{}, handler http.Handler
 	return nil
 }
 
-// customerID is the Customer every request acts for until authentication
-// exists. Only local development may serve with it.
 func customerID() (inventory.CustomerID, error) {
 	id, err := uuid.Parse(os.Getenv("CUSTOMER_ID"))
 	if err != nil {
@@ -91,7 +87,6 @@ func customerID() (inventory.CustomerID, error) {
 	return inventory.CustomerID(id), nil
 }
 
-// allowedOrigins reads CORS_ALLOWED_ORIGINS, a comma-separated list.
 func allowedOrigins() []string {
 	var origins []string
 	for o := range strings.SplitSeq(os.Getenv("CORS_ALLOWED_ORIGINS"), ",") {

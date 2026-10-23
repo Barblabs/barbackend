@@ -21,9 +21,6 @@ import (
 // CMDB, such as a malformed URL, or one for an unknown provider.
 var ErrInvalidLogin = errors.New("invalid cmdb source login")
 
-// The errors, seam types and Sync status below belong to persistence and the
-// CMDB Provider seam, named here so that transports, which only import use
-// cases (ADR 0008), can use them.
 var (
 	// ErrNotConnected is a Customer with no Connected CMDB Source.
 	ErrNotConnected = postgres.ErrNotConnected
@@ -87,8 +84,6 @@ func (s *Service) Add(ctx context.Context, customer inventory.CustomerID, provid
 	return s.create(ctx, customer, provider, settings, credentials)
 }
 
-// create stores a new CMDB Source with sealed credentials, without checking
-// them: callers have.
 func (s *Service) create(ctx context.Context, customer inventory.CustomerID, provider inventory.CMDBProvider, settings, credentials json.RawMessage) (inventory.CMDBSource, error) {
 	src, err := inventory.NewCMDBSource(inventory.CMDBSourceID(uuid.New()), customer, provider)
 	if err != nil {
@@ -129,8 +124,6 @@ func (s *Service) Connect(ctx context.Context, customer inventory.CustomerID, pr
 	if _, err := s.Sync(ctx, src.ID()); err != nil && !errors.As(err, &failed) {
 		return ConnectedSource{}, err
 	}
-	// A Sync that failed because ctx ended still connected the source, so
-	// reading it must not fail for the same reason.
 	return s.ConnectedSource(context.WithoutCancel(ctx), customer)
 }
 
@@ -166,8 +159,6 @@ func (s *Service) Disconnect(ctx context.Context, customer inventory.CustomerID)
 	return s.db.InTx(ctx, func(tx *postgres.Tx) error { return tx.DisconnectCMDBSource(ctx, customer) })
 }
 
-// checkLogin turns a login into the settings and credentials its CMDB
-// accepted.
 func (s *Service) checkLogin(ctx context.Context, provider inventory.CMDBProvider, login Login) (settings, credentials json.RawMessage, err error) {
 	p, err := s.providers.Lookup(provider)
 	if err != nil {
@@ -223,8 +214,6 @@ func (s *Service) ConnectedSource(ctx context.Context, customer inventory.Custom
 	}, nil
 }
 
-// connected reads the Customer's Connected CMDB Source, failing with
-// ErrNotConnected when there is none.
 func (s *Service) connected(ctx context.Context, customer inventory.CustomerID) (postgres.StoredCMDBSource, error) {
 	var stored postgres.StoredCMDBSource
 	err := s.db.InTx(ctx, func(tx *postgres.Tx) error {
@@ -235,8 +224,6 @@ func (s *Service) connected(ctx context.Context, customer inventory.CustomerID) 
 	return stored, err
 }
 
-// owner binds credentials to their CMDB Source, so sealed credentials copied
-// to another source fail to open.
 func owner(id inventory.CMDBSourceID) []byte {
 	return []byte(id.String())
 }
@@ -269,8 +256,6 @@ func (s *Service) Sync(ctx context.Context, id inventory.CMDBSourceID) (inventor
 	if err != nil {
 		return inventory.SyncRun{}, err
 	}
-	// Refused before reading the CMDB, which the admin may have disconnected
-	// to stop barbattack using its credentials.
 	if !stored.Connected {
 		return inventory.SyncRun{}, fmt.Errorf("%w: %s", ErrDisconnected, id)
 	}
@@ -284,9 +269,6 @@ func (s *Service) Sync(ctx context.Context, id inventory.CMDBSourceID) (inventor
 	return run, nil
 }
 
-// sync reads the snapshot before locking the source, so a slow CMDB Provider
-// never holds the lock. Settings are parsed again because a provider may
-// have tightened its rules since the source was added.
 func (s *Service) sync(ctx context.Context, stored postgres.StoredCMDBSource, started time.Time) (inventory.SyncRun, error) {
 	src := stored.Source
 	p, err := s.providers.Lookup(src.Provider())
@@ -310,10 +292,6 @@ func (s *Service) sync(ctx context.Context, stored postgres.StoredCMDBSource, st
 	})
 }
 
-// recordFailure records the failed run even when ctx was canceled, since the
-// cancellation may be the failure being recorded. Only a recorded failure is
-// a *SyncError; failing to record it is an error of barbackend, so the cause
-// is kept only as text and is not reported as the CMDB's failure.
 func (s *Service) recordFailure(ctx context.Context, id inventory.CMDBSourceID, started time.Time, cause error) error {
 	ctx = context.WithoutCancel(ctx)
 	run, err := inventory.FailedRun(id, started, time.Now(), cause)
