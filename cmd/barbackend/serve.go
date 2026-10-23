@@ -25,6 +25,10 @@ const (
 )
 
 func serve(ctx context.Context, _ []string) error {
+	customer, err := customerID()
+	if err != nil {
+		return err
+	}
 	svc, err := ingest.New(registeredFeeds()...)
 	if err != nil {
 		return err
@@ -35,12 +39,8 @@ func serve(ctx context.Context, _ []string) error {
 		svc.Run(ctx)
 	}()
 
-	customer, err := customerID()
-	if err != nil {
-		return err
-	}
 	return withApp(ctx, func(a app) error {
-		return listen(ctx, httpapi.New(httpapi.Config{
+		return listen(ctx, feedsDone, httpapi.New(httpapi.Config{
 			Sources:        a.sources,
 			Customer:       customer,
 			AllowedOrigins: allowedOrigins(),
@@ -50,7 +50,7 @@ func serve(ctx context.Context, _ []string) error {
 	})
 }
 
-func listen(ctx context.Context, handler http.Handler) error {
+func listen(ctx context.Context, feedsDone <-chan struct{}, handler http.Handler) error {
 	srv := &http.Server{
 		Addr:              listenAddr(),
 		Handler:           handler,
