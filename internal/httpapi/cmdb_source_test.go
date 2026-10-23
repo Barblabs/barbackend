@@ -1,6 +1,7 @@
 package httpapi_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"net/http"
@@ -10,7 +11,9 @@ import (
 	"time"
 
 	"barbackend/internal/cmdb"
+	"barbackend/internal/cmdb/cmdbtest"
 	"barbackend/internal/inventory"
+	"barbackend/internal/postgres"
 )
 
 func TestGetCMDBSourceWithoutConnectedSource(t *testing.T) {
@@ -112,7 +115,7 @@ func TestTestCMDBSourceCredentials(t *testing.T) {
 			e := newEnv(t)
 			e.provider.CheckErr = tt.checkErr
 
-			rec := e.testCredentials(validLogin())
+			rec := e.postLogin("/cmdb/source/test", validLogin())
 
 			if rec.Code != http.StatusOK || rec.Body.String() != tt.want {
 				t.Errorf("response = %d %s, want 200 %s", rec.Code, rec.Body, tt.want)
@@ -127,7 +130,11 @@ func TestTestCMDBSourceCredentials(t *testing.T) {
 	}
 }
 
-func TestTestCMDBSourceCredentialsRejectsInvalidRequests(t *testing.T) {
+// loginEndpoints take a login as their body, so they reject the same
+// invalid requests.
+var loginEndpoints = []string{"/cmdb/source/test", "/cmdb/source"}
+
+func TestLoginEndpointsRejectInvalidRequests(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name string
@@ -141,18 +148,20 @@ func TestTestCMDBSourceCredentialsRejectsInvalidRequests(t *testing.T) {
 		{"missing password", func(l map[string]string) { delete(l, "password") }},
 	}
 	e := newEnv(t)
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			login := validLogin()
-			tt.edit(login)
+	for _, path := range loginEndpoints {
+		for _, tt := range tests {
+			t.Run(path+" "+tt.name, func(t *testing.T) {
+				t.Parallel()
+				login := validLogin()
+				tt.edit(login)
 
-			rec := e.testCredentials(login)
+				rec := e.postLogin(path, login)
 
-			if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), `"error":`) {
-				t.Errorf("response = %d %s, want 400 with an error", rec.Code, rec.Body)
-			}
-		})
+				if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), `"error":`) {
+					t.Errorf("response = %d %s, want 400 with an error", rec.Code, rec.Body)
+				}
+			})
+		}
 	}
 }
 
@@ -161,21 +170,22 @@ func TestTestCMDBSourceCredentialsHidesInternalErrors(t *testing.T) {
 	e := newEnv(t)
 	e.provider.CheckErr = errors.New("check broke")
 
-	rec := e.testCredentials(validLogin())
+	rec := e.postLogin("/cmdb/source/test", validLogin())
 
 	if rec.Code != http.StatusInternalServerError || strings.Contains(rec.Body.String(), "check broke") {
 		t.Errorf("response = %d %s, want 500 without the cause", rec.Code, rec.Body)
 	}
 }
 
-func TestTestCMDBSourceCredentialsRejectsMalformedJSON(t *testing.T) {
+func TestLoginEndpointsRejectMalformedJSON(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
+	for _, path := range loginEndpoints {
+		rec := e.do(httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{"provider":`)))
 
-	rec := e.do(httptest.NewRequest(http.MethodPost, "/cmdb/source/test", strings.NewReader(`{"provider":`)))
-
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("response = %d %s, want 400", rec.Code, rec.Body)
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("POST %s: response = %d %s, want 400", path, rec.Code, rec.Body)
+		}
 	}
 }
 
@@ -232,7 +242,7 @@ func TestSyncCMDBSourceFailure(t *testing.T) {
 
 			rec := e.sync(context.Background())
 
-			got := decode[syncFailure](t, rec, http.StatusBadGateway)
+			got := decode[codedError](t, rec, http.StatusBadGateway)
 			if got.Code != tt.wantCode || !strings.Contains(got.Error, "cmdb unreachable") {
 				t.Errorf("body = %s, want code %q and the cause", rec.Body, tt.wantCode)
 			}
@@ -252,7 +262,7 @@ func TestSyncCMDBSourceWhileAnotherSyncRuns(t *testing.T) {
 	rec := e.sync(context.Background())
 	release()
 
-	got := decode[syncFailure](t, rec, http.StatusConflict)
+	got := decode[codedError](t, rec, http.StatusConflict)
 	if got.Code != "sync_in_progress" {
 		t.Errorf("body = %s, want code sync_in_progress", rec.Body)
 	}
@@ -284,7 +294,7 @@ func TestSyncCMDBSourceExceedingTheTimeLimitFails(t *testing.T) {
 
 	rec := e.sync(context.Background())
 
-	got := decode[syncFailure](t, rec, http.StatusBadGateway)
+	got := decode[codedError](t, rec, http.StatusBadGateway)
 	if !strings.Contains(got.Error, context.DeadlineExceeded.Error()) {
 		t.Errorf("body = %s, want the deadline", rec.Body)
 	}
@@ -306,11 +316,114 @@ func TestSyncCMDBSourceCanceledByShutdownFails(t *testing.T) {
 
 	rec := e.sync(context.Background())
 
-	got := decode[syncFailure](t, rec, http.StatusBadGateway)
+	got := decode[codedError](t, rec, http.StatusBadGateway)
 	if !strings.Contains(got.Error, context.Canceled.Error()) {
 		t.Errorf("body = %s, want the cancellation", rec.Body)
 	}
 	if src, body := e.getCMDBSource(t); src.LastSyncFailure == nil {
 		t.Errorf("GET /cmdb/source = %s, want the failed Sync Run", body)
+	}
+}
+
+func TestConnectCMDBSource(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	e.provider.Snapshot = inventory.Snapshot{Records: []inventory.Record{record(t, "a", "vm-a")}}
+
+	rec := e.postLogin("/cmdb/source", validLogin())
+
+	got := decode[cmdbSource](t, rec, http.StatusOK)
+	if got.Provider != "fake" || got.URL != "http://cmdb" || got.User != "admin" || got.LastSync == nil || got.LastSyncFailure != nil {
+		t.Errorf("body = %s, want the source with a lastSync and no failure", rec.Body)
+	}
+	if _, body := e.getCMDBSource(t); body != rec.Body.String() {
+		t.Errorf("GET /cmdb/source = %s, want the connect response %s", body, rec.Body)
+	}
+	if run := decode[syncResult](t, e.sync(context.Background()), http.StatusOK); run.Created != 0 || run.Updated != 0 {
+		t.Errorf("a later Sync = %+v, want nothing to create or update since the first Sync imported the Asset", run)
+	}
+}
+
+func TestConnectCMDBSourceWithRejectedCredentials(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	e.provider.CheckErr = &cmdb.Failure{Code: cmdb.InvalidCredentials, Message: "the cmdb rejected the user or password"}
+
+	rec := e.postLogin("/cmdb/source", validLogin())
+
+	if want := `{"code":"invalid_credentials","error":"the cmdb rejected the user or password"}`; rec.Code != http.StatusUnprocessableEntity || rec.Body.String() != want {
+		t.Errorf("response = %d %s, want 422 %s", rec.Code, rec.Body, want)
+	}
+	if _, body := e.getCMDBSource(t); body != "null" {
+		t.Errorf("GET /cmdb/source = %s, want null since nothing is stored", body)
+	}
+}
+
+func TestConnectCMDBSourceWithFailedFirstSync(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	e.provider.Err = errors.New("cmdb unreachable")
+
+	rec := e.postLogin("/cmdb/source", validLogin())
+
+	got := decode[cmdbSource](t, rec, http.StatusOK)
+	if got.LastSync != nil || got.LastSyncFailure == nil || !strings.Contains(got.LastSyncFailure.Error, "cmdb unreachable") {
+		t.Errorf("body = %s, want no lastSync and the failure", rec.Body)
+	}
+	e.provider.Err = nil
+	if rec := e.sync(context.Background()); rec.Code != http.StatusOK {
+		t.Errorf("a later Sync = %d %s, want 200 since the source stays connected", rec.Code, rec.Body)
+	}
+}
+
+func TestConnectCMDBSourceWhenAlreadyConnected(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	e.addSource(t, e.customer)
+	login := validLogin()
+	login["url"] = "http://other-cmdb"
+
+	rec := e.postLogin("/cmdb/source", login)
+
+	got := decode[codedError](t, rec, http.StatusConflict)
+	if got.Code != "already_connected" {
+		t.Errorf("body = %s, want code already_connected", rec.Body)
+	}
+	if src, body := e.getCMDBSource(t); src.URL != "http://cmdb" {
+		t.Errorf("GET /cmdb/source = %s, want the source connected first", body)
+	}
+}
+
+func TestConnectCMDBSourceStoresSealedCredentials(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+
+	decode[cmdbSource](t, e.postLogin("/cmdb/source", validLogin()), http.StatusOK)
+
+	var stored postgres.StoredCMDBSource
+	if err := e.db.InTx(context.Background(), func(tx *postgres.Tx) (err error) {
+		stored, err = tx.ConnectedCMDBSource(context.Background(), e.customer)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(stored.Credentials) == 0 || bytes.Contains(stored.Credentials, []byte(cmdbtest.Secret)) {
+		t.Errorf("stored credentials = %q, want ciphertext without the password", stored.Credentials)
+	}
+	if e.provider.Secret != cmdbtest.Secret {
+		t.Errorf("the first Sync used secret %q, want the password sent", e.provider.Secret)
+	}
+}
+
+func TestConnectCMDBSourceWithFirstSyncExceedingTheTimeLimit(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t).withSyncContext(context.Background(), 50*time.Millisecond)
+	e.provider.Hanging = make(chan struct{})
+
+	rec := e.postLogin("/cmdb/source", validLogin())
+
+	got := decode[cmdbSource](t, rec, http.StatusOK)
+	if got.LastSync != nil || got.LastSyncFailure == nil || !strings.Contains(got.LastSyncFailure.Error, context.DeadlineExceeded.Error()) {
+		t.Errorf("body = %s, want no lastSync and the deadline as the failure", rec.Body)
 	}
 }

@@ -121,9 +121,9 @@ func validLogin() map[string]string {
 	return map[string]string{"provider": string(cmdbtest.Name), "url": "http://cmdb", "user": "admin", "password": cmdbtest.Secret}
 }
 
-func (e env) testCredentials(login map[string]string) *httptest.ResponseRecorder {
+func (e env) postLogin(path string, login map[string]string) *httptest.ResponseRecorder {
 	body, _ := json.Marshal(login)
-	return e.do(httptest.NewRequest(http.MethodPost, "/cmdb/source/test", strings.NewReader(string(body))))
+	return e.do(httptest.NewRequest(http.MethodPost, path, strings.NewReader(string(body))))
 }
 
 type syncResult struct {
@@ -135,7 +135,7 @@ type syncResult struct {
 	Skipped     int        `json:"skipped"`
 }
 
-type syncFailure struct {
+type codedError struct {
 	Code  string `json:"code"`
 	Error string `json:"error"`
 }

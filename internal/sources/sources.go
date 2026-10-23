@@ -1,5 +1,6 @@
 // Package sources holds the use cases on CMDB Sources: testing a login,
-// adding one, showing the Connected CMDB Source and syncing its Assets.
+// connecting or adding one, showing the Connected CMDB Source and syncing
+// its Assets.
 package sources
 
 import (
@@ -26,6 +27,9 @@ var ErrNotConnected = errors.New("customer has no connected cmdb source")
 // ErrInvalidLogin is a login its CMDB Provider rejects without reaching the
 // CMDB, such as a malformed URL, or one for an unknown provider.
 var ErrInvalidLogin = errors.New("invalid cmdb source login")
+
+// ErrAlreadyConnected is a Customer that already has a Connected CMDB Source.
+var ErrAlreadyConnected = postgres.ErrAlreadyConnected
 
 // ErrSyncInProgress is a Sync refused because another Sync of the same CMDB
 // Source holds its lock.
@@ -85,6 +89,12 @@ func (s *Service) Add(ctx context.Context, customer inventory.CustomerID, provid
 	if _, err := p.ParseSettings(settings, credentials); err != nil {
 		return inventory.CMDBSource{}, fmt.Errorf("parse %s source: %w", provider, err)
 	}
+	return s.create(ctx, customer, provider, settings, credentials)
+}
+
+// create stores a new CMDB Source with sealed credentials, without checking
+// them: callers have.
+func (s *Service) create(ctx context.Context, customer inventory.CustomerID, provider inventory.CMDBProvider, settings, credentials json.RawMessage) (inventory.CMDBSource, error) {
 	src, err := inventory.NewCMDBSource(inventory.CMDBSourceID(uuid.New()), customer, provider)
 	if err != nil {
 		return inventory.CMDBSource{}, err
@@ -102,19 +112,52 @@ func (s *Service) Add(ctx context.Context, customer inventory.CustomerID, provid
 // TestLogin checks a login against its CMDB and stores nothing. A CMDB that
 // cannot be reached or rejects the login is a *Failure.
 func (s *Service) TestLogin(ctx context.Context, provider inventory.CMDBProvider, login Login) error {
+	_, _, err := s.checkLogin(ctx, provider, login)
+	return err
+}
+
+// Connect makes a login the Customer's Connected CMDB Source once its CMDB
+// accepts it, then runs the first Sync. It stores nothing when the check
+// fails, as TestLogin does. A failed first Sync is recorded and leaves the
+// source connected, so it is shown as LastSyncFailure rather than returned:
+// the admin fixes the CMDB and syncs again without reconnecting.
+func (s *Service) Connect(ctx context.Context, customer inventory.CustomerID, provider inventory.CMDBProvider, login Login) (ConnectedSource, error) {
+	settings, credentials, err := s.checkLogin(ctx, provider, login)
+	if err != nil {
+		return ConnectedSource{}, err
+	}
+	src, err := s.create(ctx, customer, provider, settings, credentials)
+	if err != nil {
+		return ConnectedSource{}, err
+	}
+	var failed *SyncError
+	if _, err := s.Sync(ctx, src.ID()); err != nil && !errors.As(err, &failed) {
+		return ConnectedSource{}, err
+	}
+	// A Sync that failed because ctx ended still connected the source, so
+	// reading it must not fail for the same reason.
+	return s.ConnectedSource(context.WithoutCancel(ctx), customer)
+}
+
+// checkLogin turns a login into the settings and credentials its CMDB
+// accepted.
+func (s *Service) checkLogin(ctx context.Context, provider inventory.CMDBProvider, login Login) (settings, credentials json.RawMessage, err error) {
 	p, err := s.providers.Lookup(provider)
 	if err != nil {
-		return fmt.Errorf("%w: %w", ErrInvalidLogin, err)
+		return nil, nil, fmt.Errorf("%w: %w", ErrInvalidLogin, err)
 	}
-	settings, credentials, err := p.FromLogin(login)
+	settings, credentials, err = p.FromLogin(login)
 	if err != nil {
-		return fmt.Errorf("%w: %w", ErrInvalidLogin, err)
+		return nil, nil, fmt.Errorf("%w: %w", ErrInvalidLogin, err)
 	}
 	parsed, err := p.ParseSettings(settings, credentials)
 	if err != nil {
-		return fmt.Errorf("%w: %w", ErrInvalidLogin, err)
+		return nil, nil, fmt.Errorf("%w: %w", ErrInvalidLogin, err)
 	}
-	return parsed.CheckCredentials(ctx)
+	if err := parsed.CheckCredentials(ctx); err != nil {
+		return nil, nil, err
+	}
+	return settings, credentials, nil
 }
 
 // ConnectedSource fails with ErrNotConnected when the Customer has no

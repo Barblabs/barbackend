@@ -34,6 +34,7 @@ func New(cfg Config) http.Handler {
 	})
 	h := cmdbSourceHandler{sources: cfg.Sources, customer: cfg.Customer, lifetime: cfg.Lifetime, syncTimeout: cfg.SyncTimeout}
 	router.GET("/cmdb/source", h.get)
+	router.POST("/cmdb/source", h.connect)
 	router.POST("/cmdb/source/test", h.test)
 	router.POST("/cmdb/source/sync", h.sync)
 	return router

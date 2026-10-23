@@ -57,6 +57,10 @@ type loginRequest struct {
 	Password string `json:"password" binding:"required"`
 }
 
+func (r loginRequest) login() sources.Login {
+	return sources.Login{URL: r.URL, User: r.User, Password: r.Password}
+}
+
 // testResponse carries a failed check with 200, because a CMDB rejecting a
 // login is a normal result the dashboard shows inline. Code is stable for
 // translation; Error is shown for codes the dashboard does not know.
@@ -72,13 +76,39 @@ func (h cmdbSourceHandler) test(ctx *gin.Context) {
 		badRequest(ctx, err)
 		return
 	}
-	err := h.sources.TestLogin(ctx.Request.Context(), inventory.CMDBProvider(req.Provider), sources.Login{URL: req.URL, User: req.User, Password: req.Password})
+	err := h.sources.TestLogin(ctx.Request.Context(), inventory.CMDBProvider(req.Provider), req.login())
 	var failure *sources.Failure
 	switch {
 	case err == nil:
 		ctx.JSON(http.StatusOK, testResponse{OK: true})
 	case errors.As(err, &failure):
 		ctx.JSON(http.StatusOK, testResponse{Code: string(failure.Code), Error: failure.Message})
+	case errors.Is(err, sources.ErrInvalidLogin):
+		badRequest(ctx, err)
+	default:
+		internalError(ctx, err)
+	}
+}
+
+// connect runs under the Sync context, not its request, so the first Sync
+// is bounded and outlives a closed tab as a manual Sync does.
+func (h cmdbSourceHandler) connect(ctx *gin.Context) {
+	var req loginRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		badRequest(ctx, err)
+		return
+	}
+	syncCtx, cancel := context.WithTimeout(h.lifetime, h.syncTimeout)
+	defer cancel()
+	src, err := h.sources.Connect(syncCtx, h.customer, inventory.CMDBProvider(req.Provider), req.login())
+	var failure *sources.Failure
+	switch {
+	case err == nil:
+		ctx.JSON(http.StatusOK, newCMDBSourceResponse(src))
+	case errors.As(err, &failure):
+		ctx.JSON(http.StatusUnprocessableEntity, codedError{Code: string(failure.Code), Error: failure.Message})
+	case errors.Is(err, sources.ErrAlreadyConnected):
+		ctx.JSON(http.StatusConflict, codedError{Code: alreadyConnected, Error: err.Error()})
 	case errors.Is(err, sources.ErrInvalidLogin):
 		badRequest(ctx, err)
 	default:
@@ -118,7 +148,8 @@ type codedError struct {
 }
 
 const (
-	syncInProgress = "sync_in_progress"
+	alreadyConnected = "already_connected"
+	syncInProgress   = "sync_in_progress"
 	// syncFailed is a failed Sync whose CMDB Provider did not classify why.
 	syncFailed = "sync_failed"
 )
