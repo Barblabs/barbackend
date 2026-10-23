@@ -28,6 +28,8 @@ var (
 	ErrDisconnected = errors.New("cmdb source is disconnected")
 	// ErrAlreadyConnected is a Customer that already has a Connected CMDB Source.
 	ErrAlreadyConnected = errors.New("customer already has a connected cmdb source")
+	// ErrNotConnected is a Customer with no Connected CMDB Source.
+	ErrNotConnected = errors.New("customer has no connected cmdb source")
 )
 
 const (
@@ -133,7 +135,7 @@ func (db *DB) CommitSync(ctx context.Context, id inventory.CMDBSourceID, started
 func lockSource(ctx context.Context, q *sqlcgen.Queries, id inventory.CMDBSourceID, started time.Time) error {
 	connected, err := q.LockCMDBSource(ctx, uuid.UUID(id))
 	if err != nil {
-		return lockError(fmt.Sprintf("cmdb source %s", id), err)
+		return lockError(fmt.Sprintf("cmdb source %s", id), ErrNotFound, err)
 	}
 	if !connected {
 		return fmt.Errorf("cmdb source %s: %w", id, ErrDisconnected)
@@ -152,10 +154,11 @@ func lockSource(ctx context.Context, q *sqlcgen.Queries, id inventory.CMDBSource
 	return nil
 }
 
-// lockError maps a failed NOWAIT lock of the CMDB Source named source.
-func lockError(source string, err error) error {
+// lockError maps a failed NOWAIT lock of the CMDB Source named source,
+// reporting a missing one as missing.
+func lockError(source string, missing, err error) error {
 	if errors.Is(err, pgx.ErrNoRows) {
-		return fmt.Errorf("%s: %w", source, ErrNotFound)
+		return fmt.Errorf("%s: %w", source, missing)
 	}
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == lockNotAvailable {

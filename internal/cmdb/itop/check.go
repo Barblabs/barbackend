@@ -28,30 +28,29 @@ const (
 )
 
 func (s settings) CheckCredentials(ctx context.Context) error {
-	err := rest.New(s.baseURL, s.auth, rest.Options{Timeout: checkTimeout}).Check(ctx)
-	return s.classify(err)
+	return s.classify(rest.New(s.baseURL, s.auth, rest.Options{Timeout: checkTimeout}).Check(ctx))
 }
 
-// classify turns a failed check into a Failure. A canceled check is not the
-// CMDB's fault, so it stays an error. Any other failure left is the transport
-// failing, such as DNS, a refused connection, a timeout or a dropped reply.
+// classify turns an error of a call to iTop into a Failure when it is the
+// CMDB's fault. A canceled call is not, and neither is an error barbackend
+// raised itself, such as a record it cannot read, so those stay errors.
 func (s settings) classify(err error) error {
 	var apiErr *rest.APIError
 	switch {
-	case err == nil:
-		return nil
-	case errors.Is(err, context.Canceled):
+	case err == nil, errors.Is(err, context.Canceled):
 		return err
 	case errors.As(err, &apiErr) && apiErr.Code == unauthorized && strings.Contains(apiErr.Message, restProfileMessage):
 		return s.failure(missingRESTProfile, "the iTop user lacks the REST Services User profile", err)
 	case errors.As(err, &apiErr) && apiErr.Code == unauthorized:
 		return s.failure(cmdb.InvalidCredentials, "iTop rejected the user or password", err)
 	case errors.As(err, &apiErr), errors.Is(err, rest.ErrUnexpectedResponse):
-		return s.failure(cmdb.UnexpectedResponse, "the URL does not answer like iTop", err)
-	case isTLSError(err):
+		return s.failure(cmdb.UnexpectedResponse, "iTop did not answer as expected", err)
+	case errors.Is(err, rest.ErrTransport) && isTLSError(err):
 		return s.failure(cmdb.TLSError, "the TLS handshake with iTop failed", err)
-	default:
+	case errors.Is(err, rest.ErrTransport):
 		return s.failure(cmdb.Unreachable, "iTop is unreachable", err)
+	default:
+		return err
 	}
 }
 

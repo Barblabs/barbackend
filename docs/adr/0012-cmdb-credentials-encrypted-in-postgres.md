@@ -13,4 +13,4 @@ This replaces naming an environment variable in the settings (`password_env`, `t
 ## Consequences
 
 - Losing the encryption key makes every stored credential unrecoverable; Customers would have to re-enter them.
-- Existing CMDB Sources with env-named secrets must be migrated or re-added.
+- Existing CMDB Sources with env-named secrets are disconnected by the migration, and their Assets become Inactive; their Customers connect or add a new CMDB Source.

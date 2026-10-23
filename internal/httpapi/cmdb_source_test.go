@@ -133,10 +133,14 @@ func TestTestCMDBSourceCredentials(t *testing.T) {
 
 // loginEndpoints take a login as their body, so they reject the same
 // invalid requests.
-var loginEndpoints = []struct{ method, path string }{
-	{http.MethodPost, "/cmdb/source/test"},
-	{http.MethodPost, "/cmdb/source"},
-	{http.MethodPut, "/cmdb/source"},
+var loginEndpoints = []struct {
+	method, path string
+	// takesProvider is false for an update, which keeps the source's provider.
+	takesProvider bool
+}{
+	{http.MethodPost, "/cmdb/source/test", true},
+	{http.MethodPost, "/cmdb/source", true},
+	{http.MethodPut, "/cmdb/source", false},
 }
 
 func TestLoginEndpointsRejectInvalidRequests(t *testing.T) {
@@ -144,19 +148,25 @@ func TestLoginEndpointsRejectInvalidRequests(t *testing.T) {
 	tests := []struct {
 		name string
 		edit func(map[string]string)
+		// aboutProvider cases only apply to endpoints that take one.
+		aboutProvider bool
+		code          string
 	}{
-		{"missing provider", func(l map[string]string) { delete(l, "provider") }},
-		{"unknown provider", func(l map[string]string) { l["provider"] = "servicenow" }},
-		{"missing url", func(l map[string]string) { delete(l, "url") }},
-		{"malformed url", func(l map[string]string) { l["url"] = "cmdb.example.com" }},
-		{"missing user", func(l map[string]string) { delete(l, "user") }},
-		{"missing password", func(l map[string]string) { delete(l, "password") }},
+		{"missing provider", func(l map[string]string) { delete(l, "provider") }, true, "invalid_request"},
+		{"unknown provider", func(l map[string]string) { l["provider"] = "servicenow" }, true, "invalid_login"},
+		{"missing url", func(l map[string]string) { delete(l, "url") }, false, "invalid_request"},
+		{"malformed url", func(l map[string]string) { l["url"] = "cmdb.example.com" }, false, "invalid_login"},
+		{"missing user", func(l map[string]string) { delete(l, "user") }, false, "invalid_request"},
+		{"missing password", func(l map[string]string) { delete(l, "password") }, false, "invalid_request"},
 	}
 	e := newEnv(t)
 	// Connected, so updating finds a source to check the login for.
 	e.addSource(t, e.customer)
 	for _, ep := range loginEndpoints {
 		for _, tt := range tests {
+			if tt.aboutProvider && !ep.takesProvider {
+				continue
+			}
 			t.Run(ep.method+" "+ep.path+" "+tt.name, func(t *testing.T) {
 				t.Parallel()
 				login := validLogin()
@@ -164,8 +174,8 @@ func TestLoginEndpointsRejectInvalidRequests(t *testing.T) {
 
 				rec := e.sendLogin(ep.method, ep.path, login)
 
-				if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), `"error":`) {
-					t.Errorf("response = %d %s, want 400 with an error", rec.Code, rec.Body)
+				if got := decode[codedError](t, rec, http.StatusBadRequest); got.Code != tt.code || got.Error == "" {
+					t.Errorf("body = %s, want code %s with an error", rec.Body, tt.code)
 				}
 			})
 		}
@@ -429,9 +439,10 @@ func TestConnectCMDBSourceWithFirstSyncExceedingTheTimeLimit(t *testing.T) {
 	}
 }
 
-// rotatedLogin is validLogin with every field but the provider changed.
+// rotatedLogin is validLogin with every field changed, and no provider: an
+// update keeps the source's own.
 func rotatedLogin() map[string]string {
-	return map[string]string{"provider": string(cmdbtest.Name), "url": "http://new-cmdb", "user": "new-admin", "password": "new-secret"}
+	return map[string]string{"url": "http://new-cmdb", "user": "new-admin", "password": "new-secret"}
 }
 
 func TestUpdateCMDBSource(t *testing.T) {

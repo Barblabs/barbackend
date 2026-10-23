@@ -175,3 +175,59 @@ func serve(h http.Handler) func(t *testing.T) string {
 		return srv.URL
 	}
 }
+
+func snapshot(t *testing.T, url string) error {
+	t.Helper()
+	settings, credentials, err := itop.Provider{}.FromLogin(cmdb.Login{URL: url, User: fakeUser, Password: fakePassword})
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := itop.Provider{}.ParseSettings(settings, credentials)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = parsed.Snapshot(context.Background())
+	return err
+}
+
+// A Sync reports why iTop could not be used as a check does, so the
+// dashboard can translate a password rotated since the source connected.
+func TestSnapshotFailureCodes(t *testing.T) {
+	t.Parallel()
+	closed := httptest.NewServer(http.NotFoundHandler())
+	closed.Close()
+	tests := []struct {
+		name string
+		url  func(t *testing.T) string
+		want cmdb.FailureCode
+	}{
+		{"rejected login", serve(reply(`{"code":1,"message":"Error: Invalid login"}`)), cmdb.InvalidCredentials},
+		{"connection refused", func(*testing.T) string { return closed.URL }, cmdb.Unreachable},
+		{"html page", serve(reply(`<html><body>Fatal error</body></html>`)), cmdb.UnexpectedResponse},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := snapshot(t, tt.url(t))
+
+			var failure *cmdb.Failure
+			if !errors.As(err, &failure) || failure.Code != tt.want {
+				t.Errorf("Snapshot = %v, want a %s failure", err, tt.want)
+			}
+		})
+	}
+}
+
+// A record barbackend cannot read is not iTop failing, so it stays an
+// unclassified error rather than blaming the CMDB.
+func TestSnapshotKeepsItsOwnErrorsUnclassified(t *testing.T) {
+	t.Parallel()
+	url := serve(reply(`{"code":0,"message":"","objects":{"Server::abc":{"code":0,"message":"","class":"Server","key":"abc","fields":{}}}}`))(t)
+
+	err := snapshot(t, url)
+
+	var failure *cmdb.Failure
+	if err == nil || errors.As(err, &failure) {
+		t.Errorf("Snapshot = %#v, want an unclassified error", err)
+	}
+}

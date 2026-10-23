@@ -13,7 +13,6 @@ import (
 	"barbackend/internal/encryption"
 	"barbackend/internal/inventory"
 	"barbackend/internal/postgres"
-	"barbackend/internal/sources"
 	"github.com/google/uuid"
 )
 
@@ -251,22 +250,6 @@ func TestSyncWithoutTheKeyFails(t *testing.T) {
 				t.Errorf("assets = %+v, want none", got)
 			}
 		})
-	}
-}
-
-func TestSyncOfSourceWithoutCredentialsFails(t *testing.T) {
-	t.Parallel()
-	e := newEnv(t)
-	src := e.addSource(t)
-	if _, err := e.conn.Exec(context.Background(), "UPDATE cmdb_sources SET credentials = ''"); err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := e.sources.Sync(context.Background(), src.ID()); !errors.Is(err, sources.ErrNoCredentials) {
-		t.Errorf("err = %v, want ErrNoCredentials", err)
-	}
-	if n := e.queryInt(t, "SELECT count(*) FROM sync_runs WHERE outcome_id = $1", int16(inventory.SyncFailed)); n != 1 {
-		t.Errorf("failed runs = %d, want 1", n)
 	}
 }
 

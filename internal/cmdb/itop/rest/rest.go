@@ -21,6 +21,10 @@ import (
 // error page or a server that is not iTop.
 var ErrUnexpectedResponse = errors.New("unexpected itop response")
 
+// ErrTransport is a request that got no complete reply, such as a DNS
+// failure, a refused connection, a failed TLS handshake or a timeout.
+var ErrTransport = errors.New("itop request failed")
+
 // APIError is an error reported by iTop itself, such as an invalid login or
 // query. iTop reports them with HTTP 200 and a non-zero code.
 type APIError struct {
@@ -226,12 +230,12 @@ func (c *Client) post(ctx context.Context, payload []byte) (response, error) {
 	}
 	res, err := c.http.Do(req)
 	if err != nil {
-		return response{}, err
+		return response{}, fmt.Errorf("%w: %w", ErrTransport, err)
 	}
 	defer func() { _ = res.Body.Close() }()
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		return response{}, err
+		return response{}, fmt.Errorf("%w: read reply: %w", ErrTransport, err)
 	}
 	if res.StatusCode != http.StatusOK {
 		return response{}, fmt.Errorf("%w: http %d: %.200s", ErrUnexpectedResponse, res.StatusCode, body)

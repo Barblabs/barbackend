@@ -41,7 +41,7 @@ func (Provider) FromLogin(login cmdb.Login) (json.RawMessage, json.RawMessage, e
 func (s settings) Snapshot(ctx context.Context) (inventory.Snapshot, error) {
 	cis, lk, err := fetch(ctx, rest.New(s.baseURL, s.auth, rest.Options{}))
 	if err != nil {
-		return inventory.Snapshot{}, err
+		return inventory.Snapshot{}, s.classify(err)
 	}
 	return snapshot(cis, lk), nil
 }

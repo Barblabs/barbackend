@@ -46,6 +46,7 @@ type Settings interface {
 	// CheckCredentials makes one cheap authenticated call to the CMDB. It
 	// returns a *Failure when the CMDB cannot be reached or rejects the
 	// credentials, and any other error only when the check itself failed.
+	// Snapshot reports the same failures the same way.
 	CheckCredentials(ctx context.Context) error
 	// Snapshot returns every in-scope record of the CMDB Source, or an error
 	// if it could not read them all: a partial snapshot would deactivate the
@@ -62,7 +63,9 @@ const (
 	Unreachable        FailureCode = "unreachable"
 	TLSError           FailureCode = "tls_error"
 	InvalidCredentials FailureCode = "invalid_credentials" //nolint:gosec // a failure code, not a credential
-	// UnexpectedResponse is a server that is not the CMDB or a malformed reply.
+	// UnexpectedResponse is a reply the adapter cannot use: a server that is
+	// not the CMDB, a malformed reply, or an error the CMDB reports for a
+	// reason other than the login.
 	UnexpectedResponse FailureCode = "unexpected_response"
 )
 

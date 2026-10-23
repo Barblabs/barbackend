@@ -45,12 +45,13 @@ func withDB(ctx context.Context, run func(*postgres.DB) error) error {
 	return run(db)
 }
 
-// encryptionKey allows an unset key, so that a Sync without one is recorded
-// as a failed Sync Run, but refuses a malformed one at startup.
+// encryptionKey refuses a missing key at startup: every command that needs
+// one seals or opens credentials, and would otherwise fail only after the
+// CMDB accepted a login.
 func encryptionKey() (encryption.Key, error) {
 	encoded := os.Getenv("CREDENTIALS_KEY")
 	if encoded == "" {
-		return encryption.Key{}, nil
+		return encryption.Key{}, errors.New("CREDENTIALS_KEY is not set")
 	}
 	key, err := encryption.ParseKey(encoded)
 	if err != nil {

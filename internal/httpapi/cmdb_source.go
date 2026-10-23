@@ -44,14 +44,15 @@ func (h cmdbSourceHandler) get(ctx *gin.Context) {
 		return
 	}
 	if err != nil {
-		internalError(ctx, err)
+		writeError(ctx, err)
 		return
 	}
 	ctx.JSON(http.StatusOK, newCMDBSourceResponse(src))
 }
 
+// loginRequest is the login PUT /cmdb/source takes: it keeps the connected
+// source's provider. connectRequest adds the provider for a new source.
 type loginRequest struct {
-	Provider string `json:"provider" binding:"required"`
 	URL      string `json:"url" binding:"required"`
 	User     string `json:"user" binding:"required"`
 	Password string `json:"password" binding:"required"`
@@ -59,6 +60,11 @@ type loginRequest struct {
 
 func (r loginRequest) login() sources.Login {
 	return sources.Login{URL: r.URL, User: r.User, Password: r.Password}
+}
+
+type connectRequest struct {
+	Provider string `json:"provider" binding:"required"`
+	loginRequest
 }
 
 // testResponse carries a failed check with 200, because a CMDB rejecting a
@@ -71,7 +77,7 @@ type testResponse struct {
 }
 
 func (h cmdbSourceHandler) test(ctx *gin.Context) {
-	var req loginRequest
+	var req connectRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		badRequest(ctx, err)
 		return
@@ -83,17 +89,15 @@ func (h cmdbSourceHandler) test(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, testResponse{OK: true})
 	case errors.As(err, &failure):
 		ctx.JSON(http.StatusOK, testResponse{Code: string(failure.Code), Error: failure.Message})
-	case errors.Is(err, sources.ErrInvalidLogin):
-		badRequest(ctx, err)
 	default:
-		internalError(ctx, err)
+		writeError(ctx, err)
 	}
 }
 
 // connect runs under the Sync context, not its request, so the first Sync
 // is bounded and outlives a closed tab as a manual Sync does.
 func (h cmdbSourceHandler) connect(ctx *gin.Context) {
-	var req loginRequest
+	var req connectRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		badRequest(ctx, err)
 		return
@@ -101,19 +105,11 @@ func (h cmdbSourceHandler) connect(ctx *gin.Context) {
 	syncCtx, cancel := context.WithTimeout(h.lifetime, h.syncTimeout)
 	defer cancel()
 	src, err := h.sources.Connect(syncCtx, h.customer, inventory.CMDBProvider(req.Provider), req.login())
-	var failure *sources.Failure
-	switch {
-	case err == nil:
-		ctx.JSON(http.StatusOK, newCMDBSourceResponse(src))
-	case errors.As(err, &failure):
-		ctx.JSON(http.StatusUnprocessableEntity, codedError{Code: string(failure.Code), Error: failure.Message})
-	case errors.Is(err, sources.ErrAlreadyConnected):
-		ctx.JSON(http.StatusConflict, codedError{Code: alreadyConnected, Error: err.Error()})
-	case errors.Is(err, sources.ErrInvalidLogin):
-		badRequest(ctx, err)
-	default:
-		internalError(ctx, err)
+	if err != nil {
+		writeError(ctx, err)
+		return
 	}
+	ctx.JSON(http.StatusOK, newCMDBSourceResponse(src))
 }
 
 func (h cmdbSourceHandler) update(ctx *gin.Context) {
@@ -122,34 +118,20 @@ func (h cmdbSourceHandler) update(ctx *gin.Context) {
 		badRequest(ctx, err)
 		return
 	}
-	src, err := h.sources.UpdateLogin(ctx.Request.Context(), h.customer, inventory.CMDBProvider(req.Provider), req.login())
-	var failure *sources.Failure
-	switch {
-	case err == nil:
-		ctx.JSON(http.StatusOK, newCMDBSourceResponse(src))
-	case errors.As(err, &failure):
-		ctx.JSON(http.StatusUnprocessableEntity, codedError{Code: string(failure.Code), Error: failure.Message})
-	case errors.Is(err, sources.ErrNotConnected):
-		ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-	case errors.Is(err, sources.ErrInvalidLogin):
-		badRequest(ctx, err)
-	default:
-		internalError(ctx, err)
+	src, err := h.sources.UpdateLogin(ctx.Request.Context(), h.customer, req.login())
+	if err != nil {
+		writeError(ctx, err)
+		return
 	}
+	ctx.JSON(http.StatusOK, newCMDBSourceResponse(src))
 }
 
 func (h cmdbSourceHandler) disconnect(ctx *gin.Context) {
-	err := h.sources.Disconnect(ctx.Request.Context(), h.customer)
-	switch {
-	case err == nil:
-		ctx.Status(http.StatusNoContent)
-	case errors.Is(err, sources.ErrNotConnected):
-		ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-	case errors.Is(err, sources.ErrSyncInProgress):
-		ctx.JSON(http.StatusConflict, codedError{Code: syncInProgress, Error: err.Error()})
-	default:
-		internalError(ctx, err)
+	if err := h.sources.Disconnect(ctx.Request.Context(), h.customer); err != nil {
+		writeError(ctx, err)
+		return
 	}
+	ctx.Status(http.StatusNoContent)
 }
 
 func newCMDBSourceResponse(src sources.ConnectedSource) cmdbSourceResponse {
@@ -177,19 +159,6 @@ type syncResponse struct {
 	Skipped     int       `json:"skipped"`
 }
 
-// codedError carries a Code stable for translation, as in testResponse.
-type codedError struct {
-	Code  string `json:"code"`
-	Error string `json:"error"`
-}
-
-const (
-	alreadyConnected = "already_connected"
-	syncInProgress   = "sync_in_progress"
-	// syncFailed is a failed Sync whose CMDB Provider did not classify why.
-	syncFailed = "sync_failed"
-)
-
 func (h cmdbSourceHandler) sync(ctx *gin.Context) {
 	syncCtx, cancel := context.WithTimeout(h.lifetime, h.syncTimeout)
 	defer cancel()
@@ -198,16 +167,11 @@ func (h cmdbSourceHandler) sync(ctx *gin.Context) {
 	switch {
 	case err == nil:
 		ctx.JSON(http.StatusOK, newSyncResponse(run))
-	// ErrDisconnected is a source disconnected while this Sync read it.
-	case errors.Is(err, sources.ErrNotConnected), errors.Is(err, sources.ErrDisconnected):
-		ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-	case errors.Is(err, sources.ErrSyncInProgress):
-		ctx.JSON(http.StatusConflict, codedError{Code: syncInProgress, Error: err.Error()})
 	case errors.As(err, &failed):
 		_ = ctx.Error(err)
 		ctx.JSON(http.StatusBadGateway, codedError{Code: failureCode(failed), Error: failed.Error()})
 	default:
-		internalError(ctx, err)
+		writeError(ctx, err)
 	}
 }
 

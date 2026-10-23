@@ -45,7 +45,7 @@ func (t *Tx) CreateCMDBSource(ctx context.Context, src inventory.CMDBSource, set
 
 // UpdateConnectedLogin replaces the settings and sealed credentials of a
 // Connected CMDB Source, keeping its id and so its Assets. It fails with
-// ErrNotFound when the source is not connected.
+// ErrNotConnected when the source is not connected.
 func (t *Tx) UpdateConnectedLogin(ctx context.Context, id inventory.CMDBSourceID, settings json.RawMessage, credentials []byte) error {
 	n, err := t.q.UpdateConnectedCMDBSourceLogin(ctx, sqlcgen.UpdateConnectedCMDBSourceLoginParams{
 		ID:          uuid.UUID(id),
@@ -56,7 +56,7 @@ func (t *Tx) UpdateConnectedLogin(ctx context.Context, id inventory.CMDBSourceID
 		return fmt.Errorf("update login of cmdb source %s: %w", id, err)
 	}
 	if n == 0 {
-		return fmt.Errorf("connected cmdb source %s: %w", id, ErrNotFound)
+		return fmt.Errorf("cmdb source %s: %w", id, ErrNotConnected)
 	}
 	return nil
 }
@@ -64,11 +64,11 @@ func (t *Tx) UpdateConnectedLogin(ctx context.Context, id inventory.CMDBSourceID
 // DisconnectCMDBSource makes the Customer's Connected CMDB Source a
 // Disconnected one and its Assets Inactive, deleting nothing. It locks the
 // source as CommitSync does, so it fails at once with ErrSyncInProgress
-// while a Sync commits, and with ErrNotFound when nothing is connected.
+// while a Sync commits, and with ErrNotConnected when nothing is connected.
 func (t *Tx) DisconnectCMDBSource(ctx context.Context, customer inventory.CustomerID) error {
 	id, err := t.q.LockConnectedCMDBSource(ctx, uuid.UUID(customer))
 	if err != nil {
-		return lockError(fmt.Sprintf("connected cmdb source of customer %s", customer), err)
+		return lockError(fmt.Sprintf("customer %s", customer), ErrNotConnected, err)
 	}
 	if err := t.q.DisconnectCMDBSource(ctx, id); err != nil {
 		return fmt.Errorf("disconnect cmdb source %s: %w", id, err)
@@ -93,12 +93,12 @@ func (t *Tx) CMDBSource(ctx context.Context, id inventory.CMDBSourceID) (StoredC
 	return restoreCMDBSource(sqlcgen.GetConnectedCMDBSourceRow(row))
 }
 
-// ConnectedCMDBSource fails with ErrNotFound when the Customer has no
+// ConnectedCMDBSource fails with ErrNotConnected when the Customer has no
 // Connected CMDB Source.
 func (t *Tx) ConnectedCMDBSource(ctx context.Context, customer inventory.CustomerID) (StoredCMDBSource, error) {
 	row, err := t.q.GetConnectedCMDBSource(ctx, uuid.UUID(customer))
 	if errors.Is(err, pgx.ErrNoRows) {
-		return StoredCMDBSource{}, fmt.Errorf("connected cmdb source of customer %s: %w", customer, ErrNotFound)
+		return StoredCMDBSource{}, fmt.Errorf("customer %s: %w", customer, ErrNotConnected)
 	}
 	if err != nil {
 		return StoredCMDBSource{}, fmt.Errorf("get connected cmdb source of customer %s: %w", customer, err)

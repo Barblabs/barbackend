@@ -4,6 +4,7 @@ package httpapi
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"time"
 
@@ -42,12 +43,47 @@ func New(cfg Config) http.Handler {
 	return router
 }
 
-func badRequest(ctx *gin.Context, err error) {
-	ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+// codedError is every error body: Code is stable for translation, and Error
+// is shown for codes the dashboard does not know.
+type codedError struct {
+	Code  string `json:"code"`
+	Error string `json:"error"`
 }
 
-// internalError hides the cause from the client; gin's logger prints it.
-func internalError(ctx *gin.Context, err error) {
-	_ = ctx.Error(err)
-	ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+const (
+	invalidRequest   = "invalid_request"
+	invalidLogin     = "invalid_login"
+	notConnected     = "not_connected"
+	alreadyConnected = "already_connected"
+	syncInProgress   = "sync_in_progress"
+	// syncFailed is a failed Sync whose CMDB Provider did not classify why.
+	syncFailed    = "sync_failed"
+	internalError = "internal_error"
+)
+
+// writeError answers the errors any endpoint may return. Handlers answer
+// their own normal outcomes, such as a failed check, before falling back to it.
+func writeError(ctx *gin.Context, err error) {
+	var failure *sources.Failure
+	switch {
+	case errors.As(err, &failure):
+		ctx.JSON(http.StatusUnprocessableEntity, codedError{Code: string(failure.Code), Error: failure.Message})
+	case errors.Is(err, sources.ErrInvalidLogin):
+		ctx.JSON(http.StatusBadRequest, codedError{Code: invalidLogin, Error: err.Error()})
+	// ErrDisconnected is a source disconnected while a Sync of it ran.
+	case errors.Is(err, sources.ErrNotConnected), errors.Is(err, sources.ErrDisconnected):
+		ctx.JSON(http.StatusNotFound, codedError{Code: notConnected, Error: err.Error()})
+	case errors.Is(err, sources.ErrAlreadyConnected):
+		ctx.JSON(http.StatusConflict, codedError{Code: alreadyConnected, Error: err.Error()})
+	case errors.Is(err, sources.ErrSyncInProgress):
+		ctx.JSON(http.StatusConflict, codedError{Code: syncInProgress, Error: err.Error()})
+	default:
+		// The cause stays out of the reply; gin's logger prints it.
+		_ = ctx.Error(err)
+		ctx.JSON(http.StatusInternalServerError, codedError{Code: internalError, Error: "internal server error"})
+	}
+}
+
+func badRequest(ctx *gin.Context, err error) {
+	ctx.JSON(http.StatusBadRequest, codedError{Code: invalidRequest, Error: err.Error()})
 }

@@ -27,9 +27,8 @@ var (
 	ErrCorrupt    = errors.New("sealed data is corrupt")
 )
 
-// Key is an AES-256 key and its id. The zero Key stands for a server
-// started without one: it fails every Seal and Open with ErrNoKey, so a Sync
-// can still record why it failed.
+// Key is an AES-256 key and its id. Only ParseKey makes a usable one; the
+// zero Key fails every Seal and Open with ErrNoKey rather than panicking.
 type Key struct {
 	id   []byte
 	aead cipher.AEAD
