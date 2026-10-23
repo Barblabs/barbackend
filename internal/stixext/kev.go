@@ -1,10 +1,6 @@
 package stixext
 
-import (
-	"encoding/json"
-
-	"github.com/TcM1911/stix2"
-)
+import "github.com/TcM1911/stix2"
 
 // KEV is the kev/1 property extension of a Vulnerability.
 type KEV struct {
@@ -27,17 +23,5 @@ func NewKEV(k KEV) KEV {
 
 // KEVOf decodes the kev/1 extension of v.
 func KEVOf(v *stix2.Vulnerability) (KEV, bool) {
-	raw, ok := v.Extensions[string(KEVDefinitionID)]
-	if !ok {
-		return KEV{}, false
-	}
-	data, err := json.Marshal(raw)
-	if err != nil {
-		return KEV{}, false
-	}
-	var k KEV
-	if err := json.Unmarshal(data, &k); err != nil {
-		return KEV{}, false
-	}
-	return k, true
+	return decodeExtension[KEV](v, KEVDefinitionID)
 }

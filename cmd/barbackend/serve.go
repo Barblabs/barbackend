@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"barbackend/internal/httpapi"
+	"barbackend/internal/ingest"
 	"barbackend/internal/inventory"
 	"github.com/google/uuid"
 )
@@ -28,8 +29,18 @@ func serve(ctx context.Context, _ []string) error {
 	if err != nil {
 		return err
 	}
+	svc, err := ingest.New(registeredFeeds()...)
+	if err != nil {
+		return err
+	}
+	feedsDone := make(chan struct{})
+	go func() {
+		defer close(feedsDone)
+		svc.Run(ctx)
+	}()
+
 	return withApp(ctx, func(a app) error {
-		return listen(ctx, httpapi.New(httpapi.Config{
+		return listen(ctx, feedsDone, httpapi.New(httpapi.Config{
 			Sources:        a.sources,
 			Customer:       customer,
 			AllowedOrigins: allowedOrigins(),
@@ -39,7 +50,7 @@ func serve(ctx context.Context, _ []string) error {
 	})
 }
 
-func listen(ctx context.Context, handler http.Handler) error {
+func listen(ctx context.Context, feedsDone <-chan struct{}, handler http.Handler) error {
 	srv := &http.Server{
 		Addr:              listenAddr(),
 		Handler:           handler,
@@ -58,6 +69,11 @@ func listen(ctx context.Context, handler http.Handler) error {
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		return err
+	}
+	select {
+	case <-feedsDone:
+	case <-shutdownCtx.Done():
+		return errors.New("feeds did not stop")
 	}
 	if err := <-serveErr; !errors.Is(err, http.ErrServerClosed) {
 		return err

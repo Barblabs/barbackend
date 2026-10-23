@@ -9,13 +9,23 @@ import (
 	"os"
 	"time"
 
+	"barbackend/internal/feeds/attack"
+	"barbackend/internal/feeds/aws"
+	"barbackend/internal/feeds/epss"
 	"barbackend/internal/feeds/kev"
+	"barbackend/internal/feeds/nvd"
 	"barbackend/internal/ingest"
 )
 
 const feedSynopsis = "pull [--feed <name>]"
 
-const kevInterval = time.Hour
+const (
+	kevInterval    = time.Hour
+	nvdInterval    = 2 * time.Hour
+	attackInterval = 12 * time.Hour
+	awsInterval    = 6 * time.Hour
+	epssInterval   = 24 * time.Hour
+)
 
 func feed(ctx context.Context, args []string) error {
 	if len(args) == 0 || args[0] != "pull" {
@@ -57,9 +67,31 @@ func pullFeeds(ctx context.Context, out io.Writer, feeds []ingest.Feed, name str
 }
 
 func registeredFeeds() []ingest.Feed {
-	return []ingest.Feed{{
-		Name:     "kev",
-		Interval: kevInterval,
-		Pull:     kev.New(nil, "").Pull,
-	}}
+	return []ingest.Feed{
+		{
+			Name:     "kev",
+			Interval: kevInterval,
+			Pull:     kev.New(nil, "").Pull,
+		},
+		{
+			Name:     "nvd",
+			Interval: nvdInterval,
+			Pull:     nvd.New(nil, "", os.Getenv("NVD_API_KEY")).Pull,
+		},
+		{
+			Name:     "attack",
+			Interval: attackInterval,
+			Pull:     attack.New(nil, "").Pull,
+		},
+		{
+			Name:     "aws",
+			Interval: awsInterval,
+			Pull:     aws.New(nil, "").Pull,
+		},
+		{
+			Name:     "epss",
+			Interval: epssInterval,
+			Pull:     epss.New(nil, "").Pull,
+		},
+	}
 }

@@ -7,11 +7,10 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"regexp"
-	"strings"
 	"time"
 
 	"barbackend/internal/feeds"
+	"barbackend/internal/feeds/httpx"
 	"barbackend/internal/stixext"
 	"github.com/TcM1911/stix2"
 )
@@ -21,23 +20,14 @@ const (
 	dateLayout = "2006-01-02"
 )
 
-var cveIDPattern = regexp.MustCompile(`^CVE-\d{4}-\d{4,}$`)
-
 // Adapter fetches and normalizes the KEV catalog.
 type Adapter struct {
-	Client *http.Client
-	URL    string
+	httpx.Endpoint
 }
 
 // New returns an Adapter, defaulting the client and URL when they are empty.
 func New(client *http.Client, url string) *Adapter {
-	if client == nil {
-		client = http.DefaultClient
-	}
-	if strings.TrimSpace(url) == "" {
-		url = defaultURL
-	}
-	return &Adapter{Client: client, URL: url}
+	return &Adapter{Endpoint: httpx.NewEndpoint(client, url, defaultURL)}
 }
 
 // Pull fetches the catalog and emits one Vulnerability per entry.
@@ -66,18 +56,11 @@ func (a *Adapter) Pull(ctx context.Context, emit feeds.Emit) error {
 }
 
 func (a *Adapter) fetch(ctx context.Context) (catalog, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, a.URL, nil)
+	resp, err := a.Get(ctx, "kev")
 	if err != nil {
-		return catalog{}, fmt.Errorf("kev: %w", err)
-	}
-	resp, err := a.Client.Do(req)
-	if err != nil {
-		return catalog{}, fmt.Errorf("kev: %w", err)
+		return catalog{}, err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return catalog{}, fmt.Errorf("kev: %s: %s", a.URL, resp.Status)
-	}
 	var c catalog
 	if err := json.NewDecoder(resp.Body).Decode(&c); err != nil {
 		return catalog{}, fmt.Errorf("kev: decode catalog: %w", err)
@@ -86,8 +69,8 @@ func (a *Adapter) fetch(ctx context.Context) (catalog, error) {
 }
 
 func vulnerability(e entry, catalogVersion string, released time.Time) (*stix2.Vulnerability, bool, error) {
-	id := strings.ToUpper(strings.TrimSpace(e.CVEID))
-	if !cveIDPattern.MatchString(id) {
+	id, ok := stixext.CVEID(e.CVEID)
+	if !ok {
 		log.Printf("kev: skipping %q: not a CVE ID", e.CVEID)
 		return nil, false, nil
 	}

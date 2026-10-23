@@ -120,26 +120,33 @@ func (s *Service) pullAndLog(ctx context.Context, f Feed) {
 func (f Feed) pull(ctx context.Context, handle func(context.Context, []stix2.STIXObject) error) (int, error) {
 	var count int
 	var batch []stix2.STIXObject
-	err := f.Pull(ctx, func(obj stix2.STIXObject) error {
+	var handleErr error
+	pullErr := f.Pull(ctx, func(obj stix2.STIXObject) error {
 		count++
 		if handle == nil {
 			return nil
+		}
+		if handleErr != nil {
+			return handleErr
 		}
 		batch = append(batch, obj)
 		if len(batch) < batchSize {
 			return nil
 		}
-		if err := handle(ctx, batch); err != nil {
-			return err
+		handleErr = handle(ctx, batch)
+		if handleErr != nil {
+			return handleErr
 		}
 		batch = nil
 		return nil
 	})
-	if err != nil {
-		return count, err
+	if handleErr != nil {
+		return count, handleErr
 	}
-	if len(batch) == 0 {
-		return count, nil
+	if handle != nil && len(batch) > 0 {
+		if err := handle(ctx, batch); err != nil {
+			return count, errors.Join(pullErr, err)
+		}
 	}
-	return count, handle(ctx, batch)
+	return count, pullErr
 }

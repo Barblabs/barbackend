@@ -15,11 +15,14 @@ This adds layers to ADR 0008. Its table must be updated, and `depguard` must get
 ```
 internal/
   feeds/               Feed seam                       -> stixext
-    <feed>/            adapters: nvd, epss, kev, attack -> feeds, stixext
+    httpx/             shared HTTP client setup        -> nothing internal
+    <feed>/            adapters: nvd, epss, kev, attack -> feeds, httpx, stixext
   stixext/             barbattack's STIX conventions    -> nothing internal (stix2, uuid)
 ```
 
 `internal/stixext` is pure, with no I/O. It holds everything in this ADR that more than one package needs: the identifier helpers, the `extension-definition` objects, the typed Go structs for each extension and their decode helpers, and the barbattack Identity and TLP marking constants. Feed adapters write with it, and threat matching (ADR 0008) reads with it. Only `feeds/...` and `stixext` construct STIX objects. Other packages read them through `stixext`, so a change of library touches only these two places.
+
+`internal/feeds/httpx` holds the shared HTTP client setup (client, URL, headers, 200 check). It sits under `feeds/` because only Feed adapters use it, but it is not part of the seam: the seam itself stays transport-free.
 
 ## What objects to create
 
@@ -32,6 +35,8 @@ internal/
 | ATT&CK technique, tactic, group, etc. | MITRE's own objects, unchanged | Do not re-mint IDs or translate `x_mitre_*` properties. |
 | Advisory or news item (later) | `report` SDO with `object_refs` to Vulnerabilities | Its text is untrusted data. |
 | Asset, Software Component, Finding, Score | none for now | These belong to the Customer and live in Postgres. Exporting them to STIX (e.g. `infrastructure`, `software`, `sighting`) is a separate decision. |
+
+An advisory's `object_refs` point at the deterministic Vulnerability IDs for the CVE IDs its text mentions. STIX requires at least one `object_ref`, so a bulletin that mentions none is skipped and logged.
 
 Do not create `software` SCOs or `relationship` objects for affected products in this version. A `software` object holds a single version, but NVD says "every version from 2.4.0 up to but not including 2.4.58". The affected ranges go in the NVD extension instead, where filters can compare them with a Software Component's version.
 
