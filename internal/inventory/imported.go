@@ -86,11 +86,8 @@ func newSoftware(components []SoftwareComponent) ([]SoftwareComponent, error) {
 	return software, nil
 }
 
-// A blank name is enough to detect the zero value: NewImportedAsset rejects it.
 func (a ImportedAsset) isZero() bool { return a.name == "" }
 
-// equal treats Software Components as a multiset: CMDB Sources do not promise
-// a stable order, so a reordered list is not a change.
 func (a ImportedAsset) equal(b ImportedAsset) bool {
 	return a.name == b.name &&
 		a.description == b.description &&

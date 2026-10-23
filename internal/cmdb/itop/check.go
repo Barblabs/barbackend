@@ -16,8 +16,6 @@ import (
 // Services User profile, which iTop requires for the REST API.
 const missingRESTProfile cmdb.FailureCode = "missing_rest_profile"
 
-// checkTimeout is short because an admin waits for the check in the
-// dashboard, and list_operations reads no data.
 const checkTimeout = 15 * time.Second
 
 // iTop reports every login failure with code 1 (UNAUTHORIZED); only the
@@ -31,9 +29,6 @@ func (s settings) CheckCredentials(ctx context.Context) error {
 	return s.classify(rest.New(s.baseURL, s.auth, rest.Options{Timeout: checkTimeout}).Check(ctx))
 }
 
-// classify turns an error of a call to iTop into a Failure when it is the
-// CMDB's fault. A canceled call is not, and neither is an error barbackend
-// raised itself, such as a record it cannot read, so those stay errors.
 func (s settings) classify(err error) error {
 	var apiErr *rest.APIError
 	switch {

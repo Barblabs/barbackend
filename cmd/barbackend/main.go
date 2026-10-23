@@ -11,10 +11,8 @@ import (
 )
 
 type command struct {
-	name    string
-	summary string
-	// synopsis is the command line after "barbackend", shown when the
-	// command takes arguments.
+	name     string
+	summary  string
 	synopsis string
 	needsDB  bool
 	run      func(ctx context.Context, args []string) error
@@ -48,7 +46,6 @@ func usage() string {
 	return b.String()
 }
 
-// joinAnd lists names as prose: "a", "a and b", "a, b and c".
 func joinAnd(names []string) string {
 	if len(names) <= 1 {
 		return strings.Join(names, "")
@@ -75,9 +72,6 @@ func main() {
 		fmt.Fprintln(os.Stderr, usage())
 		os.Exit(2)
 	}
-	// Canceling on interrupt or termination lets an interrupted Sync record
-	// its failed run and the server shut down gracefully. SIGTERM is how
-	// container runtimes and systemd stop a process.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if err := cmd.run(ctx, os.Args[2:]); err != nil {

@@ -17,9 +17,6 @@ var (
 	corsMaxAge  = strconv.Itoa(int((10 * time.Minute).Seconds()))
 )
 
-// cors lets browsers on allowed origins call the API. Other origins get no
-// CORS headers, so the browser blocks them. It answers preflights itself
-// because no route handles OPTIONS.
 func cors(allowed []string) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		origin := ctx.GetHeader("Origin")

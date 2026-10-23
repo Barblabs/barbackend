@@ -45,8 +45,6 @@ func mustImported(t *testing.T, p inventory.ImportedAssetParams) inventory.Impor
 
 var errReadOnly = errors.New("read only")
 
-// assets reads the stored Assets through the interface a Sync uses, then
-// aborts so nothing is written.
 func assets(t *testing.T, db *postgres.DB, src inventory.CMDBSourceID) []*inventory.Asset {
 	t.Helper()
 	var got []*inventory.Asset
@@ -60,7 +58,6 @@ func assets(t *testing.T, db *postgres.DB, src inventory.CMDBSourceID) []*invent
 	return got
 }
 
-// reconcileWith reconciles the stored Assets with s, as a Sync does.
 func reconcileWith(src inventory.CMDBSourceID, s inventory.Snapshot) func([]*inventory.Asset) (inventory.Reconciliation, error) {
 	return func(existing []*inventory.Asset) (inventory.Reconciliation, error) {
 		return inventory.Reconcile(src, existing, s)
@@ -76,7 +73,6 @@ func commitSync(t *testing.T, db *postgres.DB, src inventory.CMDBSourceID, recon
 	return run
 }
 
-// syncRecords commits a Sync of a snapshot of records.
 func syncRecords(t *testing.T, db *postgres.DB, src inventory.CMDBSourceID, records ...inventory.Record) inventory.Reconciliation {
 	t.Helper()
 	var r inventory.Reconciliation

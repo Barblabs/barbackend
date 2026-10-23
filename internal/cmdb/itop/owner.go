@@ -7,10 +7,6 @@ import (
 	"barbackend/internal/inventory"
 )
 
-// owner is the CI's only Person contact (ADR 0003). Persons are counted
-// before any email is checked, so a CI with two Persons has no owner even
-// when one of them has an invalid email: the valid one is not more likely to
-// be the owner.
 func owner(c ci, lk lookups) inventory.OwnerEmail {
 	persons := map[string]bool{}
 	var only string

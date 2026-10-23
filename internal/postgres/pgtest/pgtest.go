@@ -22,8 +22,7 @@ import (
 
 const (
 	template = "barb_template"
-	// Matches the major version production runs.
-	version = embeddedpostgres.V15
+	version  = embeddedpostgres.V15
 )
 
 var (
@@ -58,10 +57,6 @@ func run(m *testing.M) int {
 	binaries := shared
 	staged := !extracted(shared)
 	if staged {
-		// Extract into a private directory and publish it by rename once
-		// Postgres has stopped, so packages starting concurrently and
-		// interrupted runs never see a partial extraction. The removal only
-		// matters when the publish did not happen or lost to another package.
 		binaries, err = os.MkdirTemp(filepath.Dir(shared), "staging-")
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "pgtest:", err)

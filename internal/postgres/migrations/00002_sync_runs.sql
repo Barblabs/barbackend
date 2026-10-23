@@ -1,6 +1,5 @@
 -- +goose Up
 
--- Catalog ids equal inventory.SyncOutcome (ADR 0006).
 CREATE TABLE sync_outcomes (
     id   smallint PRIMARY KEY,
     name text NOT NULL UNIQUE
@@ -9,7 +8,6 @@ INSERT INTO sync_outcomes (id, name) VALUES
     (1, 'Succeeded'),
     (2, 'Failed');
 
--- skipped_records is [{record_id, reason}]; failure is written NULL for a successful run.
 CREATE TABLE sync_runs (
     id              bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     cmdb_source_id  uuid NOT NULL REFERENCES cmdb_sources (id),

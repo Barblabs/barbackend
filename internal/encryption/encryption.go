@@ -55,9 +55,6 @@ func ParseKey(encoded string) (Key, error) {
 	return Key{id: keyID(raw), aead: aead}, nil
 }
 
-// keyID is derived from the key rather than configured, so two keys can
-// never share an id. A truncated SHA-256 of a random 256-bit key reveals
-// nothing usable about it.
 func keyID(raw []byte) []byte {
 	sum := sha256.Sum256(append([]byte("barbackend encryption key id\x00"), raw...))
 	return sum[:keyIDSize]
@@ -97,8 +94,6 @@ func (k Key) Open(sealed, owner []byte) ([]byte, error) {
 	return plaintext, nil
 }
 
-// authenticatedData starts with the fixed-size key id, so no key id and owner
-// pair can collide with another.
 func (k Key) authenticatedData(owner []byte) []byte {
 	return append(bytes.Clone(k.id), owner...)
 }

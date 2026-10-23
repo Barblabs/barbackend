@@ -41,7 +41,6 @@ func TestParseSettings(t *testing.T) {
 		{"unknown mode", `{"url": "http://localhost:8000", "auth": {"mode": "oauth"}}`, token, itop.ErrInvalidSettings},
 		{"basic without user", `{"url": "http://localhost:8000", "auth": {"mode": "basic", "user": " "}}`, password, itop.ErrInvalidSettings},
 		{"token with user", `{"url": "http://localhost:8000", "auth": {"mode": "token", "user": "barb-reader"}}`, token, itop.ErrInvalidSettings},
-		// Secrets used to be named as environment variables (ADR 0012).
 		{"password_env", `{"url": "http://localhost:8000", "auth": {"mode": "basic", "user": "barb-reader", "password_env": "ITOP_PASSWORD"}}`, password, itop.ErrInvalidSettings},
 		{"token_env", `{"url": "http://localhost:8000", "auth": {"mode": "token", "token_env": "ITOP_TOKEN"}}`, token, itop.ErrInvalidSettings},
 		{"credentials not an object", basicSettings, `"secret"`, itop.ErrInvalidCredentials},
@@ -83,8 +82,6 @@ func TestDescribe(t *testing.T) {
 	}
 }
 
-// A Snapshot authenticates with the credentials it was parsed with. The fake
-// iTop refuses anything else, as iTop does with HTTP 200 and a non-zero code.
 func TestSnapshotAuthenticatesWithCredentials(t *testing.T) {
 	tests := []struct {
 		name        string

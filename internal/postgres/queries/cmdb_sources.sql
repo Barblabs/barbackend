@@ -7,7 +7,6 @@ SELECT id, customer_id, provider, settings, credentials, (disconnected_at IS NUL
 FROM cmdb_sources
 WHERE id = $1;
 
--- NOWAIT fails at once instead of queueing behind a Sync that may never end.
 -- name: LockCMDBSource :one
 SELECT (disconnected_at IS NULL)::boolean AS connected
 FROM cmdb_sources
@@ -24,7 +23,6 @@ UPDATE cmdb_sources
 SET settings = $2, credentials = $3
 WHERE id = $1 AND disconnected_at IS NULL;
 
--- NOWAIT, as LockCMDBSource, so a disconnect never waits behind a Sync.
 -- name: LockConnectedCMDBSource :one
 SELECT id
 FROM cmdb_sources

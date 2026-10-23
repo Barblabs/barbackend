@@ -56,13 +56,10 @@ const (
 	notConnected     = "not_connected"
 	alreadyConnected = "already_connected"
 	syncInProgress   = "sync_in_progress"
-	// syncFailed is a failed Sync whose CMDB Provider did not classify why.
-	syncFailed    = "sync_failed"
-	internalError = "internal_error"
+	syncFailed       = "sync_failed"
+	internalError    = "internal_error"
 )
 
-// writeError answers the errors any endpoint may return. Handlers answer
-// their own normal outcomes, such as a failed check, before falling back to it.
 func writeError(ctx *gin.Context, err error) {
 	var failure *sources.Failure
 	switch {
@@ -70,7 +67,6 @@ func writeError(ctx *gin.Context, err error) {
 		ctx.JSON(http.StatusUnprocessableEntity, codedError{Code: string(failure.Code), Error: failure.Message})
 	case errors.Is(err, sources.ErrInvalidLogin):
 		ctx.JSON(http.StatusBadRequest, codedError{Code: invalidLogin, Error: err.Error()})
-	// ErrDisconnected is a source disconnected while a Sync of it ran.
 	case errors.Is(err, sources.ErrNotConnected), errors.Is(err, sources.ErrDisconnected):
 		ctx.JSON(http.StatusNotFound, codedError{Code: notConnected, Error: err.Error()})
 	case errors.Is(err, sources.ErrAlreadyConnected):
@@ -78,7 +74,6 @@ func writeError(ctx *gin.Context, err error) {
 	case errors.Is(err, sources.ErrSyncInProgress):
 		ctx.JSON(http.StatusConflict, codedError{Code: syncInProgress, Error: err.Error()})
 	default:
-		// The cause stays out of the reply; gin's logger prints it.
 		_ = ctx.Error(err)
 		ctx.JSON(http.StatusInternalServerError, codedError{Code: internalError, Error: "internal server error"})
 	}

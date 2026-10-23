@@ -1,6 +1,5 @@
 -- +goose Up
 
--- Catalog ids equal the Go constants in internal/inventory (ADR 0006).
 CREATE TABLE asset_kinds (
     id   smallint PRIMARY KEY,
     name text NOT NULL UNIQUE
@@ -36,7 +35,6 @@ INSERT INTO software_roles (id, name) VALUES
     (1, 'Operating System'),
     (2, 'Application');
 
--- customer_id has no foreign key until the customers table exists.
 CREATE TABLE cmdb_sources (
     id          uuid PRIMARY KEY,
     customer_id uuid NOT NULL,
@@ -72,7 +70,6 @@ CREATE TABLE assets (
     CHECK ((hardware_vendor IS NULL) = (hardware_model IS NULL))
 );
 
--- position keeps components in the order the CMDB Source listed them.
 CREATE TABLE software_components (
     cmdb_source_id uuid NOT NULL,
     record_id      text NOT NULL,
