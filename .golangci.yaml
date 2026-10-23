@@ -96,6 +96,15 @@ linters:
           deny:
             - pkg: barbackend/internal
               desc: the ingest use case calls the Feed seam, never persistence or transports (ADR 0008, ADR 0011)
+        encryption:
+          list-mode: lax
+          files:
+            - "**/internal/encryption/**"
+          allow:
+            - barbackend/internal/encryption
+          deny:
+            - pkg: barbackend/internal
+              desc: encryption imports no other layer; the sources use case seals and opens credentials with it (ADR 0008, ADR 0012)
         postgres:
           list-mode: lax
           files:
@@ -108,10 +117,12 @@ linters:
               desc: persistence depends only on inventory; use cases call it, not the reverse (ADR 0008)
         # Handlers reach persistence and adapters only through use cases, so
         # each new use-case package is added to allow when httpapi serves it.
+        # Tests are exempt: they wire a real router on Postgres, as cmd does.
         httpapi-imports:
           list-mode: lax
           files:
             - "**/internal/httpapi/**"
+            - "!$test"
           allow:
             - barbackend/internal/httpapi
             - barbackend/internal/inventory

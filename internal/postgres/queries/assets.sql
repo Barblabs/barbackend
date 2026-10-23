@@ -70,3 +70,8 @@ SELECT record_id, role_id, name, version, product_vendor, product_name
 FROM software_components
 WHERE cmdb_source_id = @cmdb_source_id
 ORDER BY record_id, position;
+
+-- name: DeactivateSourceAssets :exec
+UPDATE assets
+SET inactive_since = coalesce(inactive_since, now())
+WHERE cmdb_source_id = @cmdb_source_id;

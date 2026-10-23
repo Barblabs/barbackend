@@ -6,9 +6,10 @@ Packages are split by role, not by feature, and each layer may only import the l
 cmd/barbackend/        flags, usage, wiring only
 internal/
   httpapi/             router + handlers           -> use-case packages
-  sources/             use cases on CMDB Sources   -> cmdb, inventory, postgres
+  sources/             use cases on CMDB Sources   -> cmdb, encryption, inventory, postgres
   cmdb/                CMDB Provider seam          -> inventory
     <provider>/        adapters                    -> cmdb, inventory, own subpackages
+  encryption/          sealing credentials         -> nothing internal
   postgres/            all persistence             -> inventory
   inventory/           pure domain                 -> nothing internal
 ```
@@ -22,7 +23,7 @@ New features get a home before they get code:
 - **Customer as a real entity**: `internal/tenancy`, taking `CustomerID` out of `inventory`.
 - **Threat matching**: a new domain package that imports `inventory`, never the reverse.
 
-The direction is enforced by `depguard` rules in `.golangci.yaml`, which deny all of `barbackend/internal` to a layer and allow back only the layers below it, so a new use-case package is forbidden to `inventory`, `cmdb` and `postgres` without touching the config. `internal/httpapi` may import only `inventory` and the use-case packages it serves, listed by name, so serving a new use case means adding it to that list. Only `cmd` and `internal/httpapi` may import gin.
+The direction is enforced by `depguard` rules in `.golangci.yaml`, which deny all of `barbackend/internal` to a layer and allow back only the layers below it, so a new use-case package is forbidden to `inventory`, `cmdb` and `postgres` without touching the config. `internal/httpapi` may import only `inventory` and the use-case packages it serves, listed by name, so serving a new use case means adding it to that list. Its tests are exempt, because they wire a real router on Postgres as `cmd` does. Only `cmd` and `internal/httpapi` may import gin.
 
 ## Considered Options
 

@@ -27,7 +27,7 @@ func newSource(t *testing.T, db *postgres.DB, customer inventory.CustomerID) inv
 		t.Fatal(err)
 	}
 	inTx(t, db, func(tx *postgres.Tx) error {
-		return tx.CreateCMDBSource(context.Background(), src, []byte(`{}`))
+		return tx.CreateCMDBSource(context.Background(), src, []byte(`{}`), []byte{})
 	})
 	return src
 }

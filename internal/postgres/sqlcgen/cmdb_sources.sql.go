@@ -11,17 +11,30 @@ import (
 	"github.com/google/uuid"
 )
 
+const disconnectCMDBSource = `-- name: DisconnectCMDBSource :exec
+UPDATE cmdb_sources
+SET disconnected_at = now()
+WHERE id = $1
+`
+
+func (q *Queries) DisconnectCMDBSource(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, disconnectCMDBSource, id)
+	return err
+}
+
 const getCMDBSource = `-- name: GetCMDBSource :one
-SELECT id, customer_id, provider, settings
+SELECT id, customer_id, provider, settings, credentials, (disconnected_at IS NULL)::boolean AS connected
 FROM cmdb_sources
 WHERE id = $1
 `
 
 type GetCMDBSourceRow struct {
-	ID         uuid.UUID
-	CustomerID uuid.UUID
-	Provider   string
-	Settings   []byte
+	ID          uuid.UUID
+	CustomerID  uuid.UUID
+	Provider    string
+	Settings    []byte
+	Credentials []byte
+	Connected   bool
 }
 
 func (q *Queries) GetCMDBSource(ctx context.Context, id uuid.UUID) (GetCMDBSourceRow, error) {
@@ -32,20 +45,52 @@ func (q *Queries) GetCMDBSource(ctx context.Context, id uuid.UUID) (GetCMDBSourc
 		&i.CustomerID,
 		&i.Provider,
 		&i.Settings,
+		&i.Credentials,
+		&i.Connected,
+	)
+	return i, err
+}
+
+const getConnectedCMDBSource = `-- name: GetConnectedCMDBSource :one
+SELECT id, customer_id, provider, settings, credentials, (disconnected_at IS NULL)::boolean AS connected
+FROM cmdb_sources
+WHERE customer_id = $1 AND disconnected_at IS NULL
+`
+
+type GetConnectedCMDBSourceRow struct {
+	ID          uuid.UUID
+	CustomerID  uuid.UUID
+	Provider    string
+	Settings    []byte
+	Credentials []byte
+	Connected   bool
+}
+
+func (q *Queries) GetConnectedCMDBSource(ctx context.Context, customerID uuid.UUID) (GetConnectedCMDBSourceRow, error) {
+	row := q.db.QueryRow(ctx, getConnectedCMDBSource, customerID)
+	var i GetConnectedCMDBSourceRow
+	err := row.Scan(
+		&i.ID,
+		&i.CustomerID,
+		&i.Provider,
+		&i.Settings,
+		&i.Credentials,
+		&i.Connected,
 	)
 	return i, err
 }
 
 const insertCMDBSource = `-- name: InsertCMDBSource :exec
-INSERT INTO cmdb_sources (id, customer_id, provider, settings)
-VALUES ($1, $2, $3, $4)
+INSERT INTO cmdb_sources (id, customer_id, provider, settings, credentials)
+VALUES ($1, $2, $3, $4, $5)
 `
 
 type InsertCMDBSourceParams struct {
-	ID         uuid.UUID
-	CustomerID uuid.UUID
-	Provider   string
-	Settings   []byte
+	ID          uuid.UUID
+	CustomerID  uuid.UUID
+	Provider    string
+	Settings    []byte
+	Credentials []byte
 }
 
 func (q *Queries) InsertCMDBSource(ctx context.Context, arg InsertCMDBSourceParams) error {
@@ -54,21 +99,57 @@ func (q *Queries) InsertCMDBSource(ctx context.Context, arg InsertCMDBSourcePara
 		arg.CustomerID,
 		arg.Provider,
 		arg.Settings,
+		arg.Credentials,
 	)
 	return err
 }
 
 const lockCMDBSource = `-- name: LockCMDBSource :one
-SELECT id
+SELECT (disconnected_at IS NULL)::boolean AS connected
 FROM cmdb_sources
 WHERE id = $1
 FOR UPDATE NOWAIT
 `
 
 // NOWAIT fails at once instead of queueing behind a Sync that may never end.
-func (q *Queries) LockCMDBSource(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+func (q *Queries) LockCMDBSource(ctx context.Context, id uuid.UUID) (bool, error) {
 	row := q.db.QueryRow(ctx, lockCMDBSource, id)
-	var id_2 uuid.UUID
-	err := row.Scan(&id_2)
-	return id_2, err
+	var connected bool
+	err := row.Scan(&connected)
+	return connected, err
+}
+
+const lockConnectedCMDBSource = `-- name: LockConnectedCMDBSource :one
+SELECT id
+FROM cmdb_sources
+WHERE customer_id = $1 AND disconnected_at IS NULL
+FOR UPDATE NOWAIT
+`
+
+// NOWAIT, as LockCMDBSource, so a disconnect never waits behind a Sync.
+func (q *Queries) LockConnectedCMDBSource(ctx context.Context, customerID uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockConnectedCMDBSource, customerID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const updateConnectedCMDBSourceLogin = `-- name: UpdateConnectedCMDBSourceLogin :execrows
+UPDATE cmdb_sources
+SET settings = $2, credentials = $3
+WHERE id = $1 AND disconnected_at IS NULL
+`
+
+type UpdateConnectedCMDBSourceLoginParams struct {
+	ID          uuid.UUID
+	Settings    []byte
+	Credentials []byte
+}
+
+func (q *Queries) UpdateConnectedCMDBSourceLogin(ctx context.Context, arg UpdateConnectedCMDBSourceLoginParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateConnectedCMDBSourceLogin, arg.ID, arg.Settings, arg.Credentials)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
