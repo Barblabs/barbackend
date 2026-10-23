@@ -1,4 +1,3 @@
-// Package cmdb is the seam every CMDB Provider adapter implements (ADR 0007).
 package cmdb
 
 import (
@@ -10,7 +9,6 @@ import (
 	"barbackend/internal/inventory"
 )
 
-// Provider is the adapter of one CMDB Provider.
 type Provider interface {
 	// ParseSettings validates a CMDB Source's connection settings and its
 	// decrypted credentials, both of which only the adapter can parse. It does
@@ -24,8 +22,6 @@ type Provider interface {
 	FromLogin(login Login) (settings, credentials json.RawMessage, err error)
 }
 
-// Login is how an admin connects a CMDB Source from the dashboard: the same
-// shape for every CMDB Provider, so adding one does not change the API.
 type Login struct {
 	URL      string
 	User     string
@@ -60,9 +56,9 @@ type FailureCode string
 
 const (
 	// Unreachable covers DNS failures, refused connections and timeouts.
-	Unreachable        FailureCode = "unreachable"
-	TLSError           FailureCode = "tls_error"
-	InvalidCredentials FailureCode = "invalid_credentials" //nolint:gosec // a failure code, not a credential
+	Unreachable   FailureCode = "unreachable"
+	TLSError      FailureCode = "tls_error"
+	RejectedLogin FailureCode = "invalid_credentials"
 	// UnexpectedResponse is a reply the adapter cannot use: a server that is
 	// not the CMDB, a malformed reply, or an error the CMDB reports for a
 	// reason other than the login.

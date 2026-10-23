@@ -66,20 +66,17 @@ func Reconcile(source CMDBSourceID, existing []*Asset, s Snapshot) (Reconciliati
 		return Reconciliation{}, err
 	}
 
-	// Every input has been checked, so nothing below can fail halfway through
-	// changing the Assets.
 	r := Reconciliation{source: source, skipped: slices.Clone(s.Skipped)}
 	present := make(map[string]bool, len(s.Records))
 	for _, rec := range s.Records {
 		present[rec.RecordID] = true
 		a, ok := stored[rec.RecordID]
 		if !ok {
-			r.created = append(r.created, create(source, rec))
+			r.created = append(r.created, createValidated(source, rec))
 			continue
 		}
 		r.update(a, rec.Imported)
 	}
-	// A Skipped Record is still in the CMDB Source, so its Asset is not missing.
 	for _, a := range existing {
 		id := a.Ref().RecordID
 		if !present[id] && !skipped[id] {
@@ -104,8 +101,6 @@ func indexExisting(source CMDBSourceID, existing []*Asset) (map[string]*Asset, e
 	return stored, nil
 }
 
-// validateSnapshot checks everything that could make Reconcile fail before
-// any Asset is changed, and returns the ids of the Skipped Records.
 func validateSnapshot(s Snapshot) (map[string]bool, error) {
 	skipped := make(map[string]bool, len(s.Skipped))
 	for _, sr := range s.Skipped {
@@ -134,8 +129,7 @@ func validateSnapshot(s Snapshot) (map[string]bool, error) {
 	return skipped, nil
 }
 
-// create skips NewAsset: Reconcile has already checked everything it checks.
-func create(source CMDBSourceID, rec Record) *Asset {
+func createValidated(source CMDBSourceID, rec Record) *Asset {
 	return &Asset{
 		ref:      SourceReference{Source: source, RecordID: rec.RecordID},
 		imported: rec.Imported,
@@ -143,8 +137,6 @@ func create(source CMDBSourceID, rec Record) *Asset {
 	}
 }
 
-// update keeps an Asset present in the Snapshot Active exactly when its
-// record is not reported as retired.
 func (r *Reconciliation) update(a *Asset, imported ImportedAsset) {
 	if !a.Imported().equal(imported) {
 		a.imported = imported

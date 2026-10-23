@@ -111,7 +111,6 @@ WHERE id = $1
 FOR UPDATE NOWAIT
 `
 
-// NOWAIT fails at once instead of queueing behind a Sync that may never end.
 func (q *Queries) LockCMDBSource(ctx context.Context, id uuid.UUID) (bool, error) {
 	row := q.db.QueryRow(ctx, lockCMDBSource, id)
 	var connected bool
@@ -126,7 +125,6 @@ WHERE customer_id = $1 AND disconnected_at IS NULL
 FOR UPDATE NOWAIT
 `
 
-// NOWAIT, as LockCMDBSource, so a disconnect never waits behind a Sync.
 func (q *Queries) LockConnectedCMDBSource(ctx context.Context, customerID uuid.UUID) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, lockConnectedCMDBSource, customerID)
 	var id uuid.UUID

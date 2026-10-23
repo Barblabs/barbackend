@@ -1,4 +1,3 @@
-// Package aws pulls the AWS Security Bulletins RSS feed.
 package aws
 
 import (
@@ -20,7 +19,6 @@ const defaultURL = "https://aws.amazon.com/security/security-bulletins/rss/feed/
 
 var dateLayouts = []string{time.RFC1123Z, time.RFC1123, time.RFC822Z, time.RFC822}
 
-// Adapter fetches the AWS Security Bulletins RSS feed.
 type Adapter struct {
 	httpx.Endpoint
 }

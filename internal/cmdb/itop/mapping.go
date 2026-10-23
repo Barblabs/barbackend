@@ -19,12 +19,8 @@ var criticalities = map[string]inventory.Criticality{
 	"low":    inventory.CriticalityLow,
 }
 
-// retiredStatus is the only iTop status reported as retired (ADR 0005):
-// implementation, stock and the rest are still part of the environment.
 const retiredStatus = "obsolete"
 
-// snapshot maps each ci to a Record, or to a Skipped Record when it holds a
-// value the mapping cannot interpret or the domain rejects.
 func snapshot(cis []ci, lk lookups) inventory.Snapshot {
 	var s inventory.Snapshot
 	for _, c := range cis {
@@ -64,8 +60,6 @@ func importedAsset(c ci, lk lookups) (inventory.ImportedAsset, error) {
 	})
 }
 
-// criticality refuses a value outside iTop's defaults rather than guessing:
-// a customized enum could rank a value differently than its name suggests.
 func criticality(raw *string) (inventory.Criticality, error) {
 	if raw == nil {
 		return inventory.CriticalityUnknown, nil
@@ -84,8 +78,6 @@ func hardware(c ci, kind inventory.AssetKind) inventory.Hardware {
 	return inventory.Hardware{Vendor: c.Brand, Model: c.Model}
 }
 
-// operatingSystem names a Network Device's OS after its IOSVersion's brand,
-// because iTop has no OS family for network devices (ADR 0002).
 func operatingSystem(c ci, lk lookups) (inventory.SoftwareComponent, bool) {
 	name, version := c.OSFamily, c.OSVersion
 	if c.Class == "NetworkDevice" {

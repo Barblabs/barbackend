@@ -11,13 +11,11 @@ type EPSS struct {
 	ModelVersion  string  `json:"model_version,omitempty"`
 }
 
-// NewEPSS returns e as a property extension.
 func NewEPSS(e EPSS) EPSS {
 	e.ExtensionType = "property-extension"
 	return e
 }
 
-// EPSSOf decodes the epss/1 extension of v.
 func EPSSOf(v *stix2.Vulnerability) (EPSS, bool) {
 	return decodeExtension[EPSS](v, EPSSDefinitionID)
 }

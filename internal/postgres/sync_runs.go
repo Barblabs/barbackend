@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"barbackend/internal/inventory"
@@ -22,8 +23,6 @@ func (t *Tx) RecordFailedSync(ctx context.Context, run inventory.SyncRun) error 
 	return recordSyncRun(ctx, t.q, run)
 }
 
-// SyncStatus is what a person needs to judge how fresh a CMDB Source's
-// Assets are.
 type SyncStatus struct {
 	// LastSync is when the latest successful Sync Run finished, zero if no
 	// Sync of the source succeeded.
@@ -77,16 +76,31 @@ func recordSyncRun(ctx context.Context, q *sqlcgen.Queries, run inventory.SyncRu
 		return fmt.Errorf("encode skipped records: %w", err)
 	}
 	counts := run.Counts()
+	var created, updated, deactivated, reactivated, skippedCount int32
+	for _, c := range []struct {
+		dst *int32
+		n   int
+	}{
+		{&created, counts.Created},
+		{&updated, counts.Updated},
+		{&deactivated, counts.Deactivated},
+		{&reactivated, counts.Reactivated},
+		{&skippedCount, counts.Skipped},
+	} {
+		if *c.dst, err = countColumn(c.n); err != nil {
+			return fmt.Errorf("sync run of %s: %w", run.Source(), err)
+		}
+	}
 	p := sqlcgen.InsertSyncRunParams{
 		CmdbSourceID:   uuid.UUID(run.Source()),
 		StartedAt:      run.Started(),
 		FinishedAt:     run.Finished(),
 		OutcomeID:      int16(run.Outcome()),
-		Created:        int32(counts.Created),
-		Updated:        int32(counts.Updated),
-		Deactivated:    int32(counts.Deactivated),
-		Reactivated:    int32(counts.Reactivated),
-		Skipped:        int32(counts.Skipped),
+		Created:        created,
+		Updated:        updated,
+		Deactivated:    deactivated,
+		Reactivated:    reactivated,
+		Skipped:        skippedCount,
 		SkippedRecords: skippedJSON,
 	}
 	if failure := run.Failure(); failure != "" {
@@ -96,4 +110,11 @@ func recordSyncRun(ctx context.Context, q *sqlcgen.Queries, run inventory.SyncRu
 		return fmt.Errorf("insert sync run of %s: %w", run.Source(), err)
 	}
 	return nil
+}
+
+func countColumn(n int) (int32, error) {
+	if n < 0 || n > math.MaxInt32 {
+		return 0, fmt.Errorf("count %d does not fit an integer column", n)
+	}
+	return int32(n), nil
 }

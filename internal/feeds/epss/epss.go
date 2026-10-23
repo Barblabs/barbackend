@@ -1,4 +1,3 @@
-// Package epss pulls FIRST's daily EPSS score snapshot.
 package epss
 
 import (
@@ -25,7 +24,6 @@ const (
 	dateLayout = "2006-01-02"
 )
 
-// Adapter fetches the EPSS score snapshot.
 type Adapter struct {
 	httpx.Endpoint
 }

@@ -1,4 +1,3 @@
-// Package stixext holds barbattack's STIX conventions.
 package stixext
 
 import (
@@ -22,12 +21,9 @@ const TLPClear stix2.Identifier = "marking-definition--94868c89-83c2-464b-929b-a
 
 var (
 	// BarbattackID is the identity that created every object barbattack mints.
-	BarbattackID = ID(stix2.TypeIdentity, "barbattack")
-	// KEVDefinitionID is the kev/1 extension definition.
-	KEVDefinitionID = ID(stix2.TypeExtensionDefinition, "kev/1")
-	// NVDDefinitionID is the nvd/1 extension definition.
-	NVDDefinitionID = ID(stix2.TypeExtensionDefinition, "nvd/1")
-	// EPSSDefinitionID is the epss/1 extension definition.
+	BarbattackID     = ID(stix2.TypeIdentity, "barbattack")
+	KEVDefinitionID  = ID(stix2.TypeExtensionDefinition, "kev/1")
+	NVDDefinitionID  = ID(stix2.TypeExtensionDefinition, "nvd/1")
 	EPSSDefinitionID = ID(stix2.TypeExtensionDefinition, "epss/1")
 )
 

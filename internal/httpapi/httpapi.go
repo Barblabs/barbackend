@@ -1,5 +1,3 @@
-// Package httpapi is the HTTP transport: it routes requests to use cases
-// (ADR 0008).
 package httpapi
 
 import (
@@ -14,16 +12,12 @@ import (
 )
 
 type Config struct {
-	Sources *sources.Service
-	// Customer is who every request acts for. It comes from server
-	// configuration until authentication exists.
-	Customer inventory.CustomerID
-	// AllowedOrigins may call the API from a browser.
+	Sources        *sources.Service
+	Customer       inventory.CustomerID
 	AllowedOrigins []string
 	// Lifetime ends when the server shuts down. Syncs run under it instead of
 	// their request, so a client that disconnects does not fail its Sync.
-	Lifetime context.Context
-	// SyncTimeout bounds each Sync started over HTTP.
+	Lifetime    context.Context
 	SyncTimeout time.Duration
 }
 
@@ -61,8 +55,6 @@ const (
 	internalError = "internal_error"
 )
 
-// writeError answers the errors any endpoint may return. Handlers answer
-// their own normal outcomes, such as a failed check, before falling back to it.
 func writeError(ctx *gin.Context, err error) {
 	var failure *sources.Failure
 	switch {
@@ -70,7 +62,6 @@ func writeError(ctx *gin.Context, err error) {
 		ctx.JSON(http.StatusUnprocessableEntity, codedError{Code: string(failure.Code), Error: failure.Message})
 	case errors.Is(err, sources.ErrInvalidLogin):
 		ctx.JSON(http.StatusBadRequest, codedError{Code: invalidLogin, Error: err.Error()})
-	// ErrDisconnected is a source disconnected while a Sync of it ran.
 	case errors.Is(err, sources.ErrNotConnected), errors.Is(err, sources.ErrDisconnected):
 		ctx.JSON(http.StatusNotFound, codedError{Code: notConnected, Error: err.Error()})
 	case errors.Is(err, sources.ErrAlreadyConnected):

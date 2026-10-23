@@ -66,7 +66,6 @@ func (db *DB) Migrate(ctx context.Context) error {
 	}
 	sqlDB := stdlib.OpenDBFromPool(db.pool)
 	defer func() { _ = sqlDB.Close() }()
-	// The advisory lock keeps two processes migrating at once from both applying a migration.
 	locker, err := lock.NewPostgresSessionLocker()
 	if err != nil {
 		return fmt.Errorf("create migration lock: %w", err)
@@ -154,8 +153,6 @@ func lockSource(ctx context.Context, q *sqlcgen.Queries, id inventory.CMDBSource
 	return nil
 }
 
-// lockError maps a failed NOWAIT lock of the CMDB Source named source,
-// reporting a missing one as missing.
 func lockError(source string, missing, err error) error {
 	if errors.Is(err, pgx.ErrNoRows) {
 		return fmt.Errorf("%s: %w", source, missing)

@@ -1,4 +1,3 @@
-// Package nvd pulls CVEs modified in the last 24 hours from the NVD API (ADR 0010).
 package nvd
 
 import (
@@ -25,7 +24,6 @@ const (
 	timeLayout = "2006-01-02T15:04:05.000Z07:00"
 )
 
-// Adapter fetches and normalizes NVD CVEs.
 type Adapter struct {
 	httpx.Endpoint
 

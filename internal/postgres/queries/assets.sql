@@ -13,7 +13,6 @@ RETURNING id, email;
 -- name: TransactionTime :one
 SELECT now()::timestamptz;
 
--- Created Assets have no Declarations, so those columns stay NULL.
 -- name: InsertAssets :copyfrom
 INSERT INTO assets (
     cmdb_source_id, record_id, name, description, kind_id, hardware_vendor, hardware_model,
@@ -34,7 +33,6 @@ SET name = @name,
 WHERE cmdb_source_id = @cmdb_source_id AND record_id = @record_id
 RETURNING record_id;
 
--- inactive_since keeps its original time when an Inactive Asset stays Inactive.
 -- name: DeactivateAssets :execrows
 UPDATE assets
 SET inactive_since = coalesce(inactive_since, now())

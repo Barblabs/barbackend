@@ -18,8 +18,6 @@ type cmdbSourceHandler struct {
 	syncTimeout time.Duration
 }
 
-// cmdbSourceResponse never carries credentials: a password sent to the
-// dashboard could leak from it.
 type cmdbSourceResponse struct {
 	Provider string `json:"provider"`
 	URL      string `json:"url"`
@@ -35,8 +33,6 @@ type syncFailureResponse struct {
 	Error string    `json:"error"`
 }
 
-// get answers null rather than 404 when nothing is connected, because that
-// is a normal state the dashboard shows the connect flow for.
 func (h cmdbSourceHandler) get(ctx *gin.Context) {
 	src, err := h.sources.ConnectedSource(ctx, h.customer)
 	if errors.Is(err, sources.ErrNotConnected) {
@@ -50,8 +46,6 @@ func (h cmdbSourceHandler) get(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, newCMDBSourceResponse(src))
 }
 
-// loginRequest is the login PUT /cmdb/source takes: it keeps the connected
-// source's provider. connectRequest adds the provider for a new source.
 type loginRequest struct {
 	URL      string `json:"url" binding:"required"`
 	User     string `json:"user" binding:"required"`
@@ -67,9 +61,6 @@ type connectRequest struct {
 	loginRequest
 }
 
-// testResponse carries a failed check with 200, because a CMDB rejecting a
-// login is a normal result the dashboard shows inline. Code is stable for
-// translation; Error is shown for codes the dashboard does not know.
 type testResponse struct {
 	OK    bool   `json:"ok"`
 	Code  string `json:"code,omitempty"`
@@ -94,15 +85,17 @@ func (h cmdbSourceHandler) test(ctx *gin.Context) {
 	}
 }
 
-// connect runs under the Sync context, not its request, so the first Sync
-// is bounded and outlives a closed tab as a manual Sync does.
+func (h cmdbSourceHandler) detachedSyncContext() (context.Context, context.CancelFunc) {
+	return context.WithTimeout(h.lifetime, h.syncTimeout)
+}
+
 func (h cmdbSourceHandler) connect(ctx *gin.Context) {
 	var req connectRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		badRequest(ctx, err)
 		return
 	}
-	syncCtx, cancel := context.WithTimeout(h.lifetime, h.syncTimeout)
+	syncCtx, cancel := h.detachedSyncContext()
 	defer cancel()
 	src, err := h.sources.Connect(syncCtx, h.customer, inventory.CMDBProvider(req.Provider), req.login())
 	if err != nil {
@@ -148,8 +141,6 @@ func newCMDBSourceResponse(src sources.ConnectedSource) cmdbSourceResponse {
 	return resp
 }
 
-// syncResponse is the Sync Run of a successful Sync. LastSync is when it
-// finished, as GET /cmdb/source then reports it.
 type syncResponse struct {
 	LastSync    time.Time `json:"lastSync"`
 	Created     int       `json:"created"`
@@ -160,7 +151,7 @@ type syncResponse struct {
 }
 
 func (h cmdbSourceHandler) sync(ctx *gin.Context) {
-	syncCtx, cancel := context.WithTimeout(h.lifetime, h.syncTimeout)
+	syncCtx, cancel := h.detachedSyncContext()
 	defer cancel()
 	run, err := h.sources.SyncConnected(syncCtx, h.customer)
 	var failed *sources.SyncError

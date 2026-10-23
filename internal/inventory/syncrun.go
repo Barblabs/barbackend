@@ -9,9 +9,8 @@ import (
 
 var ErrInvalidSyncRun = errors.New("invalid sync run")
 
-type SyncOutcome int
+type SyncOutcome int16
 
-// Stored as catalog ids (ADR 0006): never renumber.
 const (
 	SyncSucceeded SyncOutcome = 1
 	SyncFailed    SyncOutcome = 2

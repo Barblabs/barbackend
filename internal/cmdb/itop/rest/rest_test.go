@@ -18,9 +18,6 @@ import (
 	"barbackend/internal/cmdb/itop/rest"
 )
 
-// fakeITop serves core/get for one class over a set of ids, evaluating only
-// the id ranges the client adds and returning objects in an order unrelated
-// to their ids, as iTop does.
 type fakeITop struct {
 	t       *testing.T
 	ids     []int
@@ -86,7 +83,6 @@ func newClient(t *testing.T, h http.Handler, auth rest.Auth, opts rest.Options) 
 
 func TestGetReadsEveryObjectOnce(t *testing.T) {
 	t.Parallel()
-	// Sparse ids, then a run denser than a page, so windows both grow and shrink.
 	ids := []int{1, 2, 3, 40, 900, 901, 902, 903, 904, 905, 906, 5000}
 	f := &fakeITop{t: t, ids: ids}
 	c := newClient(t, f, rest.BasicAuth("reader", "secret"), rest.Options{PageSize: 2})

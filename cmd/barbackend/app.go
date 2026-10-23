@@ -13,13 +13,10 @@ import (
 	"barbackend/internal/sources"
 )
 
-// app is everything a command may depend on, wired in one place.
 type app struct {
 	sources *sources.Service
 }
 
-// withApp opens the database only once the command has parsed its
-// arguments, so a usage error never waits on or reports a database error.
 func withApp(ctx context.Context, run func(app) error) error {
 	key, err := encryptionKey()
 	if err != nil {
@@ -30,8 +27,6 @@ func withApp(ctx context.Context, run func(app) error) error {
 	})
 }
 
-// withDB is for commands that never touch credentials, so a bad
-// CREDENTIALS_KEY cannot block them.
 func withDB(ctx context.Context, run func(*postgres.DB) error) error {
 	url := os.Getenv("DATABASE_URL")
 	if url == "" {
@@ -45,9 +40,6 @@ func withDB(ctx context.Context, run func(*postgres.DB) error) error {
 	return run(db)
 }
 
-// encryptionKey refuses a missing key at startup: every command that needs
-// one seals or opens credentials, and would otherwise fail only after the
-// CMDB accepted a login.
 func encryptionKey() (encryption.Key, error) {
 	encoded := os.Getenv("CREDENTIALS_KEY")
 	if encoded == "" {

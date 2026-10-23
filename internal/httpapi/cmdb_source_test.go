@@ -106,7 +106,7 @@ func TestTestCMDBSourceCredentials(t *testing.T) {
 		},
 		{
 			name:     "rejected",
-			checkErr: &cmdb.Failure{Code: cmdb.InvalidCredentials, Message: "the cmdb rejected the user or password"},
+			checkErr: &cmdb.Failure{Code: cmdb.RejectedLogin, Message: "the cmdb rejected the user or password"},
 			want:     `{"ok":false,"code":"invalid_credentials","error":"the cmdb rejected the user or password"}`,
 		},
 	}
@@ -131,11 +131,8 @@ func TestTestCMDBSourceCredentials(t *testing.T) {
 	}
 }
 
-// loginEndpoints take a login as their body, so they reject the same
-// invalid requests.
 var loginEndpoints = []struct {
-	method, path string
-	// takesProvider is false for an update, which keeps the source's provider.
+	method, path  string
 	takesProvider bool
 }{
 	{http.MethodPost, "/cmdb/source/test", true},
@@ -146,9 +143,8 @@ var loginEndpoints = []struct {
 func TestLoginEndpointsRejectInvalidRequests(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name string
-		edit func(map[string]string)
-		// aboutProvider cases only apply to endpoints that take one.
+		name          string
+		edit          func(map[string]string)
 		aboutProvider bool
 		code          string
 	}{
@@ -160,7 +156,6 @@ func TestLoginEndpointsRejectInvalidRequests(t *testing.T) {
 		{"missing password", func(l map[string]string) { delete(l, "password") }, false, "invalid_request"},
 	}
 	e := newEnv(t)
-	// Connected, so updating finds a source to check the login for.
 	e.addSource(t, e.customer)
 	for _, ep := range loginEndpoints {
 		for _, tt := range tests {
@@ -365,7 +360,7 @@ func TestConnectCMDBSource(t *testing.T) {
 func TestConnectCMDBSourceWithRejectedCredentials(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
-	e.provider.CheckErr = &cmdb.Failure{Code: cmdb.InvalidCredentials, Message: "the cmdb rejected the user or password"}
+	e.provider.CheckErr = &cmdb.Failure{Code: cmdb.RejectedLogin, Message: "the cmdb rejected the user or password"}
 
 	rec := e.postLogin("/cmdb/source", validLogin())
 
@@ -440,8 +435,6 @@ func TestConnectCMDBSourceWithFirstSyncExceedingTheTimeLimit(t *testing.T) {
 	}
 }
 
-// rotatedLogin is validLogin with every field changed, and no provider: an
-// update keeps the source's own.
 func rotatedLogin() map[string]string {
 	return map[string]string{"url": "http://new-cmdb", "user": "new-admin", "password": "new-secret"}
 }
@@ -477,7 +470,7 @@ func TestUpdateCMDBSourceWithRejectedCredentials(t *testing.T) {
 	e := newEnv(t)
 	e.addSource(t, e.customer)
 	before := e.connected(t)
-	e.provider.CheckErr = &cmdb.Failure{Code: cmdb.InvalidCredentials, Message: "the cmdb rejected the user or password"}
+	e.provider.CheckErr = &cmdb.Failure{Code: cmdb.RejectedLogin, Message: "the cmdb rejected the user or password"}
 
 	rec := e.sendLogin(http.MethodPut, "/cmdb/source", rotatedLogin())
 

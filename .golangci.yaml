@@ -8,18 +8,11 @@ linters:
     - gocognit
     - gosec
   settings:
-    # Sonar's threshold for Go. Production code only: table-driven tests score
-    # high from their structure, not from tangled logic.
     gocognit:
       min-complexity: 15
-    gosec:
-      excludes:
-        # Every flagged conversion narrows a domain enum or a per-Sync Run count
-        # into its Postgres column type; none can approach the column's range.
-        - G115
-    # Package layering from ADR 0008. In lax mode the longest matching prefix
-    # wins, so denying all of barbackend/internal and allowing specific layers
-    # also forbids layers that do not exist yet.
+    # In lax mode the longest matching prefix wins, so denying all of
+    # barbackend/internal and allowing specific layers also forbids layers
+    # that do not exist yet.
     depguard:
       rules:
         inventory:
@@ -115,9 +108,6 @@ linters:
           deny:
             - pkg: barbackend/internal
               desc: persistence depends only on inventory; use cases call it, not the reverse (ADR 0008)
-        # Handlers reach persistence and adapters only through use cases, so
-        # each new use-case package is added to allow when httpapi serves it.
-        # Tests are exempt: they wire a real router on Postgres, as cmd does.
         httpapi-imports:
           list-mode: lax
           files:
@@ -147,8 +137,6 @@ linters:
               desc: only cmd and internal/httpapi are HTTP transport (ADR 0008)
   exclusions:
     rules:
-      # Test helpers read and write fixtures and record against a real iTop
-      # on purpose, which gosec reads as file inclusion and SSRF.
       - path: _test\.go
         linters:
           - gocognit

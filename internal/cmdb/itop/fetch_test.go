@@ -20,14 +20,8 @@ import (
 
 var record = flag.Bool("record", false, "re-record testdata/fetch from the iTop named by ITOP_URL, ITOP_USER and ITOP_PASSWORD (source .env)")
 
-// recording maps each request's json_data to iTop's response. Requests are
-// deterministic for a given instance, so a replay answers exactly them.
 type recording map[string]json.RawMessage
 
-// recorded serves the responses in testdata/fetch/name.json. With -record it
-// forwards each request to the live iTop instead, authenticating with the
-// credentials from the environment so none reach the recording, and rewrites
-// the file when the test ends.
 func recorded(t *testing.T, name string) *rest.Client {
 	t.Helper()
 	path := filepath.Join("testdata", "fetch", name+".json")
@@ -165,7 +159,6 @@ func TestFetchSeededInstance(t *testing.T) {
 		}
 	}
 
-	// Team 52 and 53 are contacts too, but only Persons are looked up.
 	wantLookups := lookups{
 		persons: map[string]person{
 			"5": {Email: "alice.milliat@customer.com"}, "8": {Email: "boris.vian@it.com"}, "18": {Email: "george.sand@it.com"},
@@ -186,8 +179,6 @@ func TestFetchSeededInstance(t *testing.T) {
 	}
 }
 
-// iTop ships no SoftwareInstance class outside the kept ones, so the filter
-// is tested on a hand-written object.
 func TestDecodeCIKeepsOnlySoftwareComponentClasses(t *testing.T) {
 	fields := `{"softwares_list": [
 		{"finalclass": "DBServer", "name": "Postgres", "software_id": "7"},

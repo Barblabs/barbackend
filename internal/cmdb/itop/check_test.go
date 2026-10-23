@@ -17,8 +17,6 @@ const (
 	fakePassword = "s3cret"
 )
 
-// fakeITop answers list_operations like a real iTop: the replies below were
-// captured from the local iTop container.
 func fakeITop(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/webservices/rest.php" || r.PostFormValue("json_data") != `{"operation":"list_operations"}` {
 		http.NotFound(w, r)
@@ -75,7 +73,7 @@ func TestCheckCredentialsFailureCodes(t *testing.T) {
 			name:     "wrong password",
 			url:      serve(http.HandlerFunc(fakeITop)),
 			password: "wrong",
-			want:     cmdb.InvalidCredentials,
+			want:     cmdb.RejectedLogin,
 		},
 		{
 			name: "user without the REST profile",
@@ -190,8 +188,6 @@ func snapshot(t *testing.T, url string) error {
 	return err
 }
 
-// A Sync reports why iTop could not be used as a check does, so the
-// dashboard can translate a password rotated since the source connected.
 func TestSnapshotFailureCodes(t *testing.T) {
 	t.Parallel()
 	closed := httptest.NewServer(http.NotFoundHandler())
@@ -201,7 +197,7 @@ func TestSnapshotFailureCodes(t *testing.T) {
 		url  func(t *testing.T) string
 		want cmdb.FailureCode
 	}{
-		{"rejected login", serve(reply(`{"code":1,"message":"Error: Invalid login"}`)), cmdb.InvalidCredentials},
+		{"rejected login", serve(reply(`{"code":1,"message":"Error: Invalid login"}`)), cmdb.RejectedLogin},
 		{"connection refused", func(*testing.T) string { return closed.URL }, cmdb.Unreachable},
 		{"html page", serve(reply(`<html><body>Fatal error</body></html>`)), cmdb.UnexpectedResponse},
 	}
@@ -218,8 +214,6 @@ func TestSnapshotFailureCodes(t *testing.T) {
 	}
 }
 
-// A record barbackend cannot read is not iTop failing, so it stays an
-// unclassified error rather than blaming the CMDB.
 func TestSnapshotKeepsItsOwnErrorsUnclassified(t *testing.T) {
 	t.Parallel()
 	url := serve(reply(`{"code":0,"message":"","objects":{"Server::abc":{"code":0,"message":"","class":"Server","key":"abc","fields":{}}}}`))(t)

@@ -16,8 +16,6 @@ type stored struct {
 	active bool
 }
 
-// outcome is a Reconciliation reduced to record ids, plus the ids of every
-// Asset, stored or created, that is Inactive afterwards.
 type outcome struct {
 	created, updated, deactivated, reactivated []string
 	inactive                                   []string
@@ -166,7 +164,6 @@ func TestReconcileErrorsChangeNoAsset(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Missing from every snapshot above, so it would be deactivated on success.
 			bystander := assetOf(t, sourceID, "bystander")
 			_, err := inventory.Reconcile(sourceID, append(tt.existing, bystander), tt.snapshot)
 			if !errors.Is(err, tt.want) {
@@ -179,8 +176,6 @@ func TestReconcileErrorsChangeNoAsset(t *testing.T) {
 	}
 }
 
-// A Sync replaces imported values only, so Declarations survive it, and
-// clearing one afterwards falls back to the newly imported value (ADR 0004).
 func TestReconcileKeepsDeclarations(t *testing.T) {
 	declared := mustOwner(t, "declared@example.com")
 	first := with(validParams(), func(p *inventory.ImportedAssetParams) { p.Owner = mustOwner(t, "first@example.com") })

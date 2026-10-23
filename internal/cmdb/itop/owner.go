@@ -7,21 +7,13 @@ import (
 	"barbackend/internal/inventory"
 )
 
-// owner is the CI's only Person contact (ADR 0003). Persons are counted
-// before any email is checked, so a CI with two Persons has no owner even
-// when one of them has an invalid email: the valid one is not more likely to
-// be the owner.
 func owner(c ci, lk lookups) inventory.OwnerEmail {
-	persons := map[string]bool{}
-	var only string
-	for _, ct := range c.Contacts {
-		if ct.Class == "Person" {
-			persons[ct.ID] = true
-			only = ct.ID
-		}
+	personID, ok := onlyPerson(c.Contacts)
+	if !ok {
+		return inventory.OwnerEmail{}
 	}
-	address := lk.persons[only].Email
-	if len(persons) != 1 || !validEmail(address) {
+	address := lk.persons[personID].Email
+	if !validEmail(address) {
 		return inventory.OwnerEmail{}
 	}
 	email, err := inventory.NewOwnerEmail(address)
@@ -29,6 +21,18 @@ func owner(c ci, lk lookups) inventory.OwnerEmail {
 		return inventory.OwnerEmail{}
 	}
 	return email
+}
+
+func onlyPerson(contacts []contact) (string, bool) {
+	persons := map[string]bool{}
+	var id string
+	for _, ct := range contacts {
+		if ct.Class == "Person" {
+			persons[ct.ID] = true
+			id = ct.ID
+		}
+	}
+	return id, len(persons) == 1
 }
 
 // validEmail accepts a bare address only: ParseAddress also takes a display

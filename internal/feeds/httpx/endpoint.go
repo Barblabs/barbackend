@@ -7,7 +7,6 @@ import (
 	"strings"
 )
 
-// Endpoint is an HTTP client and request defaults for a Feed adapter.
 type Endpoint struct {
 	client *http.Client
 	url    string
@@ -25,7 +24,6 @@ func NewEndpoint(client *http.Client, url, defaultURL string) Endpoint {
 	return Endpoint{client: client, url: url}
 }
 
-// URL returns the endpoint URL.
 func (e Endpoint) URL() string {
 	return e.url
 }

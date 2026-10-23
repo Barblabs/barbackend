@@ -9,6 +9,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"math"
 	"net"
 	"os"
 	"path/filepath"
@@ -22,8 +23,7 @@ import (
 
 const (
 	template = "barb_template"
-	// Matches the major version production runs.
-	version = embeddedpostgres.V15
+	version  = embeddedpostgres.V15
 )
 
 var (
@@ -55,35 +55,25 @@ func run(m *testing.M) int {
 		fmt.Fprintln(os.Stderr, "pgtest:", err)
 		return 1
 	}
-	binaries := shared
-	staged := !extracted(shared)
-	if staged {
-		// Extract into a private directory and publish it by rename once
-		// Postgres has stopped, so packages starting concurrently and
-		// interrupted runs never see a partial extraction. The removal only
-		// matters when the publish did not happen or lost to another package.
-		binaries, err = os.MkdirTemp(filepath.Dir(shared), "staging-")
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "pgtest:", err)
-			return 1
-		}
-		defer func() { _ = os.RemoveAll(binaries) }()
+	binaries, err := stageBinaries(shared)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "pgtest:", err)
+		return 1
 	}
+	defer binaries.discard()
 
 	var log bytes.Buffer
 	pg := embeddedpostgres.NewDatabase(embeddedpostgres.DefaultConfig().
 		Version(version).
 		Port(port).
-		BinariesPath(binaries).
+		BinariesPath(binaries.path).
 		RuntimePath(filepath.Join(dir, "runtime")).
 		Logger(&log))
 	if err := pg.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "pgtest: start postgres: %v\n%s", err, log.String())
 		return 1
 	}
-	if staged {
-		defer func() { _ = os.Rename(binaries, shared) }()
-	}
+	defer binaries.publish()
 	defer func() { _ = pg.Stop() }()
 
 	if err := createTemplate(context.Background()); err != nil {
@@ -91,6 +81,35 @@ func run(m *testing.M) int {
 		return 1
 	}
 	return m.Run()
+}
+
+type binariesDir struct {
+	path   string
+	shared string
+	staged bool
+}
+
+func stageBinaries(shared string) (binariesDir, error) {
+	if extracted(shared) {
+		return binariesDir{path: shared, shared: shared}, nil
+	}
+	staging, err := os.MkdirTemp(filepath.Dir(shared), "staging-")
+	if err != nil {
+		return binariesDir{}, err
+	}
+	return binariesDir{path: staging, shared: shared, staged: true}, nil
+}
+
+func (b binariesDir) publish() {
+	if b.staged {
+		_ = os.Rename(b.path, b.shared)
+	}
+}
+
+func (b binariesDir) discard() {
+	if b.staged {
+		_ = os.RemoveAll(b.path)
+	}
 }
 
 // sharedBinariesDir is where the Postgres binaries stay extracted between
@@ -192,7 +211,11 @@ func freePort() (uint32, error) {
 		return 0, fmt.Errorf("find free port: %w", err)
 	}
 	defer func() { _ = l.Close() }()
-	return uint32(l.Addr().(*net.TCPAddr).Port), nil
+	port := l.Addr().(*net.TCPAddr).Port
+	if port <= 0 || port > math.MaxUint16 {
+		return 0, fmt.Errorf("find free port: got %d", port)
+	}
+	return uint32(port), nil
 }
 
 func randomHex() string {

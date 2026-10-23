@@ -1,5 +1,3 @@
-// Package cmdbtest is a fake CMDB Provider for tests of the layers above the
-// seam.
 package cmdbtest
 
 import (
@@ -12,7 +10,6 @@ import (
 	"barbackend/internal/inventory"
 )
 
-// Name is the CMDB Provider the fake is registered as.
 const Name inventory.CMDBProvider = "fake"
 
 var (
@@ -20,7 +17,6 @@ var (
 	ErrInvalidCredentials = errors.New("credentials need a secret")
 )
 
-// Settings and Credentials are valid for the fake, with Secret as the secret.
 const (
 	Settings    = `{"url": "http://cmdb", "user": "admin"}`
 	Credentials = `{"secret": "` + Secret + `"}`
@@ -39,7 +35,6 @@ type Provider struct {
 	Secret   string
 }
 
-// Providers registers p under Name.
 func (p *Provider) Providers() cmdb.Providers {
 	return cmdb.Providers{Name: p}
 }
@@ -81,7 +76,7 @@ func (p *Provider) FromLogin(login cmdb.Login) (json.RawMessage, json.RawMessage
 	if err != nil {
 		return nil, nil, err
 	}
-	credentials, err := json.Marshal(credentialsDocument{Secret: login.Password}) //nolint:gosec // the service seals credentials before storing them
+	credentials, err := json.Marshal(credentialsDocument{Secret: login.Password}) //nolint:gosec // serialized only to be sealed by the service
 	if err != nil {
 		return nil, nil, err
 	}

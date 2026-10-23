@@ -17,7 +17,6 @@ const batchSize = 1000
 
 var ErrUnknownFeed = errors.New("unknown feed")
 
-// Feed is one registered Feed: its name, how often it is polled and how to pull and handle it.
 type Feed struct {
 	Name     string
 	Interval time.Duration
@@ -35,7 +34,6 @@ type Service struct {
 	feeds []Feed
 }
 
-// New registers feeds
 func New(feeds ...Feed) (*Service, error) {
 	seen := make(map[string]struct{}, len(feeds))
 	registered := make([]Feed, len(feeds))

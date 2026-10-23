@@ -44,7 +44,6 @@ func newEnv(t *testing.T) env {
 	return env{db: db, conn: pgtest.Conn(t, url), provider: p, sources: sources.New(db, p.Providers(), newKey(t))}
 }
 
-// withKey is a server on the same database started with another key.
 func (e env) withKey(key encryption.Key) *sources.Service {
 	return sources.New(e.db, e.provider.Providers(), key)
 }
@@ -71,8 +70,6 @@ func (e env) addSource(t *testing.T) inventory.CMDBSource {
 
 var errReadOnly = errors.New("read only")
 
-// assets reads the stored Assets through the interface a Sync uses, then
-// aborts so nothing is written.
 func (e env) assets(t *testing.T, src inventory.CMDBSourceID) []*inventory.Asset {
 	t.Helper()
 	var got []*inventory.Asset

@@ -24,9 +24,8 @@ type SourceReference struct {
 	RecordID string
 }
 
-type AssetKind int
+type AssetKind int16
 
-// Stored as catalog ids (ADR 0006): never renumber.
 const (
 	Server         AssetKind = 1
 	VirtualMachine AssetKind = 2
@@ -60,9 +59,8 @@ type Hardware struct {
 
 func (h Hardware) absent() bool { return blank(h.Vendor) && blank(h.Model) }
 
-type SoftwareRole int
+type SoftwareRole int16
 
-// Stored as catalog ids (ADR 0006): never renumber.
 const (
 	OperatingSystem SoftwareRole = 1
 	Application     SoftwareRole = 2
@@ -81,8 +79,6 @@ func (r SoftwareRole) String() string {
 	}
 }
 
-// Product has no version on purpose: the version stays on the SoftwareComponent,
-// so one Product covers every version threat intelligence may name.
 // A Product with both fields blank is no Product, as is the zero value.
 type Product struct {
 	Vendor, Name string
@@ -99,9 +95,8 @@ type SoftwareComponent struct {
 
 func (c SoftwareComponent) Identified() bool { return !c.Product.absent() }
 
-type Criticality int
+type Criticality int16
 
-// Stored as catalog ids (ADR 0006): never renumber.
 const (
 	CriticalityUnknown Criticality = 0
 	CriticalityHigh    Criticality = 1
@@ -126,9 +121,8 @@ func (c Criticality) String() string {
 	}
 }
 
-type Exposure int
+type Exposure int16
 
-// Stored as catalog ids (ADR 0006): never renumber.
 const (
 	ExposureUnknown Exposure = 0
 	InternetFacing  Exposure = 1

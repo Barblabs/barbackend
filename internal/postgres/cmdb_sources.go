@@ -19,8 +19,7 @@ type StoredCMDBSource struct {
 	Source      inventory.CMDBSource
 	Settings    json.RawMessage
 	Credentials []byte
-	// Connected is false for a Disconnected CMDB Source.
-	Connected bool
+	Connected   bool
 }
 
 // Settings and credentials are stored as given: only the CMDB Provider's
@@ -79,7 +78,6 @@ func (t *Tx) DisconnectCMDBSource(ctx context.Context, customer inventory.Custom
 	return nil
 }
 
-// connectedCustomerIndex keeps a Customer to at most one Connected CMDB Source.
 const connectedCustomerIndex = "cmdb_sources_connected_customer_idx"
 
 func (t *Tx) CMDBSource(ctx context.Context, id inventory.CMDBSourceID) (StoredCMDBSource, error) {

@@ -47,7 +47,6 @@ func (r iteratorForInsertAssets) Err() error {
 	return nil
 }
 
-// Created Assets have no Declarations, so those columns stay NULL.
 func (q *Queries) InsertAssets(ctx context.Context, arg []InsertAssetsParams) (int64, error) {
 	return q.db.CopyFrom(ctx, []string{"assets"}, []string{"cmdb_source_id", "record_id", "name", "description", "kind_id", "hardware_vendor", "hardware_model", "criticality_id", "imported_owner_id", "retired", "inactive_since"}, &iteratorForInsertAssets{rows: arg})
 }

@@ -24,8 +24,6 @@ const (
 	tokenAuth authMode = "token"
 )
 
-// settingsDocument is the plain JSON stored on the CMDB Source. It holds no
-// secret: those arrive decrypted as a credentialsDocument (ADR 0012).
 type settingsDocument struct {
 	URL  string       `json:"url"`
 	Auth authDocument `json:"auth"`
@@ -77,8 +75,6 @@ func parseSettingsDocument(raw json.RawMessage) (settingsDocument, *url.URL, err
 	return doc, base, nil
 }
 
-// decodeStrict rejects unknown fields so that a typo in an optional-looking
-// field fails when the source is added, not as a puzzling auth error later.
 func decodeStrict(raw json.RawMessage, v any) error {
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()
@@ -91,9 +87,6 @@ func decodeStrict(raw json.RawMessage, v any) error {
 	return nil
 }
 
-// parseBaseURL accepts a path because iTop is often served under one
-// (http://host/itop). Settings are stored in plain text, so credentials in the
-// URL are refused.
 func parseBaseURL(s string) (*url.URL, error) {
 	u, err := url.Parse(s)
 	if err != nil {
@@ -127,8 +120,6 @@ func (a authDocument) validate() error {
 	return nil
 }
 
-// restAuth checks that the credentials hold exactly the secret the mode
-// needs. A secret is only empty or not: spaces may be part of a password.
 func (a authDocument) restAuth(c credentialsDocument) (rest.Auth, error) {
 	if a.Mode == basicAuth {
 		if c.Password == "" || c.Token != "" {

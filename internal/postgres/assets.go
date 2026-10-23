@@ -13,13 +13,11 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// sourceTx reads and writes the Assets of one locked CMDB Source.
 type sourceTx struct {
 	q      *sqlcgen.Queries
 	source inventory.CMDBSourceID
 }
 
-// assets returns every Asset of the CMDB Source, Active or not, ordered by record id.
 func (t *sourceTx) assets(ctx context.Context) ([]*inventory.Asset, error) {
 	source := uuid.UUID(t.source)
 	rows, err := t.q.ListAssets(ctx, source)
@@ -42,12 +40,7 @@ func (t *sourceTx) assets(ctx context.Context) ([]*inventory.Asset, error) {
 	return assets, nil
 }
 
-// save writes the changes of a Reconciliation. Updates write only imported
-// values and the Active state, so Declarations stay as stored. Each kind of
-// write is one statement for all Assets, so a Sync takes the same number of
-// round trips at any size.
 func (t *sourceTx) save(ctx context.Context, r inventory.Reconciliation) error {
-	// Only this transaction's CMDB Source is locked.
 	if r.Source() != t.source {
 		return fmt.Errorf("save to %s: reconciliation of %s", t.source, r.Source())
 	}
@@ -68,7 +61,6 @@ func (t *sourceTx) save(ctx context.Context, r inventory.Reconciliation) error {
 	return t.updateActive(ctx, r.Deactivated(), r.Reactivated())
 }
 
-// ownerIDs maps an Asset Owner's email to its row id.
 type ownerIDs map[string]int64
 
 func (ids ownerIDs) ref(owner inventory.OwnerEmail, ok bool) *int64 {
@@ -79,9 +71,6 @@ func (ids ownerIDs) ref(owner inventory.OwnerEmail, ok bool) *int64 {
 	return &id
 }
 
-// upsertOwners stores the imported Asset Owner of every Asset whose imported
-// values are written. A created Asset has no Declarations yet, and updates
-// keep the stored ones.
 func (t *sourceTx) upsertOwners(ctx context.Context, written []*inventory.Asset) (ownerIDs, error) {
 	seen := map[string]bool{}
 	var emails []string
@@ -171,8 +160,6 @@ func (t *sourceTx) updateImported(ctx context.Context, updated []*inventory.Asse
 	return err
 }
 
-// replaceSoftware writes the Software Components of every created Asset and
-// rewrites those of every updated one: they have no identity to update in place.
 func (t *sourceTx) replaceSoftware(ctx context.Context, created, updated []*inventory.Asset) error {
 	source := uuid.UUID(t.source)
 	var rows []sqlcgen.InsertSoftwareComponentsParams
@@ -290,7 +277,6 @@ func restoreAsset(ref inventory.SourceReference, row sqlcgen.ListAssetsRow, soft
 	})
 }
 
-// ownerEmail maps a nullable email column; NULL is the zero OwnerEmail, meaning no owner.
 func ownerEmail(email *string) (inventory.OwnerEmail, error) {
 	if email == nil {
 		return inventory.OwnerEmail{}, nil
@@ -316,8 +302,7 @@ func (t *sourceTx) software(ctx context.Context) (map[string][]inventory.Softwar
 	return byRecord, nil
 }
 
-// nullableID stores a catalog value, or NULL for the value meaning unknown or undeclared (ADR 0006).
-func nullableID[T ~int](v, unset T) *int16 {
+func nullableID[T ~int16](v, unset T) *int16 {
 	if v == unset {
 		return nil
 	}

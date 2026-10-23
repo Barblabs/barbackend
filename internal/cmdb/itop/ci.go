@@ -26,16 +26,12 @@ type contact struct {
 	Class string `json:"contact_id_finalclass_recall"`
 }
 
-// instance is a SoftwareInstance linked to a ci. SoftwareID is "0" when it
-// links to no Software.
 type instance struct {
 	Class      string `json:"finalclass"`
 	Name       string `json:"name"`
 	SoftwareID string `json:"software_id"`
 }
 
-// person, software and iosVersion are the records the cis reference by id,
-// decoded from their JSON fields like a ci.
 type person struct {
 	Email string `json:"email"`
 }
@@ -52,7 +48,6 @@ type iosVersion struct {
 	Name  string `json:"name"`
 }
 
-// lookups holds the records the cis reference by id, read in bulk.
 type lookups struct {
 	persons     map[string]person
 	software    map[string]software

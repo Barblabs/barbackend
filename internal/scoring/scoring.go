@@ -1,9 +1,9 @@
-// Package scoring computes the Score of a Finding with a versioned Scoring Model (ADR 0009).
 package scoring
 
 import (
 	"errors"
 	"fmt"
+	"math"
 
 	"barbackend/internal/inventory"
 )
@@ -26,7 +26,6 @@ type Inputs struct {
 
 type DataGap int
 
-// Stored as catalog ids (ADR 0006): never renumber.
 const (
 	CVSSEstimated      DataGap = 1
 	EPSSPending        DataGap = 2
@@ -54,8 +53,6 @@ func (g DataGap) String() string {
 
 type ModelVersion int
 
-// Model is a Scoring Model. Its fields are unexported so a published version
-// can never be edited: changing any number means a new Model.
 type Model struct {
 	version                  ModelVersion
 	wCVSS, wEPSS, wKEV       float64
@@ -102,7 +99,7 @@ func (m Model) Compute(in Inputs) (Score, error) {
 	case in.CVSS == nil:
 		f.Alpha = m.defaultCVSS
 		gaps = append(gaps, CVSSEstimated)
-	case !(*in.CVSS >= 0 && *in.CVSS <= 10): // also rejects NaN
+	case !inRange(*in.CVSS, 0, 10):
 		return Score{}, fmt.Errorf("%w: %v", ErrInvalidCVSS, *in.CVSS)
 	default:
 		f.Alpha = *in.CVSS / 10
@@ -111,7 +108,7 @@ func (m Model) Compute(in Inputs) (Score, error) {
 	switch {
 	case in.EPSS == nil:
 		gaps = append(gaps, EPSSPending)
-	case !(*in.EPSS >= 0 && *in.EPSS <= 1):
+	case !inRange(*in.EPSS, 0, 1):
 		return Score{}, fmt.Errorf("%w: %v", ErrInvalidEPSS, *in.EPSS)
 	default:
 		f.Beta = *in.EPSS
@@ -157,4 +154,8 @@ func (m Model) Compute(in Inputs) (Score, error) {
 		Factors: f,
 		Gaps:    gaps,
 	}, nil
+}
+
+func inRange(v, lo, hi float64) bool {
+	return !math.IsNaN(v) && v >= lo && v <= hi
 }

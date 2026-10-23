@@ -253,8 +253,6 @@ func TestSyncWithoutTheKeyFails(t *testing.T) {
 	}
 }
 
-// Credentials are bound to their CMDB Source, so copying them to another
-// row does not let it authenticate.
 func TestSyncRejectsCredentialsOfAnotherSource(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)

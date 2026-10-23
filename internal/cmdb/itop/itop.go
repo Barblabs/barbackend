@@ -1,5 +1,3 @@
-// Package itop is the CMDB Provider adapter for iTop (ADR 0007). It reads
-// Servers, Virtual Machines, PCs and Network Devices through the REST API.
 package itop
 
 import (
@@ -25,13 +23,12 @@ func (Provider) Describe(settings json.RawMessage) (cmdb.Description, error) {
 	return cmdb.Description{URL: doc.URL, User: doc.Auth.User}, nil
 }
 
-// FromLogin builds a basic auth source: the dashboard has no token mode.
 func (Provider) FromLogin(login cmdb.Login) (json.RawMessage, json.RawMessage, error) {
 	settings, err := json.Marshal(settingsDocument{URL: login.URL, Auth: authDocument{Mode: basicAuth, User: login.User}})
 	if err != nil {
 		return nil, nil, err
 	}
-	credentials, err := json.Marshal(credentialsDocument{Password: login.Password}) //nolint:gosec // the service seals credentials before storing them
+	credentials, err := json.Marshal(credentialsDocument{Password: login.Password}) //nolint:gosec // serialized only to be sealed by the service
 	if err != nil {
 		return nil, nil, err
 	}

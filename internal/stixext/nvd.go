@@ -13,7 +13,6 @@ type NVD struct {
 	Affected      []Affected `json:"affected"`
 }
 
-// CVSS is one metric NVD reports for a Vulnerability.
 type CVSS struct {
 	Version   string  `json:"version"`
 	BaseScore float64 `json:"base_score"`
@@ -22,7 +21,6 @@ type CVSS struct {
 	Type      string  `json:"type"`
 }
 
-// Affected is one vulnerable CPE match of a Vulnerability.
 type Affected struct {
 	Criteria              string `json:"criteria"`
 	Vendor                string `json:"vendor"`
@@ -33,13 +31,11 @@ type Affected struct {
 	VersionEndExcluding   string `json:"version_end_excluding,omitempty"`
 }
 
-// NewNVD returns n as a property extension.
 func NewNVD(n NVD) NVD {
 	n.ExtensionType = "property-extension"
 	return n
 }
 
-// NVDOf decodes the nvd/1 extension of v.
 func NVDOf(v *stix2.Vulnerability) (NVD, bool) {
 	return decodeExtension[NVD](v, NVDDefinitionID)
 }

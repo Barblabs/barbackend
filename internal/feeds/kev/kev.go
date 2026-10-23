@@ -1,4 +1,3 @@
-// Package kev pulls the CISA Known Exploited Vulnerabilities catalog.
 package kev
 
 import (
@@ -20,7 +19,6 @@ const (
 	dateLayout = "2006-01-02"
 )
 
-// Adapter fetches and normalizes the KEV catalog.
 type Adapter struct {
 	httpx.Endpoint
 }

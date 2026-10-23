@@ -1,5 +1,3 @@
-// Package rest reads objects from the iTop REST API with core/get, returning
-// every matching object or an error.
 package rest
 
 import (
@@ -97,7 +95,6 @@ func (c *Client) Check(ctx context.Context) error {
 	return nil
 }
 
-// Query selects objects of Class, optionally narrowed by an OQL condition.
 type Query struct {
 	Class  string
 	Where  string
@@ -172,8 +169,6 @@ type responseObject struct {
 	Fields  json.RawMessage `json:"fields"`
 }
 
-// call runs one core/get of the objects matching both q and idRange, at most
-// limit of them, ordered by key.
 func (c *Client) call(ctx context.Context, q Query, idRange string, fields []string, limit int) ([]Object, error) {
 	oql := fmt.Sprintf("SELECT %s WHERE %s", q.Class, idRange)
 	if q.Where != "" {

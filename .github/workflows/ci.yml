@@ -23,9 +23,6 @@ jobs:
           # forever. Go trims build cache entries unused for 5 days, so a frozen
           # cache ends up deleted on restore and every run compiles from scratch.
           cache: false
-      # Keyed per commit and saved only from the default branch: every merge
-      # refreshes the cache, and PRs reuse the latest one without adding their own.
-      # The job id keeps lint and test apart, since they build different things.
       - &restore-go-cache
         name: restore go cache
         uses: actions/cache/restore@v6
@@ -35,7 +32,6 @@ jobs:
             ~/.cache/go-build
           key: &go-cache-key go-${{ github.job }}-${{ runner.os }}-${{ steps.setup-go.outputs.go-version }}-${{ github.sha }}
           restore-keys: go-${{ github.job }}-${{ runner.os }}-${{ steps.setup-go.outputs.go-version }}-
-      # Tools are pinned in tools.mod, so CI and local runs use the same versions.
       - name: golangci-lint
         run: go tool -modfile=tools.mod golangci-lint run ./...
       - name: check sqlc output is up to date
@@ -55,8 +51,6 @@ jobs:
       - uses: actions/checkout@v6
       - *setup-go
       - *restore-go-cache
-      # pgtest downloads and extracts the Postgres binaries on first start; they
-      # only change with the embedded-postgres module or the pinned version.
       - name: cache embedded postgres
         uses: actions/cache@v6
         with:

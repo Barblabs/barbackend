@@ -8,8 +8,6 @@ import (
 	"barbackend/internal/inventory"
 )
 
-// mapped is a ci with every value set, so each case changes only what its
-// rule reads.
 func mapped(class string, change func(*ci)) ci {
 	c := ci{
 		Key: "7", Class: class, Name: "Server1", Description: "  Billing database\n", Status: "production",
@@ -183,7 +181,6 @@ func TestSnapshotSkipsRecords(t *testing.T) {
 	}
 }
 
-// A Skipped Record does not stop the records after it from being imported.
 func TestSnapshotKeepsMappingAfterASkippedRecord(t *testing.T) {
 	skipped := mapped("Server", func(c *ci) { c.Key, c.Name = "1", "" })
 	kept := mapped("Server", func(c *ci) { c.Key = "2" })

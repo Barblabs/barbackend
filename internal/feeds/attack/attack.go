@@ -1,4 +1,3 @@
-// Package attack pulls the MITRE ATT&CK Enterprise techniques.
 package attack
 
 import (
@@ -17,7 +16,6 @@ import (
 
 const defaultURL = "https://raw.githubusercontent.com/mitre-attack/attack-stix-data/master/enterprise-attack/enterprise-attack.json"
 
-// Adapter fetches the ATT&CK Enterprise bundle.
 type Adapter struct {
 	httpx.Endpoint
 }

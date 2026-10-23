@@ -47,8 +47,6 @@ func TestCORS(t *testing.T) {
 	}
 }
 
-// PUT and DELETE are not CORS-safelisted methods, so a browser sends them
-// only once the preflight allows them.
 func TestCORSPreflightAllowsUnsafelistedMethods(t *testing.T) {
 	t.Parallel()
 	for _, method := range []string{http.MethodPut, http.MethodDelete} {
