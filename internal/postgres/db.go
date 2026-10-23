@@ -117,7 +117,8 @@ func (db *DB) CommitSync(ctx context.Context, id inventory.CMDBSourceID, started
 		if err := st.save(ctx, r); err != nil {
 			return err
 		}
-		run, err = inventory.SucceededRun(r, started, time.Now())
+		// Postgres keeps microseconds; the returned run must match the stored one.
+		run, err = inventory.SucceededRun(r, started, time.Now().Truncate(time.Microsecond))
 		if err != nil {
 			return err
 		}

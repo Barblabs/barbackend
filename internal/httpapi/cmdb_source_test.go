@@ -213,7 +213,7 @@ func TestSyncCMDBSource(t *testing.T) {
 	if want := (syncResult{Created: 2, Skipped: 1}); counts != want {
 		t.Errorf("body = %s, want counts %+v", rec.Body, want)
 	}
-	if src, body := e.getCMDBSource(t); got.LastSync == nil || src.LastSync == nil || !got.LastSync.Equal(src.LastSync.Truncate(time.Microsecond)) {
+	if src, body := e.getCMDBSource(t); got.LastSync == nil || src.LastSync == nil || !got.LastSync.Equal(*src.LastSync) {
 		t.Errorf("lastSync = %v, want GET /cmdb/source's %s", got.LastSync, body)
 	}
 }
@@ -288,7 +288,7 @@ func TestSyncCMDBSourceOutlivesItsRequest(t *testing.T) {
 	rec := e.sync(closedTab)
 
 	got := decode[syncResult](t, rec, http.StatusOK)
-	if src, body := e.getCMDBSource(t); src.LastSync == nil || !got.LastSync.Equal(src.LastSync.Truncate(time.Microsecond)) {
+	if src, body := e.getCMDBSource(t); src.LastSync == nil || !got.LastSync.Equal(*src.LastSync) {
 		t.Errorf("GET /cmdb/source = %s, want the Sync that finished at %v", body, got.LastSync)
 	}
 }
@@ -446,7 +446,7 @@ func TestUpdateCMDBSource(t *testing.T) {
 	if got.URL != "http://new-cmdb" || got.User != "new-admin" {
 		t.Errorf("body = %s, want the new url and user", rec.Body)
 	}
-	if got.LastSync == nil || !got.LastSync.Equal(synced.LastSync.Truncate(time.Microsecond)) {
+	if got.LastSync == nil || !got.LastSync.Equal(*synced.LastSync) {
 		t.Errorf("body = %s, want lastSync still %v, since the Sync history stays and the update runs no Sync", rec.Body, synced.LastSync)
 	}
 	if _, body := e.getCMDBSource(t); body != rec.Body.String() {
