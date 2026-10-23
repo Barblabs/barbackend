@@ -138,6 +138,20 @@ func (h cmdbSourceHandler) update(ctx *gin.Context) {
 	}
 }
 
+func (h cmdbSourceHandler) disconnect(ctx *gin.Context) {
+	err := h.sources.Disconnect(ctx.Request.Context(), h.customer)
+	switch {
+	case err == nil:
+		ctx.Status(http.StatusNoContent)
+	case errors.Is(err, sources.ErrNotConnected):
+		ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+	case errors.Is(err, sources.ErrSyncInProgress):
+		ctx.JSON(http.StatusConflict, codedError{Code: syncInProgress, Error: err.Error()})
+	default:
+		internalError(ctx, err)
+	}
+}
+
 func newCMDBSourceResponse(src sources.ConnectedSource) cmdbSourceResponse {
 	resp := cmdbSourceResponse{Provider: string(src.Provider), URL: src.URL}
 	if src.User != "" {
@@ -184,7 +198,8 @@ func (h cmdbSourceHandler) sync(ctx *gin.Context) {
 	switch {
 	case err == nil:
 		ctx.JSON(http.StatusOK, newSyncResponse(run))
-	case errors.Is(err, sources.ErrNotConnected):
+	// ErrDisconnected is a source disconnected while this Sync read it.
+	case errors.Is(err, sources.ErrNotConnected), errors.Is(err, sources.ErrDisconnected):
 		ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 	case errors.Is(err, sources.ErrSyncInProgress):
 		ctx.JSON(http.StatusConflict, codedError{Code: syncInProgress, Error: err.Error()})

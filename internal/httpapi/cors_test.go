@@ -47,17 +47,22 @@ func TestCORS(t *testing.T) {
 	}
 }
 
-// PUT is not a CORS-safelisted method, so a browser sends it only once the
-// preflight allows it.
-func TestCORSPreflightAllowsPut(t *testing.T) {
+// PUT and DELETE are not CORS-safelisted methods, so a browser sends them
+// only once the preflight allows them.
+func TestCORSPreflightAllowsUnsafelistedMethods(t *testing.T) {
 	t.Parallel()
-	req := httptest.NewRequest(http.MethodOptions, "/cmdb/source", nil)
-	req.Header.Set("Origin", allowedOrigin)
-	req.Header.Set("Access-Control-Request-Method", http.MethodPut)
+	for _, method := range []string{http.MethodPut, http.MethodDelete} {
+		t.Run(method, func(t *testing.T) {
+			t.Parallel()
+			req := httptest.NewRequest(http.MethodOptions, "/cmdb/source", nil)
+			req.Header.Set("Origin", allowedOrigin)
+			req.Header.Set("Access-Control-Request-Method", method)
 
-	rec := newEnv(t).do(req)
+			rec := newEnv(t).do(req)
 
-	if got := rec.Header().Get("Access-Control-Allow-Methods"); !slices.Contains(strings.Split(got, ", "), http.MethodPut) {
-		t.Errorf("Access-Control-Allow-Methods = %q, want PUT", got)
+			if got := rec.Header().Get("Access-Control-Allow-Methods"); !slices.Contains(strings.Split(got, ", "), method) {
+				t.Errorf("Access-Control-Allow-Methods = %q, want %s", got, method)
+			}
+		})
 	}
 }

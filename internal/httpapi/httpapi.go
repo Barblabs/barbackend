@@ -36,6 +36,7 @@ func New(cfg Config) http.Handler {
 	router.GET("/cmdb/source", h.get)
 	router.POST("/cmdb/source", h.connect)
 	router.PUT("/cmdb/source", h.update)
+	router.DELETE("/cmdb/source", h.disconnect)
 	router.POST("/cmdb/source/test", h.test)
 	router.POST("/cmdb/source/sync", h.sync)
 	return router

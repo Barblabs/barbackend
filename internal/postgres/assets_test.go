@@ -309,3 +309,23 @@ func TestCommitSyncOfAnotherSourceFails(t *testing.T) {
 		t.Errorf("rows written = %d, want 0", n)
 	}
 }
+
+// A Sync reads its CMDB Source before it commits, so the source may have been
+// disconnected in between.
+func TestCommitSyncAfterDisconnectFails(t *testing.T) {
+	t.Parallel()
+	db, conn := newDBWithConn(t)
+	customer := newCustomer()
+	src := newSource(t, db, customer)
+	started := time.Now()
+	inTx(t, db, func(tx *postgres.Tx) error { return tx.DisconnectCMDBSource(context.Background(), customer) })
+
+	_, err := db.CommitSync(context.Background(), src.ID(), started, reconcileWith(src.ID(), inventory.Snapshot{Records: []inventory.Record{record(t, "1", fullParams(t))}}))
+
+	if !errors.Is(err, postgres.ErrDisconnected) {
+		t.Errorf("err = %v, want ErrDisconnected", err)
+	}
+	if n := queryInt(t, conn, "SELECT count(*) FROM assets") + queryInt(t, conn, "SELECT count(*) FROM sync_runs"); n != 0 {
+		t.Errorf("rows written = %d, want 0", n)
+	}
+}

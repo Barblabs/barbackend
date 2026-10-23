@@ -14,6 +14,7 @@ import (
 	"barbackend/internal/cmdb"
 	"barbackend/internal/cmdb/cmdbtest"
 	"barbackend/internal/inventory"
+	"barbackend/internal/sources"
 )
 
 func TestGetCMDBSourceWithoutConnectedSource(t *testing.T) {
@@ -506,5 +507,116 @@ func TestUpdateCMDBSourceKeepsAssetsAndDeclarations(t *testing.T) {
 
 	if after := assets(); !reflect.DeepEqual(after, before) {
 		t.Errorf("assets = %v, want unchanged %v", after, before)
+	}
+}
+
+func (e env) disconnect() *httptest.ResponseRecorder {
+	return e.do(httptest.NewRequest(http.MethodDelete, "/cmdb/source", nil))
+}
+
+func TestDisconnectCMDBSource(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	src := e.addSource(t, e.customer)
+	e.provider.Snapshot = inventory.Snapshot{Records: []inventory.Record{record(t, "a", "vm-a"), record(t, "b", "vm-b")}}
+	decode[syncResult](t, e.sync(context.Background()), http.StatusOK)
+
+	rec := e.disconnect()
+
+	if rec.Code != http.StatusNoContent || rec.Body.Len() != 0 {
+		t.Errorf("response = %d %s, want 204 with no body", rec.Code, rec.Body)
+	}
+	if rec := e.do(httptest.NewRequest(http.MethodGet, "/cmdb/source", nil)); rec.Body.String() != "null" {
+		t.Errorf("GET /cmdb/source = %s, want null", rec.Body)
+	}
+	if got := e.rows(t, "SELECT record_id, inactive_since IS NOT NULL FROM assets WHERE cmdb_source_id = $1 ORDER BY record_id", src.ID().String()); !reflect.DeepEqual(got, [][]string{{"a", "true"}, {"b", "true"}}) {
+		t.Errorf("assets = %v, want a and b stored and Inactive", got)
+	}
+	if got := e.rows(t, "SELECT disconnected_at IS NOT NULL FROM cmdb_sources WHERE id = $1", src.ID().String()); !reflect.DeepEqual(got, [][]string{{"true"}}) {
+		t.Errorf("cmdb source = %v, want it stored and disconnected", got)
+	}
+}
+
+func TestDisconnectCMDBSourceWithoutConnectedSource(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	e.addSource(t, newCustomer())
+
+	rec := e.disconnect()
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("response = %d %s, want 404", rec.Code, rec.Body)
+	}
+}
+
+func TestDisconnectCMDBSourceWhileASyncRuns(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	src := e.addSource(t, e.customer)
+	release := e.holdSyncLock(t, src.ID())
+
+	rec := e.disconnect()
+	release()
+
+	got := decode[codedError](t, rec, http.StatusConflict)
+	if got.Code != "sync_in_progress" {
+		t.Errorf("body = %s, want code sync_in_progress", rec.Body)
+	}
+	if id := e.connected(t).Source.ID(); id != src.ID() {
+		t.Errorf("connected source = %s, want %s still connected", id, src.ID())
+	}
+}
+
+func TestSyncOfDisconnectedCMDBSourceFails(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	src := e.addSource(t, e.customer)
+	e.provider.Snapshot = inventory.Snapshot{Records: []inventory.Record{record(t, "a", "vm-a")}}
+	decode[syncResult](t, e.sync(context.Background()), http.StatusOK)
+	if rec := e.disconnect(); rec.Code != http.StatusNoContent {
+		t.Fatalf("disconnect = %d %s, want 204", rec.Code, rec.Body)
+	}
+	stored := func() [][]string {
+		return e.rows(t, `SELECT 'asset', record_id, name, inactive_since::text FROM assets WHERE cmdb_source_id = $1
+			UNION ALL SELECT 'run', id::text, outcome_id::text, '' FROM sync_runs WHERE cmdb_source_id = $1
+			ORDER BY 1, 2`, src.ID().String())
+	}
+	before := stored()
+	e.provider.Snapshot = inventory.Snapshot{Records: []inventory.Record{record(t, "a", "renamed"), record(t, "b", "vm-b")}}
+
+	_, err := e.sources.Sync(context.Background(), src.ID())
+
+	if !errors.Is(err, sources.ErrDisconnected) {
+		t.Errorf("err = %v, want ErrDisconnected", err)
+	}
+	if after := stored(); !reflect.DeepEqual(after, before) {
+		t.Errorf("assets and sync runs = %v, want unchanged %v", after, before)
+	}
+	if rec := e.sync(context.Background()); rec.Code != http.StatusNotFound {
+		t.Errorf("POST /cmdb/source/sync = %d %s, want 404", rec.Code, rec.Body)
+	}
+}
+
+func TestConnectAfterDisconnectCreatesANewCMDBSource(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	old := e.addSource(t, e.customer)
+	e.provider.Snapshot = inventory.Snapshot{Records: []inventory.Record{record(t, "a", "vm-a")}}
+	decode[syncResult](t, e.sync(context.Background()), http.StatusOK)
+	if rec := e.disconnect(); rec.Code != http.StatusNoContent {
+		t.Fatalf("disconnect = %d %s, want 204", rec.Code, rec.Body)
+	}
+
+	rec := e.postLogin("/cmdb/source", validLogin())
+
+	decode[cmdbSource](t, rec, http.StatusOK)
+	if id := e.connected(t).Source.ID(); id == old.ID() {
+		t.Errorf("connected source = %s, want a new one", id)
+	}
+	if got := e.rows(t, "SELECT cmdb_source_id::text, record_id, inactive_since IS NOT NULL FROM assets ORDER BY inactive_since IS NOT NULL"); !reflect.DeepEqual(got, [][]string{
+		{e.connected(t).Source.ID().String(), "a", "false"},
+		{old.ID().String(), "a", "true"},
+	}) {
+		t.Errorf("assets = %v, want a new Active one and the old one still Inactive", got)
 	}
 }

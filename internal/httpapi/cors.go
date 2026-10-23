@@ -13,7 +13,7 @@ import (
 // corsMethods lists the methods the router serves. POST is a CORS-safelisted
 // method, so a preflight need not list it.
 var (
-	corsMethods = strings.Join([]string{http.MethodGet, http.MethodPut}, ", ")
+	corsMethods = strings.Join([]string{http.MethodGet, http.MethodPut, http.MethodDelete}, ", ")
 	corsMaxAge  = strconv.Itoa(int((10 * time.Minute).Seconds()))
 )
 

@@ -19,6 +19,8 @@ type StoredCMDBSource struct {
 	Source      inventory.CMDBSource
 	Settings    json.RawMessage
 	Credentials []byte
+	// Connected is false for a Disconnected CMDB Source.
+	Connected bool
 }
 
 // Settings and credentials are stored as given: only the CMDB Provider's
@@ -59,6 +61,24 @@ func (t *Tx) UpdateConnectedLogin(ctx context.Context, id inventory.CMDBSourceID
 	return nil
 }
 
+// DisconnectCMDBSource makes the Customer's Connected CMDB Source a
+// Disconnected one and its Assets Inactive, deleting nothing. It locks the
+// source as CommitSync does, so it fails at once with ErrSyncInProgress
+// while a Sync commits, and with ErrNotFound when nothing is connected.
+func (t *Tx) DisconnectCMDBSource(ctx context.Context, customer inventory.CustomerID) error {
+	id, err := t.q.LockConnectedCMDBSource(ctx, uuid.UUID(customer))
+	if err != nil {
+		return lockError(fmt.Sprintf("connected cmdb source of customer %s", customer), err)
+	}
+	if err := t.q.DisconnectCMDBSource(ctx, id); err != nil {
+		return fmt.Errorf("disconnect cmdb source %s: %w", id, err)
+	}
+	if err := t.q.DeactivateSourceAssets(ctx, id); err != nil {
+		return fmt.Errorf("deactivate assets of %s: %w", id, err)
+	}
+	return nil
+}
+
 // connectedCustomerIndex keeps a Customer to at most one Connected CMDB Source.
 const connectedCustomerIndex = "cmdb_sources_connected_customer_idx"
 
@@ -95,5 +115,5 @@ func restoreCMDBSource(row sqlcgen.GetConnectedCMDBSourceRow) (StoredCMDBSource,
 	if err != nil {
 		return StoredCMDBSource{}, fmt.Errorf("restore cmdb source %s: %w", row.ID, err)
 	}
-	return StoredCMDBSource{Source: src, Settings: row.Settings, Credentials: row.Credentials}, nil
+	return StoredCMDBSource{Source: src, Settings: row.Settings, Credentials: row.Credentials, Connected: row.Connected}, nil
 }

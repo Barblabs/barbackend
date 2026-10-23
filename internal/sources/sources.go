@@ -1,6 +1,6 @@
 // Package sources holds the use cases on CMDB Sources: testing a login,
 // connecting or adding one, showing the Connected CMDB Source, replacing its
-// login and syncing its Assets.
+// login, disconnecting it and syncing its Assets.
 package sources
 
 import (
@@ -34,6 +34,10 @@ var ErrAlreadyConnected = postgres.ErrAlreadyConnected
 // ErrSyncInProgress is a Sync refused because another Sync of the same CMDB
 // Source holds its lock.
 var ErrSyncInProgress = postgres.ErrSyncInProgress
+
+// ErrDisconnected is a Sync refused because its CMDB Source is a
+// Disconnected CMDB Source.
+var ErrDisconnected = postgres.ErrDisconnected
 
 // SyncError is a Sync that failed after reading its CMDB Source. It was
 // recorded as a failed Sync Run, unless the error also holds why recording
@@ -176,6 +180,17 @@ func (s *Service) UpdateLogin(ctx context.Context, customer inventory.CustomerID
 	return s.ConnectedSource(ctx, customer)
 }
 
+// Disconnect makes the Customer's Connected CMDB Source a Disconnected one
+// and its Assets Inactive, in one transaction. It fails with ErrNotConnected
+// when there is none, and with ErrSyncInProgress while a Sync of it commits.
+func (s *Service) Disconnect(ctx context.Context, customer inventory.CustomerID) error {
+	err := s.db.InTx(ctx, func(tx *postgres.Tx) error { return tx.DisconnectCMDBSource(ctx, customer) })
+	if errors.Is(err, postgres.ErrNotFound) {
+		return fmt.Errorf("%w: %s", ErrNotConnected, customer)
+	}
+	return err
+}
+
 // checkLogin turns a login into the settings and credentials its CMDB
 // accepted.
 func (s *Service) checkLogin(ctx context.Context, provider inventory.CMDBProvider, login Login) (settings, credentials json.RawMessage, err error) {
@@ -242,6 +257,8 @@ func owner(id inventory.CMDBSourceID) []byte {
 // which changed no Asset, and returned as a *SyncError. A Sync refused with
 // ErrSyncInProgress is not recorded: it would report the running Sync as
 // failed, and recording it would wait for that Sync to release the source.
+// Nor is a Sync refused with ErrDisconnected, which never ran: the source was
+// disconnected before it read the CMDB or committed.
 func (s *Service) Sync(ctx context.Context, id inventory.CMDBSourceID) (inventory.SyncRun, error) {
 	return s.syncSource(ctx, func(tx *postgres.Tx) (postgres.StoredCMDBSource, error) {
 		return tx.CMDBSource(ctx, id)
@@ -277,8 +294,13 @@ func (s *Service) syncSource(ctx context.Context, read func(*postgres.Tx) (postg
 	if err != nil {
 		return inventory.SyncRun{}, err
 	}
+	// Refused before reading the CMDB, which the admin may have disconnected
+	// to stop barbattack using its credentials.
+	if !stored.Connected {
+		return inventory.SyncRun{}, fmt.Errorf("%w: %s", ErrDisconnected, stored.Source.ID())
+	}
 	run, err := s.sync(ctx, stored, started)
-	if errors.Is(err, ErrSyncInProgress) {
+	if errors.Is(err, ErrSyncInProgress) || errors.Is(err, ErrDisconnected) {
 		return inventory.SyncRun{}, err
 	}
 	if err != nil {
