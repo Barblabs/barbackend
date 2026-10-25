@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -193,7 +194,15 @@ func TestGetTimesOut(t *testing.T) {
 		<-r.Context().Done()
 	})
 	c := newClient(t, h, rest.BasicAuth("reader", "secret"), rest.Options{Timeout: 50 * time.Millisecond})
-	if _, err := c.Get(context.Background(), rest.Query{Class: "Server"}); err == nil {
-		t.Fatal("err = nil, want a timeout")
+	// Canceling, not a deadline, so only the client's own Timeout yields a
+	// timeout error; an ignored Timeout fails the test instead of passing late.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer time.AfterFunc(10*time.Second, cancel).Stop()
+
+	_, err := c.Get(ctx, rest.Query{Class: "Server"})
+
+	var netErr net.Error
+	if !errors.Is(err, rest.ErrTransport) || !errors.As(err, &netErr) || !netErr.Timeout() {
+		t.Fatalf("err = %v, want a transport timeout", err)
 	}
 }

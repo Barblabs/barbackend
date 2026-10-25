@@ -200,18 +200,19 @@ func TestDecodeRejectsMissingField(t *testing.T) {
 	tests := []struct {
 		name   string
 		fields string
+		want   string
 	}{
 		// iTop answers an output field the class lacks by dropping it, or with
 		// an empty array when it was the only one.
-		{"dropped field", `{"name": "Server1"}`},
-		{"no fields", `[]`},
+		{"dropped field", `{"name": "Server1"}`, "Server::1 has no field status"},
+		{"no fields", `[]`, "Server::1"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var c ci
 			o := rest.Object{Class: "Server", Key: "1", Fields: json.RawMessage(tt.fields)}
-			if err := decode(o, []string{"name", "status"}, &c); err == nil {
-				t.Error("err = nil, want a failure naming the missing field")
+			if err := decode(o, []string{"name", "status"}, &c); err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Errorf("err = %v, want a failure containing %q", err, tt.want)
 			}
 		})
 	}

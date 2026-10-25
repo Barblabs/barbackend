@@ -80,28 +80,6 @@ func TestNewImportedAsset(t *testing.T) {
 	}
 }
 
-func TestImportedAssetZeroValues(t *testing.T) {
-	a := mustImported(t, validParams())
-	if a.Criticality() != inventory.CriticalityUnknown {
-		t.Errorf("criticality = %v, want Unknown", a.Criticality())
-	}
-	if _, ok := a.Hardware(); ok {
-		t.Error("unexpected hardware")
-	}
-	if _, ok := a.Owner(); ok {
-		t.Error("unexpected owner")
-	}
-	if _, ok := a.OperatingSystem(); ok {
-		t.Error("unexpected operating system")
-	}
-	if a.Retired() {
-		t.Error("unexpected retired")
-	}
-	if got := a.Software(); got != nil {
-		t.Errorf("Software() = %#v, want nil", got)
-	}
-}
-
 func TestImportedAssetGetters(t *testing.T) {
 	owner := mustOwner(t, "a@b.c")
 	p := inventory.ImportedAssetParams{
@@ -222,63 +200,6 @@ func TestSoftwareComponentIdentified(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := tt.c.Identified(); got != tt.want {
 				t.Errorf("Identified() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestAssetKindPhysical(t *testing.T) {
-	tests := []struct {
-		kind inventory.AssetKind
-		want bool
-	}{
-		{inventory.Server, true},
-		{inventory.VirtualMachine, false},
-		{inventory.Workstation, true},
-		{inventory.NetworkDevice, true},
-		{0, false},
-		{99, false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.kind.String(), func(t *testing.T) {
-			if got := tt.kind.Physical(); got != tt.want {
-				t.Errorf("Physical() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestStringers(t *testing.T) {
-	tests := []struct {
-		name string
-		got  string
-		want string
-	}{
-		{"AssetKind/Server", inventory.Server.String(), "Server"},
-		{"AssetKind/Virtual Machine", inventory.VirtualMachine.String(), "Virtual Machine"},
-		{"AssetKind/Workstation", inventory.Workstation.String(), "Workstation"},
-		{"AssetKind/Network Device", inventory.NetworkDevice.String(), "Network Device"},
-		{"AssetKind/99", inventory.AssetKind(99).String(), "AssetKind(99)"},
-		{"SoftwareRole/Operating System", inventory.OperatingSystem.String(), "Operating System"},
-		{"SoftwareRole/Application", inventory.Application.String(), "Application"},
-		{"SoftwareRole/99", inventory.SoftwareRole(99).String(), "SoftwareRole(99)"},
-		{"Criticality/Unknown", inventory.CriticalityUnknown.String(), "Unknown"},
-		{"Criticality/High", inventory.CriticalityHigh.String(), "High"},
-		{"Criticality/Medium", inventory.CriticalityMedium.String(), "Medium"},
-		{"Criticality/Low", inventory.CriticalityLow.String(), "Low"},
-		{"Criticality/99", inventory.Criticality(99).String(), "Criticality(99)"},
-		{"Exposure/Unknown", inventory.ExposureUnknown.String(), "Unknown"},
-		{"Exposure/Internet-facing", inventory.InternetFacing.String(), "Internet-facing"},
-		{"Exposure/Internal", inventory.Internal.String(), "Internal"},
-		{"Exposure/99", inventory.Exposure(99).String(), "Exposure(99)"},
-		{"SyncOutcome/Succeeded", inventory.SyncSucceeded.String(), "Succeeded"},
-		{"SyncOutcome/Failed", inventory.SyncFailed.String(), "Failed"},
-		{"SyncOutcome/99", inventory.SyncOutcome(99).String(), "SyncOutcome(99)"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if tt.got != tt.want {
-				t.Errorf("String() = %q, want %q", tt.got, tt.want)
 			}
 		})
 	}

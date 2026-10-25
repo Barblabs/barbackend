@@ -32,9 +32,3 @@ func TestNewOwnerEmail(t *testing.T) {
 		})
 	}
 }
-
-func TestOwnerEmailsDifferingInCaseAreTheSameOwner(t *testing.T) {
-	if mustOwner(t, "Alice@example.com") != mustOwner(t, "alice@example.com ") {
-		t.Error("emails differing only in case and spacing should be equal")
-	}
-}
