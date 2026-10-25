@@ -42,7 +42,7 @@ func TestSnapshotMapsRecords(t *testing.T) {
 		},
 		{
 			name: "virtual machine has no hardware",
-			ci:   mapped("VirtualMachine", func(c *ci) { c.Brand, c.Model = "", "" }),
+			ci:   mapped("VirtualMachine", nil),
 			want: inventory.ImportedAssetParams{
 				Name: "Server1", Description: "  Billing database\n", Kind: inventory.VirtualMachine,
 				Software: redHat(), Criticality: inventory.CriticalityLow,

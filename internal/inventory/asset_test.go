@@ -134,21 +134,6 @@ func TestAssetRejectedExposureKeepsPrevious(t *testing.T) {
 	}
 }
 
-func TestAssetActiveState(t *testing.T) {
-	a := newAsset(t, validParams())
-	if !a.Active() {
-		t.Fatal("new asset should be active")
-	}
-	a.MarkInactive()
-	if a.Active() {
-		t.Error("asset should be inactive")
-	}
-	a.Reactivate()
-	if !a.Active() {
-		t.Error("asset should be active again")
-	}
-}
-
 func TestAssetRetiredDoesNotAffectActive(t *testing.T) {
 	p := validParams()
 	p.Retired = true

@@ -34,9 +34,12 @@ func TestSucceededRun(t *testing.T) {
 	if !reflect.DeepEqual(run.Skipped(), s.Skipped) {
 		t.Errorf("Skipped() = %+v, want %+v", run.Skipped(), s.Skipped)
 	}
+}
 
-	if _, err := inventory.SucceededRun(inventory.Reconciliation{}, started, finished); !errors.Is(err, inventory.ErrInvalidSyncRun) {
-		t.Errorf("zero reconciliation err = %v, want ErrInvalidSyncRun", err)
+func TestSucceededRunRejectsZeroReconciliation(t *testing.T) {
+	started := time.Date(2026, 10, 10, 12, 0, 0, 0, time.UTC)
+	if _, err := inventory.SucceededRun(inventory.Reconciliation{}, started, started); !errors.Is(err, inventory.ErrInvalidSyncRun) {
+		t.Errorf("err = %v, want ErrInvalidSyncRun", err)
 	}
 }
 
