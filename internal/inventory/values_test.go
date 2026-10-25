@@ -32,3 +32,20 @@ func TestNewOwnerEmail(t *testing.T) {
 		})
 	}
 }
+
+func TestCodesRoundTrip(t *testing.T) {
+	t.Parallel()
+	for _, k := range []inventory.AssetKind{inventory.Server, inventory.VirtualMachine, inventory.Workstation, inventory.NetworkDevice} {
+		if got, err := inventory.ParseAssetKind(k.Code()); err != nil || got != k {
+			t.Errorf("inventory.ParseAssetKind(%q) = %v, %v, want %v", k.Code(), got, err, k)
+		}
+	}
+	for _, c := range []inventory.Criticality{inventory.CriticalityHigh, inventory.CriticalityMedium, inventory.CriticalityLow} {
+		if got, err := inventory.ParseCriticality(c.Code()); err != nil || got != c {
+			t.Errorf("inventory.ParseCriticality(%q) = %v, %v, want %v", c.Code(), got, err, c)
+		}
+	}
+	if _, err := inventory.ParseCriticality(""); err == nil {
+		t.Error("ParseCriticality accepted the empty code of Unknown")
+	}
+}

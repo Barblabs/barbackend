@@ -10,7 +10,37 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const countCustomerAssets = `-- name: CountCustomerAssets :one
+SELECT count(*)
+FROM assets a
+JOIN cmdb_sources s ON s.id = a.cmdb_source_id
+WHERE s.customer_id = $1
+  AND ($2::boolean IS NULL OR (a.inactive_since IS NULL) = $2::boolean)
+  AND ($3::smallint IS NULL OR a.kind_id = $3::smallint)
+  AND ($4::smallint IS NULL OR a.criticality_id = $4::smallint)
+`
+
+type CountCustomerAssetsParams struct {
+	CustomerID    uuid.UUID
+	Active        *bool
+	KindID        *int16
+	CriticalityID *int16
+}
+
+func (q *Queries) CountCustomerAssets(ctx context.Context, arg CountCustomerAssetsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countCustomerAssets,
+		arg.CustomerID,
+		arg.Active,
+		arg.KindID,
+		arg.CriticalityID,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
 
 const deactivateAssets = `-- name: DeactivateAssets :execrows
 UPDATE assets
@@ -142,6 +172,98 @@ func (q *Queries) ListAssets(ctx context.Context, cmdbSourceID uuid.UUID) ([]Lis
 	return items, nil
 }
 
+const listCustomerAssets = `-- name: ListCustomerAssets :many
+SELECT a.cmdb_source_id, a.record_id, a.name, a.description, a.kind_id,
+       a.hardware_vendor, a.hardware_model, a.criticality_id,
+       imported_owner.email AS imported_owner, declared_owner.email AS declared_owner,
+       a.declared_exposure_id, a.retired, a.inactive_since
+FROM assets a
+JOIN cmdb_sources s ON s.id = a.cmdb_source_id
+LEFT JOIN asset_owners imported_owner ON imported_owner.id = a.imported_owner_id
+LEFT JOIN asset_owners declared_owner ON declared_owner.id = a.declared_owner_id
+WHERE s.customer_id = $1
+  AND ($2::boolean IS NULL OR (a.inactive_since IS NULL) = $2::boolean)
+  AND ($3::smallint IS NULL OR a.kind_id = $3::smallint)
+  AND ($4::smallint IS NULL OR a.criticality_id = $4::smallint)
+  AND ($5::text IS NULL
+       OR (a.name, a.cmdb_source_id, a.record_id)
+          > ($5::text, $6::uuid, $7::text))
+ORDER BY a.name, a.cmdb_source_id, a.record_id
+LIMIT $8
+`
+
+type ListCustomerAssetsParams struct {
+	CustomerID    uuid.UUID
+	Active        *bool
+	KindID        *int16
+	CriticalityID *int16
+	AfterName     *string
+	AfterSourceID pgtype.UUID
+	AfterRecordID *string
+	PageSize      int32
+}
+
+type ListCustomerAssetsRow struct {
+	CmdbSourceID       uuid.UUID
+	RecordID           string
+	Name               string
+	Description        string
+	KindID             int16
+	HardwareVendor     *string
+	HardwareModel      *string
+	CriticalityID      *int16
+	ImportedOwner      *string
+	DeclaredOwner      *string
+	DeclaredExposureID *int16
+	Retired            bool
+	InactiveSince      *time.Time
+}
+
+// The keyset condition and the ORDER BY both use (name, cmdb_source_id,
+// record_id), so a page boundary is exact even between equal names.
+func (q *Queries) ListCustomerAssets(ctx context.Context, arg ListCustomerAssetsParams) ([]ListCustomerAssetsRow, error) {
+	rows, err := q.db.Query(ctx, listCustomerAssets,
+		arg.CustomerID,
+		arg.Active,
+		arg.KindID,
+		arg.CriticalityID,
+		arg.AfterName,
+		arg.AfterSourceID,
+		arg.AfterRecordID,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCustomerAssetsRow
+	for rows.Next() {
+		var i ListCustomerAssetsRow
+		if err := rows.Scan(
+			&i.CmdbSourceID,
+			&i.RecordID,
+			&i.Name,
+			&i.Description,
+			&i.KindID,
+			&i.HardwareVendor,
+			&i.HardwareModel,
+			&i.CriticalityID,
+			&i.ImportedOwner,
+			&i.DeclaredOwner,
+			&i.DeclaredExposureID,
+			&i.Retired,
+			&i.InactiveSince,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSoftwareComponents = `-- name: ListSoftwareComponents :many
 SELECT record_id, role_id, name, version, product_vendor, product_name
 FROM software_components
@@ -168,6 +290,61 @@ func (q *Queries) ListSoftwareComponents(ctx context.Context, cmdbSourceID uuid.
 	for rows.Next() {
 		var i ListSoftwareComponentsRow
 		if err := rows.Scan(
+			&i.RecordID,
+			&i.RoleID,
+			&i.Name,
+			&i.Version,
+			&i.ProductVendor,
+			&i.ProductName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSoftwareComponentsOf = `-- name: ListSoftwareComponentsOf :many
+SELECT cmdb_source_id, record_id, role_id, name, version, product_vendor, product_name
+FROM software_components
+WHERE (cmdb_source_id, record_id) IN (
+    SELECT s.id, r.id
+    FROM unnest($1::uuid[]) WITH ORDINALITY AS s (id, n)
+    JOIN unnest($2::text[]) WITH ORDINALITY AS r (id, n) USING (n)
+)
+ORDER BY cmdb_source_id, record_id, position
+`
+
+type ListSoftwareComponentsOfParams struct {
+	SourceIds []uuid.UUID
+	RecordIds []string
+}
+
+type ListSoftwareComponentsOfRow struct {
+	CmdbSourceID  uuid.UUID
+	RecordID      string
+	RoleID        int16
+	Name          string
+	Version       string
+	ProductVendor *string
+	ProductName   *string
+}
+
+// The two arrays are parallel: element i of each names one Asset.
+func (q *Queries) ListSoftwareComponentsOf(ctx context.Context, arg ListSoftwareComponentsOfParams) ([]ListSoftwareComponentsOfRow, error) {
+	rows, err := q.db.Query(ctx, listSoftwareComponentsOf, arg.SourceIds, arg.RecordIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSoftwareComponentsOfRow
+	for rows.Next() {
+		var i ListSoftwareComponentsOfRow
+		if err := rows.Scan(
+			&i.CmdbSourceID,
 			&i.RecordID,
 			&i.RoleID,
 			&i.Name,

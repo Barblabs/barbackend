@@ -73,3 +73,44 @@ ORDER BY record_id, position;
 UPDATE assets
 SET inactive_since = coalesce(inactive_since, now())
 WHERE cmdb_source_id = @cmdb_source_id;
+
+-- The keyset condition and the ORDER BY both use (name, cmdb_source_id,
+-- record_id), so a page boundary is exact even between equal names.
+-- name: ListCustomerAssets :many
+SELECT a.cmdb_source_id, a.record_id, a.name, a.description, a.kind_id,
+       a.hardware_vendor, a.hardware_model, a.criticality_id,
+       imported_owner.email AS imported_owner, declared_owner.email AS declared_owner,
+       a.declared_exposure_id, a.retired, a.inactive_since
+FROM assets a
+JOIN cmdb_sources s ON s.id = a.cmdb_source_id
+LEFT JOIN asset_owners imported_owner ON imported_owner.id = a.imported_owner_id
+LEFT JOIN asset_owners declared_owner ON declared_owner.id = a.declared_owner_id
+WHERE s.customer_id = @customer_id
+  AND (sqlc.narg(active)::boolean IS NULL OR (a.inactive_since IS NULL) = sqlc.narg(active)::boolean)
+  AND (sqlc.narg(kind_id)::smallint IS NULL OR a.kind_id = sqlc.narg(kind_id)::smallint)
+  AND (sqlc.narg(criticality_id)::smallint IS NULL OR a.criticality_id = sqlc.narg(criticality_id)::smallint)
+  AND (sqlc.narg(after_name)::text IS NULL
+       OR (a.name, a.cmdb_source_id, a.record_id)
+          > (sqlc.narg(after_name)::text, sqlc.narg(after_source_id)::uuid, sqlc.narg(after_record_id)::text))
+ORDER BY a.name, a.cmdb_source_id, a.record_id
+LIMIT @page_size;
+
+-- name: CountCustomerAssets :one
+SELECT count(*)
+FROM assets a
+JOIN cmdb_sources s ON s.id = a.cmdb_source_id
+WHERE s.customer_id = @customer_id
+  AND (sqlc.narg(active)::boolean IS NULL OR (a.inactive_since IS NULL) = sqlc.narg(active)::boolean)
+  AND (sqlc.narg(kind_id)::smallint IS NULL OR a.kind_id = sqlc.narg(kind_id)::smallint)
+  AND (sqlc.narg(criticality_id)::smallint IS NULL OR a.criticality_id = sqlc.narg(criticality_id)::smallint);
+
+-- The two arrays are parallel: element i of each names one Asset.
+-- name: ListSoftwareComponentsOf :many
+SELECT cmdb_source_id, record_id, role_id, name, version, product_vendor, product_name
+FROM software_components
+WHERE (cmdb_source_id, record_id) IN (
+    SELECT s.id, r.id
+    FROM unnest(@source_ids::uuid[]) WITH ORDINALITY AS s (id, n)
+    JOIN unnest(@record_ids::text[]) WITH ORDINALITY AS r (id, n) USING (n)
+)
+ORDER BY cmdb_source_id, record_id, position;
