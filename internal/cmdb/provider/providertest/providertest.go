@@ -1,6 +1,6 @@
-// Package cmdbtest is a fake CMDB Provider for tests of the layers above the
+// Package providertest is a fake CMDB Provider for tests of the layers above the
 // seam.
-package cmdbtest
+package providertest
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 	"errors"
 	"net/url"
 
-	"barbackend/internal/cmdb"
+	"barbackend/internal/cmdb/provider"
 	"barbackend/internal/inventory"
 )
 
@@ -20,12 +20,11 @@ var (
 	ErrInvalidCredentials = errors.New("credentials need a secret")
 )
 
-// Settings and Credentials are valid for the fake, with Secret as the secret.
-const (
-	Settings    = `{"url": "http://cmdb", "user": "admin"}`
-	Credentials = `{"secret": "` + Secret + `"}`
-	Secret      = "hunter2"
-)
+// Secret is the password of Login.
+const Secret = "hunter2"
+
+// Login is valid for the fake.
+var Login = provider.Login{URL: "http://cmdb", User: "admin", Password: Secret}
 
 // Provider returns whatever snapshot, error and credential check result the
 // test sets, and keeps the secret it last parsed.
@@ -34,14 +33,17 @@ type Provider struct {
 	Err      error
 	// Hanging, if set, makes Snapshot close it and wait for its context to
 	// end, like a CMDB that never answers.
-	Hanging  chan struct{}
-	CheckErr error
-	Secret   string
+	Hanging chan struct{}
+	// BeforeSnapshot, if set, runs at the start of Snapshot, such as to
+	// disconnect the source while its Sync runs.
+	BeforeSnapshot func()
+	CheckErr       error
+	Secret         string
 }
 
 // Providers registers p under Name.
-func (p *Provider) Providers() cmdb.Providers {
-	return cmdb.Providers{Name: p}
+func (p *Provider) Providers() provider.Providers {
+	return provider.Providers{Name: p}
 }
 
 type settingsDocument struct {
@@ -53,7 +55,7 @@ type credentialsDocument struct {
 	Secret string `json:"secret"`
 }
 
-func (p *Provider) ParseSettings(settings, credentials json.RawMessage) (cmdb.Settings, error) {
+func (p *Provider) ParseSettings(settings, credentials json.RawMessage) (provider.Settings, error) {
 	if _, err := p.Describe(settings); err != nil {
 		return nil, err
 	}
@@ -65,18 +67,18 @@ func (p *Provider) ParseSettings(settings, credentials json.RawMessage) (cmdb.Se
 	return snapshotter{p}, nil
 }
 
-func (p *Provider) Describe(settings json.RawMessage) (cmdb.Description, error) {
+func (p *Provider) Describe(settings json.RawMessage) (provider.Description, error) {
 	var s settingsDocument
 	if err := json.Unmarshal(settings, &s); err != nil {
-		return cmdb.Description{}, ErrInvalidSettings
+		return provider.Description{}, ErrInvalidSettings
 	}
 	if u, err := url.Parse(s.URL); err != nil || u.Scheme == "" || u.Host == "" {
-		return cmdb.Description{}, ErrInvalidSettings
+		return provider.Description{}, ErrInvalidSettings
 	}
-	return cmdb.Description{URL: s.URL, User: s.User}, nil
+	return provider.Description{URL: s.URL, User: s.User}, nil
 }
 
-func (p *Provider) FromLogin(login cmdb.Login) (json.RawMessage, json.RawMessage, error) {
+func (p *Provider) FromLogin(login provider.Login) (json.RawMessage, json.RawMessage, error) {
 	settings, err := json.Marshal(settingsDocument{URL: login.URL, User: login.User})
 	if err != nil {
 		return nil, nil, err
@@ -95,6 +97,9 @@ func (s snapshotter) CheckCredentials(context.Context) error {
 }
 
 func (s snapshotter) Snapshot(ctx context.Context) (inventory.Snapshot, error) {
+	if s.p.BeforeSnapshot != nil {
+		s.p.BeforeSnapshot()
+	}
 	if s.p.Hanging != nil {
 		close(s.p.Hanging)
 		<-ctx.Done()

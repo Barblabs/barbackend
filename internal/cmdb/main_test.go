@@ -1,4 +1,4 @@
-package sources_test
+package cmdb_test
 
 import (
 	"testing"

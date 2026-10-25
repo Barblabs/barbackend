@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"barbackend/internal/cmdb/itop/rest"
+	"barbackend/internal/cmdb/provider/itop/rest"
 )
 
 type fakeITop struct {
@@ -124,34 +124,17 @@ func TestGetNarrowsEveryQueryWithWhere(t *testing.T) {
 }
 
 func TestGetAuthenticates(t *testing.T) {
-	tests := []struct {
-		name string
-		auth rest.Auth
-		ok   func(*http.Request) bool
-	}{
-		{"basic", rest.BasicAuth("reader", "secret"), func(r *http.Request) bool {
-			return r.PostFormValue("auth_user") == "reader" && r.PostFormValue("auth_pwd") == "secret" && r.Header.Get("Auth-Token") == ""
-		}},
-		{"token", rest.TokenAuth("t0ken"), func(r *http.Request) bool {
-			return r.Header.Get("Auth-Token") == "t0ken" && r.PostFormValue("auth_user") == ""
-		}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			f := &fakeITop{t: t, ids: []int{1}}
-			h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if !tt.ok(r) {
-					writeJSON(w, map[string]any{"code": 1, "message": "Error: Invalid login"})
-					return
-				}
-				f.ServeHTTP(w, r)
-			})
-			c := newClient(t, h, tt.auth, rest.Options{})
-			if _, err := c.Get(context.Background(), rest.Query{Class: "Server"}); err != nil {
-				t.Fatal(err)
-			}
-		})
+	f := &fakeITop{t: t, ids: []int{1}}
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.PostFormValue("auth_user") != "reader" || r.PostFormValue("auth_pwd") != "secret" {
+			writeJSON(w, map[string]any{"code": 1, "message": "Error: Invalid login"})
+			return
+		}
+		f.ServeHTTP(w, r)
+	})
+	c := newClient(t, h, rest.BasicAuth("reader", "secret"), rest.Options{})
+	if _, err := c.Get(context.Background(), rest.Query{Class: "Server"}); err != nil {
+		t.Fatal(err)
 	}
 }
 

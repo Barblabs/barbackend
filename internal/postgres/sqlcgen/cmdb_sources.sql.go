@@ -22,37 +22,8 @@ func (q *Queries) DisconnectCMDBSource(ctx context.Context, id uuid.UUID) error 
 	return err
 }
 
-const getCMDBSource = `-- name: GetCMDBSource :one
-SELECT id, customer_id, provider, settings, credentials, (disconnected_at IS NULL)::boolean AS connected
-FROM cmdb_sources
-WHERE id = $1
-`
-
-type GetCMDBSourceRow struct {
-	ID          uuid.UUID
-	CustomerID  uuid.UUID
-	Provider    string
-	Settings    []byte
-	Credentials []byte
-	Connected   bool
-}
-
-func (q *Queries) GetCMDBSource(ctx context.Context, id uuid.UUID) (GetCMDBSourceRow, error) {
-	row := q.db.QueryRow(ctx, getCMDBSource, id)
-	var i GetCMDBSourceRow
-	err := row.Scan(
-		&i.ID,
-		&i.CustomerID,
-		&i.Provider,
-		&i.Settings,
-		&i.Credentials,
-		&i.Connected,
-	)
-	return i, err
-}
-
 const getConnectedCMDBSource = `-- name: GetConnectedCMDBSource :one
-SELECT id, customer_id, provider, settings, credentials, (disconnected_at IS NULL)::boolean AS connected
+SELECT id, customer_id, provider, settings, credentials
 FROM cmdb_sources
 WHERE customer_id = $1 AND disconnected_at IS NULL
 `
@@ -63,7 +34,6 @@ type GetConnectedCMDBSourceRow struct {
 	Provider    string
 	Settings    []byte
 	Credentials []byte
-	Connected   bool
 }
 
 func (q *Queries) GetConnectedCMDBSource(ctx context.Context, customerID uuid.UUID) (GetConnectedCMDBSourceRow, error) {
@@ -75,7 +45,6 @@ func (q *Queries) GetConnectedCMDBSource(ctx context.Context, customerID uuid.UU
 		&i.Provider,
 		&i.Settings,
 		&i.Credentials,
-		&i.Connected,
 	)
 	return i, err
 }

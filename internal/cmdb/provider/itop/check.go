@@ -8,13 +8,13 @@ import (
 	"strings"
 	"time"
 
-	"barbackend/internal/cmdb"
-	"barbackend/internal/cmdb/itop/rest"
+	"barbackend/internal/cmdb/provider"
+	"barbackend/internal/cmdb/provider/itop/rest"
 )
 
 // missingRESTProfile is an iTop user that logged in but lacks the REST
 // Services User profile, which iTop requires for the REST API.
-const missingRESTProfile cmdb.FailureCode = "missing_rest_profile"
+const missingRESTProfile provider.FailureCode = "missing_rest_profile"
 
 const checkTimeout = 15 * time.Second
 
@@ -37,20 +37,20 @@ func (s settings) classify(err error) error {
 	case errors.As(err, &apiErr) && apiErr.Code == unauthorized && strings.Contains(apiErr.Message, restProfileMessage):
 		return s.failure(missingRESTProfile, "the iTop user lacks the REST Services User profile", err)
 	case errors.As(err, &apiErr) && apiErr.Code == unauthorized:
-		return s.failure(cmdb.InvalidCredentials, "iTop rejected the user or password", err)
+		return s.failure(provider.InvalidCredentials, "iTop rejected the user or password", err)
 	case errors.As(err, &apiErr), errors.Is(err, rest.ErrUnexpectedResponse):
-		return s.failure(cmdb.UnexpectedResponse, "iTop did not answer as expected", err)
+		return s.failure(provider.UnexpectedResponse, "iTop did not answer as expected", err)
 	case errors.Is(err, rest.ErrTransport) && isTLSError(err):
-		return s.failure(cmdb.TLSError, "the TLS handshake with iTop failed", err)
+		return s.failure(provider.TLSError, "the TLS handshake with iTop failed", err)
 	case errors.Is(err, rest.ErrTransport):
-		return s.failure(cmdb.Unreachable, "iTop is unreachable", err)
+		return s.failure(provider.Unreachable, "iTop is unreachable", err)
 	default:
 		return err
 	}
 }
 
-func (s settings) failure(code cmdb.FailureCode, summary string, cause error) *cmdb.Failure {
-	return &cmdb.Failure{Code: code, Message: fmt.Sprintf("%s at %s: %v", summary, s.baseURL.Redacted(), cause)}
+func (s settings) failure(code provider.FailureCode, summary string, cause error) *provider.Failure {
+	return &provider.Failure{Code: code, Message: fmt.Sprintf("%s at %s: %v", summary, s.baseURL.Redacted(), cause)}
 }
 
 // plainHTTPAnswer is how net/http reports an https URL served by plain HTTP.

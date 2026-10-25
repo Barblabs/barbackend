@@ -43,12 +43,10 @@ const (
 )
 
 type Auth struct {
-	user, password, token string
+	user, password string
 }
 
 func BasicAuth(user, password string) Auth { return Auth{user: user, password: password} }
-
-func TokenAuth(token string) Auth { return Auth{token: token} }
 
 type Options struct {
 	// PageSize is the most objects one response may hold. Zero means 500.
@@ -213,19 +211,12 @@ func (c *Client) call(ctx context.Context, q Query, idRange string, fields []str
 }
 
 func (c *Client) post(ctx context.Context, payload []byte) (response, error) {
-	form := url.Values{"json_data": {string(payload)}}
-	if c.auth.token == "" {
-		form.Set("auth_user", c.auth.user)
-		form.Set("auth_pwd", c.auth.password)
-	}
+	form := url.Values{"json_data": {string(payload)}, "auth_user": {c.auth.user}, "auth_pwd": {c.auth.password}}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint, strings.NewReader(form.Encode()))
 	if err != nil {
 		return response{}, err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	if c.auth.token != "" {
-		req.Header.Set("Auth-Token", c.auth.token)
-	}
 	res, err := c.http.Do(req)
 	if err != nil {
 		return response{}, fmt.Errorf("%w: %w", ErrTransport, err)

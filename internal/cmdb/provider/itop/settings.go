@@ -9,7 +9,7 @@ import (
 	"net/url"
 	"strings"
 
-	"barbackend/internal/cmdb/itop/rest"
+	"barbackend/internal/cmdb/provider/itop/rest"
 )
 
 var (
@@ -19,10 +19,7 @@ var (
 
 type authMode string
 
-const (
-	basicAuth authMode = "basic"
-	tokenAuth authMode = "token"
-)
+const basicAuth authMode = "basic"
 
 type settingsDocument struct {
 	URL  string       `json:"url"`
@@ -35,8 +32,7 @@ type authDocument struct {
 }
 
 type credentialsDocument struct {
-	Password string `json:"password,omitempty"`
-	Token    string `json:"token,omitempty"`
+	Password string `json:"password"`
 }
 
 type settings struct {
@@ -105,32 +101,20 @@ func parseBaseURL(s string) (*url.URL, error) {
 }
 
 func (a authDocument) validate() error {
-	switch a.Mode {
-	case basicAuth:
-		if blank(a.User) {
-			return fmt.Errorf("%w: basic auth needs user", ErrInvalidSettings)
-		}
-	case tokenAuth:
-		if a.User != "" {
-			return fmt.Errorf("%w: token auth does not take user", ErrInvalidSettings)
-		}
-	default:
-		return fmt.Errorf("%w: auth mode %q is not basic or token", ErrInvalidSettings, a.Mode)
+	if a.Mode != basicAuth {
+		return fmt.Errorf("%w: auth mode %q is not basic", ErrInvalidSettings, a.Mode)
+	}
+	if blank(a.User) {
+		return fmt.Errorf("%w: basic auth needs user", ErrInvalidSettings)
 	}
 	return nil
 }
 
 func (a authDocument) restAuth(c credentialsDocument) (rest.Auth, error) {
-	if a.Mode == basicAuth {
-		if c.Password == "" || c.Token != "" {
-			return rest.Auth{}, fmt.Errorf("%w: basic auth needs a password and no token", ErrInvalidCredentials)
-		}
-		return rest.BasicAuth(a.User, c.Password), nil
+	if c.Password == "" {
+		return rest.Auth{}, fmt.Errorf("%w: basic auth needs a password", ErrInvalidCredentials)
 	}
-	if c.Token == "" || c.Password != "" {
-		return rest.Auth{}, fmt.Errorf("%w: token auth needs a token and no password", ErrInvalidCredentials)
-	}
-	return rest.TokenAuth(c.Token), nil
+	return rest.BasicAuth(a.User, c.Password), nil
 }
 
 func blank(s string) bool { return strings.TrimSpace(s) == "" }

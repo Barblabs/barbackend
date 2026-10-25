@@ -3,28 +3,21 @@
 package httpapi
 
 import (
-	"context"
 	"errors"
 	"net/http"
-	"time"
 
+	"barbackend/internal/cmdb"
 	"barbackend/internal/inventory"
-	"barbackend/internal/sources"
 	"github.com/gin-gonic/gin"
 )
 
 type Config struct {
-	Sources *sources.Service
+	CMDB *cmdb.Service
 	// Customer is who every request acts for. It comes from server
 	// configuration until authentication exists.
 	Customer inventory.CustomerID
 	// AllowedOrigins may call the API from a browser.
 	AllowedOrigins []string
-	// Lifetime ends when the server shuts down. Syncs run under it instead of
-	// their request, so a client that disconnects does not fail its Sync.
-	Lifetime context.Context
-	// SyncTimeout bounds each Sync started over HTTP.
-	SyncTimeout time.Duration
 }
 
 func New(cfg Config) http.Handler {
@@ -33,7 +26,7 @@ func New(cfg Config) http.Handler {
 	router.GET("/ping", func(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, gin.H{"message": "pong"})
 	})
-	h := cmdbSourceHandler{sources: cfg.Sources, customer: cfg.Customer, lifetime: cfg.Lifetime, syncTimeout: cfg.SyncTimeout}
+	h := cmdbSourceHandler{cmdb: cfg.CMDB, customer: cfg.Customer}
 	router.GET("/cmdb/source", h.get)
 	router.POST("/cmdb/source", h.connect)
 	router.PUT("/cmdb/source", h.update)
@@ -61,17 +54,17 @@ const (
 )
 
 func writeError(ctx *gin.Context, err error) {
-	var failure *sources.Failure
+	var failure *cmdb.Failure
 	switch {
 	case errors.As(err, &failure):
 		ctx.JSON(http.StatusUnprocessableEntity, codedError{Code: string(failure.Code), Error: failure.Message})
-	case errors.Is(err, sources.ErrInvalidLogin):
+	case errors.Is(err, cmdb.ErrInvalidLogin):
 		ctx.JSON(http.StatusBadRequest, codedError{Code: invalidLogin, Error: err.Error()})
-	case errors.Is(err, sources.ErrNotConnected), errors.Is(err, sources.ErrDisconnected):
+	case errors.Is(err, cmdb.ErrNotConnected):
 		ctx.JSON(http.StatusNotFound, codedError{Code: notConnected, Error: err.Error()})
-	case errors.Is(err, sources.ErrAlreadyConnected):
+	case errors.Is(err, cmdb.ErrAlreadyConnected):
 		ctx.JSON(http.StatusConflict, codedError{Code: alreadyConnected, Error: err.Error()})
-	case errors.Is(err, sources.ErrSyncInProgress):
+	case errors.Is(err, cmdb.ErrSyncInProgress):
 		ctx.JSON(http.StatusConflict, codedError{Code: syncInProgress, Error: err.Error()})
 	default:
 		_ = ctx.Error(err)

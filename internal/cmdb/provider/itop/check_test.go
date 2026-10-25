@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"barbackend/internal/cmdb"
-	"barbackend/internal/cmdb/itop"
+	"barbackend/internal/cmdb/provider"
+	"barbackend/internal/cmdb/provider/itop"
 )
 
 const (
@@ -36,7 +36,7 @@ func reply(body string) http.HandlerFunc {
 
 func checkCredentials(ctx context.Context, t *testing.T, url, password string) error {
 	t.Helper()
-	settings, credentials, err := itop.Provider{}.FromLogin(cmdb.Login{URL: url, User: fakeUser, Password: password})
+	settings, credentials, err := itop.Provider{}.FromLogin(provider.Login{URL: url, User: fakeUser, Password: password})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,13 +67,13 @@ func TestCheckCredentialsFailureCodes(t *testing.T) {
 		url      func(t *testing.T) string
 		password string
 		timeout  time.Duration
-		want     cmdb.FailureCode
+		want     provider.FailureCode
 	}{
 		{
 			name:     "wrong password",
 			url:      serve(http.HandlerFunc(fakeITop)),
 			password: "wrong",
-			want:     cmdb.InvalidCredentials,
+			want:     provider.InvalidCredentials,
 		},
 		{
 			name: "user without the REST profile",
@@ -84,12 +84,12 @@ func TestCheckCredentialsFailureCodes(t *testing.T) {
 		{
 			name: "connection refused",
 			url:  func(*testing.T) string { return closed.URL },
-			want: cmdb.Unreachable,
+			want: provider.Unreachable,
 		},
 		{
 			name: "unknown host",
 			url:  func(*testing.T) string { return "http://itop.invalid" },
-			want: cmdb.Unreachable,
+			want: provider.Unreachable,
 		},
 		{
 			name: "timeout",
@@ -101,7 +101,7 @@ func TestCheckCredentialsFailureCodes(t *testing.T) {
 				return srv.URL
 			},
 			timeout: 100 * time.Millisecond,
-			want:    cmdb.Unreachable,
+			want:    provider.Unreachable,
 		},
 		{
 			name: "untrusted certificate",
@@ -110,7 +110,7 @@ func TestCheckCredentialsFailureCodes(t *testing.T) {
 				t.Cleanup(srv.Close)
 				return srv.URL
 			},
-			want: cmdb.TLSError,
+			want: provider.TLSError,
 		},
 		{
 			name: "https to a plain http server",
@@ -119,27 +119,27 @@ func TestCheckCredentialsFailureCodes(t *testing.T) {
 				t.Cleanup(srv.Close)
 				return "https://" + srv.Listener.Addr().String()
 			},
-			want: cmdb.TLSError,
+			want: provider.TLSError,
 		},
 		{
 			name: "not found",
 			url:  serve(http.NotFoundHandler()),
-			want: cmdb.UnexpectedResponse,
+			want: provider.UnexpectedResponse,
 		},
 		{
 			name: "html page",
 			url:  serve(reply(`<html><body>Fatal error</body></html>`)),
-			want: cmdb.UnexpectedResponse,
+			want: provider.UnexpectedResponse,
 		},
 		{
 			name: "json that is not iTop",
 			url:  serve(reply(`{}`)),
-			want: cmdb.UnexpectedResponse,
+			want: provider.UnexpectedResponse,
 		},
 		{
 			name: "another iTop error",
 			url:  serve(reply(`{"code":10,"message":"Error: Unsupported version"}`)),
-			want: cmdb.UnexpectedResponse,
+			want: provider.UnexpectedResponse,
 		},
 	}
 	for _, tt := range tests {
@@ -158,7 +158,7 @@ func TestCheckCredentialsFailureCodes(t *testing.T) {
 
 			err := checkCredentials(ctx, t, tt.url(t), password)
 
-			var failure *cmdb.Failure
+			var failure *provider.Failure
 			if !errors.As(err, &failure) || failure.Code != tt.want || failure.Message == "" {
 				t.Errorf("CheckCredentials = %#v, want a %s failure with a message", err, tt.want)
 			}
@@ -176,7 +176,7 @@ func serve(h http.Handler) func(t *testing.T) string {
 
 func snapshot(t *testing.T, url string) error {
 	t.Helper()
-	settings, credentials, err := itop.Provider{}.FromLogin(cmdb.Login{URL: url, User: fakeUser, Password: fakePassword})
+	settings, credentials, err := itop.Provider{}.FromLogin(provider.Login{URL: url, User: fakeUser, Password: fakePassword})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -195,18 +195,18 @@ func TestSnapshotFailureCodes(t *testing.T) {
 	tests := []struct {
 		name string
 		url  func(t *testing.T) string
-		want cmdb.FailureCode
+		want provider.FailureCode
 	}{
-		{"rejected login", serve(reply(`{"code":1,"message":"Error: Invalid login"}`)), cmdb.InvalidCredentials},
-		{"connection refused", func(*testing.T) string { return closed.URL }, cmdb.Unreachable},
-		{"html page", serve(reply(`<html><body>Fatal error</body></html>`)), cmdb.UnexpectedResponse},
+		{"rejected login", serve(reply(`{"code":1,"message":"Error: Invalid login"}`)), provider.InvalidCredentials},
+		{"connection refused", func(*testing.T) string { return closed.URL }, provider.Unreachable},
+		{"html page", serve(reply(`<html><body>Fatal error</body></html>`)), provider.UnexpectedResponse},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			err := snapshot(t, tt.url(t))
 
-			var failure *cmdb.Failure
+			var failure *provider.Failure
 			if !errors.As(err, &failure) || failure.Code != tt.want {
 				t.Errorf("Snapshot = %v, want a %s failure", err, tt.want)
 			}
@@ -220,7 +220,7 @@ func TestSnapshotKeepsItsOwnErrorsUnclassified(t *testing.T) {
 
 	err := snapshot(t, url)
 
-	var failure *cmdb.Failure
+	var failure *provider.Failure
 	if err == nil || errors.As(err, &failure) {
 		t.Errorf("Snapshot = %#v, want an unclassified error", err)
 	}

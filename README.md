@@ -14,9 +14,9 @@ Domain terms are defined in [`GLOSSARY.md`](GLOSSARY.md), design decisions in [`
 ```bash
 go build ./cmd/barbackend
 
-# migrate, serve, source and sync need a database
+# migrate and serve need a database
 export DATABASE_URL="postgres://user:pass@localhost:5432/barbackend?sslmode=disable"
-# serve, source and sync seal and open CMDB Source credentials with this key (ADR 0012)
+# serve seals and opens CMDB Source credentials with this key (ADR 0012)
 export CREDENTIALS_KEY="$(openssl rand -base64 32)"
 # serve acts for this Customer until authentication exists, so it is for local dev only
 export CUSTOMER_ID=<customer-uuid>
@@ -40,45 +40,15 @@ Every error answers `{code, error}`: `code` is stable for the dashboard to trans
 
 Run `./barbackend` with no arguments to print the usage.
 
-## Flows
+## CMDB Sources
 
-### Add a CMDB Source
-
-```bash
-./barbackend source add \
-  --customer <customer-uuid> \
-  --provider <provider-id> \
-  --settings '<json>' < credentials.json
-```
-
-Settings are plain JSON and hold no secret. The credentials are a JSON document read from stdin, so secrets stay out of the process list and shell history. The provider validates both before the source is stored, and the credentials are stored encrypted with `CREDENTIALS_KEY`. Prints the new CMDB Source ID.
-
-Keep `CREDENTIALS_KEY` safe: credentials stored with a lost key cannot be recovered, and their sources must be added again. `serve`, `source` and `sync` refuse to start without it. A Sync with another key fails and is recorded as a failed Sync Run.
+A CMDB Source is connected and synced through the HTTP API above. Its credentials are stored encrypted with `CREDENTIALS_KEY`. Keep that key safe: credentials stored with a lost key cannot be recovered, and their sources must be connected again. `serve` refuses to start without it, and a Sync with another key fails and is recorded as a failed Sync Run.
 
 Providers are registered in `providers()` in `cmd/barbackend/app.go`.
 
-#### iTop (`--provider itop`)
+### iTop (`"provider": "itop"`)
 
-Reads every Server, Virtual Machine, PC and Network Device in the instance through the REST API (version 1.4, iTop 2.7 or later). The user needs the REST Services User profile and read access to those classes.
-
-```bash
-jq -n --arg password "$ITOP_PASSWORD" '{$password}' | ./barbackend source add --customer <customer-uuid> --provider itop \
-  --settings '{"url": "https://itop.example.com", "auth": {"mode": "basic", "user": "barb-reader"}}'
-```
-
-- `url`: the iTop root, with or without a path (`https://example.com/itop`); no credentials, query or fragment.
-- `auth.mode: "basic"`: settings take `user`, credentials are `{"password": "..."}`.
-- `auth.mode: "token"`: settings take nothing else, credentials are `{"token": "..."}`, a token from the authent-token extension.
-
-To type the password instead, run the command without a pipe, enter `{"password": "..."}` and press Ctrl-D.
-
-### Sync a CMDB Source
-
-```bash
-./barbackend sync --source <source-uuid>
-```
-
-Prints the outcome of the Sync Run, its counts (created, updated, deactivated, reactivated, skipped), and each Skipped Record with its reason. Interrupting with Ctrl-C still records the failed Sync Run.
+Reads every Server, Virtual Machine, PC and Network Device in the instance through the REST API (version 1.4, iTop 2.7 or later), with basic auth. The user needs the REST Services User profile and read access to those classes. `url` is the iTop root, with or without a path (`https://example.com/itop`), and no credentials, query or fragment.
 
 ## Development
 

@@ -1,5 +1,5 @@
-// Package cmdb is the seam every CMDB Provider adapter implements (ADR 0007).
-package cmdb
+// Package provider is the seam every CMDB Provider adapter implements (ADR 0007).
+package provider
 
 import (
 	"context"

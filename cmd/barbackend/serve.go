@@ -10,9 +10,11 @@ import (
 	"strings"
 	"time"
 
+	"barbackend/internal/cmdb"
 	"barbackend/internal/httpapi"
 	"barbackend/internal/ingest"
 	"barbackend/internal/inventory"
+	"barbackend/internal/postgres"
 	"github.com/google/uuid"
 )
 
@@ -27,6 +29,10 @@ func serve(ctx context.Context, _ []string) error {
 	if err != nil {
 		return err
 	}
+	key, err := encryptionKey()
+	if err != nil {
+		return err
+	}
 	svc, err := ingest.New(registeredFeeds()...)
 	if err != nil {
 		return err
@@ -37,13 +43,11 @@ func serve(ctx context.Context, _ []string) error {
 		svc.Run(ctx)
 	}()
 
-	return withApp(ctx, func(a app) error {
+	return withDB(ctx, func(db *postgres.DB) error {
 		return listen(ctx, feedsDone, httpapi.New(httpapi.Config{
-			Sources:        a.sources,
+			CMDB:           cmdb.New(db, providers(), key, ctx, syncTimeout),
 			Customer:       customer,
 			AllowedOrigins: allowedOrigins(),
-			Lifetime:       ctx,
-			SyncTimeout:    syncTimeout,
 		}))
 	})
 }

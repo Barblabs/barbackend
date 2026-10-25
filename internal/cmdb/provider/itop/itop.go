@@ -6,27 +6,26 @@ import (
 	"context"
 	"encoding/json"
 
-	"barbackend/internal/cmdb"
-	"barbackend/internal/cmdb/itop/rest"
+	"barbackend/internal/cmdb/provider"
+	"barbackend/internal/cmdb/provider/itop/rest"
 	"barbackend/internal/inventory"
 )
 
 type Provider struct{}
 
-func (Provider) ParseSettings(settings, credentials json.RawMessage) (cmdb.Settings, error) {
+func (Provider) ParseSettings(settings, credentials json.RawMessage) (provider.Settings, error) {
 	return parseSettings(settings, credentials)
 }
 
-func (Provider) Describe(settings json.RawMessage) (cmdb.Description, error) {
+func (Provider) Describe(settings json.RawMessage) (provider.Description, error) {
 	doc, _, err := parseSettingsDocument(settings)
 	if err != nil {
-		return cmdb.Description{}, err
+		return provider.Description{}, err
 	}
-	return cmdb.Description{URL: doc.URL, User: doc.Auth.User}, nil
+	return provider.Description{URL: doc.URL, User: doc.Auth.User}, nil
 }
 
-// FromLogin builds a basic auth source: the dashboard has no token mode.
-func (Provider) FromLogin(login cmdb.Login) (json.RawMessage, json.RawMessage, error) {
+func (Provider) FromLogin(login provider.Login) (json.RawMessage, json.RawMessage, error) {
 	settings, err := json.Marshal(settingsDocument{URL: login.URL, Auth: authDocument{Mode: basicAuth, User: login.User}})
 	if err != nil {
 		return nil, nil, err

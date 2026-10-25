@@ -6,26 +6,11 @@ import (
 	"fmt"
 	"os"
 
-	"barbackend/internal/cmdb"
-	"barbackend/internal/cmdb/itop"
+	"barbackend/internal/cmdb/provider"
+	"barbackend/internal/cmdb/provider/itop"
 	"barbackend/internal/encryption"
 	"barbackend/internal/postgres"
-	"barbackend/internal/sources"
 )
-
-type app struct {
-	sources *sources.Service
-}
-
-func withApp(ctx context.Context, run func(app) error) error {
-	key, err := encryptionKey()
-	if err != nil {
-		return err
-	}
-	return withDB(ctx, func(db *postgres.DB) error {
-		return run(app{sources: sources.New(db, providers(), key)})
-	})
-}
 
 func withDB(ctx context.Context, run func(*postgres.DB) error) error {
 	url := os.Getenv("DATABASE_URL")
@@ -52,6 +37,6 @@ func encryptionKey() (encryption.Key, error) {
 	return key, nil
 }
 
-func providers() cmdb.Providers {
-	return cmdb.Providers{"itop": itop.Provider{}}
+func providers() provider.Providers {
+	return provider.Providers{"itop": itop.Provider{}}
 }

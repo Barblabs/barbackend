@@ -2,11 +2,6 @@
 INSERT INTO cmdb_sources (id, customer_id, provider, settings, credentials)
 VALUES ($1, $2, $3, $4, $5);
 
--- name: GetCMDBSource :one
-SELECT id, customer_id, provider, settings, credentials, (disconnected_at IS NULL)::boolean AS connected
-FROM cmdb_sources
-WHERE id = $1;
-
 -- name: LockCMDBSource :one
 SELECT (disconnected_at IS NULL)::boolean AS connected
 FROM cmdb_sources
@@ -14,7 +9,7 @@ WHERE id = $1
 FOR UPDATE NOWAIT;
 
 -- name: GetConnectedCMDBSource :one
-SELECT id, customer_id, provider, settings, credentials, (disconnected_at IS NULL)::boolean AS connected
+SELECT id, customer_id, provider, settings, credentials
 FROM cmdb_sources
 WHERE customer_id = $1 AND disconnected_at IS NULL;
 

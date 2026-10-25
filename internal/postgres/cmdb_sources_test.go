@@ -28,7 +28,7 @@ func TestCMDBSourceRoundTrip(t *testing.T) {
 	inTx(t, db, func(tx *postgres.Tx) error { return tx.CreateCMDBSource(ctx, src, settings, credentials) })
 
 	inTx(t, db, func(tx *postgres.Tx) error {
-		got, err := tx.CMDBSource(ctx, src.ID())
+		got, err := tx.ConnectedCMDBSource(ctx, src.Customer())
 		if err != nil {
 			return err
 		}
@@ -43,18 +43,6 @@ func TestCMDBSourceRoundTrip(t *testing.T) {
 		}
 		return nil
 	})
-}
-
-func TestCMDBSourceNotFound(t *testing.T) {
-	t.Parallel()
-	db := pgtest.NewDB(t)
-	err := db.InTx(context.Background(), func(tx *postgres.Tx) error {
-		_, err := tx.CMDBSource(context.Background(), inventory.CMDBSourceID(uuid.New()))
-		return err
-	})
-	if !errors.Is(err, postgres.ErrNotFound) {
-		t.Errorf("err = %v, want ErrNotFound", err)
-	}
 }
 
 func TestSecondConnectedCMDBSourceIsRefused(t *testing.T) {
