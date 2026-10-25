@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"barbackend/internal/cmdb/itop/rest"
+	"barbackend/internal/cmdb/provider/itop/rest"
 )
 
 type fakeITop struct {

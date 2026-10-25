@@ -9,7 +9,7 @@ import (
 	"net/url"
 	"strings"
 
-	"barbackend/internal/cmdb/itop/rest"
+	"barbackend/internal/cmdb/provider/itop/rest"
 )
 
 var (

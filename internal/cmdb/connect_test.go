@@ -1,4 +1,4 @@
-package sources_test
+package cmdb_test
 
 import (
 	"bytes"
@@ -10,13 +10,13 @@ import (
 	"time"
 
 	"barbackend/internal/cmdb"
-	"barbackend/internal/cmdb/cmdbtest"
+	"barbackend/internal/cmdb/provider"
+	"barbackend/internal/cmdb/provider/providertest"
 	"barbackend/internal/encryption"
 	"barbackend/internal/inventory"
-	"barbackend/internal/sources"
 )
 
-var rejected = &cmdb.Failure{Code: cmdb.InvalidCredentials, Message: "the cmdb rejected the user or password"}
+var rejected = &provider.Failure{Code: provider.InvalidCredentials, Message: "the cmdb rejected the user or password"}
 
 func TestTestLoginStoresNothing(t *testing.T) {
 	t.Parallel()
@@ -24,7 +24,7 @@ func TestTestLoginStoresNothing(t *testing.T) {
 		e := newEnv(t)
 		e.provider.CheckErr = checkErr
 
-		if err := e.sources.TestLogin(context.Background(), cmdbtest.Name, cmdbtest.Login); !errors.Is(err, checkErr) {
+		if err := e.cmdb.TestLogin(context.Background(), providertest.Name, providertest.Login); !errors.Is(err, checkErr) {
 			t.Errorf("err = %v, want %v", err, checkErr)
 		}
 		if n := e.queryInt(t, "SELECT count(*) FROM cmdb_sources"); n != 0 {
@@ -39,7 +39,7 @@ func TestConnectRunsTheFirstSync(t *testing.T) {
 	e.provider.Snapshot = inventory.Snapshot{Records: []inventory.Record{record(t, "a", "vm-a")}}
 	customer := newCustomer()
 
-	got, err := e.sources.Connect(context.Background(), customer, cmdbtest.Name, cmdbtest.Login)
+	got, err := e.cmdb.Connect(context.Background(), customer, providertest.Name, providertest.Login)
 
 	if err != nil {
 		t.Fatal(err)
@@ -67,12 +67,12 @@ func TestConnectThatFailsStoresNothing(t *testing.T) {
 			t.Parallel()
 			e := newEnv(t)
 			e.provider.CheckErr = tt.checkErr
-			svc := e.sources
+			svc := e.cmdb
 			if tt.noKey {
 				svc = e.withKey(encryption.Key{})
 			}
 
-			_, err := svc.Connect(context.Background(), newCustomer(), cmdbtest.Name, cmdbtest.Login)
+			_, err := svc.Connect(context.Background(), newCustomer(), providertest.Name, providertest.Login)
 
 			if !errors.Is(err, tt.want) {
 				t.Errorf("err = %v, want %v", err, tt.want)
@@ -90,7 +90,7 @@ func TestConnectWithFailedFirstSyncStaysConnected(t *testing.T) {
 	e.provider.Err = errors.New("cmdb unreachable")
 	customer := newCustomer()
 
-	got, err := e.sources.Connect(context.Background(), customer, cmdbtest.Name, cmdbtest.Login)
+	got, err := e.cmdb.Connect(context.Background(), customer, providertest.Name, providertest.Login)
 
 	if err != nil {
 		t.Fatal(err)
@@ -99,7 +99,7 @@ func TestConnectWithFailedFirstSyncStaysConnected(t *testing.T) {
 		t.Errorf("connected source = %+v, want no last Sync and the failure", got)
 	}
 	e.provider.Err = nil
-	if _, err := e.sources.SyncConnected(context.Background(), customer); err != nil {
+	if _, err := e.cmdb.SyncConnected(context.Background(), customer); err != nil {
 		t.Errorf("a later Sync: %v, want success since the source stays connected", err)
 	}
 }
@@ -109,7 +109,7 @@ func TestConnectWithFirstSyncExceedingTheTimeLimit(t *testing.T) {
 	e := newEnv(t)
 	e.provider.Hanging = make(chan struct{})
 
-	got, err := e.withSyncLimits(context.Background(), 50*time.Millisecond).Connect(context.Background(), newCustomer(), cmdbtest.Name, cmdbtest.Login)
+	got, err := e.withSyncLimits(context.Background(), 50*time.Millisecond).Connect(context.Background(), newCustomer(), providertest.Name, providertest.Login)
 
 	if err != nil {
 		t.Fatal(err)
@@ -123,16 +123,16 @@ func TestConnectWhenAlreadyConnected(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
 	customer, _ := e.connect(t)
-	other := cmdbtest.Login
+	other := providertest.Login
 	other.URL = "http://other-cmdb"
 
-	_, err := e.sources.Connect(context.Background(), customer, cmdbtest.Name, other)
+	_, err := e.cmdb.Connect(context.Background(), customer, providertest.Name, other)
 
-	if !errors.Is(err, sources.ErrAlreadyConnected) {
+	if !errors.Is(err, cmdb.ErrAlreadyConnected) {
 		t.Errorf("err = %v, want ErrAlreadyConnected", err)
 	}
-	if got := e.connectedSource(t, customer); got.URL != cmdbtest.Login.URL {
-		t.Errorf("connected url = %s, want the source connected first %s", got.URL, cmdbtest.Login.URL)
+	if got := e.connectedSource(t, customer); got.URL != providertest.Login.URL {
+		t.Errorf("connected url = %s, want the source connected first %s", got.URL, providertest.Login.URL)
 	}
 }
 
@@ -141,7 +141,7 @@ func TestConnectStoresSealedCredentials(t *testing.T) {
 	e := newEnv(t)
 	customer, _ := e.connect(t)
 
-	if stored := e.connected(t, customer); len(stored.Credentials) == 0 || bytes.Contains(stored.Credentials, []byte(cmdbtest.Secret)) {
+	if stored := e.connected(t, customer); len(stored.Credentials) == 0 || bytes.Contains(stored.Credentials, []byte(providertest.Secret)) {
 		t.Errorf("stored credentials = %q, want ciphertext without the password", stored.Credentials)
 	}
 }
@@ -151,11 +151,11 @@ func TestConnectAfterDisconnectCreatesANewCMDBSource(t *testing.T) {
 	e := newEnv(t)
 	e.provider.Snapshot = inventory.Snapshot{Records: []inventory.Record{record(t, "a", "vm-a")}}
 	customer, old := e.connect(t)
-	if err := e.sources.Disconnect(context.Background(), customer); err != nil {
+	if err := e.cmdb.Disconnect(context.Background(), customer); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := e.sources.Connect(context.Background(), customer, cmdbtest.Name, cmdbtest.Login); err != nil {
+	if _, err := e.cmdb.Connect(context.Background(), customer, providertest.Name, providertest.Login); err != nil {
 		t.Fatal(err)
 	}
 
@@ -176,7 +176,7 @@ func TestConnectedSourceReportsLatestSyncRuns(t *testing.T) {
 	e := newEnv(t)
 	customer, _ := e.connect(t)
 
-	succeeded, err := e.sources.SyncConnected(context.Background(), customer)
+	succeeded, err := e.cmdb.SyncConnected(context.Background(), customer)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -187,7 +187,7 @@ func TestConnectedSourceReportsLatestSyncRuns(t *testing.T) {
 
 	e.provider.Err = errors.New("cmdb unreachable")
 	beforeFailure := time.Now().Truncate(time.Microsecond)
-	if _, err := e.sources.SyncConnected(context.Background(), customer); err == nil {
+	if _, err := e.cmdb.SyncConnected(context.Background(), customer); err == nil {
 		t.Fatal("Sync succeeded, want a failure")
 	}
 	got := e.connectedSource(t, customer)
@@ -199,7 +199,7 @@ func TestConnectedSourceReportsLatestSyncRuns(t *testing.T) {
 	}
 
 	e.provider.Err = nil
-	if _, err := e.sources.SyncConnected(context.Background(), customer); err != nil {
+	if _, err := e.cmdb.SyncConnected(context.Background(), customer); err != nil {
 		t.Fatal(err)
 	}
 	if got := e.connectedSource(t, customer); got.LastSyncFailure != nil {
@@ -207,18 +207,18 @@ func TestConnectedSourceReportsLatestSyncRuns(t *testing.T) {
 	}
 }
 
-var rotated = cmdb.Login{URL: "http://new-cmdb", User: "new-admin", Password: "new-secret"}
+var rotated = provider.Login{URL: "http://new-cmdb", User: "new-admin", Password: "new-secret"}
 
 func TestUpdateLogin(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
 	customer, src := e.connect(t)
-	synced, err := e.sources.SyncConnected(context.Background(), customer)
+	synced, err := e.cmdb.SyncConnected(context.Background(), customer)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	got, err := e.sources.UpdateLogin(context.Background(), customer, rotated)
+	got, err := e.cmdb.UpdateLogin(context.Background(), customer, rotated)
 
 	if err != nil {
 		t.Fatal(err)
@@ -232,7 +232,7 @@ func TestUpdateLogin(t *testing.T) {
 	if id := e.connected(t, customer).Source.ID(); id != src {
 		t.Errorf("connected source = %s, want the same source %s", id, src)
 	}
-	if _, err := e.sources.SyncConnected(context.Background(), customer); err != nil || e.provider.Secret != rotated.Password {
+	if _, err := e.cmdb.SyncConnected(context.Background(), customer); err != nil || e.provider.Secret != rotated.Password {
 		t.Errorf("a later Sync: %v with secret %q, want success with the new password", err, e.provider.Secret)
 	}
 }
@@ -244,7 +244,7 @@ func TestUpdateLoginWithRejectedCredentials(t *testing.T) {
 	before := e.connected(t, customer)
 	e.provider.CheckErr = rejected
 
-	_, err := e.sources.UpdateLogin(context.Background(), customer, rotated)
+	_, err := e.cmdb.UpdateLogin(context.Background(), customer, rotated)
 
 	if !errors.Is(err, rejected) {
 		t.Errorf("err = %v, want %v", err, rejected)
@@ -267,7 +267,7 @@ func TestUpdateLoginKeepsAssetsAndDeclarations(t *testing.T) {
 	}
 	before := assets()
 
-	if _, err := e.sources.UpdateLogin(context.Background(), customer, rotated); err != nil {
+	if _, err := e.cmdb.UpdateLogin(context.Background(), customer, rotated); err != nil {
 		t.Fatal(err)
 	}
 
@@ -282,11 +282,11 @@ func TestDisconnect(t *testing.T) {
 	e.provider.Snapshot = inventory.Snapshot{Records: []inventory.Record{record(t, "a", "vm-a"), record(t, "b", "vm-b")}}
 	customer, src := e.connect(t)
 
-	if err := e.sources.Disconnect(context.Background(), customer); err != nil {
+	if err := e.cmdb.Disconnect(context.Background(), customer); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := e.sources.ConnectedSource(context.Background(), customer); !errors.Is(err, sources.ErrNotConnected) {
+	if _, err := e.cmdb.ConnectedSource(context.Background(), customer); !errors.Is(err, cmdb.ErrNotConnected) {
 		t.Errorf("connected source err = %v, want ErrNotConnected", err)
 	}
 	if got := e.rows(t, "SELECT record_id, inactive_since IS NOT NULL FROM assets WHERE cmdb_source_id = $1 ORDER BY record_id", src.String()); !reflect.DeepEqual(got, [][]string{{"a", "true"}, {"b", "true"}}) {
@@ -303,10 +303,10 @@ func TestDisconnectWhileASyncRuns(t *testing.T) {
 	customer, src := e.connect(t)
 	release := e.holdSyncLock(t, src)
 
-	err := e.sources.Disconnect(context.Background(), customer)
+	err := e.cmdb.Disconnect(context.Background(), customer)
 	release()
 
-	if !errors.Is(err, sources.ErrSyncInProgress) {
+	if !errors.Is(err, cmdb.ErrSyncInProgress) {
 		t.Errorf("err = %v, want ErrSyncInProgress", err)
 	}
 	if id := e.connected(t, customer).Source.ID(); id != src {

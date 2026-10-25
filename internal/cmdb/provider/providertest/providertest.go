@@ -1,6 +1,6 @@
-// Package cmdbtest is a fake CMDB Provider for tests of the layers above the
+// Package providertest is a fake CMDB Provider for tests of the layers above the
 // seam.
-package cmdbtest
+package providertest
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 	"errors"
 	"net/url"
 
-	"barbackend/internal/cmdb"
+	"barbackend/internal/cmdb/provider"
 	"barbackend/internal/inventory"
 )
 
@@ -24,7 +24,7 @@ var (
 const Secret = "hunter2"
 
 // Login is valid for the fake.
-var Login = cmdb.Login{URL: "http://cmdb", User: "admin", Password: Secret}
+var Login = provider.Login{URL: "http://cmdb", User: "admin", Password: Secret}
 
 // Provider returns whatever snapshot, error and credential check result the
 // test sets, and keeps the secret it last parsed.
@@ -42,8 +42,8 @@ type Provider struct {
 }
 
 // Providers registers p under Name.
-func (p *Provider) Providers() cmdb.Providers {
-	return cmdb.Providers{Name: p}
+func (p *Provider) Providers() provider.Providers {
+	return provider.Providers{Name: p}
 }
 
 type settingsDocument struct {
@@ -55,7 +55,7 @@ type credentialsDocument struct {
 	Secret string `json:"secret"`
 }
 
-func (p *Provider) ParseSettings(settings, credentials json.RawMessage) (cmdb.Settings, error) {
+func (p *Provider) ParseSettings(settings, credentials json.RawMessage) (provider.Settings, error) {
 	if _, err := p.Describe(settings); err != nil {
 		return nil, err
 	}
@@ -67,18 +67,18 @@ func (p *Provider) ParseSettings(settings, credentials json.RawMessage) (cmdb.Se
 	return snapshotter{p}, nil
 }
 
-func (p *Provider) Describe(settings json.RawMessage) (cmdb.Description, error) {
+func (p *Provider) Describe(settings json.RawMessage) (provider.Description, error) {
 	var s settingsDocument
 	if err := json.Unmarshal(settings, &s); err != nil {
-		return cmdb.Description{}, ErrInvalidSettings
+		return provider.Description{}, ErrInvalidSettings
 	}
 	if u, err := url.Parse(s.URL); err != nil || u.Scheme == "" || u.Host == "" {
-		return cmdb.Description{}, ErrInvalidSettings
+		return provider.Description{}, ErrInvalidSettings
 	}
-	return cmdb.Description{URL: s.URL, User: s.User}, nil
+	return provider.Description{URL: s.URL, User: s.User}, nil
 }
 
-func (p *Provider) FromLogin(login cmdb.Login) (json.RawMessage, json.RawMessage, error) {
+func (p *Provider) FromLogin(login provider.Login) (json.RawMessage, json.RawMessage, error) {
 	settings, err := json.Marshal(settingsDocument{URL: login.URL, User: login.User})
 	if err != nil {
 		return nil, nil, err

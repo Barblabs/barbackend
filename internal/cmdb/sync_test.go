@@ -1,4 +1,4 @@
-package sources_test
+package cmdb_test
 
 import (
 	"context"
@@ -10,11 +10,11 @@ import (
 	"time"
 
 	"barbackend/internal/cmdb"
-	"barbackend/internal/cmdb/cmdbtest"
+	"barbackend/internal/cmdb/provider"
+	"barbackend/internal/cmdb/provider/providertest"
 	"barbackend/internal/encryption"
 	"barbackend/internal/inventory"
 	"barbackend/internal/postgres"
-	"barbackend/internal/sources"
 	"github.com/google/uuid"
 )
 
@@ -30,12 +30,12 @@ func TestSync(t *testing.T) {
 
 	e.provider.Secret = ""
 
-	first, err := e.sources.SyncConnected(context.Background(), customer)
+	first, err := e.cmdb.SyncConnected(context.Background(), customer)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if e.provider.Secret != cmdbtest.Secret {
-		t.Errorf("provider got secret %q, want the decrypted %q", e.provider.Secret, cmdbtest.Secret)
+	if e.provider.Secret != providertest.Secret {
+		t.Errorf("provider got secret %q, want the decrypted %q", e.provider.Secret, providertest.Secret)
 	}
 	if want := (inventory.SyncCounts{Created: 2, Skipped: 1}); first.Outcome() != inventory.SyncSucceeded || first.Counts() != want {
 		t.Errorf("first run = %v %+v, want Succeeded %+v", first.Outcome(), first.Counts(), want)
@@ -52,7 +52,7 @@ func TestSync(t *testing.T) {
 	}
 
 	e.provider.Snapshot = inventory.Snapshot{Records: []inventory.Record{record(t, "a", "vm-a-renamed")}}
-	second, err := e.sources.SyncConnected(context.Background(), customer)
+	second, err := e.cmdb.SyncConnected(context.Background(), customer)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,9 +88,9 @@ func TestFailedSyncChangesNoAsset(t *testing.T) {
 			before := e.assets(t, src)
 
 			e.provider.Snapshot, e.provider.Err = tt.snapshot, tt.err
-			_, err := e.sources.SyncConnected(context.Background(), customer)
+			_, err := e.cmdb.SyncConnected(context.Background(), customer)
 
-			var failed *sources.SyncError
+			var failed *cmdb.SyncError
 			if !errors.As(err, &failed) || (tt.err != nil && !errors.Is(err, tt.err)) {
 				t.Fatalf("err = %v, want a *SyncError wrapping %v", err, tt.err)
 			}
@@ -114,7 +114,7 @@ func TestSyncWithoutConnectedSource(t *testing.T) {
 	e := newEnv(t)
 	e.connect(t)
 
-	if _, err := e.sources.SyncConnected(context.Background(), newCustomer()); !errors.Is(err, sources.ErrNotConnected) {
+	if _, err := e.cmdb.SyncConnected(context.Background(), newCustomer()); !errors.Is(err, cmdb.ErrNotConnected) {
 		t.Errorf("err = %v, want ErrNotConnected", err)
 	}
 }
@@ -144,15 +144,15 @@ func TestSyncOfSourceDisconnectedWhileItRunsChangesNothing(t *testing.T) {
 	}
 	e.provider.Snapshot = inventory.Snapshot{Records: []inventory.Record{record(t, "a", "renamed"), record(t, "b", "vm-b")}}
 	e.provider.BeforeSnapshot = func() {
-		if err := e.sources.Disconnect(context.Background(), customer); err != nil {
+		if err := e.cmdb.Disconnect(context.Background(), customer); err != nil {
 			t.Error(err)
 		}
 	}
 	before := stored()
 
-	_, err := e.sources.SyncConnected(context.Background(), customer)
+	_, err := e.cmdb.SyncConnected(context.Background(), customer)
 
-	if !errors.Is(err, sources.ErrNotConnected) {
+	if !errors.Is(err, cmdb.ErrNotConnected) {
 		t.Errorf("err = %v, want ErrNotConnected", err)
 	}
 	if after := stored(); !reflect.DeepEqual(after, before) {
@@ -175,7 +175,7 @@ func TestSyncOfUnregisteredProviderFails(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := e.sources.SyncConnected(context.Background(), customer); !errors.Is(err, cmdb.ErrUnknownProvider) {
+	if _, err := e.cmdb.SyncConnected(context.Background(), customer); !errors.Is(err, provider.ErrUnknownProvider) {
 		t.Errorf("err = %v, want ErrUnknownProvider", err)
 	}
 	if n := e.failedRuns(t); n != 1 {
@@ -191,8 +191,8 @@ func TestSyncRevalidatesSettings(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := e.sources.SyncConnected(context.Background(), customer); !errors.Is(err, cmdbtest.ErrInvalidSettings) {
-		t.Errorf("err = %v, want cmdbtest.ErrInvalidSettings", err)
+	if _, err := e.cmdb.SyncConnected(context.Background(), customer); !errors.Is(err, providertest.ErrInvalidSettings) {
+		t.Errorf("err = %v, want providertest.ErrInvalidSettings", err)
 	}
 	if n := e.failedRuns(t); n != 1 {
 		t.Errorf("failed runs = %d, want 1", n)
@@ -241,7 +241,7 @@ func TestSyncRejectsCredentialsOfAnotherSource(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := e.sources.SyncConnected(context.Background(), attacker); !errors.Is(err, encryption.ErrCorrupt) {
+	if _, err := e.cmdb.SyncConnected(context.Background(), attacker); !errors.Is(err, encryption.ErrCorrupt) {
 		t.Errorf("err = %v, want ErrCorrupt", err)
 	}
 }
@@ -250,11 +250,11 @@ func TestSyncOfDisconnectedSourceFails(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
 	customer, _ := e.connect(t)
-	if err := e.sources.Disconnect(context.Background(), customer); err != nil {
+	if err := e.cmdb.Disconnect(context.Background(), customer); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := e.sources.SyncConnected(context.Background(), customer); !errors.Is(err, sources.ErrNotConnected) {
+	if _, err := e.cmdb.SyncConnected(context.Background(), customer); !errors.Is(err, cmdb.ErrNotConnected) {
 		t.Errorf("err = %v, want ErrNotConnected", err)
 	}
 	if n := e.failedRuns(t); n != 0 {
@@ -268,10 +268,10 @@ func TestSyncWhileAnotherSyncRunsIsNotRecorded(t *testing.T) {
 	customer, src := e.connect(t)
 	release := e.holdSyncLock(t, src)
 
-	_, err := e.sources.SyncConnected(context.Background(), customer)
+	_, err := e.cmdb.SyncConnected(context.Background(), customer)
 	release()
 
-	if !errors.Is(err, sources.ErrSyncInProgress) {
+	if !errors.Is(err, cmdb.ErrSyncInProgress) {
 		t.Errorf("err = %v, want ErrSyncInProgress", err)
 	}
 	if got := e.connectedSource(t, customer); got.LastSyncFailure != nil {
@@ -286,7 +286,7 @@ func TestSyncOutlivesItsCaller(t *testing.T) {
 	closedTab, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	run, err := e.sources.SyncConnected(closedTab, customer)
+	run, err := e.cmdb.SyncConnected(closedTab, customer)
 
 	if err != nil {
 		t.Fatal(err)
@@ -326,7 +326,7 @@ func TestSyncCanceledByShutdownFails(t *testing.T) {
 
 func (e env) wantFailedSync(t *testing.T, customer inventory.CustomerID, err, cause error) {
 	t.Helper()
-	var failed *sources.SyncError
+	var failed *cmdb.SyncError
 	if !errors.As(err, &failed) || !errors.Is(err, cause) {
 		t.Errorf("err = %v, want a *SyncError wrapping %v", err, cause)
 	}

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"barbackend/internal/cmdb"
+	"barbackend/internal/cmdb/provider"
 	"barbackend/internal/inventory"
 )
 
@@ -37,7 +37,7 @@ func TestTestCMDBSourceCredentials(t *testing.T) {
 		},
 		{
 			name:     "rejected",
-			checkErr: &cmdb.Failure{Code: cmdb.InvalidCredentials, Message: "the cmdb rejected the user or password"},
+			checkErr: &provider.Failure{Code: provider.InvalidCredentials, Message: "the cmdb rejected the user or password"},
 			want:     `{"ok":false,"code":"invalid_credentials","error":"the cmdb rejected the user or password"}`,
 		},
 	}
@@ -170,7 +170,7 @@ func TestSyncCMDBSourceFailure(t *testing.T) {
 		err      error
 		wantCode string
 	}{
-		{"classified by the provider", &cmdb.Failure{Code: cmdb.Unreachable, Message: "cmdb unreachable"}, "unreachable"},
+		{"classified by the provider", &provider.Failure{Code: provider.Unreachable, Message: "cmdb unreachable"}, "unreachable"},
 		{"unclassified", errors.New("cmdb unreachable"), "sync_failed"},
 	}
 	for _, tt := range tests {
@@ -224,7 +224,7 @@ func TestConnectCMDBSource(t *testing.T) {
 func TestConnectCMDBSourceWithRejectedCredentials(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
-	e.provider.CheckErr = &cmdb.Failure{Code: cmdb.InvalidCredentials, Message: "the cmdb rejected the user or password"}
+	e.provider.CheckErr = &provider.Failure{Code: provider.InvalidCredentials, Message: "the cmdb rejected the user or password"}
 
 	rec := e.postLogin("/cmdb/source", validLogin())
 

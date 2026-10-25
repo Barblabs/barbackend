@@ -11,13 +11,13 @@ import (
 	"testing"
 	"time"
 
-	"barbackend/internal/cmdb/cmdbtest"
+	"barbackend/internal/cmdb"
+	"barbackend/internal/cmdb/provider/providertest"
 	"barbackend/internal/encryption"
 	"barbackend/internal/httpapi"
 	"barbackend/internal/inventory"
 	"barbackend/internal/postgres"
 	"barbackend/internal/postgres/pgtest"
-	"barbackend/internal/sources"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -28,8 +28,8 @@ type env struct {
 	db       *postgres.DB
 	conn     *pgx.Conn
 	customer inventory.CustomerID
-	provider *cmdbtest.Provider
-	sources  *sources.Service
+	provider *providertest.Provider
+	cmdb     *cmdb.Service
 	router   http.Handler
 }
 
@@ -41,11 +41,11 @@ func newEnv(t *testing.T) env {
 		t.Fatal(err)
 	}
 	t.Cleanup(db.Close)
-	p := &cmdbtest.Provider{}
-	svc := sources.New(db, p.Providers(), newKey(t), context.Background(), time.Minute)
+	p := &providertest.Provider{}
+	svc := cmdb.New(db, p.Providers(), newKey(t), context.Background(), time.Minute)
 	customer := newCustomer()
-	router := httpapi.New(httpapi.Config{Sources: svc, Customer: customer, AllowedOrigins: []string{allowedOrigin}})
-	return env{db: db, conn: pgtest.Conn(t, url), customer: customer, provider: p, sources: svc, router: router}
+	router := httpapi.New(httpapi.Config{CMDB: svc, Customer: customer, AllowedOrigins: []string{allowedOrigin}})
+	return env{db: db, conn: pgtest.Conn(t, url), customer: customer, provider: p, cmdb: svc, router: router}
 }
 
 func newKey(t *testing.T) encryption.Key {
@@ -64,7 +64,7 @@ func newCustomer() inventory.CustomerID { return inventory.CustomerID(uuid.New()
 // connect connects a CMDB Source for customer, running its first Sync.
 func (e env) connect(t *testing.T, customer inventory.CustomerID) inventory.CMDBSourceID {
 	t.Helper()
-	if _, err := e.sources.Connect(context.Background(), customer, cmdbtest.Name, cmdbtest.Login); err != nil {
+	if _, err := e.cmdb.Connect(context.Background(), customer, providertest.Name, providertest.Login); err != nil {
 		t.Fatal(err)
 	}
 	var stored postgres.StoredCMDBSource
@@ -108,7 +108,7 @@ func (e env) getCMDBSource(t *testing.T) (cmdbSource, string) {
 }
 
 func validLogin() map[string]string {
-	return map[string]string{"provider": string(cmdbtest.Name), "url": "http://cmdb", "user": "admin", "password": cmdbtest.Secret}
+	return map[string]string{"provider": string(providertest.Name), "url": "http://cmdb", "user": "admin", "password": providertest.Secret}
 }
 
 func (e env) postLogin(path string, login map[string]string) *httptest.ResponseRecorder {

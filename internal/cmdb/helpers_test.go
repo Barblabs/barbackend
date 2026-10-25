@@ -1,4 +1,4 @@
-package sources_test
+package cmdb_test
 
 import (
 	"context"
@@ -9,12 +9,12 @@ import (
 	"testing"
 	"time"
 
-	"barbackend/internal/cmdb/cmdbtest"
+	"barbackend/internal/cmdb"
+	"barbackend/internal/cmdb/provider/providertest"
 	"barbackend/internal/encryption"
 	"barbackend/internal/inventory"
 	"barbackend/internal/postgres"
 	"barbackend/internal/postgres/pgtest"
-	"barbackend/internal/sources"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -22,9 +22,9 @@ import (
 type env struct {
 	db       *postgres.DB
 	conn     *pgx.Conn
-	provider *cmdbtest.Provider
+	provider *providertest.Provider
 	key      encryption.Key
-	sources  *sources.Service
+	cmdb     *cmdb.Service
 }
 
 func newEnv(t *testing.T) env {
@@ -35,17 +35,17 @@ func newEnv(t *testing.T) env {
 		t.Fatal(err)
 	}
 	t.Cleanup(db.Close)
-	e := env{db: db, conn: pgtest.Conn(t, url), provider: &cmdbtest.Provider{}, key: newKey(t)}
-	e.sources = e.withSyncLimits(context.Background(), time.Minute)
+	e := env{db: db, conn: pgtest.Conn(t, url), provider: &providertest.Provider{}, key: newKey(t)}
+	e.cmdb = e.withSyncLimits(context.Background(), time.Minute)
 	return e
 }
 
-func (e env) withKey(key encryption.Key) *sources.Service {
-	return sources.New(e.db, e.provider.Providers(), key, context.Background(), time.Minute)
+func (e env) withKey(key encryption.Key) *cmdb.Service {
+	return cmdb.New(e.db, e.provider.Providers(), key, context.Background(), time.Minute)
 }
 
-func (e env) withSyncLimits(lifetime context.Context, timeout time.Duration) *sources.Service {
-	return sources.New(e.db, e.provider.Providers(), e.key, lifetime, timeout)
+func (e env) withSyncLimits(lifetime context.Context, timeout time.Duration) *cmdb.Service {
+	return cmdb.New(e.db, e.provider.Providers(), e.key, lifetime, timeout)
 }
 
 func newKey(t *testing.T) encryption.Key {
@@ -63,7 +63,7 @@ func newKey(t *testing.T) encryption.Key {
 func (e env) connect(t *testing.T) (inventory.CustomerID, inventory.CMDBSourceID) {
 	t.Helper()
 	customer := newCustomer()
-	if _, err := e.sources.Connect(context.Background(), customer, cmdbtest.Name, cmdbtest.Login); err != nil {
+	if _, err := e.cmdb.Connect(context.Background(), customer, providertest.Name, providertest.Login); err != nil {
 		t.Fatal(err)
 	}
 	return customer, e.connected(t, customer).Source.ID()
@@ -81,9 +81,9 @@ func (e env) connected(t *testing.T, customer inventory.CustomerID) postgres.Sto
 	return stored
 }
 
-func (e env) connectedSource(t *testing.T, customer inventory.CustomerID) sources.ConnectedSource {
+func (e env) connectedSource(t *testing.T, customer inventory.CustomerID) cmdb.ConnectedSource {
 	t.Helper()
-	src, err := e.sources.ConnectedSource(context.Background(), customer)
+	src, err := e.cmdb.ConnectedSource(context.Background(), customer)
 	if err != nil {
 		t.Fatal(err)
 	}

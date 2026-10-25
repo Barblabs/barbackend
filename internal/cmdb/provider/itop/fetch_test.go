@@ -15,7 +15,7 @@ import (
 	"sync"
 	"testing"
 
-	"barbackend/internal/cmdb/itop/rest"
+	"barbackend/internal/cmdb/provider/itop/rest"
 )
 
 var record = flag.Bool("record", false, "re-record testdata/fetch from the iTop named by ITOP_URL, ITOP_USER and ITOP_PASSWORD (source .env)")

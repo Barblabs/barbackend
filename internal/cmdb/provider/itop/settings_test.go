@@ -8,8 +8,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"barbackend/internal/cmdb"
-	"barbackend/internal/cmdb/itop"
+	"barbackend/internal/cmdb/provider"
+	"barbackend/internal/cmdb/provider/itop"
 )
 
 const (
@@ -57,11 +57,11 @@ func TestDescribe(t *testing.T) {
 	tests := []struct {
 		name     string
 		settings string
-		want     cmdb.Description
+		want     provider.Description
 		wantErr  error
 	}{
-		{"basic", basicSettings, cmdb.Description{URL: "http://localhost:8000", User: "barb-reader"}, nil},
-		{"invalid", `{"auth": {"mode": "basic", "user": "barb-reader"}}`, cmdb.Description{}, itop.ErrInvalidSettings},
+		{"basic", basicSettings, provider.Description{URL: "http://localhost:8000", User: "barb-reader"}, nil},
+		{"invalid", `{"auth": {"mode": "basic", "user": "barb-reader"}}`, provider.Description{}, itop.ErrInvalidSettings},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

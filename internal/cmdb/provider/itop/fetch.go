@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"barbackend/internal/cmdb/itop/rest"
+	"barbackend/internal/cmdb/provider/itop/rest"
 )
 
 const idsPerQuery = 200

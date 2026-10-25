@@ -53,16 +53,16 @@ linters:
               desc: scoring is pure and does no I/O (ADR 0009)
             - pkg: github.com/jackc/pgx
               desc: scoring is pure and does no I/O (ADR 0009)
-        cmdb:
+        cmdb-provider:
           list-mode: lax
           files:
-            - "**/internal/cmdb/**"
+            - "**/internal/cmdb/provider/**"
           allow:
-            - barbackend/internal/cmdb
+            - barbackend/internal/cmdb/provider
             - barbackend/internal/inventory
           deny:
             - pkg: barbackend/internal
-              desc: CMDB Provider adapters depend only on the seam and inventory, never on persistence or use cases (ADR 0008)
+              desc: CMDB Provider adapters depend only on the seam and inventory, never on persistence or the cmdb use case (ADR 0008)
             - pkg: github.com/jackc/pgx
               desc: CMDB Provider adapters never touch the database (ADR 0008)
         stixext:
@@ -104,7 +104,7 @@ linters:
             - barbackend/internal/encryption
           deny:
             - pkg: barbackend/internal
-              desc: encryption imports no other layer; the sources use case seals and opens credentials with it (ADR 0008, ADR 0012)
+              desc: encryption imports no other layer; the cmdb use case seals and opens credentials with it (ADR 0008, ADR 0012)
         postgres:
           list-mode: lax
           files:
@@ -126,10 +126,12 @@ linters:
           allow:
             - barbackend/internal/httpapi
             - barbackend/internal/inventory
-            - barbackend/internal/sources
+            - barbackend/internal/cmdb
           deny:
             - pkg: barbackend/internal
               desc: HTTP transport calls use cases, never persistence or adapters directly (ADR 0008)
+            - pkg: barbackend/internal/cmdb/provider
+              desc: HTTP transport calls the cmdb use case, never the CMDB Provider seam or its adapters (ADR 0008)
         httpapi:
           files:
             - "**/internal/**"

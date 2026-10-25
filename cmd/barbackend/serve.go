@@ -10,11 +10,11 @@ import (
 	"strings"
 	"time"
 
+	"barbackend/internal/cmdb"
 	"barbackend/internal/httpapi"
 	"barbackend/internal/ingest"
 	"barbackend/internal/inventory"
 	"barbackend/internal/postgres"
-	"barbackend/internal/sources"
 	"github.com/google/uuid"
 )
 
@@ -45,7 +45,7 @@ func serve(ctx context.Context, _ []string) error {
 
 	return withDB(ctx, func(db *postgres.DB) error {
 		return listen(ctx, feedsDone, httpapi.New(httpapi.Config{
-			Sources:        sources.New(db, providers(), key, ctx, syncTimeout),
+			CMDB:           cmdb.New(db, providers(), key, ctx, syncTimeout),
 			Customer:       customer,
 			AllowedOrigins: allowedOrigins(),
 		}))

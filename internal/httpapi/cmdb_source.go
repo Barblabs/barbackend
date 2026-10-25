@@ -5,13 +5,13 @@ import (
 	"net/http"
 	"time"
 
+	"barbackend/internal/cmdb"
 	"barbackend/internal/inventory"
-	"barbackend/internal/sources"
 	"github.com/gin-gonic/gin"
 )
 
 type cmdbSourceHandler struct {
-	sources  *sources.Service
+	cmdb     *cmdb.Service
 	customer inventory.CustomerID
 }
 
@@ -31,8 +31,8 @@ type syncFailureResponse struct {
 }
 
 func (h cmdbSourceHandler) get(ctx *gin.Context) {
-	src, err := h.sources.ConnectedSource(ctx, h.customer)
-	if errors.Is(err, sources.ErrNotConnected) {
+	src, err := h.cmdb.ConnectedSource(ctx, h.customer)
+	if errors.Is(err, cmdb.ErrNotConnected) {
 		ctx.JSON(http.StatusOK, nil)
 		return
 	}
@@ -49,8 +49,8 @@ type loginRequest struct {
 	Password string `json:"password" binding:"required"`
 }
 
-func (r loginRequest) login() sources.Login {
-	return sources.Login{URL: r.URL, User: r.User, Password: r.Password}
+func (r loginRequest) login() cmdb.Login {
+	return cmdb.Login{URL: r.URL, User: r.User, Password: r.Password}
 }
 
 type connectRequest struct {
@@ -70,8 +70,8 @@ func (h cmdbSourceHandler) test(ctx *gin.Context) {
 		badRequest(ctx, err)
 		return
 	}
-	err := h.sources.TestLogin(ctx.Request.Context(), inventory.CMDBProvider(req.Provider), req.login())
-	var failure *sources.Failure
+	err := h.cmdb.TestLogin(ctx.Request.Context(), inventory.CMDBProvider(req.Provider), req.login())
+	var failure *cmdb.Failure
 	switch {
 	case err == nil:
 		ctx.JSON(http.StatusOK, testResponse{OK: true})
@@ -88,7 +88,7 @@ func (h cmdbSourceHandler) connect(ctx *gin.Context) {
 		badRequest(ctx, err)
 		return
 	}
-	src, err := h.sources.Connect(ctx.Request.Context(), h.customer, inventory.CMDBProvider(req.Provider), req.login())
+	src, err := h.cmdb.Connect(ctx.Request.Context(), h.customer, inventory.CMDBProvider(req.Provider), req.login())
 	if err != nil {
 		writeError(ctx, err)
 		return
@@ -102,7 +102,7 @@ func (h cmdbSourceHandler) update(ctx *gin.Context) {
 		badRequest(ctx, err)
 		return
 	}
-	src, err := h.sources.UpdateLogin(ctx.Request.Context(), h.customer, req.login())
+	src, err := h.cmdb.UpdateLogin(ctx.Request.Context(), h.customer, req.login())
 	if err != nil {
 		writeError(ctx, err)
 		return
@@ -111,14 +111,14 @@ func (h cmdbSourceHandler) update(ctx *gin.Context) {
 }
 
 func (h cmdbSourceHandler) disconnect(ctx *gin.Context) {
-	if err := h.sources.Disconnect(ctx.Request.Context(), h.customer); err != nil {
+	if err := h.cmdb.Disconnect(ctx.Request.Context(), h.customer); err != nil {
 		writeError(ctx, err)
 		return
 	}
 	ctx.Status(http.StatusNoContent)
 }
 
-func newCMDBSourceResponse(src sources.ConnectedSource) cmdbSourceResponse {
+func newCMDBSourceResponse(src cmdb.ConnectedSource) cmdbSourceResponse {
 	resp := cmdbSourceResponse{Provider: string(src.Provider), URL: src.URL}
 	if src.User != "" {
 		resp.User = &src.User
@@ -142,8 +142,8 @@ type syncResponse struct {
 }
 
 func (h cmdbSourceHandler) sync(ctx *gin.Context) {
-	run, err := h.sources.SyncConnected(ctx.Request.Context(), h.customer)
-	var failed *sources.SyncError
+	run, err := h.cmdb.SyncConnected(ctx.Request.Context(), h.customer)
+	var failed *cmdb.SyncError
 	switch {
 	case err == nil:
 		ctx.JSON(http.StatusOK, newSyncResponse(run))
@@ -155,8 +155,8 @@ func (h cmdbSourceHandler) sync(ctx *gin.Context) {
 	}
 }
 
-func failureCode(err *sources.SyncError) string {
-	var failure *sources.Failure
+func failureCode(err *cmdb.SyncError) string {
+	var failure *cmdb.Failure
 	if errors.As(err, &failure) {
 		return string(failure.Code)
 	}

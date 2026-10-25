@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"os"
 
-	"barbackend/internal/cmdb"
-	"barbackend/internal/cmdb/itop"
+	"barbackend/internal/cmdb/provider"
+	"barbackend/internal/cmdb/provider/itop"
 	"barbackend/internal/encryption"
 	"barbackend/internal/postgres"
 )
@@ -37,6 +37,6 @@ func encryptionKey() (encryption.Key, error) {
 	return key, nil
 }
 
-func providers() cmdb.Providers {
-	return cmdb.Providers{"itop": itop.Provider{}}
+func providers() provider.Providers {
+	return provider.Providers{"itop": itop.Provider{}}
 }

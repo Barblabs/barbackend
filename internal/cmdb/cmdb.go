@@ -1,7 +1,7 @@
-// Package sources holds the use cases on CMDB Sources: testing a login,
+// Package cmdb holds the use cases on CMDB Sources: testing a login,
 // connecting one, showing the Connected CMDB Source, replacing its login,
 // disconnecting it and syncing its Assets.
-package sources
+package cmdb
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"time"
 
-	"barbackend/internal/cmdb"
+	"barbackend/internal/cmdb/provider"
 	"barbackend/internal/encryption"
 	"barbackend/internal/inventory"
 	"barbackend/internal/postgres"
@@ -32,8 +32,8 @@ var (
 )
 
 type (
-	Login   = cmdb.Login
-	Failure = cmdb.Failure
+	Login   = provider.Login
+	Failure = provider.Failure
 )
 
 // SyncFailure is a failed Sync Run: when it finished and why.
@@ -65,7 +65,7 @@ type ConnectedSource struct {
 // credentials with key, so adapters only ever see them decrypted (ADR 0012).
 type Service struct {
 	db          *postgres.DB
-	providers   cmdb.Providers
+	providers   provider.Providers
 	key         encryption.Key
 	lifetime    context.Context
 	syncTimeout time.Duration
@@ -73,7 +73,7 @@ type Service struct {
 
 // New runs every Sync under lifetime, which ends when the server shuts down,
 // and bounds it by syncTimeout.
-func New(db *postgres.DB, providers cmdb.Providers, key encryption.Key, lifetime context.Context, syncTimeout time.Duration) *Service {
+func New(db *postgres.DB, providers provider.Providers, key encryption.Key, lifetime context.Context, syncTimeout time.Duration) *Service {
 	return &Service{db: db, providers: providers, key: key, lifetime: lifetime, syncTimeout: syncTimeout}
 }
 
@@ -89,8 +89,8 @@ func (s *Service) detach(ctx context.Context) (context.Context, context.CancelFu
 	}
 }
 
-func (s *Service) create(ctx context.Context, customer inventory.CustomerID, provider inventory.CMDBProvider, settings, credentials json.RawMessage) error {
-	src, err := inventory.NewCMDBSource(inventory.CMDBSourceID(uuid.New()), customer, provider)
+func (s *Service) create(ctx context.Context, customer inventory.CustomerID, name inventory.CMDBProvider, settings, credentials json.RawMessage) error {
+	src, err := inventory.NewCMDBSource(inventory.CMDBSourceID(uuid.New()), customer, name)
 	if err != nil {
 		return err
 	}
@@ -103,8 +103,8 @@ func (s *Service) create(ctx context.Context, customer inventory.CustomerID, pro
 
 // TestLogin checks a login against its CMDB and stores nothing. A CMDB that
 // cannot be reached or rejects the login is a *Failure.
-func (s *Service) TestLogin(ctx context.Context, provider inventory.CMDBProvider, login Login) error {
-	_, _, err := s.checkLogin(ctx, provider, login)
+func (s *Service) TestLogin(ctx context.Context, name inventory.CMDBProvider, login Login) error {
+	_, _, err := s.checkLogin(ctx, name, login)
 	return err
 }
 
@@ -114,14 +114,14 @@ func (s *Service) TestLogin(ctx context.Context, provider inventory.CMDBProvider
 // source connected, so it is shown as LastSyncFailure rather than returned:
 // the admin fixes the CMDB and syncs again without reconnecting. Like
 // SyncConnected, it outlives ctx.
-func (s *Service) Connect(ctx context.Context, customer inventory.CustomerID, provider inventory.CMDBProvider, login Login) (ConnectedSource, error) {
+func (s *Service) Connect(ctx context.Context, customer inventory.CustomerID, name inventory.CMDBProvider, login Login) (ConnectedSource, error) {
 	ctx, cancel := s.detach(ctx)
 	defer cancel()
-	settings, credentials, err := s.checkLogin(ctx, provider, login)
+	settings, credentials, err := s.checkLogin(ctx, name, login)
 	if err != nil {
 		return ConnectedSource{}, err
 	}
-	if err := s.create(ctx, customer, provider, settings, credentials); err != nil {
+	if err := s.create(ctx, customer, name, settings, credentials); err != nil {
 		return ConnectedSource{}, err
 	}
 	var failed *SyncError
@@ -163,8 +163,8 @@ func (s *Service) Disconnect(ctx context.Context, customer inventory.CustomerID)
 	return s.db.InTx(ctx, func(tx *postgres.Tx) error { return tx.DisconnectCMDBSource(ctx, customer) })
 }
 
-func (s *Service) checkLogin(ctx context.Context, provider inventory.CMDBProvider, login Login) (settings, credentials json.RawMessage, err error) {
-	p, err := s.providers.Lookup(provider)
+func (s *Service) checkLogin(ctx context.Context, name inventory.CMDBProvider, login Login) (settings, credentials json.RawMessage, err error) {
+	p, err := s.providers.Lookup(name)
 	if err != nil {
 		return nil, nil, fmt.Errorf("%w: %w", ErrInvalidLogin, err)
 	}
@@ -236,7 +236,7 @@ func (s *Service) seal(id inventory.CMDBSourceID, credentials json.RawMessage) (
 
 // open is the stored source as its CMDB Provider reads it, with its
 // credentials decrypted.
-func (s *Service) open(stored postgres.StoredCMDBSource) (cmdb.Settings, error) {
+func (s *Service) open(stored postgres.StoredCMDBSource) (provider.Settings, error) {
 	src := stored.Source
 	p, err := s.providers.Lookup(src.Provider())
 	if err != nil {
