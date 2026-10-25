@@ -10,22 +10,7 @@ import (
 	"barbackend/internal/cmdb/itop"
 	"barbackend/internal/encryption"
 	"barbackend/internal/postgres"
-	"barbackend/internal/sources"
 )
-
-type app struct {
-	sources *sources.Service
-}
-
-func withApp(ctx context.Context, run func(app) error) error {
-	key, err := encryptionKey()
-	if err != nil {
-		return err
-	}
-	return withDB(ctx, func(db *postgres.DB) error {
-		return run(app{sources: sources.New(db, providers(), key)})
-	})
-}
 
 func withDB(ctx context.Context, run func(*postgres.DB) error) error {
 	url := os.Getenv("DATABASE_URL")

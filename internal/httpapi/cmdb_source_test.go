@@ -14,13 +14,12 @@ import (
 	"barbackend/internal/cmdb"
 	"barbackend/internal/cmdb/cmdbtest"
 	"barbackend/internal/inventory"
-	"barbackend/internal/sources"
 )
 
 func TestGetCMDBSourceWithoutConnectedSource(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
-	e.addSource(t, newCustomer())
+	e.connect(t, newCustomer())
 
 	rec := e.do(httptest.NewRequest(http.MethodGet, "/cmdb/source", nil))
 
@@ -29,26 +28,13 @@ func TestGetCMDBSourceWithoutConnectedSource(t *testing.T) {
 	}
 }
 
-func TestGetCMDBSource(t *testing.T) {
-	t.Parallel()
-	e := newEnv(t)
-	e.addSource(t, e.customer)
-
-	_, body := e.getCMDBSource(t)
-
-	want := `{"provider":"fake","url":"http://cmdb","user":"admin","lastSync":null,"lastSyncFailure":null}`
-	if body != want {
-		t.Errorf("body = %s, want %s", body, want)
-	}
-}
-
 func TestGetCMDBSourceReportsLatestSyncRuns(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
-	src := e.addSource(t, e.customer)
+	e.connect(t, e.customer)
 	e.provider.Snapshot = inventory.Snapshot{}
 
-	succeeded, err := e.sources.Sync(context.Background(), src.ID())
+	succeeded, err := e.sources.SyncConnected(context.Background(), e.customer)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +45,7 @@ func TestGetCMDBSourceReportsLatestSyncRuns(t *testing.T) {
 
 	e.provider.Err = errors.New("cmdb unreachable")
 	beforeFailure := time.Now()
-	if _, err := e.sources.Sync(context.Background(), src.ID()); err == nil {
+	if _, err := e.sources.SyncConnected(context.Background(), e.customer); err == nil {
 		t.Fatal("Sync succeeded, want a failure")
 	}
 	got, body = e.getCMDBSource(t)
@@ -71,25 +57,11 @@ func TestGetCMDBSourceReportsLatestSyncRuns(t *testing.T) {
 	}
 
 	e.provider.Err = nil
-	if _, err := e.sources.Sync(context.Background(), src.ID()); err != nil {
+	if _, err := e.sources.SyncConnected(context.Background(), e.customer); err != nil {
 		t.Fatal(err)
 	}
 	if got, body = e.getCMDBSource(t); got.LastSyncFailure != nil {
 		t.Errorf("after a later successful Sync: body = %s, want no failure", body)
-	}
-}
-
-func TestGetCMDBSourceWithOnlyFailedSyncs(t *testing.T) {
-	t.Parallel()
-	e := newEnv(t)
-	src := e.addSource(t, e.customer)
-	e.provider.Err = errors.New("cmdb unreachable")
-	if _, err := e.sources.Sync(context.Background(), src.ID()); err == nil {
-		t.Fatal("Sync succeeded, want a failure")
-	}
-
-	if got, body := e.getCMDBSource(t); got.LastSync != nil || got.LastSyncFailure == nil {
-		t.Errorf("body = %s, want no lastSync and a failure", body)
 	}
 }
 
@@ -156,7 +128,7 @@ func TestLoginEndpointsRejectInvalidRequests(t *testing.T) {
 		{"missing password", func(l map[string]string) { delete(l, "password") }, false, "invalid_request"},
 	}
 	e := newEnv(t)
-	e.addSource(t, e.customer)
+	e.connect(t, e.customer)
 	for _, ep := range loginEndpoints {
 		for _, tt := range tests {
 			if tt.aboutProvider && !ep.takesProvider {
@@ -204,7 +176,7 @@ func TestLoginEndpointsRejectMalformedJSON(t *testing.T) {
 func TestSyncCMDBSource(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
-	e.addSource(t, e.customer)
+	e.connect(t, e.customer)
 	e.provider.Snapshot = inventory.Snapshot{
 		Records: []inventory.Record{record(t, "a", "vm-a"), record(t, "b", "vm-b")},
 		Skipped: []inventory.SkippedRecord{{RecordID: "c", Reason: "no name"}},
@@ -226,7 +198,7 @@ func TestSyncCMDBSource(t *testing.T) {
 func TestSyncCMDBSourceWithoutConnectedSource(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
-	e.addSource(t, newCustomer())
+	e.connect(t, newCustomer())
 
 	rec := e.sync(context.Background())
 
@@ -249,7 +221,7 @@ func TestSyncCMDBSourceFailure(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			e := newEnv(t)
-			e.addSource(t, e.customer)
+			e.connect(t, e.customer)
 			e.provider.Err = tt.err
 
 			rec := e.sync(context.Background())
@@ -268,8 +240,8 @@ func TestSyncCMDBSourceFailure(t *testing.T) {
 func TestSyncCMDBSourceWhileAnotherSyncRuns(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
-	src := e.addSource(t, e.customer)
-	release := e.holdSyncLock(t, src.ID())
+	src := e.connect(t, e.customer)
+	release := e.holdSyncLock(t, src)
 
 	rec := e.sync(context.Background())
 	release()
@@ -286,7 +258,7 @@ func TestSyncCMDBSourceWhileAnotherSyncRuns(t *testing.T) {
 func TestSyncCMDBSourceOutlivesItsRequest(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
-	e.addSource(t, e.customer)
+	e.connect(t, e.customer)
 	closedTab, cancel := context.WithCancel(context.Background())
 	cancel()
 
@@ -301,7 +273,7 @@ func TestSyncCMDBSourceOutlivesItsRequest(t *testing.T) {
 func TestSyncCMDBSourceExceedingTheTimeLimitFails(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t).withSyncContext(context.Background(), 50*time.Millisecond)
-	e.addSource(t, e.customer)
+	e.connect(t, e.customer)
 	e.provider.Hanging = make(chan struct{})
 
 	rec := e.sync(context.Background())
@@ -320,7 +292,7 @@ func TestSyncCMDBSourceCanceledByShutdownFails(t *testing.T) {
 	lifetime, shutdown := context.WithCancel(context.Background())
 	defer shutdown()
 	e := newEnv(t).withSyncContext(lifetime, time.Minute)
-	e.addSource(t, e.customer)
+	e.connect(t, e.customer)
 	e.provider.Hanging = make(chan struct{})
 	go func() {
 		<-e.provider.Hanging
@@ -392,7 +364,7 @@ func TestConnectCMDBSourceWithFailedFirstSync(t *testing.T) {
 func TestConnectCMDBSourceWhenAlreadyConnected(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
-	e.addSource(t, e.customer)
+	e.connect(t, e.customer)
 	login := validLogin()
 	login["url"] = "http://other-cmdb"
 
@@ -442,7 +414,7 @@ func rotatedLogin() map[string]string {
 func TestUpdateCMDBSource(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
-	src := e.addSource(t, e.customer)
+	src := e.connect(t, e.customer)
 	synced := decode[syncResult](t, e.sync(context.Background()), http.StatusOK)
 
 	rec := e.sendLogin(http.MethodPut, "/cmdb/source", rotatedLogin())
@@ -457,8 +429,8 @@ func TestUpdateCMDBSource(t *testing.T) {
 	if _, body := e.getCMDBSource(t); body != rec.Body.String() {
 		t.Errorf("GET /cmdb/source = %s, want the update response %s", body, rec.Body)
 	}
-	if id := e.connected(t).Source.ID(); id != src.ID() {
-		t.Errorf("connected source = %s, want the same source %s", id, src.ID())
+	if id := e.connected(t).Source.ID(); id != src {
+		t.Errorf("connected source = %s, want the same source %s", id, src)
 	}
 	if rec := e.sync(context.Background()); rec.Code != http.StatusOK || e.provider.Secret != "new-secret" {
 		t.Errorf("a later Sync = %d %s with secret %q, want 200 with the new password", rec.Code, rec.Body, e.provider.Secret)
@@ -468,7 +440,7 @@ func TestUpdateCMDBSource(t *testing.T) {
 func TestUpdateCMDBSourceWithRejectedCredentials(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
-	e.addSource(t, e.customer)
+	e.connect(t, e.customer)
 	before := e.connected(t)
 	e.provider.CheckErr = &cmdb.Failure{Code: cmdb.InvalidCredentials, Message: "the cmdb rejected the user or password"}
 
@@ -485,7 +457,7 @@ func TestUpdateCMDBSourceWithRejectedCredentials(t *testing.T) {
 func TestUpdateCMDBSourceWithoutConnectedSource(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
-	e.addSource(t, newCustomer())
+	e.connect(t, newCustomer())
 
 	rec := e.sendLogin(http.MethodPut, "/cmdb/source", rotatedLogin())
 
@@ -497,7 +469,7 @@ func TestUpdateCMDBSourceWithoutConnectedSource(t *testing.T) {
 func TestUpdateCMDBSourceKeepsAssetsAndDeclarations(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
-	e.addSource(t, e.customer)
+	e.connect(t, e.customer)
 	e.provider.Snapshot = inventory.Snapshot{Records: []inventory.Record{record(t, "a", "vm-a")}}
 	decode[syncResult](t, e.sync(context.Background()), http.StatusOK)
 	if _, err := e.conn.Exec(context.Background(), "UPDATE assets SET declared_exposure_id = $1", int16(inventory.Internal)); err != nil {
@@ -522,7 +494,7 @@ func (e env) disconnect() *httptest.ResponseRecorder {
 func TestDisconnectCMDBSource(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
-	src := e.addSource(t, e.customer)
+	src := e.connect(t, e.customer)
 	e.provider.Snapshot = inventory.Snapshot{Records: []inventory.Record{record(t, "a", "vm-a"), record(t, "b", "vm-b")}}
 	decode[syncResult](t, e.sync(context.Background()), http.StatusOK)
 
@@ -534,10 +506,10 @@ func TestDisconnectCMDBSource(t *testing.T) {
 	if rec := e.do(httptest.NewRequest(http.MethodGet, "/cmdb/source", nil)); rec.Body.String() != "null" {
 		t.Errorf("GET /cmdb/source = %s, want null", rec.Body)
 	}
-	if got := e.rows(t, "SELECT record_id, inactive_since IS NOT NULL FROM assets WHERE cmdb_source_id = $1 ORDER BY record_id", src.ID().String()); !reflect.DeepEqual(got, [][]string{{"a", "true"}, {"b", "true"}}) {
+	if got := e.rows(t, "SELECT record_id, inactive_since IS NOT NULL FROM assets WHERE cmdb_source_id = $1 ORDER BY record_id", src.String()); !reflect.DeepEqual(got, [][]string{{"a", "true"}, {"b", "true"}}) {
 		t.Errorf("assets = %v, want a and b stored and Inactive", got)
 	}
-	if got := e.rows(t, "SELECT disconnected_at IS NOT NULL FROM cmdb_sources WHERE id = $1", src.ID().String()); !reflect.DeepEqual(got, [][]string{{"true"}}) {
+	if got := e.rows(t, "SELECT disconnected_at IS NOT NULL FROM cmdb_sources WHERE id = $1", src.String()); !reflect.DeepEqual(got, [][]string{{"true"}}) {
 		t.Errorf("cmdb source = %v, want it stored and disconnected", got)
 	}
 }
@@ -545,7 +517,7 @@ func TestDisconnectCMDBSource(t *testing.T) {
 func TestDisconnectCMDBSourceWithoutConnectedSource(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
-	e.addSource(t, newCustomer())
+	e.connect(t, newCustomer())
 
 	rec := e.disconnect()
 
@@ -557,8 +529,8 @@ func TestDisconnectCMDBSourceWithoutConnectedSource(t *testing.T) {
 func TestDisconnectCMDBSourceWhileASyncRuns(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
-	src := e.addSource(t, e.customer)
-	release := e.holdSyncLock(t, src.ID())
+	src := e.connect(t, e.customer)
+	release := e.holdSyncLock(t, src)
 
 	rec := e.disconnect()
 	release()
@@ -567,15 +539,15 @@ func TestDisconnectCMDBSourceWhileASyncRuns(t *testing.T) {
 	if got.Code != "sync_in_progress" {
 		t.Errorf("body = %s, want code sync_in_progress", rec.Body)
 	}
-	if id := e.connected(t).Source.ID(); id != src.ID() {
-		t.Errorf("connected source = %s, want %s still connected", id, src.ID())
+	if id := e.connected(t).Source.ID(); id != src {
+		t.Errorf("connected source = %s, want %s still connected", id, src)
 	}
 }
 
 func TestSyncOfDisconnectedCMDBSourceFails(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
-	src := e.addSource(t, e.customer)
+	src := e.connect(t, e.customer)
 	e.provider.Snapshot = inventory.Snapshot{Records: []inventory.Record{record(t, "a", "vm-a")}}
 	decode[syncResult](t, e.sync(context.Background()), http.StatusOK)
 	if rec := e.disconnect(); rec.Code != http.StatusNoContent {
@@ -584,28 +556,25 @@ func TestSyncOfDisconnectedCMDBSourceFails(t *testing.T) {
 	stored := func() [][]string {
 		return e.rows(t, `SELECT 'asset', record_id, name, inactive_since::text FROM assets WHERE cmdb_source_id = $1
 			UNION ALL SELECT 'run', id::text, outcome_id::text, '' FROM sync_runs WHERE cmdb_source_id = $1
-			ORDER BY 1, 2`, src.ID().String())
+			ORDER BY 1, 2`, src.String())
 	}
 	before := stored()
 	e.provider.Snapshot = inventory.Snapshot{Records: []inventory.Record{record(t, "a", "renamed"), record(t, "b", "vm-b")}}
 
-	_, err := e.sources.Sync(context.Background(), src.ID())
+	rec := e.sync(context.Background())
 
-	if !errors.Is(err, sources.ErrDisconnected) {
-		t.Errorf("err = %v, want ErrDisconnected", err)
+	if got := decode[codedError](t, rec, http.StatusNotFound); got.Code != "not_connected" {
+		t.Errorf("body = %s, want code not_connected", rec.Body)
 	}
 	if after := stored(); !reflect.DeepEqual(after, before) {
 		t.Errorf("assets and sync runs = %v, want unchanged %v", after, before)
-	}
-	if rec := e.sync(context.Background()); rec.Code != http.StatusNotFound {
-		t.Errorf("POST /cmdb/source/sync = %d %s, want 404", rec.Code, rec.Body)
 	}
 }
 
 func TestConnectAfterDisconnectCreatesANewCMDBSource(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
-	old := e.addSource(t, e.customer)
+	old := e.connect(t, e.customer)
 	e.provider.Snapshot = inventory.Snapshot{Records: []inventory.Record{record(t, "a", "vm-a")}}
 	decode[syncResult](t, e.sync(context.Background()), http.StatusOK)
 	if rec := e.disconnect(); rec.Code != http.StatusNoContent {
@@ -615,12 +584,12 @@ func TestConnectAfterDisconnectCreatesANewCMDBSource(t *testing.T) {
 	rec := e.postLogin("/cmdb/source", validLogin())
 
 	decode[cmdbSource](t, rec, http.StatusOK)
-	if id := e.connected(t).Source.ID(); id == old.ID() {
+	if id := e.connected(t).Source.ID(); id == old {
 		t.Errorf("connected source = %s, want a new one", id)
 	}
 	if got := e.rows(t, "SELECT cmdb_source_id::text, record_id, inactive_since IS NOT NULL FROM assets ORDER BY inactive_since IS NOT NULL"); !reflect.DeepEqual(got, [][]string{
 		{e.connected(t).Source.ID().String(), "a", "false"},
-		{old.ID().String(), "a", "true"},
+		{old.String(), "a", "true"},
 	}) {
 		t.Errorf("assets = %v, want a new Active one and the old one still Inactive", got)
 	}

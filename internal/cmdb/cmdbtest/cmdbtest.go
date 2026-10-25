@@ -20,12 +20,11 @@ var (
 	ErrInvalidCredentials = errors.New("credentials need a secret")
 )
 
-// Settings and Credentials are valid for the fake, with Secret as the secret.
-const (
-	Settings    = `{"url": "http://cmdb", "user": "admin"}`
-	Credentials = `{"secret": "` + Secret + `"}`
-	Secret      = "hunter2"
-)
+// Secret is the password of Login.
+const Secret = "hunter2"
+
+// Login is valid for the fake.
+var Login = cmdb.Login{URL: "http://cmdb", User: "admin", Password: Secret}
 
 // Provider returns whatever snapshot, error and credential check result the
 // test sets, and keeps the secret it last parsed.
@@ -34,9 +33,12 @@ type Provider struct {
 	Err      error
 	// Hanging, if set, makes Snapshot close it and wait for its context to
 	// end, like a CMDB that never answers.
-	Hanging  chan struct{}
-	CheckErr error
-	Secret   string
+	Hanging chan struct{}
+	// BeforeSnapshot, if set, runs at the start of Snapshot, such as to
+	// disconnect the source while its Sync runs.
+	BeforeSnapshot func()
+	CheckErr       error
+	Secret         string
 }
 
 // Providers registers p under Name.
@@ -95,6 +97,9 @@ func (s snapshotter) CheckCredentials(context.Context) error {
 }
 
 func (s snapshotter) Snapshot(ctx context.Context) (inventory.Snapshot, error) {
+	if s.p.BeforeSnapshot != nil {
+		s.p.BeforeSnapshot()
+	}
 	if s.p.Hanging != nil {
 		close(s.p.Hanging)
 		<-ctx.Done()

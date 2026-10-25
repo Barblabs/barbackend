@@ -77,13 +77,13 @@ func newKey(t *testing.T) encryption.Key {
 
 func newCustomer() inventory.CustomerID { return inventory.CustomerID(uuid.New()) }
 
-func (e env) addSource(t *testing.T, customer inventory.CustomerID) inventory.CMDBSource {
+// connect connects a CMDB Source for customer, running its first Sync.
+func (e env) connect(t *testing.T, customer inventory.CustomerID) inventory.CMDBSourceID {
 	t.Helper()
-	src, err := e.sources.Add(context.Background(), customer, cmdbtest.Name, json.RawMessage(cmdbtest.Settings), json.RawMessage(cmdbtest.Credentials))
-	if err != nil {
+	if _, err := e.sources.Connect(context.Background(), customer, cmdbtest.Name, cmdbtest.Login); err != nil {
 		t.Fatal(err)
 	}
-	return src
+	return e.connectedOf(t, customer).Source.ID()
 }
 
 func (e env) do(req *http.Request) *httptest.ResponseRecorder {
@@ -131,9 +131,14 @@ func (e env) sendLogin(method, path string, login map[string]string) *httptest.R
 
 func (e env) connected(t *testing.T) postgres.StoredCMDBSource {
 	t.Helper()
+	return e.connectedOf(t, e.customer)
+}
+
+func (e env) connectedOf(t *testing.T, customer inventory.CustomerID) postgres.StoredCMDBSource {
+	t.Helper()
 	var stored postgres.StoredCMDBSource
 	if err := e.db.InTx(context.Background(), func(tx *postgres.Tx) (err error) {
-		stored, err = tx.ConnectedCMDBSource(context.Background(), e.customer)
+		stored, err = tx.ConnectedCMDBSource(context.Background(), customer)
 		return err
 	}); err != nil {
 		t.Fatal(err)

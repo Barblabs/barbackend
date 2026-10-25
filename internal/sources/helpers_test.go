@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -17,12 +16,6 @@ import (
 	"barbackend/internal/sources"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-)
-
-const (
-	fake             = cmdbtest.Name
-	validSettings    = cmdbtest.Settings
-	validCredentials = cmdbtest.Credentials
 )
 
 type env struct {
@@ -59,13 +52,21 @@ func newKey(t *testing.T) encryption.Key {
 	return key
 }
 
-func (e env) addSource(t *testing.T) inventory.CMDBSource {
+// connect connects a CMDB Source for a new Customer, running its first Sync.
+func (e env) connect(t *testing.T) (inventory.CustomerID, inventory.CMDBSourceID) {
 	t.Helper()
-	src, err := e.sources.Add(context.Background(), newCustomer(), fake, json.RawMessage(validSettings), json.RawMessage(validCredentials))
-	if err != nil {
+	customer := newCustomer()
+	if _, err := e.sources.Connect(context.Background(), customer, cmdbtest.Name, cmdbtest.Login); err != nil {
 		t.Fatal(err)
 	}
-	return src
+	var stored postgres.StoredCMDBSource
+	if err := e.db.InTx(context.Background(), func(tx *postgres.Tx) (err error) {
+		stored, err = tx.ConnectedCMDBSource(context.Background(), customer)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return customer, stored.Source.ID()
 }
 
 var errReadOnly = errors.New("read only")

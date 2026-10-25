@@ -25,7 +25,6 @@ func (Provider) Describe(settings json.RawMessage) (cmdb.Description, error) {
 	return cmdb.Description{URL: doc.URL, User: doc.Auth.User}, nil
 }
 
-// FromLogin builds a basic auth source: the dashboard has no token mode.
 func (Provider) FromLogin(login cmdb.Login) (json.RawMessage, json.RawMessage, error) {
 	settings, err := json.Marshal(settingsDocument{URL: login.URL, Auth: authDocument{Mode: basicAuth, User: login.User}})
 	if err != nil {

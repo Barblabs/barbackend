@@ -1,7 +1,6 @@
 package sources_test
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -13,67 +12,15 @@ import (
 	"barbackend/internal/encryption"
 	"barbackend/internal/inventory"
 	"barbackend/internal/postgres"
+	"barbackend/internal/sources"
 	"github.com/google/uuid"
 )
 
-func TestAdd(t *testing.T) {
-	tests := []struct {
-		name        string
-		provider    inventory.CMDBProvider
-		settings    string
-		credentials string
-		want        error
-	}{
-		{"valid", fake, validSettings, validCredentials, nil},
-		{"invalid settings", fake, `{}`, validCredentials, cmdbtest.ErrInvalidSettings},
-		{"invalid credentials", fake, validSettings, `{}`, cmdbtest.ErrInvalidCredentials},
-		{"unknown provider", "servicenow", validSettings, validCredentials, cmdb.ErrUnknownProvider},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			e := newEnv(t)
-			customer := newCustomer()
-
-			src, err := e.sources.Add(context.Background(), customer, tt.provider, json.RawMessage(tt.settings), json.RawMessage(tt.credentials))
-
-			if !errors.Is(err, tt.want) {
-				t.Fatalf("err = %v, want %v", err, tt.want)
-			}
-			if n := e.queryInt(t, "SELECT count(*) FROM cmdb_sources"); (err == nil) != (n == 1) {
-				t.Fatalf("stored sources = %d after err = %v", n, err)
-			}
-			if err != nil {
-				return
-			}
-			err = e.db.InTx(context.Background(), func(tx *postgres.Tx) error {
-				stored, err := tx.CMDBSource(context.Background(), src.ID())
-				if err != nil {
-					return err
-				}
-				if stored.Source != src || stored.Source.Customer() != customer || stored.Source.Provider() != fake {
-					t.Errorf("stored source = %+v, want %+v of customer %v", stored.Source, src, customer)
-				}
-				if string(stored.Settings) != tt.settings {
-					t.Errorf("settings = %s, want %s", stored.Settings, tt.settings)
-				}
-				if len(stored.Credentials) == 0 || bytes.Contains(stored.Credentials, []byte(cmdbtest.Secret)) {
-					t.Errorf("stored credentials = %q, want ciphertext without the secret", stored.Credentials)
-				}
-				return nil
-			})
-			if err != nil {
-				t.Fatal(err)
-			}
-		})
-	}
-}
-
-func TestAddWithoutKeyStoresNothing(t *testing.T) {
+func TestConnectWithoutKeyStoresNothing(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
 
-	_, err := e.withKey(encryption.Key{}).Add(context.Background(), newCustomer(), fake, json.RawMessage(validSettings), json.RawMessage(validCredentials))
+	_, err := e.withKey(encryption.Key{}).Connect(context.Background(), newCustomer(), cmdbtest.Name, cmdbtest.Login)
 
 	if !errors.Is(err, encryption.ErrNoKey) {
 		t.Errorf("err = %v, want ErrNoKey", err)
@@ -86,7 +33,7 @@ func TestAddWithoutKeyStoresNothing(t *testing.T) {
 func TestSync(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
-	src := e.addSource(t)
+	customer, src := e.connect(t)
 	skipped := inventory.SkippedRecord{RecordID: "c", Reason: "no name"}
 	e.provider.Snapshot = inventory.Snapshot{
 		Records: []inventory.Record{record(t, "a", "vm-a"), record(t, "b", "vm-b")},
@@ -95,7 +42,7 @@ func TestSync(t *testing.T) {
 
 	e.provider.Secret = ""
 
-	first, err := e.sources.Sync(context.Background(), src.ID())
+	first, err := e.sources.SyncConnected(context.Background(), customer)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +56,7 @@ func TestSync(t *testing.T) {
 		t.Errorf("first run skipped = %+v, want [%+v]", first.Skipped(), skipped)
 	}
 	var reason string
-	if err := e.conn.QueryRow(context.Background(), "SELECT skipped_records -> 0 ->> 'reason' FROM sync_runs").Scan(&reason); err != nil {
+	if err := e.conn.QueryRow(context.Background(), "SELECT skipped_records -> 0 ->> 'reason' FROM sync_runs WHERE skipped_records <> '[]'").Scan(&reason); err != nil {
 		t.Fatal(err)
 	}
 	if reason != skipped.Reason {
@@ -117,17 +64,17 @@ func TestSync(t *testing.T) {
 	}
 
 	e.provider.Snapshot = inventory.Snapshot{Records: []inventory.Record{record(t, "a", "vm-a-renamed")}}
-	second, err := e.sources.Sync(context.Background(), src.ID())
+	second, err := e.sources.SyncConnected(context.Background(), customer)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if want := (inventory.SyncCounts{Updated: 1, Deactivated: 1}); second.Counts() != want {
 		t.Errorf("second run counts = %+v, want %+v", second.Counts(), want)
 	}
-	if n := e.queryInt(t, "SELECT count(*) FROM sync_runs WHERE outcome_id = $1", int16(inventory.SyncSucceeded)); n != 2 {
-		t.Errorf("successful runs = %d, want 2", n)
+	if n := e.queryInt(t, "SELECT count(*) FROM sync_runs WHERE outcome_id = $1", int16(inventory.SyncSucceeded)); n != 3 {
+		t.Errorf("successful runs = %d, want 3 counting the first Sync of Connect", n)
 	}
-	got := e.assets(t, src.ID())
+	got := e.assets(t, src)
 	if len(got) != 2 || got[0].Imported().Name() != "vm-a-renamed" || !got[0].Active() || got[1].Active() {
 		t.Errorf("assets = %+v, want a renamed and Active, b Inactive", got)
 	}
@@ -148,20 +95,18 @@ func TestFailedSyncChangesNoAsset(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			e := newEnv(t)
-			src := e.addSource(t)
 			e.provider.Snapshot = inventory.Snapshot{Records: []inventory.Record{record(t, "a", "vm-a")}}
-			if _, err := e.sources.Sync(context.Background(), src.ID()); err != nil {
-				t.Fatal(err)
-			}
-			before := e.assets(t, src.ID())
+			customer, src := e.connect(t)
+			before := e.assets(t, src)
 
 			e.provider.Snapshot, e.provider.Err = tt.snapshot, tt.err
-			_, err := e.sources.Sync(context.Background(), src.ID())
+			_, err := e.sources.SyncConnected(context.Background(), customer)
 
-			if err == nil || (tt.err != nil && !errors.Is(err, tt.err)) {
-				t.Fatalf("err = %v, want a failure wrapping %v", err, tt.err)
+			var failed *sources.SyncError
+			if !errors.As(err, &failed) || (tt.err != nil && !errors.Is(err, tt.err)) {
+				t.Fatalf("err = %v, want a *SyncError wrapping %v", err, tt.err)
 			}
-			if got := e.assets(t, src.ID()); !reflect.DeepEqual(got, before) {
+			if got := e.assets(t, src); !reflect.DeepEqual(got, before) {
 				t.Errorf("assets = %+v, want unchanged %+v", got, before)
 			}
 			var failure string
@@ -176,18 +121,62 @@ func TestFailedSyncChangesNoAsset(t *testing.T) {
 	}
 }
 
-func TestSyncOfMissingSource(t *testing.T) {
+func TestSyncWithoutConnectedSource(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
-	if _, err := e.sources.Sync(context.Background(), inventory.CMDBSourceID(uuid.New())); !errors.Is(err, postgres.ErrNotFound) {
-		t.Errorf("err = %v, want ErrNotFound", err)
+	e.connect(t)
+
+	if _, err := e.sources.SyncConnected(context.Background(), newCustomer()); !errors.Is(err, sources.ErrNotConnected) {
+		t.Errorf("err = %v, want ErrNotConnected", err)
+	}
+}
+
+func TestSyncOfSourceDisconnectedWhileItRunsChangesNothing(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	e.provider.Snapshot = inventory.Snapshot{Records: []inventory.Record{record(t, "a", "vm-a")}}
+	customer, src := e.connect(t)
+	stored := func() [][]any {
+		rows, err := e.conn.Query(context.Background(), `SELECT 'asset', record_id, name FROM assets WHERE cmdb_source_id = $1
+			UNION ALL SELECT 'run', id::text, outcome_id::text FROM sync_runs WHERE cmdb_source_id = $1
+			ORDER BY 1, 2`, uuid.UUID(src))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+		var got [][]any
+		for rows.Next() {
+			values, err := rows.Values()
+			if err != nil {
+				t.Fatal(err)
+			}
+			got = append(got, values)
+		}
+		return got
+	}
+	e.provider.Snapshot = inventory.Snapshot{Records: []inventory.Record{record(t, "a", "renamed"), record(t, "b", "vm-b")}}
+	e.provider.BeforeSnapshot = func() {
+		if err := e.sources.Disconnect(context.Background(), customer); err != nil {
+			t.Error(err)
+		}
+	}
+	before := stored()
+
+	_, err := e.sources.SyncConnected(context.Background(), customer)
+
+	if !errors.Is(err, sources.ErrNotConnected) {
+		t.Errorf("err = %v, want ErrNotConnected", err)
+	}
+	if after := stored(); !reflect.DeepEqual(after, before) {
+		t.Errorf("imported assets and sync runs = %v, want unchanged %v", after, before)
 	}
 }
 
 func TestSyncOfUnregisteredProviderFails(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
-	src, err := inventory.NewCMDBSource(inventory.CMDBSourceID(uuid.New()), newCustomer(), "removed")
+	customer := newCustomer()
+	src, err := inventory.NewCMDBSource(inventory.CMDBSourceID(uuid.New()), customer, "removed")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -198,7 +187,7 @@ func TestSyncOfUnregisteredProviderFails(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := e.sources.Sync(context.Background(), src.ID()); !errors.Is(err, cmdb.ErrUnknownProvider) {
+	if _, err := e.sources.SyncConnected(context.Background(), customer); !errors.Is(err, cmdb.ErrUnknownProvider) {
 		t.Errorf("err = %v, want ErrUnknownProvider", err)
 	}
 	if n := e.queryInt(t, "SELECT count(*) FROM sync_runs WHERE outcome_id = $1", int16(inventory.SyncFailed)); n != 1 {
@@ -209,12 +198,12 @@ func TestSyncOfUnregisteredProviderFails(t *testing.T) {
 func TestSyncRevalidatesSettings(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
-	src := e.addSource(t)
+	customer, _ := e.connect(t)
 	if _, err := e.conn.Exec(context.Background(), "UPDATE cmdb_sources SET settings = '{}'"); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := e.sources.Sync(context.Background(), src.ID()); !errors.Is(err, cmdbtest.ErrInvalidSettings) {
+	if _, err := e.sources.SyncConnected(context.Background(), customer); !errors.Is(err, cmdbtest.ErrInvalidSettings) {
 		t.Errorf("err = %v, want cmdbtest.ErrInvalidSettings", err)
 	}
 	if n := e.queryInt(t, "SELECT count(*) FROM sync_runs WHERE outcome_id = $1", int16(inventory.SyncFailed)); n != 1 {
@@ -235,10 +224,10 @@ func TestSyncWithoutTheKeyFails(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			e := newEnv(t)
-			src := e.addSource(t)
+			customer, src := e.connect(t)
 			e.provider.Snapshot = inventory.Snapshot{Records: []inventory.Record{record(t, "a", "vm-a")}}
 
-			_, err := e.withKey(tt.key).Sync(context.Background(), src.ID())
+			_, err := e.withKey(tt.key).SyncConnected(context.Background(), customer)
 
 			if !errors.Is(err, tt.want) {
 				t.Fatalf("err = %v, want %v", err, tt.want)
@@ -246,7 +235,7 @@ func TestSyncWithoutTheKeyFails(t *testing.T) {
 			if n := e.queryInt(t, "SELECT count(*) FROM sync_runs WHERE outcome_id = $1", int16(inventory.SyncFailed)); n != 1 {
 				t.Errorf("failed runs = %d, want 1", n)
 			}
-			if got := e.assets(t, src.ID()); len(got) != 0 {
+			if got := e.assets(t, src); len(got) != 0 {
 				t.Errorf("assets = %+v, want none", got)
 			}
 		})
@@ -256,14 +245,15 @@ func TestSyncWithoutTheKeyFails(t *testing.T) {
 func TestSyncRejectsCredentialsOfAnotherSource(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
-	victim, attacker := e.addSource(t), e.addSource(t)
+	_, victim := e.connect(t)
+	attacker, attackerSource := e.connect(t)
 	_, err := e.conn.Exec(context.Background(), "UPDATE cmdb_sources SET credentials = (SELECT credentials FROM cmdb_sources WHERE id = $1) WHERE id = $2",
-		uuid.UUID(victim.ID()), uuid.UUID(attacker.ID()))
+		uuid.UUID(victim), uuid.UUID(attackerSource))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := e.sources.Sync(context.Background(), attacker.ID()); !errors.Is(err, encryption.ErrCorrupt) {
+	if _, err := e.sources.SyncConnected(context.Background(), attacker); !errors.Is(err, encryption.ErrCorrupt) {
 		t.Errorf("err = %v, want ErrCorrupt", err)
 	}
 }

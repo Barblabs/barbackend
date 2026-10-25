@@ -1,6 +1,6 @@
 // Package sources holds the use cases on CMDB Sources: testing a login,
-// connecting or adding one, showing the Connected CMDB Source, replacing its
-// login, disconnecting it and syncing its Assets.
+// connecting one, showing the Connected CMDB Source, replacing its login,
+// disconnecting it and syncing its Assets.
 package sources
 
 import (
@@ -29,9 +29,6 @@ var (
 	// ErrSyncInProgress is a Sync refused because another Sync of the same
 	// CMDB Source holds its lock.
 	ErrSyncInProgress = postgres.ErrSyncInProgress
-	// ErrDisconnected is a Sync refused because its CMDB Source is a
-	// Disconnected CMDB Source.
-	ErrDisconnected = postgres.ErrDisconnected
 )
 
 type (
@@ -59,7 +56,7 @@ type ConnectedSource struct {
 	LastSyncFailure *SyncFailure
 }
 
-// Service adds CMDB Sources and syncs their Assets. It seals their
+// Service connects CMDB Sources and syncs their Assets. It seals their
 // credentials with key, so adapters only ever see them decrypted (ADR 0012).
 type Service struct {
 	db        *postgres.DB
@@ -71,32 +68,16 @@ func New(db *postgres.DB, providers cmdb.Providers, key encryption.Key) *Service
 	return &Service{db: db, providers: providers, key: key}
 }
 
-// Add stores a CMDB Source with plain settings and sealed credentials, after
-// its CMDB Provider has validated both.
-func (s *Service) Add(ctx context.Context, customer inventory.CustomerID, provider inventory.CMDBProvider, settings, credentials json.RawMessage) (inventory.CMDBSource, error) {
-	p, err := s.providers.Lookup(provider)
-	if err != nil {
-		return inventory.CMDBSource{}, err
-	}
-	if _, err := p.ParseSettings(settings, credentials); err != nil {
-		return inventory.CMDBSource{}, fmt.Errorf("parse %s source: %w", provider, err)
-	}
-	return s.create(ctx, customer, provider, settings, credentials)
-}
-
-func (s *Service) create(ctx context.Context, customer inventory.CustomerID, provider inventory.CMDBProvider, settings, credentials json.RawMessage) (inventory.CMDBSource, error) {
+func (s *Service) create(ctx context.Context, customer inventory.CustomerID, provider inventory.CMDBProvider, settings, credentials json.RawMessage) error {
 	src, err := inventory.NewCMDBSource(inventory.CMDBSourceID(uuid.New()), customer, provider)
 	if err != nil {
-		return inventory.CMDBSource{}, err
+		return err
 	}
 	sealed, err := s.key.Seal(credentials, owner(src.ID()))
 	if err != nil {
-		return inventory.CMDBSource{}, fmt.Errorf("seal credentials: %w", err)
+		return fmt.Errorf("seal credentials: %w", err)
 	}
-	if err := s.db.InTx(ctx, func(tx *postgres.Tx) error { return tx.CreateCMDBSource(ctx, src, settings, sealed) }); err != nil {
-		return inventory.CMDBSource{}, err
-	}
-	return src, nil
+	return s.db.InTx(ctx, func(tx *postgres.Tx) error { return tx.CreateCMDBSource(ctx, src, settings, sealed) })
 }
 
 // TestLogin checks a login against its CMDB and stores nothing. A CMDB that
@@ -116,12 +97,11 @@ func (s *Service) Connect(ctx context.Context, customer inventory.CustomerID, pr
 	if err != nil {
 		return ConnectedSource{}, err
 	}
-	src, err := s.create(ctx, customer, provider, settings, credentials)
-	if err != nil {
+	if err := s.create(ctx, customer, provider, settings, credentials); err != nil {
 		return ConnectedSource{}, err
 	}
 	var failed *SyncError
-	if _, err := s.Sync(ctx, src.ID()); err != nil && !errors.As(err, &failed) {
+	if _, err := s.SyncConnected(ctx, customer); err != nil && !errors.As(err, &failed) {
 		return ConnectedSource{}, err
 	}
 	return s.ConnectedSource(context.WithoutCancel(ctx), customer)
@@ -228,43 +208,28 @@ func owner(id inventory.CMDBSourceID) []byte {
 	return []byte(id.String())
 }
 
-// SyncConnected syncs the Customer's Connected CMDB Source as Sync does. It
-// fails with ErrNotConnected when the Customer has none.
+// SyncConnected brings the Assets of the Customer's Connected CMDB Source in
+// line with a full snapshot of it. It fails with ErrNotConnected when the
+// Customer has none, including when the source is disconnected while the Sync
+// runs. Every failure after the source is read is recorded as a failed Sync
+// Run, which changed no Asset, and returned as a *SyncError. A Sync refused
+// with ErrSyncInProgress is not recorded: it would report the running Sync as
+// failed, and recording it would wait for that Sync to release the source.
+// Nor is one that lost the source to a disconnect, which changed nothing.
 func (s *Service) SyncConnected(ctx context.Context, customer inventory.CustomerID) (inventory.SyncRun, error) {
+	started := time.Now()
 	stored, err := s.connected(ctx, customer)
 	if err != nil {
 		return inventory.SyncRun{}, err
 	}
-	return s.Sync(ctx, stored.Source.ID())
-}
-
-// Sync brings the Assets of a CMDB Source in line with a full snapshot of it.
-// Every failure after the source is read is recorded as a failed Sync Run,
-// which changed no Asset, and returned as a *SyncError. A Sync refused with
-// ErrSyncInProgress is not recorded: it would report the running Sync as
-// failed, and recording it would wait for that Sync to release the source.
-// Nor is a Sync refused with ErrDisconnected, which never ran: the source was
-// disconnected before it read the CMDB or committed.
-func (s *Service) Sync(ctx context.Context, id inventory.CMDBSourceID) (inventory.SyncRun, error) {
-	started := time.Now()
-	var stored postgres.StoredCMDBSource
-	err := s.db.InTx(ctx, func(tx *postgres.Tx) error {
-		var err error
-		stored, err = tx.CMDBSource(ctx, id)
-		return err
-	})
-	if err != nil {
-		return inventory.SyncRun{}, err
-	}
-	if !stored.Connected {
-		return inventory.SyncRun{}, fmt.Errorf("%w: %s", ErrDisconnected, id)
-	}
 	run, err := s.sync(ctx, stored, started)
-	if errors.Is(err, ErrSyncInProgress) || errors.Is(err, ErrDisconnected) {
+	switch {
+	case errors.Is(err, postgres.ErrDisconnected):
+		return inventory.SyncRun{}, fmt.Errorf("%w: %w", ErrNotConnected, err)
+	case errors.Is(err, ErrSyncInProgress):
 		return inventory.SyncRun{}, err
-	}
-	if err != nil {
-		return inventory.SyncRun{}, s.recordFailure(ctx, id, started, err)
+	case err != nil:
+		return inventory.SyncRun{}, s.recordFailure(ctx, stored.Source.ID(), started, err)
 	}
 	return run, nil
 }

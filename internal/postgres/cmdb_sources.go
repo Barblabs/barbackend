@@ -19,8 +19,6 @@ type StoredCMDBSource struct {
 	Source      inventory.CMDBSource
 	Settings    json.RawMessage
 	Credentials []byte
-	// Connected is false for a Disconnected CMDB Source.
-	Connected bool
 }
 
 // Settings and credentials are stored as given: only the CMDB Provider's
@@ -81,17 +79,6 @@ func (t *Tx) DisconnectCMDBSource(ctx context.Context, customer inventory.Custom
 
 const connectedCustomerIndex = "cmdb_sources_connected_customer_idx"
 
-func (t *Tx) CMDBSource(ctx context.Context, id inventory.CMDBSourceID) (StoredCMDBSource, error) {
-	row, err := t.q.GetCMDBSource(ctx, uuid.UUID(id))
-	if errors.Is(err, pgx.ErrNoRows) {
-		return StoredCMDBSource{}, fmt.Errorf("cmdb source %s: %w", id, ErrNotFound)
-	}
-	if err != nil {
-		return StoredCMDBSource{}, fmt.Errorf("get cmdb source %s: %w", id, err)
-	}
-	return restoreCMDBSource(sqlcgen.GetConnectedCMDBSourceRow(row))
-}
-
 // ConnectedCMDBSource fails with ErrNotConnected when the Customer has no
 // Connected CMDB Source.
 func (t *Tx) ConnectedCMDBSource(ctx context.Context, customer inventory.CustomerID) (StoredCMDBSource, error) {
@@ -102,10 +89,6 @@ func (t *Tx) ConnectedCMDBSource(ctx context.Context, customer inventory.Custome
 	if err != nil {
 		return StoredCMDBSource{}, fmt.Errorf("get connected cmdb source of customer %s: %w", customer, err)
 	}
-	return restoreCMDBSource(row)
-}
-
-func restoreCMDBSource(row sqlcgen.GetConnectedCMDBSourceRow) (StoredCMDBSource, error) {
 	src, err := inventory.NewCMDBSource(
 		inventory.CMDBSourceID(row.ID),
 		inventory.CustomerID(row.CustomerID),
@@ -114,5 +97,5 @@ func restoreCMDBSource(row sqlcgen.GetConnectedCMDBSourceRow) (StoredCMDBSource,
 	if err != nil {
 		return StoredCMDBSource{}, fmt.Errorf("restore cmdb source %s: %w", row.ID, err)
 	}
-	return StoredCMDBSource{Source: src, Settings: row.Settings, Credentials: row.Credentials, Connected: row.Connected}, nil
+	return StoredCMDBSource{Source: src, Settings: row.Settings, Credentials: row.Credentials}, nil
 }

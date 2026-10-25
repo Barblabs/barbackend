@@ -67,7 +67,7 @@ func writeError(ctx *gin.Context, err error) {
 		ctx.JSON(http.StatusUnprocessableEntity, codedError{Code: string(failure.Code), Error: failure.Message})
 	case errors.Is(err, sources.ErrInvalidLogin):
 		ctx.JSON(http.StatusBadRequest, codedError{Code: invalidLogin, Error: err.Error()})
-	case errors.Is(err, sources.ErrNotConnected), errors.Is(err, sources.ErrDisconnected):
+	case errors.Is(err, sources.ErrNotConnected):
 		ctx.JSON(http.StatusNotFound, codedError{Code: notConnected, Error: err.Error()})
 	case errors.Is(err, sources.ErrAlreadyConnected):
 		ctx.JSON(http.StatusConflict, codedError{Code: alreadyConnected, Error: err.Error()})
