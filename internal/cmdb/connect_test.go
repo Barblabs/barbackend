@@ -104,6 +104,22 @@ func TestConnectWithFailedFirstSyncStaysConnected(t *testing.T) {
 	}
 }
 
+func TestConnectOutlivesItsCaller(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	closedTab, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	got, err := e.cmdb.Connect(closedTab, newCustomer(), providertest.Name, providertest.Login)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.LastSync.IsZero() || got.LastSyncFailure != nil {
+		t.Errorf("connected source = %+v, want a successful first Sync", got)
+	}
+}
+
 func TestConnectWithFirstSyncExceedingTheTimeLimit(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
