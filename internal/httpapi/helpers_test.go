@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -34,21 +33,6 @@ type env struct {
 	router   http.Handler
 }
 
-func (e env) withSyncContext(lifetime context.Context, timeout time.Duration) env {
-	e.router = newRouter(e.sources, e.customer, lifetime, timeout)
-	return e
-}
-
-func newRouter(svc *sources.Service, customer inventory.CustomerID, lifetime context.Context, syncTimeout time.Duration) http.Handler {
-	return httpapi.New(httpapi.Config{
-		Sources:        svc,
-		Customer:       customer,
-		AllowedOrigins: []string{allowedOrigin},
-		Lifetime:       lifetime,
-		SyncTimeout:    syncTimeout,
-	})
-}
-
 func newEnv(t *testing.T) env {
 	t.Helper()
 	url := pgtest.URL(t)
@@ -58,9 +42,9 @@ func newEnv(t *testing.T) env {
 	}
 	t.Cleanup(db.Close)
 	p := &cmdbtest.Provider{}
-	svc := sources.New(db, p.Providers(), newKey(t))
+	svc := sources.New(db, p.Providers(), newKey(t), context.Background(), time.Minute)
 	customer := newCustomer()
-	router := newRouter(svc, customer, context.Background(), time.Minute)
+	router := httpapi.New(httpapi.Config{Sources: svc, Customer: customer, AllowedOrigins: []string{allowedOrigin}})
 	return env{db: db, conn: pgtest.Conn(t, url), customer: customer, provider: p, sources: svc, router: router}
 }
 
@@ -83,7 +67,14 @@ func (e env) connect(t *testing.T, customer inventory.CustomerID) inventory.CMDB
 	if _, err := e.sources.Connect(context.Background(), customer, cmdbtest.Name, cmdbtest.Login); err != nil {
 		t.Fatal(err)
 	}
-	return e.connectedOf(t, customer).Source.ID()
+	var stored postgres.StoredCMDBSource
+	if err := e.db.InTx(context.Background(), func(tx *postgres.Tx) (err error) {
+		stored, err = tx.ConnectedCMDBSource(context.Background(), customer)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return stored.Source.ID()
 }
 
 func (e env) do(req *http.Request) *httptest.ResponseRecorder {
@@ -127,23 +118,6 @@ func (e env) postLogin(path string, login map[string]string) *httptest.ResponseR
 func (e env) sendLogin(method, path string, login map[string]string) *httptest.ResponseRecorder {
 	body, _ := json.Marshal(login)
 	return e.do(httptest.NewRequest(method, path, strings.NewReader(string(body))))
-}
-
-func (e env) connected(t *testing.T) postgres.StoredCMDBSource {
-	t.Helper()
-	return e.connectedOf(t, e.customer)
-}
-
-func (e env) connectedOf(t *testing.T, customer inventory.CustomerID) postgres.StoredCMDBSource {
-	t.Helper()
-	var stored postgres.StoredCMDBSource
-	if err := e.db.InTx(context.Background(), func(tx *postgres.Tx) (err error) {
-		stored, err = tx.ConnectedCMDBSource(context.Background(), customer)
-		return err
-	}); err != nil {
-		t.Fatal(err)
-	}
-	return stored
 }
 
 type syncResult struct {
@@ -203,29 +177,4 @@ func (e env) holdSyncLock(t *testing.T, src inventory.CMDBSourceID) (release fun
 			t.Fatal(err)
 		}
 	}
-}
-
-func (e env) rows(t *testing.T, query string, args ...any) [][]string {
-	t.Helper()
-	rows, err := e.conn.Query(context.Background(), query, args...)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer rows.Close()
-	var got [][]string
-	for rows.Next() {
-		values, err := rows.Values()
-		if err != nil {
-			t.Fatal(err)
-		}
-		row := make([]string, len(values))
-		for i, v := range values {
-			row[i] = fmt.Sprint(v)
-		}
-		got = append(got, row)
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatal(err)
-	}
-	return got
 }

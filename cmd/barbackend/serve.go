@@ -45,11 +45,9 @@ func serve(ctx context.Context, _ []string) error {
 
 	return withDB(ctx, func(db *postgres.DB) error {
 		return listen(ctx, feedsDone, httpapi.New(httpapi.Config{
-			Sources:        sources.New(db, providers(), key),
+			Sources:        sources.New(db, providers(), key, ctx, syncTimeout),
 			Customer:       customer,
 			AllowedOrigins: allowedOrigins(),
-			Lifetime:       ctx,
-			SyncTimeout:    syncTimeout,
 		}))
 	})
 }

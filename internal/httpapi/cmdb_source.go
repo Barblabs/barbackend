@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"time"
@@ -12,10 +11,8 @@ import (
 )
 
 type cmdbSourceHandler struct {
-	sources     *sources.Service
-	customer    inventory.CustomerID
-	lifetime    context.Context
-	syncTimeout time.Duration
+	sources  *sources.Service
+	customer inventory.CustomerID
 }
 
 type cmdbSourceResponse struct {
@@ -91,9 +88,7 @@ func (h cmdbSourceHandler) connect(ctx *gin.Context) {
 		badRequest(ctx, err)
 		return
 	}
-	syncCtx, cancel := context.WithTimeout(h.lifetime, h.syncTimeout)
-	defer cancel()
-	src, err := h.sources.Connect(syncCtx, h.customer, inventory.CMDBProvider(req.Provider), req.login())
+	src, err := h.sources.Connect(ctx.Request.Context(), h.customer, inventory.CMDBProvider(req.Provider), req.login())
 	if err != nil {
 		writeError(ctx, err)
 		return
@@ -147,9 +142,7 @@ type syncResponse struct {
 }
 
 func (h cmdbSourceHandler) sync(ctx *gin.Context) {
-	syncCtx, cancel := context.WithTimeout(h.lifetime, h.syncTimeout)
-	defer cancel()
-	run, err := h.sources.SyncConnected(syncCtx, h.customer)
+	run, err := h.sources.SyncConnected(ctx.Request.Context(), h.customer)
 	var failed *sources.SyncError
 	switch {
 	case err == nil:

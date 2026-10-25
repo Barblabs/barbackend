@@ -32,10 +32,15 @@ var (
 )
 
 type (
-	Login       = cmdb.Login
-	Failure     = cmdb.Failure
-	SyncFailure = postgres.SyncFailure
+	Login   = cmdb.Login
+	Failure = cmdb.Failure
 )
+
+// SyncFailure is a failed Sync Run: when it finished and why.
+type SyncFailure struct {
+	At    time.Time
+	Error string
+}
 
 // SyncError is a Sync that failed after reading its CMDB Source and was
 // recorded as a failed Sync Run.
@@ -59,13 +64,29 @@ type ConnectedSource struct {
 // Service connects CMDB Sources and syncs their Assets. It seals their
 // credentials with key, so adapters only ever see them decrypted (ADR 0012).
 type Service struct {
-	db        *postgres.DB
-	providers cmdb.Providers
-	key       encryption.Key
+	db          *postgres.DB
+	providers   cmdb.Providers
+	key         encryption.Key
+	lifetime    context.Context
+	syncTimeout time.Duration
 }
 
-func New(db *postgres.DB, providers cmdb.Providers, key encryption.Key) *Service {
-	return &Service{db: db, providers: providers, key: key}
+// New runs every Sync under lifetime, which ends when the server shuts down,
+// and bounds it by syncTimeout.
+func New(db *postgres.DB, providers cmdb.Providers, key encryption.Key, lifetime context.Context, syncTimeout time.Duration) *Service {
+	return &Service{db: db, providers: providers, key: key, lifetime: lifetime, syncTimeout: syncTimeout}
+}
+
+// detach keeps a Sync running when its caller goes away, such as a client
+// that closes the tab, since a Sync cut short only records a failure. It
+// keeps the caller's values.
+func (s *Service) detach(ctx context.Context) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.syncTimeout)
+	stop := context.AfterFunc(s.lifetime, cancel)
+	return ctx, func() {
+		stop()
+		cancel()
+	}
 }
 
 func (s *Service) create(ctx context.Context, customer inventory.CustomerID, provider inventory.CMDBProvider, settings, credentials json.RawMessage) error {
@@ -73,9 +94,9 @@ func (s *Service) create(ctx context.Context, customer inventory.CustomerID, pro
 	if err != nil {
 		return err
 	}
-	sealed, err := s.key.Seal(credentials, owner(src.ID()))
+	sealed, err := s.seal(src.ID(), credentials)
 	if err != nil {
-		return fmt.Errorf("seal credentials: %w", err)
+		return err
 	}
 	return s.db.InTx(ctx, func(tx *postgres.Tx) error { return tx.CreateCMDBSource(ctx, src, settings, sealed) })
 }
@@ -91,8 +112,11 @@ func (s *Service) TestLogin(ctx context.Context, provider inventory.CMDBProvider
 // accepts it, then runs the first Sync. It stores nothing when the check
 // fails, as TestLogin does. A failed first Sync is recorded and leaves the
 // source connected, so it is shown as LastSyncFailure rather than returned:
-// the admin fixes the CMDB and syncs again without reconnecting.
+// the admin fixes the CMDB and syncs again without reconnecting. Like
+// SyncConnected, it outlives ctx.
 func (s *Service) Connect(ctx context.Context, customer inventory.CustomerID, provider inventory.CMDBProvider, login Login) (ConnectedSource, error) {
+	ctx, cancel := s.detach(ctx)
+	defer cancel()
 	settings, credentials, err := s.checkLogin(ctx, provider, login)
 	if err != nil {
 		return ConnectedSource{}, err
@@ -101,7 +125,7 @@ func (s *Service) Connect(ctx context.Context, customer inventory.CustomerID, pr
 		return ConnectedSource{}, err
 	}
 	var failed *SyncError
-	if _, err := s.SyncConnected(ctx, customer); err != nil && !errors.As(err, &failed) {
+	if _, err := s.syncConnected(ctx, customer); err != nil && !errors.As(err, &failed) {
 		return ConnectedSource{}, err
 	}
 	return s.ConnectedSource(context.WithoutCancel(ctx), customer)
@@ -122,9 +146,9 @@ func (s *Service) UpdateLogin(ctx context.Context, customer inventory.CustomerID
 	if err != nil {
 		return ConnectedSource{}, err
 	}
-	sealed, err := s.key.Seal(credentials, owner(src.ID()))
+	sealed, err := s.seal(src.ID(), credentials)
 	if err != nil {
-		return ConnectedSource{}, fmt.Errorf("seal credentials: %w", err)
+		return ConnectedSource{}, err
 	}
 	if err := s.db.InTx(ctx, func(tx *postgres.Tx) error { return tx.UpdateConnectedLogin(ctx, src.ID(), settings, sealed) }); err != nil {
 		return ConnectedSource{}, err
@@ -185,13 +209,11 @@ func (s *Service) ConnectedSource(ctx context.Context, customer inventory.Custom
 	if err != nil {
 		return ConnectedSource{}, fmt.Errorf("describe %s: %w", src.ID(), err)
 	}
-	return ConnectedSource{
-		Provider:        src.Provider(),
-		URL:             desc.URL,
-		User:            desc.User,
-		LastSync:        status.LastSync,
-		LastSyncFailure: status.LastFailure,
-	}, nil
+	connected := ConnectedSource{Provider: src.Provider(), URL: desc.URL, User: desc.User, LastSync: status.LastSync}
+	if f := status.LastFailure; f != nil {
+		connected.LastSyncFailure = &SyncFailure{At: f.At, Error: f.Error}
+	}
+	return connected, nil
 }
 
 func (s *Service) connected(ctx context.Context, customer inventory.CustomerID) (postgres.StoredCMDBSource, error) {
@@ -202,6 +224,33 @@ func (s *Service) connected(ctx context.Context, customer inventory.CustomerID) 
 		return err
 	})
 	return stored, err
+}
+
+func (s *Service) seal(id inventory.CMDBSourceID, credentials json.RawMessage) ([]byte, error) {
+	sealed, err := s.key.Seal(credentials, owner(id))
+	if err != nil {
+		return nil, fmt.Errorf("seal credentials: %w", err)
+	}
+	return sealed, nil
+}
+
+// open is the stored source as its CMDB Provider reads it, with its
+// credentials decrypted.
+func (s *Service) open(stored postgres.StoredCMDBSource) (cmdb.Settings, error) {
+	src := stored.Source
+	p, err := s.providers.Lookup(src.Provider())
+	if err != nil {
+		return nil, err
+	}
+	credentials, err := s.key.Open(stored.Credentials, owner(src.ID()))
+	if err != nil {
+		return nil, fmt.Errorf("credentials of %s: %w", src.ID(), err)
+	}
+	parsed, err := p.ParseSettings(stored.Settings, credentials)
+	if err != nil {
+		return nil, fmt.Errorf("parse %s: %w", src.ID(), err)
+	}
+	return parsed, nil
 }
 
 func owner(id inventory.CMDBSourceID) []byte {
@@ -216,7 +265,15 @@ func owner(id inventory.CMDBSourceID) []byte {
 // with ErrSyncInProgress is not recorded: it would report the running Sync as
 // failed, and recording it would wait for that Sync to release the source.
 // Nor is one that lost the source to a disconnect, which changed nothing.
+// The Sync outlives ctx: it ends when the Service's lifetime does, or at its
+// time limit.
 func (s *Service) SyncConnected(ctx context.Context, customer inventory.CustomerID) (inventory.SyncRun, error) {
+	ctx, cancel := s.detach(ctx)
+	defer cancel()
+	return s.syncConnected(ctx, customer)
+}
+
+func (s *Service) syncConnected(ctx context.Context, customer inventory.CustomerID) (inventory.SyncRun, error) {
 	started := time.Now()
 	stored, err := s.connected(ctx, customer)
 	if err != nil {
@@ -236,17 +293,9 @@ func (s *Service) SyncConnected(ctx context.Context, customer inventory.Customer
 
 func (s *Service) sync(ctx context.Context, stored postgres.StoredCMDBSource, started time.Time) (inventory.SyncRun, error) {
 	src := stored.Source
-	p, err := s.providers.Lookup(src.Provider())
+	parsed, err := s.open(stored)
 	if err != nil {
 		return inventory.SyncRun{}, err
-	}
-	credentials, err := s.key.Open(stored.Credentials, owner(src.ID()))
-	if err != nil {
-		return inventory.SyncRun{}, fmt.Errorf("credentials of %s: %w", src.ID(), err)
-	}
-	parsed, err := p.ParseSettings(stored.Settings, credentials)
-	if err != nil {
-		return inventory.SyncRun{}, fmt.Errorf("parse %s: %w", src.ID(), err)
 	}
 	snapshot, err := parsed.Snapshot(ctx)
 	if err != nil {

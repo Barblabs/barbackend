@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -22,6 +23,7 @@ type env struct {
 	db       *postgres.DB
 	conn     *pgx.Conn
 	provider *cmdbtest.Provider
+	key      encryption.Key
 	sources  *sources.Service
 }
 
@@ -33,12 +35,17 @@ func newEnv(t *testing.T) env {
 		t.Fatal(err)
 	}
 	t.Cleanup(db.Close)
-	p := &cmdbtest.Provider{}
-	return env{db: db, conn: pgtest.Conn(t, url), provider: p, sources: sources.New(db, p.Providers(), newKey(t))}
+	e := env{db: db, conn: pgtest.Conn(t, url), provider: &cmdbtest.Provider{}, key: newKey(t)}
+	e.sources = e.withSyncLimits(context.Background(), time.Minute)
+	return e
 }
 
 func (e env) withKey(key encryption.Key) *sources.Service {
-	return sources.New(e.db, e.provider.Providers(), key)
+	return sources.New(e.db, e.provider.Providers(), key, context.Background(), time.Minute)
+}
+
+func (e env) withSyncLimits(lifetime context.Context, timeout time.Duration) *sources.Service {
+	return sources.New(e.db, e.provider.Providers(), e.key, lifetime, timeout)
 }
 
 func newKey(t *testing.T) encryption.Key {
@@ -59,6 +66,11 @@ func (e env) connect(t *testing.T) (inventory.CustomerID, inventory.CMDBSourceID
 	if _, err := e.sources.Connect(context.Background(), customer, cmdbtest.Name, cmdbtest.Login); err != nil {
 		t.Fatal(err)
 	}
+	return customer, e.connected(t, customer).Source.ID()
+}
+
+func (e env) connected(t *testing.T, customer inventory.CustomerID) postgres.StoredCMDBSource {
+	t.Helper()
 	var stored postgres.StoredCMDBSource
 	if err := e.db.InTx(context.Background(), func(tx *postgres.Tx) (err error) {
 		stored, err = tx.ConnectedCMDBSource(context.Background(), customer)
@@ -66,7 +78,66 @@ func (e env) connect(t *testing.T) (inventory.CustomerID, inventory.CMDBSourceID
 	}); err != nil {
 		t.Fatal(err)
 	}
-	return customer, stored.Source.ID()
+	return stored
+}
+
+func (e env) connectedSource(t *testing.T, customer inventory.CustomerID) sources.ConnectedSource {
+	t.Helper()
+	src, err := e.sources.ConnectedSource(context.Background(), customer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return src
+}
+
+func (e env) holdSyncLock(t *testing.T, src inventory.CMDBSourceID) (release func()) {
+	t.Helper()
+	locked, unlock, done := make(chan struct{}), make(chan struct{}), make(chan error)
+	go func() {
+		_, err := e.db.CommitSync(context.Background(), src, time.Now(), func(existing []*inventory.Asset) (inventory.Reconciliation, error) {
+			close(locked)
+			<-unlock
+			return inventory.Reconcile(src, existing, inventory.Snapshot{})
+		})
+		done <- err
+	}()
+	<-locked
+	return func() {
+		close(unlock)
+		if err := <-done; err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func (e env) rows(t *testing.T, query string, args ...any) [][]string {
+	t.Helper()
+	rows, err := e.conn.Query(context.Background(), query, args...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var got [][]string
+	for rows.Next() {
+		values, err := rows.Values()
+		if err != nil {
+			t.Fatal(err)
+		}
+		row := make([]string, len(values))
+		for i, v := range values {
+			row[i] = fmt.Sprint(v)
+		}
+		got = append(got, row)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return got
+}
+
+func (e env) failedRuns(t *testing.T) int {
+	t.Helper()
+	return e.queryInt(t, "SELECT count(*) FROM sync_runs WHERE outcome_id = $1", int16(inventory.SyncFailed))
 }
 
 var errReadOnly = errors.New("read only")

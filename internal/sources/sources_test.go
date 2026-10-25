@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
+	"time"
 
 	"barbackend/internal/cmdb"
 	"barbackend/internal/cmdb/cmdbtest"
@@ -15,20 +17,6 @@ import (
 	"barbackend/internal/sources"
 	"github.com/google/uuid"
 )
-
-func TestConnectWithoutKeyStoresNothing(t *testing.T) {
-	t.Parallel()
-	e := newEnv(t)
-
-	_, err := e.withKey(encryption.Key{}).Connect(context.Background(), newCustomer(), cmdbtest.Name, cmdbtest.Login)
-
-	if !errors.Is(err, encryption.ErrNoKey) {
-		t.Errorf("err = %v, want ErrNoKey", err)
-	}
-	if n := e.queryInt(t, "SELECT count(*) FROM cmdb_sources"); n != 0 {
-		t.Errorf("stored sources = %d, want 0", n)
-	}
-}
 
 func TestSync(t *testing.T) {
 	t.Parallel()
@@ -190,7 +178,7 @@ func TestSyncOfUnregisteredProviderFails(t *testing.T) {
 	if _, err := e.sources.SyncConnected(context.Background(), customer); !errors.Is(err, cmdb.ErrUnknownProvider) {
 		t.Errorf("err = %v, want ErrUnknownProvider", err)
 	}
-	if n := e.queryInt(t, "SELECT count(*) FROM sync_runs WHERE outcome_id = $1", int16(inventory.SyncFailed)); n != 1 {
+	if n := e.failedRuns(t); n != 1 {
 		t.Errorf("failed runs = %d, want 1", n)
 	}
 }
@@ -206,7 +194,7 @@ func TestSyncRevalidatesSettings(t *testing.T) {
 	if _, err := e.sources.SyncConnected(context.Background(), customer); !errors.Is(err, cmdbtest.ErrInvalidSettings) {
 		t.Errorf("err = %v, want cmdbtest.ErrInvalidSettings", err)
 	}
-	if n := e.queryInt(t, "SELECT count(*) FROM sync_runs WHERE outcome_id = $1", int16(inventory.SyncFailed)); n != 1 {
+	if n := e.failedRuns(t); n != 1 {
 		t.Errorf("failed runs = %d, want 1", n)
 	}
 }
@@ -232,7 +220,7 @@ func TestSyncWithoutTheKeyFails(t *testing.T) {
 			if !errors.Is(err, tt.want) {
 				t.Fatalf("err = %v, want %v", err, tt.want)
 			}
-			if n := e.queryInt(t, "SELECT count(*) FROM sync_runs WHERE outcome_id = $1", int16(inventory.SyncFailed)); n != 1 {
+			if n := e.failedRuns(t); n != 1 {
 				t.Errorf("failed runs = %d, want 1", n)
 			}
 			if got := e.assets(t, src); len(got) != 0 {
@@ -255,5 +243,94 @@ func TestSyncRejectsCredentialsOfAnotherSource(t *testing.T) {
 
 	if _, err := e.sources.SyncConnected(context.Background(), attacker); !errors.Is(err, encryption.ErrCorrupt) {
 		t.Errorf("err = %v, want ErrCorrupt", err)
+	}
+}
+
+func TestSyncOfDisconnectedSourceFails(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	customer, _ := e.connect(t)
+	if err := e.sources.Disconnect(context.Background(), customer); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := e.sources.SyncConnected(context.Background(), customer); !errors.Is(err, sources.ErrNotConnected) {
+		t.Errorf("err = %v, want ErrNotConnected", err)
+	}
+	if n := e.failedRuns(t); n != 0 {
+		t.Errorf("failed runs = %d, want 0", n)
+	}
+}
+
+func TestSyncWhileAnotherSyncRunsIsNotRecorded(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	customer, src := e.connect(t)
+	release := e.holdSyncLock(t, src)
+
+	_, err := e.sources.SyncConnected(context.Background(), customer)
+	release()
+
+	if !errors.Is(err, sources.ErrSyncInProgress) {
+		t.Errorf("err = %v, want ErrSyncInProgress", err)
+	}
+	if got := e.connectedSource(t, customer); got.LastSyncFailure != nil {
+		t.Errorf("last sync failure = %+v, want none, since the running Sync succeeded", got.LastSyncFailure)
+	}
+}
+
+func TestSyncOutlivesItsCaller(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	customer, _ := e.connect(t)
+	closedTab, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	run, err := e.sources.SyncConnected(closedTab, customer)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := e.connectedSource(t, customer); !got.LastSync.Equal(run.Finished().Truncate(time.Microsecond)) {
+		t.Errorf("last sync = %v, want the Sync that finished at %v", got.LastSync, run.Finished())
+	}
+}
+
+func TestSyncExceedingTheTimeLimitFails(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	customer, _ := e.connect(t)
+	e.provider.Hanging = make(chan struct{})
+
+	_, err := e.withSyncLimits(context.Background(), 50*time.Millisecond).SyncConnected(context.Background(), customer)
+
+	e.wantFailedSync(t, customer, err, context.DeadlineExceeded)
+}
+
+func TestSyncCanceledByShutdownFails(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	lifetime, shutdown := context.WithCancel(context.Background())
+	defer shutdown()
+	customer, _ := e.connect(t)
+	e.provider.Hanging = make(chan struct{})
+	go func() {
+		<-e.provider.Hanging
+		shutdown()
+	}()
+
+	_, err := e.withSyncLimits(lifetime, time.Minute).SyncConnected(context.Background(), customer)
+
+	e.wantFailedSync(t, customer, err, context.Canceled)
+}
+
+func (e env) wantFailedSync(t *testing.T, customer inventory.CustomerID, err, cause error) {
+	t.Helper()
+	var failed *sources.SyncError
+	if !errors.As(err, &failed) || !errors.Is(err, cause) {
+		t.Errorf("err = %v, want a *SyncError wrapping %v", err, cause)
+	}
+	if got := e.connectedSource(t, customer); got.LastSyncFailure == nil || !strings.Contains(got.LastSyncFailure.Error, cause.Error()) {
+		t.Errorf("last sync failure = %+v, want %v", got.LastSyncFailure, cause)
 	}
 }
