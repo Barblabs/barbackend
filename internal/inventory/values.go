@@ -171,3 +171,45 @@ func (o OwnerEmail) String() string { return o.address }
 func (o OwnerEmail) isZero() bool { return o == OwnerEmail{} }
 
 func blank(s string) bool { return strings.TrimSpace(s) == "" }
+
+var (
+	assetKindCodes    = map[AssetKind]string{Server: "server", VirtualMachine: "virtual_machine", Workstation: "workstation", NetworkDevice: "network_device"}
+	criticalityCodes  = map[Criticality]string{CriticalityHigh: "high", CriticalityMedium: "medium", CriticalityLow: "low"}
+	exposureCodes     = map[Exposure]string{InternetFacing: "internet_facing", Internal: "internal"}
+	softwareRoleCodes = map[SoftwareRole]string{OperatingSystem: "operating_system", Application: "application"}
+)
+
+// Code is the stable lowercase snake_case name clients use for the kind, or
+// empty for a value that is not one.
+func (k AssetKind) Code() string { return assetKindCodes[k] }
+
+// ParseAssetKind is the inverse of AssetKind.Code.
+func ParseAssetKind(code string) (AssetKind, error) {
+	for k, c := range assetKindCodes {
+		if c == code {
+			return k, nil
+		}
+	}
+	return 0, fmt.Errorf("%w: %q", ErrInvalidKind, code)
+}
+
+// Code is the stable lowercase snake_case name clients use for the
+// criticality, or empty for Unknown, which is never shown as a value.
+func (c Criticality) Code() string { return criticalityCodes[c] }
+
+// ParseCriticality is the inverse of Criticality.Code. Unknown has no code.
+func ParseCriticality(code string) (Criticality, error) {
+	for c, name := range criticalityCodes {
+		if name == code {
+			return c, nil
+		}
+	}
+	return 0, fmt.Errorf("%w: %q", ErrInvalidCriticality, code)
+}
+
+// Code is the stable lowercase snake_case name clients use for the exposure,
+// or empty for Unknown.
+func (e Exposure) Code() string { return exposureCodes[e] }
+
+// Code is the stable lowercase snake_case name clients use for the role.
+func (r SoftwareRole) Code() string { return softwareRoleCodes[r] }

@@ -33,6 +33,7 @@ func New(cfg Config) http.Handler {
 	router.DELETE("/cmdb/source", h.disconnect)
 	router.POST("/cmdb/source/test", h.test)
 	router.POST("/cmdb/source/sync", h.sync)
+	router.GET("/assets", assetHandler{cmdb: cfg.CMDB, customer: cfg.Customer}.list)
 	return router
 }
 
@@ -60,6 +61,8 @@ func writeError(ctx *gin.Context, err error) {
 		ctx.JSON(http.StatusUnprocessableEntity, codedError{Code: string(failure.Code), Error: failure.Message})
 	case errors.Is(err, cmdb.ErrInvalidLogin):
 		ctx.JSON(http.StatusBadRequest, codedError{Code: invalidLogin, Error: err.Error()})
+	case errors.Is(err, cmdb.ErrInvalidAssetQuery):
+		badRequest(ctx, err)
 	case errors.Is(err, cmdb.ErrNotConnected):
 		ctx.JSON(http.StatusNotFound, codedError{Code: notConnected, Error: err.Error()})
 	case errors.Is(err, cmdb.ErrAlreadyConnected):

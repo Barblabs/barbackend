@@ -1,6 +1,6 @@
 // Package cmdb holds the use cases on CMDB Sources: testing a login,
 // connecting one, showing the Connected CMDB Source, replacing its login,
-// disconnecting it and syncing its Assets.
+// disconnecting it, syncing its Assets and listing the Customer's Assets.
 package cmdb
 
 import (
