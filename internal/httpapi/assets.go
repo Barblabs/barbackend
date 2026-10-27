@@ -1,17 +1,43 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
 	"time"
 
 	"barbackend/internal/cmdb"
 	"barbackend/internal/inventory"
-	"github.com/gin-gonic/gin"
+	"github.com/danielgtaylor/huma/v2"
 )
 
 type assetHandler struct {
 	cmdb     *cmdb.Service
 	customer inventory.CustomerID
+}
+
+func (h assetHandler) register(api huma.API) {
+	huma.Register(api, huma.Operation{
+		OperationID: "list-assets",
+		Method:      http.MethodGet,
+		Path:        "/assets",
+		Summary:     "List the Customer's Assets",
+		Description: "Pages through Assets in a stable order. Pass next_cursor as cursor, with the same filters, to get the next page.",
+		Errors:      []int{http.StatusBadRequest},
+	}, h.list)
+}
+
+// assetListInput declares the query as strings: cmdb.AssetQuery parses and
+// validates it, so its rules have one home.
+type assetListInput struct {
+	Limit       string `query:"limit" doc:"Page size, from 1 to 200; 50 by default"`
+	Cursor      string `query:"cursor" doc:"next_cursor of the previous page"`
+	Active      string `query:"active" doc:"true (the default), false or all"`
+	Kind        string `query:"kind" doc:"Asset Kind code, such as server"`
+	Criticality string `query:"criticality" doc:"Criticality code, such as high"`
+}
+
+type assetListOutput struct {
+	Body assetListResponse
 }
 
 type assetListResponse struct {
@@ -58,19 +84,18 @@ type ownerResponse struct {
 	Source string `json:"source"`
 }
 
-func (h assetHandler) list(ctx *gin.Context) {
-	page, err := h.cmdb.ListAssets(ctx.Request.Context(), h.customer, cmdb.AssetQuery{
-		Limit:       ctx.Query("limit"),
-		Cursor:      ctx.Query("cursor"),
-		Active:      ctx.Query("active"),
-		Kind:        ctx.Query("kind"),
-		Criticality: ctx.Query("criticality"),
+func (h assetHandler) list(ctx context.Context, in *assetListInput) (*assetListOutput, error) {
+	page, err := h.cmdb.ListAssets(ctx, h.customer, cmdb.AssetQuery{
+		Limit:       in.Limit,
+		Cursor:      in.Cursor,
+		Active:      in.Active,
+		Kind:        in.Kind,
+		Criticality: in.Criticality,
 	})
 	if err != nil {
-		writeError(ctx, err)
-		return
+		return nil, apiError(err)
 	}
-	ctx.JSON(http.StatusOK, newAssetListResponse(page))
+	return &assetListOutput{Body: newAssetListResponse(page)}, nil
 }
 
 func newAssetListResponse(page cmdb.AssetPage) assetListResponse {

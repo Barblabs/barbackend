@@ -34,7 +34,7 @@ func New(cfg Config) http.Handler {
 	})
 	api := humagin.New(router, apiConfig())
 	cmdbSourceHandler{cmdb: cfg.CMDB, customer: cfg.Customer}.register(api)
-	router.GET("/assets", assetHandler{cmdb: cfg.CMDB, customer: cfg.Customer}.list)
+	assetHandler{cmdb: cfg.CMDB, customer: cfg.Customer}.register(api)
 	return router
 }
 
@@ -146,29 +146,4 @@ func apiError(err error) *codedError {
 	default:
 		return internal(err)
 	}
-}
-
-func writeError(ctx *gin.Context, err error) {
-	var failure *cmdb.Failure
-	switch {
-	case errors.As(err, &failure):
-		ctx.JSON(http.StatusUnprocessableEntity, codedError{Code: string(failure.Code), Message: failure.Message})
-	case errors.Is(err, cmdb.ErrInvalidLogin):
-		ctx.JSON(http.StatusBadRequest, codedError{Code: invalidLogin, Message: err.Error()})
-	case errors.Is(err, cmdb.ErrInvalidAssetQuery):
-		badRequest(ctx, err)
-	case errors.Is(err, cmdb.ErrNotConnected):
-		ctx.JSON(http.StatusNotFound, codedError{Code: notConnected, Message: err.Error()})
-	case errors.Is(err, cmdb.ErrAlreadyConnected):
-		ctx.JSON(http.StatusConflict, codedError{Code: alreadyConnected, Message: err.Error()})
-	case errors.Is(err, cmdb.ErrSyncInProgress):
-		ctx.JSON(http.StatusConflict, codedError{Code: syncInProgress, Message: err.Error()})
-	default:
-		_ = ctx.Error(err)
-		ctx.JSON(http.StatusInternalServerError, codedError{Code: internalError, Message: "internal server error"})
-	}
-}
-
-func badRequest(ctx *gin.Context, err error) {
-	ctx.JSON(http.StatusBadRequest, codedError{Code: invalidRequest, Message: err.Error()})
 }
