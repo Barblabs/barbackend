@@ -11,7 +11,7 @@ An organization that uses barbattack. Everything barbattack knows about an envir
 _Avoid_: Tenant, account, organization
 
 **Deactivated Customer**:
-A Customer that barbattack no longer serves. It is never deleted, its Users can no longer sign in, and its CMDB Source is no longer synced.
+A Customer that barbattack no longer serves. It is never deleted, its Users can no longer sign in, and its CMDB Source is no longer synced. A Platform Admin can reactivate it, which restores its Users and its CMDB Source as they were.
 _Avoid_: Deleted customer, suspended, churned
 
 ### Inventory
@@ -127,7 +127,7 @@ A person who signs in to barbattack. A User is either a Platform Admin or belong
 _Avoid_: Account, login, member
 
 **Platform Admin**:
-A barbattack staff User who creates Customers and their first Customer Admin. A Platform Admin belongs to no Customer and cannot see any Customer's Assets or Findings.
+A barbattack staff User who creates, renames, deactivates and reactivates Customers, and creates each Customer's first Customer Admin. A Platform Admin belongs to no Customer and cannot see any Customer's Assets or Findings.
 _Avoid_: Super admin, superadmin, staff
 
 **Customer Admin**:
