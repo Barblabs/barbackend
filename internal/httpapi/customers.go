@@ -77,10 +77,6 @@ type renameCustomerRequest struct {
 	Name string   `json:"name" minLength:"1"`
 }
 
-type customerPath struct {
-	ID uuid.UUID `path:"id" format:"uuid"`
-}
-
 type renameCustomerInput struct {
 	ID   uuid.UUID `path:"id" format:"uuid"`
 	Body renameCustomerRequest
@@ -118,7 +114,7 @@ func (h customerHandler) rename(ctx context.Context, in *renameCustomerInput) (*
 	return customerOutput(h.users.RenameCustomer(ctx, caller, tenancy.CustomerID(in.ID), in.Body.Name))
 }
 
-func (h customerHandler) deactivate(ctx context.Context, in *customerPath) (*body[customerResponse], error) {
+func (h customerHandler) deactivate(ctx context.Context, in *idPath) (*body[customerResponse], error) {
 	caller, err := callerOf(ctx)
 	if err != nil {
 		return nil, err
@@ -126,7 +122,7 @@ func (h customerHandler) deactivate(ctx context.Context, in *customerPath) (*bod
 	return customerOutput(h.users.DeactivateCustomer(ctx, caller, tenancy.CustomerID(in.ID)))
 }
 
-func (h customerHandler) reactivate(ctx context.Context, in *customerPath) (*body[customerResponse], error) {
+func (h customerHandler) reactivate(ctx context.Context, in *idPath) (*body[customerResponse], error) {
 	caller, err := callerOf(ctx)
 	if err != nil {
 		return nil, err

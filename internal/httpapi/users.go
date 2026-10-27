@@ -52,9 +52,15 @@ func (h userHandler) register(api huma.API) {
 type userResponse struct {
 	ID         string     `json:"id"`
 	Email      string     `json:"email"`
-	Role       string     `json:"role" enum:"customer_admin,viewer"`
+	Role       roleCode   `json:"role"`
 	CreatedAt  time.Time  `json:"created_at"`
 	DisabledAt *time.Time `json:"disabled_at"`
+}
+
+type roleCode string
+
+func (roleCode) Schema(huma.Registry) *huma.Schema {
+	return &huma.Schema{Type: huma.TypeString, Enum: []any{tenancy.CustomerAdmin.Code(), tenancy.Viewer.Code()}}
 }
 
 type userListResponse struct {
@@ -64,16 +70,12 @@ type userListResponse struct {
 type inviteUserRequest struct {
 	_     struct{} `additionalProperties:"true"`
 	Email string   `json:"email" format:"email" doc:"Invited by Cognito"`
-	Role  string   `json:"role" enum:"customer_admin,viewer"`
+	Role  roleCode `json:"role"`
 }
 
 type changeRoleRequest struct {
 	_    struct{} `additionalProperties:"true"`
-	Role string   `json:"role" enum:"customer_admin,viewer"`
-}
-
-type userPath struct {
-	ID uuid.UUID `path:"id" format:"uuid"`
+	Role roleCode `json:"role"`
 }
 
 type changeRoleInput struct {
@@ -102,7 +104,7 @@ func (h userHandler) invite(ctx context.Context, in *body[inviteUserRequest]) (*
 	if err != nil {
 		return nil, err
 	}
-	role, err := tenancy.ParseRole(in.Body.Role)
+	role, err := tenancy.ParseRole(string(in.Body.Role))
 	if err != nil {
 		return nil, apiError(err)
 	}
@@ -114,14 +116,14 @@ func (h userHandler) changeRole(ctx context.Context, in *changeRoleInput) (*body
 	if err != nil {
 		return nil, err
 	}
-	role, err := tenancy.ParseRole(in.Body.Role)
+	role, err := tenancy.ParseRole(string(in.Body.Role))
 	if err != nil {
 		return nil, apiError(err)
 	}
 	return userOutput(h.users.ChangeRole(ctx, caller, tenancy.UserID(in.ID), role))
 }
 
-func (h userHandler) disable(ctx context.Context, in *userPath) (*body[userResponse], error) {
+func (h userHandler) disable(ctx context.Context, in *idPath) (*body[userResponse], error) {
 	caller, err := callerOf(ctx)
 	if err != nil {
 		return nil, err
@@ -137,7 +139,7 @@ func userOutput(u users.StoredUser, err error) (*body[userResponse], error) {
 }
 
 func newUserResponse(u users.StoredUser) userResponse {
-	resp := userResponse{ID: u.User.ID().String(), Email: u.User.Email(), Role: u.User.Role().Code(), CreatedAt: u.Created}
+	resp := userResponse{ID: u.User.ID().String(), Email: u.User.Email(), Role: roleCode(u.User.Role().Code()), CreatedAt: u.Created}
 	if !u.Disabled.IsZero() {
 		resp.DisabledAt = &u.Disabled
 	}

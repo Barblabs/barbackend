@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
+	"github.com/google/uuid"
 )
 
 const (
@@ -17,6 +18,10 @@ const (
 
 type body[T any] struct {
 	Body T
+}
+
+type idPath struct {
+	ID uuid.UUID `path:"id" format:"uuid"`
 }
 
 // Huma lists 422 on any operation with path parameters or a body, though
