@@ -58,18 +58,18 @@ func TestDeactivatingADeactivatedCustomerKeepsTheFirstTime(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	setDeactivated := func(deactivated bool) postgres.StoredCustomer {
+	change := func(fn func(*postgres.Tx, context.Context, tenancy.CustomerID) (postgres.StoredCustomer, error)) postgres.StoredCustomer {
 		var stored postgres.StoredCustomer
 		inTx(t, db, func(tx *postgres.Tx) (err error) {
-			stored, err = tx.SetCustomerDeactivated(context.Background(), c.Customer.ID(), deactivated)
+			stored, err = fn(tx, context.Background(), c.Customer.ID())
 			return err
 		})
 		return stored
 	}
 
-	first := setDeactivated(true)
-	again := setDeactivated(true)
-	reactivated := setDeactivated(false)
+	first := change((*postgres.Tx).DeactivateCustomer)
+	again := change((*postgres.Tx).DeactivateCustomer)
+	reactivated := change((*postgres.Tx).ReactivateCustomer)
 
 	if first.Deactivated.IsZero() || !again.Deactivated.Equal(first.Deactivated) {
 		t.Errorf("deactivated at %v, then %v, want the first time kept", first.Deactivated, again.Deactivated)
@@ -85,7 +85,7 @@ func TestCommitSyncOfADeactivatedCustomerFails(t *testing.T) {
 	customer := newCustomer(t, db)
 	src := newSource(t, db, customer)
 	inTx(t, db, func(tx *postgres.Tx) error {
-		_, err := tx.SetCustomerDeactivated(context.Background(), customer, true)
+		_, err := tx.DeactivateCustomer(context.Background(), customer)
 		return err
 	})
 

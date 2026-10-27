@@ -12,6 +12,25 @@ import (
 	"github.com/google/uuid"
 )
 
+const deactivateCustomer = `-- name: DeactivateCustomer :one
+UPDATE customers
+SET deactivated_at = coalesce(deactivated_at, now())
+WHERE id = $1
+RETURNING id, name, created_at, deactivated_at
+`
+
+func (q *Queries) DeactivateCustomer(ctx context.Context, id uuid.UUID) (Customer, error) {
+	row := q.db.QueryRow(ctx, deactivateCustomer, id)
+	var i Customer
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.CreatedAt,
+		&i.DeactivatedAt,
+	)
+	return i, err
+}
+
 const insertCustomer = `-- name: InsertCustomer :one
 INSERT INTO customers (id, name)
 VALUES ($1, $2)
@@ -61,6 +80,25 @@ func (q *Queries) ListCustomers(ctx context.Context) ([]Customer, error) {
 	return items, nil
 }
 
+const reactivateCustomer = `-- name: ReactivateCustomer :one
+UPDATE customers
+SET deactivated_at = NULL
+WHERE id = $1
+RETURNING id, name, created_at, deactivated_at
+`
+
+func (q *Queries) ReactivateCustomer(ctx context.Context, id uuid.UUID) (Customer, error) {
+	row := q.db.QueryRow(ctx, reactivateCustomer, id)
+	var i Customer
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.CreatedAt,
+		&i.DeactivatedAt,
+	)
+	return i, err
+}
+
 const renameCustomer = `-- name: RenameCustomer :one
 UPDATE customers
 SET name = $2
@@ -75,30 +113,6 @@ type RenameCustomerParams struct {
 
 func (q *Queries) RenameCustomer(ctx context.Context, arg RenameCustomerParams) (Customer, error) {
 	row := q.db.QueryRow(ctx, renameCustomer, arg.ID, arg.Name)
-	var i Customer
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.CreatedAt,
-		&i.DeactivatedAt,
-	)
-	return i, err
-}
-
-const setCustomerDeactivated = `-- name: SetCustomerDeactivated :one
-UPDATE customers
-SET deactivated_at = CASE WHEN $1::boolean THEN coalesce(deactivated_at, now()) END
-WHERE id = $2
-RETURNING id, name, created_at, deactivated_at
-`
-
-type SetCustomerDeactivatedParams struct {
-	Deactivated bool
-	ID          uuid.UUID
-}
-
-func (q *Queries) SetCustomerDeactivated(ctx context.Context, arg SetCustomerDeactivatedParams) (Customer, error) {
-	row := q.db.QueryRow(ctx, setCustomerDeactivated, arg.Deactivated, arg.ID)
 	var i Customer
 	err := row.Scan(
 		&i.ID,

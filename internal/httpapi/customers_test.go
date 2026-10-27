@@ -127,6 +127,7 @@ func TestCustomerManagementErrors(t *testing.T) {
 		{"blank name", http.MethodPost, "/customers", map[string]string{"name": "  ", "admin_email": "b@example.com"}, http.StatusBadRequest, "invalid_request"},
 		{"malformed email", http.MethodPost, "/customers", map[string]string{"name": "Initech", "admin_email": "not-an-email"}, http.StatusBadRequest, "invalid_request"},
 		{"rename to a taken name", http.MethodPatch, "/customers/" + globex.ID, map[string]string{"name": "acme"}, http.StatusConflict, "customer_name_taken"},
+		{"rename a malformed id", http.MethodPatch, "/customers/not-a-uuid", map[string]string{"name": "Initech"}, http.StatusBadRequest, "invalid_request"},
 		{"rename an unknown customer", http.MethodPatch, "/customers/" + uuid.NewString(), map[string]string{"name": "Initech"}, http.StatusNotFound, "customer_not_found"},
 		{"deactivate an unknown customer", http.MethodPost, "/customers/" + uuid.NewString() + "/deactivate", nil, http.StatusNotFound, "customer_not_found"},
 	}

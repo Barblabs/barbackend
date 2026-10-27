@@ -63,16 +63,20 @@ func (t *Tx) RenameCustomer(ctx context.Context, c tenancy.Customer) (StoredCust
 	return restoreCustomer(row)
 }
 
-// SetCustomerDeactivated keeps the time of the first deactivation when the
+// DeactivateCustomer keeps the time of the first deactivation when the
 // Customer is already deactivated.
-func (t *Tx) SetCustomerDeactivated(ctx context.Context, id tenancy.CustomerID, deactivated bool) (StoredCustomer, error) {
-	row, err := t.q.SetCustomerDeactivated(ctx, sqlcgen.SetCustomerDeactivatedParams{ID: uuid.UUID(id), Deactivated: deactivated})
+func (t *Tx) DeactivateCustomer(ctx context.Context, id tenancy.CustomerID) (StoredCustomer, error) {
+	row, err := t.q.DeactivateCustomer(ctx, uuid.UUID(id))
 	if err != nil {
-		action := "deactivate"
-		if !deactivated {
-			action = "reactivate"
-		}
-		return StoredCustomer{}, customerError(action, id, err)
+		return StoredCustomer{}, customerError("deactivate", id, err)
+	}
+	return restoreCustomer(row)
+}
+
+func (t *Tx) ReactivateCustomer(ctx context.Context, id tenancy.CustomerID) (StoredCustomer, error) {
+	row, err := t.q.ReactivateCustomer(ctx, uuid.UUID(id))
+	if err != nil {
+		return StoredCustomer{}, customerError("reactivate", id, err)
 	}
 	return restoreCustomer(row)
 }

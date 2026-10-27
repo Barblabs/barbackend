@@ -50,19 +50,13 @@ func (s *Service) Customers(ctx context.Context, caller tenancy.User) ([]StoredC
 }
 
 func (s *Service) RenameCustomer(ctx context.Context, caller tenancy.User, id tenancy.CustomerID, name string) (StoredCustomer, error) {
-	if err := caller.ManageCustomers(); err != nil {
-		return StoredCustomer{}, err
-	}
-	c, err := tenancy.NewCustomer(id, name)
-	if err != nil {
-		return StoredCustomer{}, err
-	}
-	var stored StoredCustomer
-	err = s.db.InTx(ctx, func(tx *postgres.Tx) (err error) {
-		stored, err = tx.RenameCustomer(ctx, c)
-		return err
+	return s.changeCustomer(ctx, caller, func(tx *postgres.Tx) (StoredCustomer, error) {
+		c, err := tenancy.NewCustomer(id, name)
+		if err != nil {
+			return StoredCustomer{}, err
+		}
+		return tx.RenameCustomer(ctx, c)
 	})
-	return stored, err
 }
 
 // DeactivateCustomer makes the Customer a Deactivated Customer: its Users can
@@ -71,20 +65,24 @@ func (s *Service) RenameCustomer(ctx context.Context, caller tenancy.User, id te
 // restores both as they were (ADR 0013). Deactivating a Deactivated Customer
 // keeps the time it was first deactivated.
 func (s *Service) DeactivateCustomer(ctx context.Context, caller tenancy.User, id tenancy.CustomerID) (StoredCustomer, error) {
-	return s.setDeactivated(ctx, caller, id, true)
+	return s.changeCustomer(ctx, caller, func(tx *postgres.Tx) (StoredCustomer, error) {
+		return tx.DeactivateCustomer(ctx, id)
+	})
 }
 
 func (s *Service) ReactivateCustomer(ctx context.Context, caller tenancy.User, id tenancy.CustomerID) (StoredCustomer, error) {
-	return s.setDeactivated(ctx, caller, id, false)
+	return s.changeCustomer(ctx, caller, func(tx *postgres.Tx) (StoredCustomer, error) {
+		return tx.ReactivateCustomer(ctx, id)
+	})
 }
 
-func (s *Service) setDeactivated(ctx context.Context, caller tenancy.User, id tenancy.CustomerID, deactivated bool) (StoredCustomer, error) {
+func (s *Service) changeCustomer(ctx context.Context, caller tenancy.User, change func(*postgres.Tx) (StoredCustomer, error)) (StoredCustomer, error) {
 	if err := caller.ManageCustomers(); err != nil {
 		return StoredCustomer{}, err
 	}
 	var stored StoredCustomer
 	err := s.db.InTx(ctx, func(tx *postgres.Tx) (err error) {
-		stored, err = tx.SetCustomerDeactivated(ctx, id, deactivated)
+		stored, err = change(tx)
 		return err
 	})
 	return stored, err

@@ -14,8 +14,14 @@ SET name = $2
 WHERE id = $1
 RETURNING id, name, created_at, deactivated_at;
 
--- name: SetCustomerDeactivated :one
+-- name: DeactivateCustomer :one
 UPDATE customers
-SET deactivated_at = CASE WHEN @deactivated::boolean THEN coalesce(deactivated_at, now()) END
-WHERE id = @id
+SET deactivated_at = coalesce(deactivated_at, now())
+WHERE id = $1
+RETURNING id, name, created_at, deactivated_at;
+
+-- name: ReactivateCustomer :one
+UPDATE customers
+SET deactivated_at = NULL
+WHERE id = $1
 RETURNING id, name, created_at, deactivated_at;
