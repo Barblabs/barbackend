@@ -326,3 +326,16 @@ func TestDisconnectCMDBSourceWithoutConnectedSource(t *testing.T) {
 		t.Errorf("response = %d %s, want 404", rec.Code, rec.Body)
 	}
 }
+
+func TestLoginEndpointsDoNotEchoTheBodyInErrors(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	for _, ep := range loginEndpoints {
+		rec := e.do(httptest.NewRequest(ep.method, ep.path, strings.NewReader(`{"password":"hunter2",`)))
+
+		got := decode[codedError](t, rec, http.StatusBadRequest)
+		if got.Code != "invalid_request" || strings.Contains(got.Error, "hunter2") {
+			t.Errorf("%s %s: body = %s, want invalid_request without the password", ep.method, ep.path, rec.Body)
+		}
+	}
+}

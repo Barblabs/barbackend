@@ -114,13 +114,23 @@ func newHumaError(status int, msg string, errs ...error) huma.StatusError {
 	details := make([]string, 0, len(errs))
 	for _, err := range errs {
 		if err != nil {
-			details = append(details, err.Error())
+			details = append(details, errorDetail(err))
 		}
 	}
 	if len(details) > 0 {
 		msg = fmt.Sprintf("%s: %s", msg, strings.Join(details, "; "))
 	}
 	return &codedError{status: status, Code: invalidRequest, Message: msg}
+}
+
+// errorDetail leaves out the value Huma echoes with a detail, which for a
+// malformed body is the whole body, password included.
+func errorDetail(err error) string {
+	var detail *huma.ErrorDetail
+	if !errors.As(err, &detail) || detail.Location == "" {
+		return err.Error()
+	}
+	return fmt.Sprintf("%s (%s)", detail.Message, detail.Location)
 }
 
 func internal(cause error) *codedError {
