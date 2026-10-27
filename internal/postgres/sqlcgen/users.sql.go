@@ -12,6 +12,72 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countActiveUsersWithRole = `-- name: CountActiveUsersWithRole :one
+SELECT count(*)
+FROM users
+WHERE customer_id = $1 AND role_id = $2 AND disabled_at IS NULL
+`
+
+type CountActiveUsersWithRoleParams struct {
+	CustomerID pgtype.UUID
+	RoleID     int16
+}
+
+func (q *Queries) CountActiveUsersWithRole(ctx context.Context, arg CountActiveUsersWithRoleParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countActiveUsersWithRole, arg.CustomerID, arg.RoleID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const disableUser = `-- name: DisableUser :one
+UPDATE users
+SET disabled_at = coalesce(disabled_at, now())
+WHERE id = $1
+RETURNING id, cognito_sub, email, customer_id, role_id, created_at, disabled_at
+`
+
+func (q *Queries) DisableUser(ctx context.Context, id uuid.UUID) (User, error) {
+	row := q.db.QueryRow(ctx, disableUser, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.CognitoSub,
+		&i.Email,
+		&i.CustomerID,
+		&i.RoleID,
+		&i.CreatedAt,
+		&i.DisabledAt,
+	)
+	return i, err
+}
+
+const getCustomerUser = `-- name: GetCustomerUser :one
+SELECT id, cognito_sub, email, customer_id, role_id, created_at, disabled_at
+FROM users
+WHERE customer_id = $1 AND id = $2
+`
+
+type GetCustomerUserParams struct {
+	CustomerID pgtype.UUID
+	ID         uuid.UUID
+}
+
+func (q *Queries) GetCustomerUser(ctx context.Context, arg GetCustomerUserParams) (User, error) {
+	row := q.db.QueryRow(ctx, getCustomerUser, arg.CustomerID, arg.ID)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.CognitoSub,
+		&i.Email,
+		&i.CustomerID,
+		&i.RoleID,
+		&i.CreatedAt,
+		&i.DisabledAt,
+	)
+	return i, err
+}
+
 const getUserBySub = `-- name: GetUserBySub :one
 SELECT u.id, u.email, u.customer_id, u.role_id,
        (u.disabled_at IS NOT NULL)::boolean AS disabled,
@@ -66,4 +132,75 @@ func (q *Queries) InsertUser(ctx context.Context, arg InsertUserParams) error {
 		arg.RoleID,
 	)
 	return err
+}
+
+const listCustomerUsers = `-- name: ListCustomerUsers :many
+SELECT id, cognito_sub, email, customer_id, role_id, created_at, disabled_at
+FROM users
+WHERE customer_id = $1
+ORDER BY email
+`
+
+func (q *Queries) ListCustomerUsers(ctx context.Context, customerID pgtype.UUID) ([]User, error) {
+	rows, err := q.db.Query(ctx, listCustomerUsers, customerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []User
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.CognitoSub,
+			&i.Email,
+			&i.CustomerID,
+			&i.RoleID,
+			&i.CreatedAt,
+			&i.DisabledAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockCustomer = `-- name: LockCustomer :exec
+SELECT id FROM customers WHERE id = $1 FOR UPDATE
+`
+
+func (q *Queries) LockCustomer(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, lockCustomer, id)
+	return err
+}
+
+const setUserRole = `-- name: SetUserRole :one
+UPDATE users
+SET role_id = $2
+WHERE id = $1
+RETURNING id, cognito_sub, email, customer_id, role_id, created_at, disabled_at
+`
+
+type SetUserRoleParams struct {
+	ID     uuid.UUID
+	RoleID int16
+}
+
+func (q *Queries) SetUserRole(ctx context.Context, arg SetUserRoleParams) (User, error) {
+	row := q.db.QueryRow(ctx, setUserRole, arg.ID, arg.RoleID)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.CognitoSub,
+		&i.Email,
+		&i.CustomerID,
+		&i.RoleID,
+		&i.CreatedAt,
+		&i.DisabledAt,
+	)
+	return i, err
 }
