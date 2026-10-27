@@ -35,6 +35,7 @@ func New(cfg Config) http.Handler {
 	api := humagin.New(router, apiConfig())
 	cmdbSourceHandler{cmdb: cfg.CMDB, customer: cfg.Customer}.register(api)
 	assetHandler{cmdb: cfg.CMDB, customer: cfg.Customer}.register(api)
+	markNullableObjects(api)
 	return router
 }
 
@@ -96,9 +97,12 @@ const (
 )
 
 // Huma builds its own errors, such as for a body that is malformed or misses
-// a field, through huma.NewError, which is global.
+// a field, through huma.NewError, and decides array nullability through
+// huma.DefaultArrayNullable; both are global.
 func init() {
 	huma.NewError = newHumaError
+	// Every array the API sends is empty rather than null.
+	huma.DefaultArrayNullable = false
 }
 
 // newHumaError reports a request Huma rejects as invalid_request. Huma

@@ -23,6 +23,7 @@ func (h cmdbSourceHandler) register(api huma.API) {
 		Path:        "/cmdb/source",
 		Summary:     "Get the Connected CMDB Source",
 		Description: "Returns null when the Customer has no Connected CMDB Source.",
+		Responses:   nullableBody[cmdbSourceResponse](api),
 		Errors:      []int{http.StatusInternalServerError},
 	}, h.get)
 	huma.Register(api, huma.Operation{
