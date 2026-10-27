@@ -10,6 +10,10 @@ barbattack is a threat intelligence platform that watches a customer's assets fo
 An organization that uses barbattack. Everything barbattack knows about an environment belongs to exactly one Customer.
 _Avoid_: Tenant, account, organization
 
+**Deactivated Customer**:
+A Customer that barbattack no longer serves. It is never deleted, its Users can no longer sign in, and its CMDB Source is no longer synced.
+_Avoid_: Deleted customer, suspended, churned
+
 ### Inventory
 
 **CMDB Provider**:
@@ -129,6 +133,10 @@ _Avoid_: Super admin, superadmin, staff
 **Customer Admin**:
 A User who manages the Users of their own Customer, including other Customer Admins. Every Customer has at least one.
 _Avoid_: Tenant admin, org admin, owner
+
+**Viewer**:
+A User of a Customer who is not a Customer Admin and cannot manage Users.
+_Avoid_: Member, regular user, analyst
 
 **Asset Owner**:
 A person, identified by email, who is responsible for one or more Assets and receives alerts about them on Slack. It is imported from the CMDB Source or set by a Declaration. An Asset Owner is not a User.
