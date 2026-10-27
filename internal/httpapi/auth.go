@@ -59,10 +59,18 @@ func writeError(api huma.API, ctx huma.Context, e *codedError) {
 	_ = api.Marshal(ctx.BodyWriter(), "application/json", v)
 }
 
-func customerOf(ctx context.Context) (tenancy.CustomerID, error) {
+func callerOf(ctx context.Context) (tenancy.User, error) {
 	u, ok := ctx.Value(userKey{}).(tenancy.User)
 	if !ok {
-		return tenancy.CustomerID{}, internal(errors.New("operation reached without a signed-in user"))
+		return tenancy.User{}, internal(errors.New("operation reached without a signed-in user"))
+	}
+	return u, nil
+}
+
+func customerOf(ctx context.Context) (tenancy.CustomerID, error) {
+	u, err := callerOf(ctx)
+	if err != nil {
+		return tenancy.CustomerID{}, err
 	}
 	id, err := u.ActsFor()
 	if err != nil {

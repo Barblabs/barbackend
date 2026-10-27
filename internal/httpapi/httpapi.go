@@ -31,6 +31,7 @@ func New(cfg Config) http.Handler {
 	api.UseMiddleware(authenticate(api, cfg.Users))
 	cmdbSourceHandler{cmdb: cfg.CMDB}.register(api)
 	assetHandler{cmdb: cfg.CMDB}.register(api)
+	customerHandler{users: cfg.Users}.register(api)
 	return router
 }
 

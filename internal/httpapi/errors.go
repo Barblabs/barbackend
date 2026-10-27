@@ -32,6 +32,9 @@ const (
 	alreadyConnected = "already_connected"
 	syncInProgress   = "sync_in_progress"
 	syncFailed       = "sync_failed"
+	customerNotFound = "customer_not_found"
+	nameTaken        = "customer_name_taken"
+	emailTaken       = "email_taken"
 	internalError    = "internal_error"
 )
 
@@ -46,10 +49,20 @@ func apiError(err error) *codedError {
 		return &codedError{status: http.StatusUnauthorized, cause: err, Code: unauthenticated, Message: "a valid access token of a user who can sign in is required"}
 	case errors.Is(err, tenancy.ErrNoCustomer):
 		return &codedError{status: http.StatusForbidden, Code: forbidden, Message: "a platform admin cannot see customer data"}
+	case errors.Is(err, tenancy.ErrNotPlatformAdmin):
+		return &codedError{status: http.StatusForbidden, Code: forbidden, Message: "only a platform admin can manage customers"}
 	// A Sync refused here was asked for by a User who could sign in when it
 	// started, and can no longer.
 	case errors.Is(err, cmdb.ErrCustomerDeactivated):
 		return &codedError{status: http.StatusUnauthorized, cause: err, Code: unauthenticated, Message: "the customer is deactivated"}
+	case errors.Is(err, tenancy.ErrInvalidCustomer), errors.Is(err, tenancy.ErrInvalidUser):
+		return &codedError{status: http.StatusBadRequest, Code: invalidRequest, Message: err.Error()}
+	case errors.Is(err, users.ErrCustomerNotFound):
+		return &codedError{status: http.StatusNotFound, Code: customerNotFound, Message: "customer not found"}
+	case errors.Is(err, users.ErrCustomerNameTaken):
+		return &codedError{status: http.StatusConflict, Code: nameTaken, Message: users.ErrCustomerNameTaken.Error()}
+	case errors.Is(err, users.ErrEmailTaken):
+		return &codedError{status: http.StatusConflict, Code: emailTaken, Message: "a user with this email already exists"}
 	case errors.As(err, &failure):
 		return &codedError{status: http.StatusUnprocessableEntity, Code: string(failure.Code), Message: failure.Message}
 	case errors.Is(err, cmdb.ErrInvalidLogin):
