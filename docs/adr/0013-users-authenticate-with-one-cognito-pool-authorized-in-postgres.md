@@ -2,7 +2,7 @@
 
 Users sign in with Amazon Cognito, but Cognito only proves who a User is. Their Customer and role (Platform Admin, Customer Admin, or a regular User) live in a `users` table in Postgres, keyed by the Cognito `sub`. Every request resolves the token's `sub` to that row, and Customer-scoped queries take the Customer from it, never from the URL or request body. All Users of all Customers share one user pool, and Platform Admins are Users with no Customer in the same pool.
 
-Users are created only by the backend. Both a Platform Admin creating a Customer's first Customer Admin and a Customer Admin creating Users go through the same endpoint. The backend checks the caller's role and Customer before it calls Cognito's `AdminCreateUser`, which sends the invitation. Nobody creates Users in the Cognito console. The first Platform Admin is bootstrapped by a CLI command.
+Users are created only by the backend. Both a Platform Admin creating a Customer's first Customer Admin and a Customer Admin creating Users go through the same creation path in the backend. The backend checks the caller's role and Customer before it calls Cognito's `AdminCreateUser`, which sends the invitation. Nobody creates Users in the Cognito console. The first Platform Admin is bootstrapped by a CLI command.
 
 ## Considered Options
 
