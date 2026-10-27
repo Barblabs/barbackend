@@ -73,7 +73,7 @@ A record still present in a CMDB Source that a Sync could not import, with the r
 _Avoid_: Rejection, rejected record, invalid record
 
 **Declaration**:
-A value about an Asset set by a barbattack user rather than imported from its CMDB Source. Where both exist, the Declaration wins, and removing it restores the imported value.
+A value about an Asset set by a User rather than imported from its CMDB Source. Where both exist, the Declaration wins, and removing it restores the imported value.
 _Avoid_: Override, manual value, custom field
 
 ### Threat intelligence
@@ -118,10 +118,22 @@ _Avoid_: Priority, severity, business criticity
 
 ### People
 
+**User**:
+A person who signs in to barbattack. A User is either a Platform Admin or belongs to exactly one Customer, and never moves between Customers.
+_Avoid_: Account, login, member
+
+**Platform Admin**:
+A barbattack staff User who creates Customers and their first Customer Admin. A Platform Admin belongs to no Customer and cannot see any Customer's Assets or Findings.
+_Avoid_: Super admin, superadmin, staff
+
+**Customer Admin**:
+A User who manages the Users of their own Customer, including other Customer Admins. Every Customer has at least one.
+_Avoid_: Tenant admin, org admin, owner
+
 **Asset Owner**:
-A person, identified by email, who is responsible for one or more Assets and receives alerts about them on Slack. It is imported from the CMDB Source or set by a Declaration. An Asset Owner is not a barbattack user.
+A person, identified by email, who is responsible for one or more Assets and receives alerts about them on Slack. It is imported from the CMDB Source or set by a Declaration. An Asset Owner is not a User.
 _Avoid_: User, contact, assignee, responsible, manager
 
 **Security Team**:
-The Customer's cybersecurity team, which receives alerts for any Asset that has no Asset Owner.
+The Customer's cybersecurity team, which receives every alert about the Customer's Assets, whether or not the Asset has an Asset Owner.
 _Avoid_: Fallback owner, default owner, cyber team
