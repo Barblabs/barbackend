@@ -32,14 +32,8 @@ func New(cfg Config) http.Handler {
 	router.GET("/ping", func(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, gin.H{"message": "pong"})
 	})
-	humagin.New(router, apiConfig())
-	h := cmdbSourceHandler{cmdb: cfg.CMDB, customer: cfg.Customer}
-	router.GET("/cmdb/source", h.get)
-	router.POST("/cmdb/source", h.connect)
-	router.PUT("/cmdb/source", h.update)
-	router.DELETE("/cmdb/source", h.disconnect)
-	router.POST("/cmdb/source/test", h.test)
-	router.POST("/cmdb/source/sync", h.sync)
+	api := humagin.New(router, apiConfig())
+	cmdbSourceHandler{cmdb: cfg.CMDB, customer: cfg.Customer}.register(api)
 	router.GET("/assets", assetHandler{cmdb: cfg.CMDB, customer: cfg.Customer}.list)
 	return router
 }
@@ -131,6 +125,27 @@ func newHumaError(status int, msg string, errs ...error) huma.StatusError {
 
 func internal(cause error) *codedError {
 	return &codedError{status: http.StatusInternalServerError, cause: cause, Code: internalError, Message: "internal server error"}
+}
+
+// apiError maps an error from a use case to its status and code.
+func apiError(err error) *codedError {
+	var failure *cmdb.Failure
+	switch {
+	case errors.As(err, &failure):
+		return &codedError{status: http.StatusUnprocessableEntity, Code: string(failure.Code), Message: failure.Message}
+	case errors.Is(err, cmdb.ErrInvalidLogin):
+		return &codedError{status: http.StatusBadRequest, Code: invalidLogin, Message: err.Error()}
+	case errors.Is(err, cmdb.ErrInvalidAssetQuery):
+		return &codedError{status: http.StatusBadRequest, Code: invalidRequest, Message: err.Error()}
+	case errors.Is(err, cmdb.ErrNotConnected):
+		return &codedError{status: http.StatusNotFound, Code: notConnected, Message: err.Error()}
+	case errors.Is(err, cmdb.ErrAlreadyConnected):
+		return &codedError{status: http.StatusConflict, Code: alreadyConnected, Message: err.Error()}
+	case errors.Is(err, cmdb.ErrSyncInProgress):
+		return &codedError{status: http.StatusConflict, Code: syncInProgress, Message: err.Error()}
+	default:
+		return internal(err)
+	}
 }
 
 func writeError(ctx *gin.Context, err error) {
