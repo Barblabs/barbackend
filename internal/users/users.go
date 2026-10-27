@@ -1,5 +1,6 @@
 // Package users holds the use cases on Users: authenticating a request and
-// creating a User (ADR 0013).
+// creating a User (ADR 0013), and on the Customers they belong to, since a
+// Customer is created together with its first Customer Admin (ADR 0008).
 package users
 
 import (
