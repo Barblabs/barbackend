@@ -27,4 +27,4 @@ Review rules for judgement calls that no linter checks. Apply every rule to the 
 ## Code hygiene
 
 - No dead code: every identifier, sentinel error and helper is used.
-- Comments explain a non-trivial decision or implementation, per the global rule.
+- **Comments are foreign gotchas or API contracts**: a comment survives only if it records behaviour forced by a dependency (Huma, Gin, Postgres, iTop) and checked against its source or docs, or documents an exported identifier. A comment justifying our own code is an alibi: delete it and reshape the code so it reads on its own (rename, extract, a `doc:` tag).
