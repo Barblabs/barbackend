@@ -74,17 +74,24 @@ func (q *Queries) InsertCMDBSource(ctx context.Context, arg InsertCMDBSourcePara
 }
 
 const lockCMDBSource = `-- name: LockCMDBSource :one
-SELECT (disconnected_at IS NULL)::boolean AS connected
-FROM cmdb_sources
-WHERE id = $1
-FOR UPDATE NOWAIT
+SELECT (s.disconnected_at IS NULL)::boolean AS connected,
+       (c.deactivated_at IS NOT NULL)::boolean AS customer_deactivated
+FROM cmdb_sources s
+JOIN customers c ON c.id = s.customer_id
+WHERE s.id = $1
+FOR UPDATE OF s NOWAIT
 `
 
-func (q *Queries) LockCMDBSource(ctx context.Context, id uuid.UUID) (bool, error) {
+type LockCMDBSourceRow struct {
+	Connected           bool
+	CustomerDeactivated bool
+}
+
+func (q *Queries) LockCMDBSource(ctx context.Context, id uuid.UUID) (LockCMDBSourceRow, error) {
 	row := q.db.QueryRow(ctx, lockCMDBSource, id)
-	var connected bool
-	err := row.Scan(&connected)
-	return connected, err
+	var i LockCMDBSourceRow
+	err := row.Scan(&i.Connected, &i.CustomerDeactivated)
+	return i, err
 }
 
 const lockConnectedCMDBSource = `-- name: LockConnectedCMDBSource :one

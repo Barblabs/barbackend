@@ -46,6 +46,10 @@ func apiError(err error) *codedError {
 		return &codedError{status: http.StatusUnauthorized, cause: err, Code: unauthenticated, Message: "a valid access token of a user who can sign in is required"}
 	case errors.Is(err, tenancy.ErrNoCustomer):
 		return &codedError{status: http.StatusForbidden, Code: forbidden, Message: "a platform admin cannot see customer data"}
+	// A Sync refused here was asked for by a User who could sign in when it
+	// started, and can no longer.
+	case errors.Is(err, cmdb.ErrCustomerDeactivated):
+		return &codedError{status: http.StatusUnauthorized, cause: err, Code: unauthenticated, Message: "the customer is deactivated"}
 	case errors.As(err, &failure):
 		return &codedError{status: http.StatusUnprocessableEntity, Code: string(failure.Code), Message: failure.Message}
 	case errors.Is(err, cmdb.ErrInvalidLogin):

@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
+	"barbackend/internal/inventory"
 	"barbackend/internal/postgres"
 	"barbackend/internal/tenancy"
 	"github.com/google/uuid"
@@ -74,5 +76,25 @@ func TestDeactivatingADeactivatedCustomerKeepsTheFirstTime(t *testing.T) {
 	}
 	if !reactivated.Deactivated.IsZero() {
 		t.Errorf("deactivated at %v after reactivating, want zero", reactivated.Deactivated)
+	}
+}
+
+func TestCommitSyncOfADeactivatedCustomerFails(t *testing.T) {
+	t.Parallel()
+	db, conn := newDBWithConn(t)
+	customer := newCustomer(t, db)
+	src := newSource(t, db, customer)
+	inTx(t, db, func(tx *postgres.Tx) error {
+		_, err := tx.SetCustomerDeactivated(context.Background(), customer, true)
+		return err
+	})
+
+	_, err := db.CommitSync(context.Background(), src.ID(), time.Now(), reconcileWith(src.ID(), inventory.Snapshot{Records: []inventory.Record{record(t, "1", fullParams(t))}}))
+
+	if !errors.Is(err, postgres.ErrCustomerDeactivated) {
+		t.Errorf("err = %v, want ErrCustomerDeactivated", err)
+	}
+	if n := queryInt(t, conn, "SELECT count(*) FROM assets") + queryInt(t, conn, "SELECT count(*) FROM sync_runs"); n != 0 {
+		t.Errorf("rows written = %d, want 0", n)
 	}
 }
