@@ -121,6 +121,18 @@ linters:
           deny:
             - pkg: barbackend/internal
               desc: encryption imports no other layer; the cmdb use case seals and opens credentials with it (ADR 0008, ADR 0012)
+        cognito:
+          list-mode: lax
+          files:
+            - "**/internal/cognito/**"
+          allow:
+            - barbackend/internal/cognito
+            - barbackend/internal/tenancy
+          deny:
+            - pkg: barbackend/internal
+              desc: the Cognito adapter depends only on tenancy, never on persistence or the users use case (ADR 0008, ADR 0013)
+            - pkg: github.com/jackc/pgx
+              desc: the Cognito adapter never touches the database (ADR 0008)
         postgres:
           list-mode: lax
           files:
