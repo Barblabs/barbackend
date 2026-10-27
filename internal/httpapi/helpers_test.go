@@ -122,6 +122,8 @@ func (a *fakeAdmin) CreateUser(context.Context, string) (string, error) {
 
 func (*fakeAdmin) DeleteUser(context.Context, string) error { return nil }
 
+func (*fakeAdmin) DisableUser(context.Context, string) error { return nil }
+
 func (a *fakeAdmin) invited() []string {
 	a.mu.Lock()
 	defer a.mu.Unlock()

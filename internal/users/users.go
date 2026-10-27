@@ -1,6 +1,7 @@
 // Package users holds the use cases on Users: authenticating a request and
-// creating a User (ADR 0013), and on the Customers they belong to, since a
-// Customer is created together with its first Customer Admin (ADR 0008).
+// creating, listing, changing the role of and disabling Users (ADR 0013),
+// and on the Customers they belong to, since a Customer is created together
+// with its first Customer Admin (ADR 0008).
 package users
 
 import (
@@ -23,10 +24,11 @@ var (
 	ErrEmailTaken = errors.New("a user with this email already exists")
 )
 
-// Admin creates and deletes users in the user pool. *cognito.Admin is the
-// real one.
+// Admin creates, disables and deletes users in the user pool.
+// *cognito.Admin is the real one.
 type Admin interface {
 	CreateUser(ctx context.Context, email string) (sub string, err error)
+	DisableUser(ctx context.Context, sub string) error
 	DeleteUser(ctx context.Context, sub string) error
 }
 
