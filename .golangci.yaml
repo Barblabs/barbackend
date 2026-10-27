@@ -133,6 +133,18 @@ linters:
               desc: the Cognito adapter depends only on tenancy, never on persistence or the users use case (ADR 0008, ADR 0013)
             - pkg: github.com/jackc/pgx
               desc: the Cognito adapter never touches the database (ADR 0008)
+        users:
+          list-mode: lax
+          files:
+            - "**/internal/users/**"
+          allow:
+            - barbackend/internal/users
+            - barbackend/internal/cognito
+            - barbackend/internal/postgres
+            - barbackend/internal/tenancy
+          deny:
+            - pkg: barbackend/internal
+              desc: the users use case calls only cognito, postgres and tenancy (ADR 0008)
         postgres:
           list-mode: lax
           files:
