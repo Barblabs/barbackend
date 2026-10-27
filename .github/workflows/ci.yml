@@ -56,6 +56,10 @@ jobs:
         with:
           path: ~/.embedded-postgres-go
           key: embedded-postgres-${{ runner.os }}-${{ hashFiles('go.sum', 'internal/postgres/pgtest/pgtest.go') }}
+          # Any go.sum change moves the key, and a cold cache downloads the
+          # binaries from Maven Central, which fails intermittently. Most key
+          # changes keep the same Postgres version, so the old cache still works.
+          restore-keys: embedded-postgres-${{ runner.os }}-
       - name: go test
         run: go test -race ./...
       - *save-go-cache
