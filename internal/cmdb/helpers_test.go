@@ -15,6 +15,7 @@ import (
 	"barbackend/internal/inventory"
 	"barbackend/internal/postgres"
 	"barbackend/internal/postgres/pgtest"
+	"barbackend/internal/tenancy"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -60,7 +61,7 @@ func newKey(t *testing.T) encryption.Key {
 }
 
 // connect connects a CMDB Source for a new Customer, running its first Sync.
-func (e env) connect(t *testing.T) (inventory.CustomerID, inventory.CMDBSourceID) {
+func (e env) connect(t *testing.T) (tenancy.CustomerID, inventory.CMDBSourceID) {
 	t.Helper()
 	customer := newCustomer()
 	if _, err := e.cmdb.Connect(context.Background(), customer, providertest.Name, providertest.Login); err != nil {
@@ -69,7 +70,7 @@ func (e env) connect(t *testing.T) (inventory.CustomerID, inventory.CMDBSourceID
 	return customer, e.connected(t, customer).Source.ID()
 }
 
-func (e env) connected(t *testing.T, customer inventory.CustomerID) postgres.StoredCMDBSource {
+func (e env) connected(t *testing.T, customer tenancy.CustomerID) postgres.StoredCMDBSource {
 	t.Helper()
 	var stored postgres.StoredCMDBSource
 	if err := e.db.InTx(context.Background(), func(tx *postgres.Tx) (err error) {
@@ -81,7 +82,7 @@ func (e env) connected(t *testing.T, customer inventory.CustomerID) postgres.Sto
 	return stored
 }
 
-func (e env) connectedSource(t *testing.T, customer inventory.CustomerID) cmdb.ConnectedSource {
+func (e env) connectedSource(t *testing.T, customer tenancy.CustomerID) cmdb.ConnectedSource {
 	t.Helper()
 	src, err := e.cmdb.ConnectedSource(context.Background(), customer)
 	if err != nil {
@@ -164,7 +165,7 @@ func (e env) queryInt(t *testing.T, sql string, args ...any) int {
 	return n
 }
 
-func newCustomer() inventory.CustomerID { return inventory.CustomerID(uuid.New()) }
+func newCustomer() tenancy.CustomerID { return tenancy.CustomerID(uuid.New()) }
 
 func record(t *testing.T, id, name string) inventory.Record {
 	t.Helper()

@@ -13,8 +13,8 @@ import (
 	"barbackend/internal/cmdb"
 	"barbackend/internal/httpapi"
 	"barbackend/internal/ingest"
-	"barbackend/internal/inventory"
 	"barbackend/internal/postgres"
+	"barbackend/internal/tenancy"
 	"github.com/google/uuid"
 )
 
@@ -83,12 +83,12 @@ func listen(ctx context.Context, feedsDone <-chan struct{}, handler http.Handler
 	return nil
 }
 
-func customerID() (inventory.CustomerID, error) {
+func customerID() (tenancy.CustomerID, error) {
 	id, err := uuid.Parse(os.Getenv("CUSTOMER_ID"))
 	if err != nil {
-		return inventory.CustomerID{}, fmt.Errorf("CUSTOMER_ID: %w", err)
+		return tenancy.CustomerID{}, fmt.Errorf("CUSTOMER_ID: %w", err)
 	}
-	return inventory.CustomerID(id), nil
+	return tenancy.CustomerID(id), nil
 }
 
 func allowedOrigins() []string {

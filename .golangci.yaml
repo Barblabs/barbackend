@@ -28,15 +28,31 @@ linters:
             - "**/internal/inventory/**"
           allow:
             - barbackend/internal/inventory
+            - barbackend/internal/tenancy
           deny:
             - pkg: barbackend/internal
-              desc: inventory is the pure domain and imports no other layer (ADR 0008)
+              desc: inventory is a pure domain and imports only tenancy (ADR 0008)
             - pkg: net/http
               desc: inventory is the pure domain and does no I/O (ADR 0008)
             - pkg: database/sql
               desc: inventory is the pure domain and does no I/O (ADR 0008)
             - pkg: github.com/jackc/pgx
               desc: inventory is the pure domain and does no I/O (ADR 0008)
+        tenancy:
+          list-mode: lax
+          files:
+            - "**/internal/tenancy/**"
+          allow:
+            - barbackend/internal/tenancy
+          deny:
+            - pkg: barbackend/internal
+              desc: tenancy is the lowest pure domain and imports no other layer (ADR 0008)
+            - pkg: net/http
+              desc: tenancy is a pure domain and does no I/O (ADR 0008)
+            - pkg: database/sql
+              desc: tenancy is a pure domain and does no I/O (ADR 0008)
+            - pkg: github.com/jackc/pgx
+              desc: tenancy is a pure domain and does no I/O (ADR 0008)
         scoring:
           list-mode: lax
           files:
@@ -112,9 +128,10 @@ linters:
           allow:
             - barbackend/internal/inventory
             - barbackend/internal/postgres
+            - barbackend/internal/tenancy
           deny:
             - pkg: barbackend/internal
-              desc: persistence depends only on inventory; use cases call it, not the reverse (ADR 0008)
+              desc: persistence depends only on the domain; use cases call it, not the reverse (ADR 0008)
         # Handlers reach persistence and adapters only through use cases, so
         # each new use-case package is added to allow when httpapi serves it.
         # Tests are exempt: they wire a real router on Postgres, as cmd does.
@@ -126,6 +143,7 @@ linters:
           allow:
             - barbackend/internal/httpapi
             - barbackend/internal/inventory
+            - barbackend/internal/tenancy
             - barbackend/internal/cmdb
           deny:
             - pkg: barbackend/internal

@@ -10,6 +10,7 @@ import (
 
 	"barbackend/internal/inventory"
 	"barbackend/internal/postgres"
+	"barbackend/internal/tenancy"
 	"github.com/google/uuid"
 )
 
@@ -59,7 +60,7 @@ type cursor struct {
 // Disconnected ones included, sorted by name, then CMDB Source, then Record
 // ID. It hides Inactive Assets unless q.Active says otherwise. A Customer
 // without Assets gets an empty page. It fails with ErrInvalidAssetQuery.
-func (s *Service) ListAssets(ctx context.Context, customer inventory.CustomerID, q AssetQuery) (AssetPage, error) {
+func (s *Service) ListAssets(ctx context.Context, customer tenancy.CustomerID, q AssetQuery) (AssetPage, error) {
 	query, filters, err := parseAssetQuery(q)
 	if err != nil {
 		return AssetPage{}, err

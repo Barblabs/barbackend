@@ -18,6 +18,7 @@ import (
 	"barbackend/internal/inventory"
 	"barbackend/internal/postgres"
 	"barbackend/internal/postgres/pgtest"
+	"barbackend/internal/tenancy"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -27,7 +28,7 @@ const allowedOrigin = "http://localhost:5173"
 type env struct {
 	db       *postgres.DB
 	conn     *pgx.Conn
-	customer inventory.CustomerID
+	customer tenancy.CustomerID
 	provider *providertest.Provider
 	cmdb     *cmdb.Service
 	router   http.Handler
@@ -59,10 +60,10 @@ func newKey(t *testing.T) encryption.Key {
 	return key
 }
 
-func newCustomer() inventory.CustomerID { return inventory.CustomerID(uuid.New()) }
+func newCustomer() tenancy.CustomerID { return tenancy.CustomerID(uuid.New()) }
 
 // connect connects a CMDB Source for customer, running its first Sync.
-func (e env) connect(t *testing.T, customer inventory.CustomerID) inventory.CMDBSourceID {
+func (e env) connect(t *testing.T, customer tenancy.CustomerID) inventory.CMDBSourceID {
 	t.Helper()
 	if _, err := e.cmdb.Connect(context.Background(), customer, providertest.Name, providertest.Login); err != nil {
 		t.Fatal(err)

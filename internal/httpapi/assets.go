@@ -6,13 +6,13 @@ import (
 	"time"
 
 	"barbackend/internal/cmdb"
-	"barbackend/internal/inventory"
+	"barbackend/internal/tenancy"
 	"github.com/danielgtaylor/huma/v2"
 )
 
 type assetHandler struct {
 	cmdb     *cmdb.Service
-	customer inventory.CustomerID
+	customer tenancy.CustomerID
 }
 
 func (h assetHandler) register(api huma.API) {

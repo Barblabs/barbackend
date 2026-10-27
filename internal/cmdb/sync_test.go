@@ -15,6 +15,7 @@ import (
 	"barbackend/internal/encryption"
 	"barbackend/internal/inventory"
 	"barbackend/internal/postgres"
+	"barbackend/internal/tenancy"
 	"github.com/google/uuid"
 )
 
@@ -324,7 +325,7 @@ func TestSyncCanceledByShutdownFails(t *testing.T) {
 	e.wantFailedSync(t, customer, err, context.Canceled)
 }
 
-func (e env) wantFailedSync(t *testing.T, customer inventory.CustomerID, err, cause error) {
+func (e env) wantFailedSync(t *testing.T, customer tenancy.CustomerID, err, cause error) {
 	t.Helper()
 	var failed *cmdb.SyncError
 	if !errors.As(err, &failed) || !errors.Is(err, cause) {

@@ -8,12 +8,13 @@ import (
 
 	"barbackend/internal/cmdb"
 	"barbackend/internal/inventory"
+	"barbackend/internal/tenancy"
 	"github.com/danielgtaylor/huma/v2"
 )
 
 type cmdbSourceHandler struct {
 	cmdb     *cmdb.Service
-	customer inventory.CustomerID
+	customer tenancy.CustomerID
 }
 
 func (h cmdbSourceHandler) register(api huma.API) {

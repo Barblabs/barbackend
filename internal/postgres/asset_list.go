@@ -7,6 +7,7 @@ import (
 
 	"barbackend/internal/inventory"
 	"barbackend/internal/postgres/sqlcgen"
+	"barbackend/internal/tenancy"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -20,7 +21,7 @@ type AssetPosition struct {
 // AssetListQuery selects one page of a Customer's Assets, sorted by name,
 // then CMDB Source, then Record ID.
 type AssetListQuery struct {
-	Customer inventory.CustomerID
+	Customer tenancy.CustomerID
 	// Active keeps only Active Assets when true and only Inactive ones when
 	// false; nil keeps both.
 	Active      *bool

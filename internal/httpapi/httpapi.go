@@ -8,7 +8,7 @@ import (
 	"net/http"
 
 	"barbackend/internal/cmdb"
-	"barbackend/internal/inventory"
+	"barbackend/internal/tenancy"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humagin"
 	"github.com/gin-gonic/gin"
@@ -18,7 +18,7 @@ type Config struct {
 	CMDB *cmdb.Service
 	// Customer is who every request acts for. It comes from server
 	// configuration until authentication exists.
-	Customer inventory.CustomerID
+	Customer tenancy.CustomerID
 	// AllowedOrigins may call the API from a browser.
 	AllowedOrigins []string
 }
