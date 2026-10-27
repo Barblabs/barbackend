@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Asset struct {
@@ -54,6 +55,13 @@ type Criticality struct {
 	Name string
 }
 
+type Customer struct {
+	ID            uuid.UUID
+	Name          string
+	CreatedAt     time.Time
+	DeactivatedAt *time.Time
+}
+
 type Exposure struct {
 	ID   int16
 	Name string
@@ -93,4 +101,19 @@ type SyncRun struct {
 	Skipped        int32
 	SkippedRecords []byte
 	Failure        *string
+}
+
+type User struct {
+	ID         uuid.UUID
+	CognitoSub string
+	Email      string
+	CustomerID pgtype.UUID
+	RoleID     int16
+	CreatedAt  time.Time
+	DisabledAt *time.Time
+}
+
+type UserRole struct {
+	ID   int16
+	Name string
 }

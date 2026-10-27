@@ -176,7 +176,7 @@ func TestListAssetsOnlyReturnsTheCustomersAssets(t *testing.T) {
 	e.provider.Snapshot = inventory.Snapshot{Records: []inventory.Record{record(t, "1", "mine")}}
 	e.connect(t, e.customer)
 	e.provider.Snapshot = inventory.Snapshot{Records: []inventory.Record{record(t, "1", "theirs")}}
-	e.connect(t, newCustomer())
+	e.connect(t, e.newCustomer(t))
 
 	page := decode[assetList](t, e.listAssets(url.Values{"active": {"all"}}), http.StatusOK)
 

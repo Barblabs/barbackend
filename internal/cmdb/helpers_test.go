@@ -63,7 +63,7 @@ func newKey(t *testing.T) encryption.Key {
 // connect connects a CMDB Source for a new Customer, running its first Sync.
 func (e env) connect(t *testing.T) (tenancy.CustomerID, inventory.CMDBSourceID) {
 	t.Helper()
-	customer := newCustomer()
+	customer := e.newCustomer(t)
 	if _, err := e.cmdb.Connect(context.Background(), customer, providertest.Name, providertest.Login); err != nil {
 		t.Fatal(err)
 	}
@@ -165,7 +165,14 @@ func (e env) queryInt(t *testing.T, sql string, args ...any) int {
 	return n
 }
 
-func newCustomer() tenancy.CustomerID { return tenancy.CustomerID(uuid.New()) }
+func (e env) newCustomer(t *testing.T) tenancy.CustomerID {
+	t.Helper()
+	id := uuid.New()
+	if _, err := e.conn.Exec(context.Background(), "INSERT INTO customers (id, name) VALUES ($1, $2)", id, id.String()); err != nil {
+		t.Fatal(err)
+	}
+	return tenancy.CustomerID(id)
+}
 
 func record(t *testing.T, id, name string) inventory.Record {
 	t.Helper()

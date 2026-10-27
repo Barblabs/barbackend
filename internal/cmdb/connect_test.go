@@ -37,7 +37,7 @@ func TestConnectRunsTheFirstSync(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
 	e.provider.Snapshot = inventory.Snapshot{Records: []inventory.Record{record(t, "a", "vm-a")}}
-	customer := newCustomer()
+	customer := e.newCustomer(t)
 
 	got, err := e.cmdb.Connect(context.Background(), customer, providertest.Name, providertest.Login)
 
@@ -72,7 +72,7 @@ func TestConnectThatFailsStoresNothing(t *testing.T) {
 				svc = e.withKey(encryption.Key{})
 			}
 
-			_, err := svc.Connect(context.Background(), newCustomer(), providertest.Name, providertest.Login)
+			_, err := svc.Connect(context.Background(), e.newCustomer(t), providertest.Name, providertest.Login)
 
 			if !errors.Is(err, tt.want) {
 				t.Errorf("err = %v, want %v", err, tt.want)
@@ -88,7 +88,7 @@ func TestConnectWithFailedFirstSyncStaysConnected(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
 	e.provider.Err = errors.New("cmdb unreachable")
-	customer := newCustomer()
+	customer := e.newCustomer(t)
 
 	got, err := e.cmdb.Connect(context.Background(), customer, providertest.Name, providertest.Login)
 
@@ -110,7 +110,7 @@ func TestConnectOutlivesItsCaller(t *testing.T) {
 	closedTab, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	got, err := e.cmdb.Connect(closedTab, newCustomer(), providertest.Name, providertest.Login)
+	got, err := e.cmdb.Connect(closedTab, e.newCustomer(t), providertest.Name, providertest.Login)
 
 	if err != nil {
 		t.Fatal(err)
@@ -125,7 +125,7 @@ func TestConnectWithFirstSyncExceedingTheTimeLimit(t *testing.T) {
 	e := newEnv(t)
 	e.provider.Hanging = make(chan struct{})
 
-	got, err := e.withSyncLimits(context.Background(), 50*time.Millisecond).Connect(context.Background(), newCustomer(), providertest.Name, providertest.Login)
+	got, err := e.withSyncLimits(context.Background(), 50*time.Millisecond).Connect(context.Background(), e.newCustomer(t), providertest.Name, providertest.Login)
 
 	if err != nil {
 		t.Fatal(err)

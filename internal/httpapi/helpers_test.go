@@ -44,9 +44,19 @@ func newEnv(t *testing.T) env {
 	t.Cleanup(db.Close)
 	p := &providertest.Provider{}
 	svc := cmdb.New(db, p.Providers(), newKey(t), context.Background(), time.Minute)
-	customer := newCustomer()
-	router := httpapi.New(httpapi.Config{CMDB: svc, Customer: customer, AllowedOrigins: []string{allowedOrigin}})
-	return env{db: db, conn: pgtest.Conn(t, url), customer: customer, provider: p, cmdb: svc, router: router}
+	e := env{db: db, conn: pgtest.Conn(t, url), provider: p, cmdb: svc}
+	e.customer = e.newCustomer(t)
+	e.router = httpapi.New(httpapi.Config{CMDB: svc, Customer: e.customer, AllowedOrigins: []string{allowedOrigin}})
+	return e
+}
+
+func (e env) newCustomer(t *testing.T) tenancy.CustomerID {
+	t.Helper()
+	id := uuid.New()
+	if _, err := e.conn.Exec(context.Background(), "INSERT INTO customers (id, name) VALUES ($1, $2)", id, id.String()); err != nil {
+		t.Fatal(err)
+	}
+	return tenancy.CustomerID(id)
 }
 
 func newKey(t *testing.T) encryption.Key {
@@ -59,8 +69,6 @@ func newKey(t *testing.T) encryption.Key {
 	}
 	return key
 }
-
-func newCustomer() tenancy.CustomerID { return tenancy.CustomerID(uuid.New()) }
 
 // connect connects a CMDB Source for customer, running its first Sync.
 func (e env) connect(t *testing.T, customer tenancy.CustomerID) inventory.CMDBSourceID {

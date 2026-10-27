@@ -65,7 +65,7 @@ func TestSyncRunRoundTrip(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			db, conn := newDBWithConn(t)
-			src := newSource(t, db, newCustomer())
+			src := newSource(t, db, newCustomer(t, db))
 
 			run := tt.record(t, db, src.ID())
 
@@ -107,7 +107,7 @@ func TestSyncRunRoundTrip(t *testing.T) {
 func TestRecordFailedSyncRejectsSucceededRun(t *testing.T) {
 	t.Parallel()
 	db, conn := newDBWithConn(t)
-	src := newSource(t, db, newCustomer())
+	src := newSource(t, db, newCustomer(t, db))
 	r, err := inventory.Reconcile(src.ID(), nil, inventory.Snapshot{})
 	if err != nil {
 		t.Fatal(err)
