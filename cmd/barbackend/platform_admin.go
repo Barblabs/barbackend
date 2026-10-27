@@ -24,11 +24,11 @@ func createPlatformAdmin(ctx context.Context, args []string) error {
 		return err
 	}
 	return withDB(ctx, func(db *postgres.DB) error {
-		u, err := users.New(db, nil, admin).Create(ctx, args[0], tenancy.PlatformAdmin, tenancy.CustomerID{})
+		stored, err := users.New(db, nil, admin).Create(ctx, args[0], tenancy.PlatformAdmin, tenancy.CustomerID{})
 		if err != nil {
 			return err
 		}
-		_, _ = fmt.Fprintf(os.Stdout, "invited platform admin %s (%s)\n", u.Email(), u.ID())
+		_, _ = fmt.Fprintf(os.Stdout, "invited platform admin %s (%s)\n", stored.User.Email(), stored.User.ID())
 		return nil
 	})
 }

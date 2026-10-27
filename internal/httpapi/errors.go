@@ -35,6 +35,8 @@ const (
 	customerNotFound  = "customer_not_found"
 	customerNameTaken = "customer_name_taken"
 	emailTaken        = "email_taken"
+	userNotFound      = "user_not_found"
+	lastCustomerAdmin = "last_customer_admin"
 	internalError     = "internal_error"
 )
 
@@ -51,6 +53,10 @@ func apiError(err error) *codedError {
 		return &codedError{status: http.StatusForbidden, Code: forbidden, Message: "a platform admin cannot see customer data"}
 	case errors.Is(err, tenancy.ErrNotPlatformAdmin):
 		return &codedError{status: http.StatusForbidden, Code: forbidden, Message: "only a platform admin can manage customers"}
+	case errors.Is(err, tenancy.ErrNotCustomerAdmin):
+		return &codedError{status: http.StatusForbidden, Code: forbidden, Message: "only a customer admin can manage users"}
+	case errors.Is(err, tenancy.ErrLastCustomerAdmin):
+		return &codedError{status: http.StatusConflict, Code: lastCustomerAdmin, Message: "a customer keeps at least one active customer admin"}
 	case errors.Is(err, cmdb.ErrCustomerDeactivated):
 		return &codedError{status: http.StatusUnauthorized, cause: err, Code: unauthenticated, Message: "the customer is deactivated"}
 	case errors.Is(err, tenancy.ErrInvalidCustomer), errors.Is(err, tenancy.ErrInvalidUser):
@@ -61,6 +67,8 @@ func apiError(err error) *codedError {
 		return &codedError{status: http.StatusConflict, Code: customerNameTaken, Message: "another customer has this name"}
 	case errors.Is(err, users.ErrEmailTaken):
 		return &codedError{status: http.StatusConflict, Code: emailTaken, Message: "a user with this email already exists"}
+	case errors.Is(err, users.ErrUserNotFound):
+		return &codedError{status: http.StatusNotFound, Code: userNotFound, Message: "user not found"}
 	case errors.As(err, &failure):
 		return &codedError{status: http.StatusUnprocessableEntity, Code: string(failure.Code), Message: failure.Message}
 	case errors.Is(err, cmdb.ErrInvalidLogin):

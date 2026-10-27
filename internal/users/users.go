@@ -1,6 +1,7 @@
 // Package users holds the use cases on Users: authenticating a request and
-// creating a User (ADR 0013), and on the Customers they belong to, since a
-// Customer is created together with its first Customer Admin (ADR 0008).
+// creating, listing, changing the role of and disabling Users (ADR 0013),
+// and on the Customers they belong to, since a Customer is created together
+// with its first Customer Admin (ADR 0008).
 package users
 
 import (
@@ -20,13 +21,17 @@ var (
 	ErrUnauthenticated = errors.New("unauthenticated")
 	// ErrEmailTaken is an email that already signs in, in Cognito or in
 	// Postgres: the two disagree when a Cognito user is deleted by hand.
-	ErrEmailTaken = errors.New("a user with this email already exists")
+	ErrEmailTaken   = errors.New("a user with this email already exists")
+	ErrUserNotFound = postgres.ErrUserNotFound
 )
 
-// Admin creates and deletes users in the user pool. *cognito.Admin is the
-// real one.
+type StoredUser = postgres.StoredUser
+
+// Admin creates, disables and deletes users in the user pool.
+// *cognito.Admin is the real one.
 type Admin interface {
 	CreateUser(ctx context.Context, email string) (sub string, err error)
+	DisableUser(ctx context.Context, sub string) error
 	DeleteUser(ctx context.Context, sub string) error
 }
 
@@ -72,15 +77,12 @@ func (s *Service) authenticate(ctx context.Context, accessToken string) (tenancy
 // Create invites a User through Cognito and stores them. It does not check
 // who asks: callers that act for a User must check their role and Customer
 // first.
-func (s *Service) Create(ctx context.Context, email string, role tenancy.Role, customer tenancy.CustomerID) (tenancy.User, error) {
+func (s *Service) Create(ctx context.Context, email string, role tenancy.Role, customer tenancy.CustomerID) (StoredUser, error) {
 	u, err := tenancy.NewUser(tenancy.UserID(uuid.New()), email, role, customer)
 	if err != nil {
-		return tenancy.User{}, err
+		return StoredUser{}, err
 	}
-	if err := s.invite(ctx, u, nil); err != nil {
-		return tenancy.User{}, err
-	}
-	return u, nil
+	return s.invite(ctx, u, nil)
 }
 
 // invite stores u in one transaction with whatever before stores, and has
@@ -88,8 +90,11 @@ func (s *Service) Create(ctx context.Context, email string, role tenancy.Role, c
 // such as a Customer with a taken name, sends no invitation. When storing
 // fails after Cognito created the user, the Cognito user is deleted again, so
 // the email stays free.
-func (s *Service) invite(ctx context.Context, u tenancy.User, before func(*postgres.Tx) error) error {
-	var sub string
+func (s *Service) invite(ctx context.Context, u tenancy.User, before func(*postgres.Tx) error) (StoredUser, error) {
+	var (
+		sub    string
+		stored StoredUser
+	)
 	err := s.db.InTx(ctx, func(tx *postgres.Tx) error {
 		if before != nil {
 			if err := before(tx); err != nil {
@@ -100,15 +105,19 @@ func (s *Service) invite(ctx context.Context, u tenancy.User, before func(*postg
 		if sub, err = s.admin.CreateUser(ctx, u.Email()); err != nil {
 			return err
 		}
-		return tx.CreateUser(ctx, u, sub)
+		stored, err = tx.CreateUser(ctx, u, sub)
+		return err
 	})
 	if errors.Is(err, cognito.ErrUsernameExists) || errors.Is(err, postgres.ErrEmailTaken) {
 		err = fmt.Errorf("%w: %w", ErrEmailTaken, err)
 	}
 	if err != nil && sub != "" {
 		if delErr := s.admin.DeleteUser(context.WithoutCancel(ctx), sub); delErr != nil {
-			return errors.Join(err, delErr)
+			err = errors.Join(err, delErr)
 		}
 	}
-	return err
+	if err != nil {
+		return StoredUser{}, err
+	}
+	return stored, nil
 }

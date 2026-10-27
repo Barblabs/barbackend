@@ -131,3 +131,49 @@ func TestOnlyAPlatformAdminManagesCustomers(t *testing.T) {
 		})
 	}
 }
+
+func TestOnlyACustomerAdminManagesUsers(t *testing.T) {
+	tests := []struct {
+		role     tenancy.Role
+		customer tenancy.CustomerID
+		want     error
+	}{
+		{tenancy.CustomerAdmin, customer, nil},
+		{tenancy.Viewer, customer, tenancy.ErrNotCustomerAdmin},
+		{tenancy.PlatformAdmin, tenancy.CustomerID{}, tenancy.ErrNotCustomerAdmin},
+	}
+	for _, tt := range tests {
+		t.Run(tt.role.String(), func(t *testing.T) {
+			u, err := tenancy.NewUser(userID, "a@example.com", tt.role, tt.customer)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := u.ManageUsers()
+			if !errors.Is(err, tt.want) || (err == nil && got != customer) {
+				t.Errorf("ManageUsers = %v, %v, want %v, %v", got, err, customer, tt.want)
+			}
+		})
+	}
+}
+
+func TestACustomerKeepsAnActiveCustomerAdmin(t *testing.T) {
+	tests := []struct {
+		activeAdmins int
+		want         error
+	}{
+		{0, tenancy.ErrLastCustomerAdmin},
+		{1, nil},
+	}
+	for _, tt := range tests {
+		if err := tenancy.RequireActiveCustomerAdmin(tt.activeAdmins); !errors.Is(err, tt.want) {
+			t.Errorf("RequireActiveCustomerAdmin(%d) = %v, want %v", tt.activeAdmins, err, tt.want)
+		}
+	}
+}
+
+func TestWithRoleRefusesPlatformAdmin(t *testing.T) {
+	u, _ := tenancy.NewUser(userID, "a@example.com", tenancy.Viewer, customer)
+	if _, err := u.WithRole(tenancy.PlatformAdmin); !errors.Is(err, tenancy.ErrInvalidUser) {
+		t.Errorf("err = %v, want ErrInvalidUser", err)
+	}
+}

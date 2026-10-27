@@ -14,9 +14,12 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"barbackend/internal/postgres"
+	"barbackend/internal/tenancy"
 	embeddedpostgres "github.com/fergusstrange/embedded-postgres"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -163,6 +166,50 @@ func Conn(t *testing.T, url string) *pgx.Conn {
 	}
 	t.Cleanup(func() { _ = conn.Close(ctx) })
 	return conn
+}
+
+// LockCustomer locks the Customer as Tx.LockCustomer does, in a transaction
+// on conn that holds the lock until the test ends it.
+func LockCustomer(t *testing.T, conn *pgx.Conn, customer tenancy.CustomerID) pgx.Tx {
+	t.Helper()
+	tx, err := conn.Begin(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(context.Background(), "SELECT id FROM customers WHERE id = $1 FOR UPDATE", uuid.UUID(customer)); err != nil {
+		t.Fatal(err)
+	}
+	return tx
+}
+
+// WaitForLockWaiters waits until n other sessions of conn's database are
+// blocked on a lock, so a test can release a lock it holds once the requests
+// it races are all queued behind it. conn may be in the transaction that
+// holds the lock.
+func WaitForLockWaiters(t *testing.T, conn *pgx.Conn, n int) {
+	t.Helper()
+	ctx := context.Background()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		// Inside a transaction, Postgres keeps its first read of
+		// pg_stat_activity until the snapshot is cleared.
+		if _, err := conn.Exec(ctx, "SELECT pg_stat_clear_snapshot()"); err != nil {
+			t.Fatal(err)
+		}
+		var waiting int
+		err := conn.QueryRow(ctx,
+			"SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'").Scan(&waiting)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if waiting >= n {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%d sessions wait on a lock, want %d", waiting, n)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 func exec(ctx context.Context, sql string) error {

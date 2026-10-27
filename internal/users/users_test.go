@@ -15,15 +15,25 @@ import (
 // fakeAdmin is a user pool that accepts every email, as Cognito would for
 // an email it has not seen.
 type fakeAdmin struct {
-	deleteErr error
-	created   []string
-	deleted   []string
+	deleteErr  error
+	disableErr error
+	created    []string
+	disabled   []string
+	deleted    []string
 }
 
 func (a *fakeAdmin) CreateUser(context.Context, string) (string, error) {
 	sub := uuid.NewString()
 	a.created = append(a.created, sub)
 	return sub, nil
+}
+
+func (a *fakeAdmin) DisableUser(_ context.Context, sub string) error {
+	if a.disableErr != nil {
+		return a.disableErr
+	}
+	a.disabled = append(a.disabled, sub)
+	return nil
 }
 
 func (a *fakeAdmin) DeleteUser(_ context.Context, sub string) error {
@@ -58,7 +68,7 @@ func TestCreateStoresThePlatformAdmin(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if stored != created || stored.Role() != tenancy.PlatformAdmin || len(admin.deleted) != 0 {
+	if stored != created.User || stored.Role() != tenancy.PlatformAdmin || len(admin.deleted) != 0 {
 		t.Errorf("stored = %+v, created = %+v, deleted = %v, want the platform admin stored under its sub", stored, created, admin.deleted)
 	}
 }

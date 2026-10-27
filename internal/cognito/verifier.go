@@ -1,5 +1,5 @@
 // Package cognito is the Amazon Cognito adapter: it verifies the access
-// tokens Cognito issues and creates and deletes users in the user pool
+// tokens Cognito issues and creates, disables and deletes users in the user pool
 // (ADR 0013).
 package cognito
 

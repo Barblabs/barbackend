@@ -48,6 +48,14 @@ var platformOperations = []struct{ method, path string }{
 	{http.MethodPost, "/customers/" + uuid.Nil.String() + "/reactivate"},
 }
 
+// customerAdminOperations are those only a Customer Admin may call.
+var customerAdminOperations = []struct{ method, path string }{
+	{http.MethodGet, "/users"},
+	{http.MethodPost, "/users"},
+	{http.MethodPatch, "/users/" + uuid.Nil.String()},
+	{http.MethodPost, "/users/" + uuid.Nil.String() + "/disable"},
+}
+
 type env struct {
 	db       *postgres.DB
 	conn     *pgx.Conn
@@ -97,7 +105,10 @@ func (e env) newUser(t *testing.T, role tenancy.Role, customer tenancy.CustomerI
 		t.Fatal(err)
 	}
 	sub := uuid.NewString()
-	if err := e.db.InTx(context.Background(), func(tx *postgres.Tx) error { return tx.CreateUser(context.Background(), u, sub) }); err != nil {
+	if err := e.db.InTx(context.Background(), func(tx *postgres.Tx) error {
+		_, err := tx.CreateUser(context.Background(), u, sub)
+		return err
+	}); err != nil {
 		t.Fatal(err)
 	}
 	return sub
@@ -118,6 +129,8 @@ func (a *fakeAdmin) CreateUser(context.Context, string) (string, error) {
 }
 
 func (*fakeAdmin) DeleteUser(context.Context, string) error { return nil }
+
+func (*fakeAdmin) DisableUser(context.Context, string) error { return nil }
 
 func (a *fakeAdmin) invited() []string {
 	a.mu.Lock()

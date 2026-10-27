@@ -13,7 +13,7 @@ import (
 // ErrUsernameExists is an email that already signs in to the user pool.
 var ErrUsernameExists = errors.New("a user with this email already exists in cognito")
 
-// Admin creates and deletes users in one user pool, which signs users in by
+// Admin creates, disables and deletes users in one user pool, which signs users in by
 // email.
 type Admin struct {
 	client *cip.Client
@@ -57,6 +57,15 @@ func (a *Admin) CreateUser(ctx context.Context, email string) (string, error) {
 func (a *Admin) DeleteUser(ctx context.Context, sub string) error {
 	if _, err := a.client.AdminDeleteUser(ctx, &cip.AdminDeleteUserInput{UserPoolId: &a.poolID, Username: &sub}); err != nil {
 		return fmt.Errorf("delete cognito user %s: %w", sub, err)
+	}
+	return nil
+}
+
+// DisableUser stops the user from signing in and revokes their access
+// tokens.
+func (a *Admin) DisableUser(ctx context.Context, sub string) error {
+	if _, err := a.client.AdminDisableUser(ctx, &cip.AdminDisableUserInput{UserPoolId: &a.poolID, Username: &sub}); err != nil {
+		return fmt.Errorf("disable cognito user %s: %w", sub, err)
 	}
 	return nil
 }
