@@ -6,13 +6,11 @@ import (
 	"time"
 
 	"barbackend/internal/cmdb"
-	"barbackend/internal/tenancy"
 	"github.com/danielgtaylor/huma/v2"
 )
 
 type assetHandler struct {
-	cmdb     *cmdb.Service
-	customer tenancy.CustomerID
+	cmdb *cmdb.Service
 }
 
 func (h assetHandler) register(api huma.API) {
@@ -79,7 +77,11 @@ type ownerResponse struct {
 }
 
 func (h assetHandler) list(ctx context.Context, in *rawAssetQuery) (*body[assetListResponse], error) {
-	page, err := h.cmdb.ListAssets(ctx, h.customer, cmdb.AssetQuery{
+	customer, err := customerOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+	page, err := h.cmdb.ListAssets(ctx, customer, cmdb.AssetQuery{
 		Limit:       in.Limit,
 		Cursor:      in.Cursor,
 		Active:      in.Active,

@@ -13,22 +13,37 @@ import (
 
 	"barbackend/internal/cmdb"
 	"barbackend/internal/cmdb/provider/providertest"
+	"barbackend/internal/cognito/cognitotest"
 	"barbackend/internal/encryption"
 	"barbackend/internal/httpapi"
 	"barbackend/internal/inventory"
 	"barbackend/internal/postgres"
 	"barbackend/internal/postgres/pgtest"
 	"barbackend/internal/tenancy"
+	"barbackend/internal/users"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 
 const allowedOrigin = "http://localhost:5173"
 
+var operations = []struct{ method, path string }{
+	{http.MethodGet, "/cmdb/source"},
+	{http.MethodPost, "/cmdb/source"},
+	{http.MethodPut, "/cmdb/source"},
+	{http.MethodDelete, "/cmdb/source"},
+	{http.MethodPost, "/cmdb/source/test"},
+	{http.MethodPost, "/cmdb/source/sync"},
+	{http.MethodGet, "/assets"},
+}
+
 type env struct {
 	db       *postgres.DB
 	conn     *pgx.Conn
+	pool     *cognitotest.Pool
 	customer tenancy.CustomerID
+	// token signs in a Viewer of customer.
+	token    string
 	provider *providertest.Provider
 	cmdb     *cmdb.Service
 	router   http.Handler
@@ -43,10 +58,12 @@ func newEnv(t *testing.T) env {
 	}
 	t.Cleanup(db.Close)
 	p := &providertest.Provider{}
+	pool := cognitotest.New(t)
 	svc := cmdb.New(db, p.Providers(), newKey(t), context.Background(), time.Minute)
-	e := env{db: db, conn: pgtest.Conn(t, url), provider: p, cmdb: svc}
+	router := httpapi.New(httpapi.Config{CMDB: svc, Users: users.New(db, pool.Verifier(t), nil), AllowedOrigins: []string{allowedOrigin}})
+	e := env{db: db, conn: pgtest.Conn(t, url), pool: pool, provider: p, cmdb: svc, router: router}
 	e.customer = e.newCustomer(t)
-	e.router = httpapi.New(httpapi.Config{CMDB: svc, Customer: e.customer, AllowedOrigins: []string{allowedOrigin}})
+	e.token = e.signIn(t, e.newUser(t, tenancy.Viewer, e.customer))
 	return e
 }
 
@@ -57,6 +74,25 @@ func (e env) newCustomer(t *testing.T) tenancy.CustomerID {
 		t.Fatal(err)
 	}
 	return tenancy.CustomerID(id)
+}
+
+// newUser stores a User and returns their Cognito sub.
+func (e env) newUser(t *testing.T, role tenancy.Role, customer tenancy.CustomerID) string {
+	t.Helper()
+	u, err := tenancy.NewUser(tenancy.UserID(uuid.New()), uuid.NewString()+"@example.com", role, customer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sub := uuid.NewString()
+	if err := e.db.InTx(context.Background(), func(tx *postgres.Tx) error { return tx.CreateUser(context.Background(), u, sub) }); err != nil {
+		t.Fatal(err)
+	}
+	return sub
+}
+
+func (e env) signIn(t *testing.T, sub string) string {
+	t.Helper()
+	return e.pool.AccessToken(t, sub)
 }
 
 func newKey(t *testing.T) encryption.Key {
@@ -86,7 +122,15 @@ func (e env) connect(t *testing.T, customer tenancy.CustomerID) inventory.CMDBSo
 	return stored.Source.ID()
 }
 
+// do sends req as the env's Viewer unless it carries its own Authorization.
 func (e env) do(req *http.Request) *httptest.ResponseRecorder {
+	if req.Header.Get("Authorization") == "" {
+		req.Header.Set("Authorization", "Bearer "+e.token)
+	}
+	return e.send(req)
+}
+
+func (e env) send(req *http.Request) *httptest.ResponseRecorder {
 	rec := httptest.NewRecorder()
 	e.router.ServeHTTP(rec, req)
 	return rec

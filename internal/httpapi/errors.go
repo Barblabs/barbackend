@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"barbackend/internal/cmdb"
+	"barbackend/internal/tenancy"
+	"barbackend/internal/users"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humagin"
 )
@@ -23,6 +25,8 @@ func (e *codedError) GetStatus() int { return e.status }
 
 const (
 	invalidRequest   = "invalid_request"
+	unauthenticated  = "unauthenticated"
+	forbidden        = "forbidden"
 	invalidLogin     = "invalid_login"
 	notConnected     = "not_connected"
 	alreadyConnected = "already_connected"
@@ -38,6 +42,10 @@ func apiError(err error) *codedError {
 	}
 	var failure *cmdb.Failure
 	switch {
+	case errors.Is(err, users.ErrUnauthenticated):
+		return &codedError{status: http.StatusUnauthorized, cause: err, Code: unauthenticated, Message: "a valid access token of a user who can sign in is required"}
+	case errors.Is(err, tenancy.ErrNoCustomer):
+		return &codedError{status: http.StatusForbidden, Code: forbidden, Message: "a platform admin cannot see customer data"}
 	case errors.As(err, &failure):
 		return &codedError{status: http.StatusUnprocessableEntity, Code: string(failure.Code), Message: failure.Message}
 	case errors.Is(err, cmdb.ErrInvalidLogin):

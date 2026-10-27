@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -14,8 +13,7 @@ import (
 	"barbackend/internal/httpapi"
 	"barbackend/internal/ingest"
 	"barbackend/internal/postgres"
-	"barbackend/internal/tenancy"
-	"github.com/google/uuid"
+	"barbackend/internal/users"
 )
 
 const (
@@ -25,14 +23,23 @@ const (
 )
 
 func serve(ctx context.Context, _ []string) error {
-	customer, err := customerID()
-	if err != nil {
-		return err
-	}
 	key, err := encryptionKey()
 	if err != nil {
 		return err
 	}
+	pool, err := cognitoPool()
+	if err != nil {
+		return err
+	}
+	verifier, err := pool.verifier(ctx)
+	if err != nil {
+		return err
+	}
+	admin, err := pool.admin(ctx)
+	if err != nil {
+		return err
+	}
+
 	svc, err := ingest.New(registeredFeeds()...)
 	if err != nil {
 		return err
@@ -46,7 +53,7 @@ func serve(ctx context.Context, _ []string) error {
 	return withDB(ctx, func(db *postgres.DB) error {
 		return listen(ctx, feedsDone, httpapi.New(httpapi.Config{
 			CMDB:           cmdb.New(db, providers(), key, ctx, syncTimeout),
-			Customer:       customer,
+			Users:          users.New(db, verifier, admin),
 			AllowedOrigins: allowedOrigins(),
 		}))
 	})
@@ -81,14 +88,6 @@ func listen(ctx context.Context, feedsDone <-chan struct{}, handler http.Handler
 		return err
 	}
 	return nil
-}
-
-func customerID() (tenancy.CustomerID, error) {
-	id, err := uuid.Parse(os.Getenv("CUSTOMER_ID"))
-	if err != nil {
-		return tenancy.CustomerID{}, fmt.Errorf("CUSTOMER_ID: %w", err)
-	}
-	return tenancy.CustomerID(id), nil
 }
 
 func allowedOrigins() []string {

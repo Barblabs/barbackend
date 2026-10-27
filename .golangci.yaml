@@ -169,6 +169,7 @@ linters:
             - barbackend/internal/inventory
             - barbackend/internal/tenancy
             - barbackend/internal/cmdb
+            - barbackend/internal/users
           deny:
             - pkg: barbackend/internal
               desc: HTTP transport calls use cases, never persistence or adapters directly (ADR 0008)

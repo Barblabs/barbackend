@@ -34,7 +34,7 @@ func cors(allowed []string) gin.HandlerFunc {
 			return
 		}
 		ctx.Header("Access-Control-Allow-Methods", corsMethods)
-		ctx.Header("Access-Control-Allow-Headers", "Content-Type")
+		ctx.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		ctx.Header("Access-Control-Max-Age", corsMaxAge)
 		ctx.AbortWithStatus(http.StatusNoContent)
 	}

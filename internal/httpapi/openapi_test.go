@@ -17,18 +17,31 @@ func TestOpenAPIListsEveryRoute(t *testing.T) {
 		} `json:"paths"`
 	}](t, rec, http.StatusOK)
 
-	routes := []struct{ method, path string }{
-		{http.MethodGet, "/cmdb/source"},
-		{http.MethodPost, "/cmdb/source"},
-		{http.MethodPut, "/cmdb/source"},
-		{http.MethodDelete, "/cmdb/source"},
-		{http.MethodPost, "/cmdb/source/test"},
-		{http.MethodPost, "/cmdb/source/sync"},
-		{http.MethodGet, "/assets"},
-	}
-	for _, r := range routes {
+	for _, r := range operations {
 		if op, ok := spec.Paths[r.path][strings.ToLower(r.method)]; !ok || op.OperationID == "" {
 			t.Errorf("spec lacks %s %s with an operationId", r.method, r.path)
 		}
+	}
+}
+
+func TestOpenAPIDeclaresBearerAuthentication(t *testing.T) {
+	t.Parallel()
+	rec := newEnv(t).send(httptest.NewRequest(http.MethodGet, "/openapi.json", nil))
+
+	spec := decode[struct {
+		Security   []map[string][]string `json:"security"`
+		Components struct {
+			SecuritySchemes map[string]struct {
+				Type   string `json:"type"`
+				Scheme string `json:"scheme"`
+			} `json:"securitySchemes"`
+		} `json:"components"`
+	}](t, rec, http.StatusOK)
+
+	if len(spec.Security) != 1 || spec.Security[0]["bearer"] == nil {
+		t.Errorf("security = %v, want bearer on every operation", spec.Security)
+	}
+	if s := spec.Components.SecuritySchemes["bearer"]; s.Type != "http" || s.Scheme != "bearer" {
+		t.Errorf("bearer scheme = %+v, want http bearer", s)
 	}
 }

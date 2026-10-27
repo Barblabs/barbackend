@@ -8,17 +8,15 @@ import (
 	"net/http"
 
 	"barbackend/internal/cmdb"
-	"barbackend/internal/tenancy"
+	"barbackend/internal/users"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humagin"
 	"github.com/gin-gonic/gin"
 )
 
 type Config struct {
-	CMDB *cmdb.Service
-	// Customer is who every request acts for. It comes from server
-	// configuration until authentication exists.
-	Customer tenancy.CustomerID
+	CMDB  *cmdb.Service
+	Users *users.Service
 	// AllowedOrigins may call the API from a browser.
 	AllowedOrigins []string
 }
@@ -30,8 +28,9 @@ func New(cfg Config) http.Handler {
 		ctx.JSON(http.StatusOK, gin.H{"message": "pong"})
 	})
 	api := humagin.New(router, apiConfig())
-	cmdbSourceHandler{cmdb: cfg.CMDB, customer: cfg.Customer}.register(api)
-	assetHandler{cmdb: cfg.CMDB, customer: cfg.Customer}.register(api)
+	api.UseMiddleware(authenticate(api, cfg.Users))
+	cmdbSourceHandler{cmdb: cfg.CMDB}.register(api)
+	assetHandler{cmdb: cfg.CMDB}.register(api)
 	return router
 }
 
@@ -42,6 +41,7 @@ func apiConfig() huma.Config {
 	// The default hook adds a $schema field to every response body, which
 	// would change the wire format.
 	config.CreateHooks = nil
+	secureByBearer(&config)
 	config.Formats = map[string]huma.Format{"application/json": jsonFormat, "json": jsonFormat}
 	config.Transformers = []huma.Transformer{logCause}
 	config.OnAddOperation = append(config.OnAddOperation, dropUndeclared422, markNullableObjects)
