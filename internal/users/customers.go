@@ -30,7 +30,7 @@ func (s *Service) CreateCustomer(ctx context.Context, caller tenancy.User, name,
 		return StoredCustomer{}, err
 	}
 	var stored StoredCustomer
-	err = s.invite(ctx, admin, func(tx *postgres.Tx) (err error) {
+	_, err = s.invite(ctx, admin, func(tx *postgres.Tx) (err error) {
 		stored, err = tx.CreateCustomer(ctx, c)
 		return err
 	})

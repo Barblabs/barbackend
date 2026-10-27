@@ -7,6 +7,7 @@ package sqlcgen
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -110,9 +111,10 @@ func (q *Queries) GetUserBySub(ctx context.Context, cognitoSub string) (GetUserB
 	return i, err
 }
 
-const insertUser = `-- name: InsertUser :exec
+const insertUser = `-- name: InsertUser :one
 INSERT INTO users (id, cognito_sub, email, customer_id, role_id)
 VALUES ($1, $2, $3, $4, $5)
+RETURNING created_at
 `
 
 type InsertUserParams struct {
@@ -123,15 +125,17 @@ type InsertUserParams struct {
 	RoleID     int16
 }
 
-func (q *Queries) InsertUser(ctx context.Context, arg InsertUserParams) error {
-	_, err := q.db.Exec(ctx, insertUser,
+func (q *Queries) InsertUser(ctx context.Context, arg InsertUserParams) (time.Time, error) {
+	row := q.db.QueryRow(ctx, insertUser,
 		arg.ID,
 		arg.CognitoSub,
 		arg.Email,
 		arg.CustomerID,
 		arg.RoleID,
 	)
-	return err
+	var created_at time.Time
+	err := row.Scan(&created_at)
+	return created_at, err
 }
 
 const listCustomerUsers = `-- name: ListCustomerUsers :many

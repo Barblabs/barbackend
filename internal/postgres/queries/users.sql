@@ -1,6 +1,7 @@
--- name: InsertUser :exec
+-- name: InsertUser :one
 INSERT INTO users (id, cognito_sub, email, customer_id, role_id)
-VALUES ($1, $2, $3, $4, $5);
+VALUES ($1, $2, $3, $4, $5)
+RETURNING created_at;
 
 -- name: GetUserBySub :one
 SELECT u.id, u.email, u.customer_id, u.role_id,

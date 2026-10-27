@@ -30,7 +30,10 @@ func TestUserBySubRestoresTheStoredUser(t *testing.T) {
 				t.Fatal(err)
 			}
 			sub := uuid.NewString()
-			inTx(t, db, func(tx *postgres.Tx) error { return tx.CreateUser(context.Background(), want, sub) })
+			inTx(t, db, func(tx *postgres.Tx) error {
+				_, err := tx.CreateUser(context.Background(), want, sub)
+				return err
+			})
 
 			var got tenancy.User
 			inTx(t, db, func(tx *postgres.Tx) (err error) {
@@ -65,7 +68,10 @@ func storeUser(t *testing.T, db *postgres.DB, email string, role tenancy.Role, c
 	if err != nil {
 		t.Fatal(err)
 	}
-	inTx(t, db, func(tx *postgres.Tx) error { return tx.CreateUser(context.Background(), u, uuid.NewString()) })
+	inTx(t, db, func(tx *postgres.Tx) error {
+		_, err := tx.CreateUser(context.Background(), u, uuid.NewString())
+		return err
+	})
 	return u
 }
 

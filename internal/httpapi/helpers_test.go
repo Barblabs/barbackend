@@ -97,7 +97,10 @@ func (e env) newUser(t *testing.T, role tenancy.Role, customer tenancy.CustomerI
 		t.Fatal(err)
 	}
 	sub := uuid.NewString()
-	if err := e.db.InTx(context.Background(), func(tx *postgres.Tx) error { return tx.CreateUser(context.Background(), u, sub) }); err != nil {
+	if err := e.db.InTx(context.Background(), func(tx *postgres.Tx) error {
+		_, err := tx.CreateUser(context.Background(), u, sub)
+		return err
+	}); err != nil {
 		t.Fatal(err)
 	}
 	return sub

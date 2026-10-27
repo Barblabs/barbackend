@@ -77,10 +77,8 @@ func (s *Service) Create(ctx context.Context, email string, role tenancy.Role, c
 	if err != nil {
 		return tenancy.User{}, err
 	}
-	if err := s.invite(ctx, u, nil); err != nil {
-		return tenancy.User{}, err
-	}
-	return u, nil
+	stored, err := s.invite(ctx, u, nil)
+	return stored.User, err
 }
 
 // invite stores u in one transaction with whatever before stores, and has
@@ -88,8 +86,11 @@ func (s *Service) Create(ctx context.Context, email string, role tenancy.Role, c
 // such as a Customer with a taken name, sends no invitation. When storing
 // fails after Cognito created the user, the Cognito user is deleted again, so
 // the email stays free.
-func (s *Service) invite(ctx context.Context, u tenancy.User, before func(*postgres.Tx) error) error {
-	var sub string
+func (s *Service) invite(ctx context.Context, u tenancy.User, before func(*postgres.Tx) error) (postgres.StoredUser, error) {
+	var (
+		sub    string
+		stored postgres.StoredUser
+	)
 	err := s.db.InTx(ctx, func(tx *postgres.Tx) error {
 		if before != nil {
 			if err := before(tx); err != nil {
@@ -100,15 +101,19 @@ func (s *Service) invite(ctx context.Context, u tenancy.User, before func(*postg
 		if sub, err = s.admin.CreateUser(ctx, u.Email()); err != nil {
 			return err
 		}
-		return tx.CreateUser(ctx, u, sub)
+		stored, err = tx.CreateUser(ctx, u, sub)
+		return err
 	})
 	if errors.Is(err, cognito.ErrUsernameExists) || errors.Is(err, postgres.ErrEmailTaken) {
 		err = fmt.Errorf("%w: %w", ErrEmailTaken, err)
 	}
 	if err != nil && sub != "" {
 		if delErr := s.admin.DeleteUser(context.WithoutCancel(ctx), sub); delErr != nil {
-			return errors.Join(err, delErr)
+			err = errors.Join(err, delErr)
 		}
 	}
-	return err
+	if err != nil {
+		return postgres.StoredUser{}, err
+	}
+	return stored, nil
 }

@@ -33,12 +33,12 @@ type StoredUser struct {
 }
 
 // CreateUser stores a User with the Cognito sub that signs them in.
-func (t *Tx) CreateUser(ctx context.Context, u tenancy.User, sub string) error {
+func (t *Tx) CreateUser(ctx context.Context, u tenancy.User, sub string) (StoredUser, error) {
 	var customer pgtype.UUID
 	if id, err := u.ActsFor(); err == nil {
-		customer = pgtype.UUID{Bytes: id, Valid: true}
+		customer = customerUUID(id)
 	}
-	err := t.q.InsertUser(ctx, sqlcgen.InsertUserParams{
+	created, err := t.q.InsertUser(ctx, sqlcgen.InsertUserParams{
 		ID:         uuid.UUID(u.ID()),
 		CognitoSub: sub,
 		Email:      u.Email(),
@@ -47,12 +47,12 @@ func (t *Tx) CreateUser(ctx context.Context, u tenancy.User, sub string) error {
 	})
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == uniqueViolation && pgErr.ConstraintName == userEmailKey {
-		return fmt.Errorf("insert user %s: %w", u.ID(), ErrEmailTaken)
+		return StoredUser{}, fmt.Errorf("insert user %s: %w", u.ID(), ErrEmailTaken)
 	}
 	if err != nil {
-		return fmt.Errorf("insert user %s: %w", u.ID(), err)
+		return StoredUser{}, fmt.Errorf("insert user %s: %w", u.ID(), err)
 	}
-	return nil
+	return StoredUser{User: u, Created: created}, nil
 }
 
 // UserBySub fails with ErrNotFound when no User has the Cognito sub.
