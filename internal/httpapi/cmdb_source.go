@@ -149,7 +149,7 @@ func (h cmdbSourceHandler) sync(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, newSyncResponse(run))
 	case errors.As(err, &failed):
 		_ = ctx.Error(err)
-		ctx.JSON(http.StatusBadGateway, codedError{Code: failureCode(failed), Error: failed.Error()})
+		ctx.JSON(http.StatusBadGateway, codedError{Code: failureCode(failed), Message: failed.Error()})
 	default:
 		writeError(ctx, err)
 	}
