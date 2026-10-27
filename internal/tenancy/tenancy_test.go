@@ -157,61 +157,23 @@ func TestOnlyACustomerAdminManagesUsers(t *testing.T) {
 }
 
 func TestACustomerKeepsAnActiveCustomerAdmin(t *testing.T) {
-	demote := func(u tenancy.User, admins int) error {
-		_, err := u.WithRole(tenancy.Viewer, admins)
-		return err
-	}
-	disable := func(u tenancy.User, admins int) error {
-		_, err := u.Disable(admins)
-		return err
-	}
-	promote := func(u tenancy.User, admins int) error {
-		_, err := u.WithRole(tenancy.CustomerAdmin, admins)
-		return err
-	}
 	tests := []struct {
-		name     string
-		role     tenancy.Role
-		disabled bool
-		admins   int
-		change   func(tenancy.User, int) error
-		want     error
+		activeAdmins int
+		want         error
 	}{
-		{"demoting the last admin", tenancy.CustomerAdmin, false, 1, demote, tenancy.ErrLastCustomerAdmin},
-		{"disabling the last admin", tenancy.CustomerAdmin, false, 1, disable, tenancy.ErrLastCustomerAdmin},
-		{"demoting one of two admins", tenancy.CustomerAdmin, false, 2, demote, nil},
-		{"disabling one of two admins", tenancy.CustomerAdmin, false, 2, disable, nil},
-		{"demoting a disabled admin", tenancy.CustomerAdmin, true, 1, demote, nil},
-		{"keeping the last admin an admin", tenancy.CustomerAdmin, false, 1, promote, nil},
-		{"disabling a viewer", tenancy.Viewer, false, 1, disable, nil},
+		{0, tenancy.ErrLastCustomerAdmin},
+		{1, nil},
 	}
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			u, err := tenancy.RestoreUser(userID, "a@example.com", tt.role, customer, tenancy.UserState{Disabled: tt.disabled})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err := tt.change(u, tt.admins); !errors.Is(err, tt.want) {
-				t.Errorf("err = %v, want %v", err, tt.want)
-			}
-		})
+		if err := tenancy.RequireActiveCustomerAdmin(tt.activeAdmins); !errors.Is(err, tt.want) {
+			t.Errorf("RequireActiveCustomerAdmin(%d) = %v, want %v", tt.activeAdmins, err, tt.want)
+		}
 	}
 }
 
 func TestWithRoleRefusesPlatformAdmin(t *testing.T) {
 	u, _ := tenancy.NewUser(userID, "a@example.com", tenancy.Viewer, customer)
-	if _, err := u.WithRole(tenancy.PlatformAdmin, 1); !errors.Is(err, tenancy.ErrInvalidUser) {
+	if _, err := u.WithRole(tenancy.PlatformAdmin); !errors.Is(err, tenancy.ErrInvalidUser) {
 		t.Errorf("err = %v, want ErrInvalidUser", err)
-	}
-}
-
-func TestDisabledUserCannotSignIn(t *testing.T) {
-	u, _ := tenancy.NewUser(userID, "a@example.com", tenancy.Viewer, customer)
-	disabled, err := u.Disable(1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if disabled.CanSignIn() {
-		t.Error("a disabled User can sign in")
 	}
 }

@@ -64,14 +64,14 @@ func TestOnlyACustomerAdminManagesUsers(t *testing.T) {
 	}
 }
 
-// The invited Viewer signs in with the sub the fake user pool gave them.
 func TestCustomerAdminInvitesPromotesAndDisablesAUser(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
 	_, admin := e.customerAdmin(t, e.customer)
 
 	invited := decode[user](t, e.asUser(admin, http.MethodPost, "/users", map[string]string{"email": "Ana@Example.com", "role": "viewer"}), http.StatusCreated)
-	ana := "Bearer " + e.signIn(t, e.admin.invited()[0])
+	anaSub := e.admin.invited()[0]
+	ana := "Bearer " + e.signIn(t, anaSub)
 	if invited.Email != "ana@example.com" || invited.Role != "viewer" || invited.DisabledAt != nil {
 		t.Errorf("invited = %+v, want an enabled viewer ana@example.com", invited)
 	}
@@ -144,20 +144,12 @@ func TestTheLastCustomerAdminCannotBeRemoved(t *testing.T) {
 	}
 }
 
-// The test holds the Customer's lock until both demotions wait for it, so
-// each would see two Customer Admins if they counted before the lock.
-func TestTwoCustomerAdminsDemotingEachOtherKeepOne(t *testing.T) {
+func TestTwoCustomerAdminsDemotingEachOtherAtOnceKeepOne(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
 	aID, a := e.customerAdmin(t, e.customer)
 	bID, b := e.customerAdmin(t, e.customer)
-	holder, err := e.conn.Begin(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := holder.Exec(context.Background(), "SELECT id FROM customers WHERE id = $1 FOR UPDATE", uuid.UUID(e.customer)); err != nil {
-		t.Fatal(err)
-	}
+	holder := pgtest.LockCustomer(t, e.conn, e.customer)
 
 	codes := make(chan int, 2)
 	demote := func(caller, id string) {

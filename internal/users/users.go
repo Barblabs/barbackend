@@ -21,8 +21,11 @@ var (
 	ErrUnauthenticated = errors.New("unauthenticated")
 	// ErrEmailTaken is an email that already signs in, in Cognito or in
 	// Postgres: the two disagree when a Cognito user is deleted by hand.
-	ErrEmailTaken = errors.New("a user with this email already exists")
+	ErrEmailTaken   = errors.New("a user with this email already exists")
+	ErrUserNotFound = postgres.ErrUserNotFound
 )
+
+type StoredUser = postgres.StoredUser
 
 // Admin creates, disables and deletes users in the user pool.
 // *cognito.Admin is the real one.
@@ -74,13 +77,12 @@ func (s *Service) authenticate(ctx context.Context, accessToken string) (tenancy
 // Create invites a User through Cognito and stores them. It does not check
 // who asks: callers that act for a User must check their role and Customer
 // first.
-func (s *Service) Create(ctx context.Context, email string, role tenancy.Role, customer tenancy.CustomerID) (tenancy.User, error) {
+func (s *Service) Create(ctx context.Context, email string, role tenancy.Role, customer tenancy.CustomerID) (StoredUser, error) {
 	u, err := tenancy.NewUser(tenancy.UserID(uuid.New()), email, role, customer)
 	if err != nil {
-		return tenancy.User{}, err
+		return StoredUser{}, err
 	}
-	stored, err := s.invite(ctx, u, nil)
-	return stored.User, err
+	return s.invite(ctx, u, nil)
 }
 
 // invite stores u in one transaction with whatever before stores, and has
@@ -88,10 +90,10 @@ func (s *Service) Create(ctx context.Context, email string, role tenancy.Role, c
 // such as a Customer with a taken name, sends no invitation. When storing
 // fails after Cognito created the user, the Cognito user is deleted again, so
 // the email stays free.
-func (s *Service) invite(ctx context.Context, u tenancy.User, before func(*postgres.Tx) error) (postgres.StoredUser, error) {
+func (s *Service) invite(ctx context.Context, u tenancy.User, before func(*postgres.Tx) error) (StoredUser, error) {
 	var (
 		sub    string
-		stored postgres.StoredUser
+		stored StoredUser
 	)
 	err := s.db.InTx(ctx, func(tx *postgres.Tx) error {
 		if before != nil {
@@ -115,7 +117,7 @@ func (s *Service) invite(ctx context.Context, u tenancy.User, before func(*postg
 		}
 	}
 	if err != nil {
-		return postgres.StoredUser{}, err
+		return StoredUser{}, err
 	}
 	return stored, nil
 }

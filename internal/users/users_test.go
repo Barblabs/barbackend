@@ -68,7 +68,7 @@ func TestCreateStoresThePlatformAdmin(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if stored != created || stored.Role() != tenancy.PlatformAdmin || len(admin.deleted) != 0 {
+	if stored != created.User || stored.Role() != tenancy.PlatformAdmin || len(admin.deleted) != 0 {
 		t.Errorf("stored = %+v, created = %+v, deleted = %v, want the platform admin stored under its sub", stored, created, admin.deleted)
 	}
 }

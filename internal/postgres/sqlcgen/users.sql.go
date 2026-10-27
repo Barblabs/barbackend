@@ -31,32 +31,30 @@ func (q *Queries) CountActiveUsersWithRole(ctx context.Context, arg CountActiveU
 	return count, err
 }
 
-const disableUser = `-- name: DisableUser :one
+const disableCustomerUser = `-- name: DisableCustomerUser :execrows
 UPDATE users
 SET disabled_at = coalesce(disabled_at, now())
-WHERE id = $1
-RETURNING id, cognito_sub, email, customer_id, role_id, created_at, disabled_at
+WHERE customer_id = $1 AND id = $2
 `
 
-func (q *Queries) DisableUser(ctx context.Context, id uuid.UUID) (User, error) {
-	row := q.db.QueryRow(ctx, disableUser, id)
-	var i User
-	err := row.Scan(
-		&i.ID,
-		&i.CognitoSub,
-		&i.Email,
-		&i.CustomerID,
-		&i.RoleID,
-		&i.CreatedAt,
-		&i.DisabledAt,
-	)
-	return i, err
+type DisableCustomerUserParams struct {
+	CustomerID pgtype.UUID
+	ID         uuid.UUID
+}
+
+func (q *Queries) DisableCustomerUser(ctx context.Context, arg DisableCustomerUserParams) (int64, error) {
+	result, err := q.db.Exec(ctx, disableCustomerUser, arg.CustomerID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const getCustomerUser = `-- name: GetCustomerUser :one
-SELECT id, cognito_sub, email, customer_id, role_id, created_at, disabled_at
-FROM users
-WHERE customer_id = $1 AND id = $2
+SELECT u.id, u.cognito_sub, u.email, u.customer_id, u.role_id, u.created_at, u.disabled_at, (c.deactivated_at IS NOT NULL)::boolean AS customer_deactivated
+FROM users u
+JOIN customers c ON c.id = u.customer_id
+WHERE u.customer_id = $1 AND u.id = $2
 `
 
 type GetCustomerUserParams struct {
@@ -64,36 +62,36 @@ type GetCustomerUserParams struct {
 	ID         uuid.UUID
 }
 
-func (q *Queries) GetCustomerUser(ctx context.Context, arg GetCustomerUserParams) (User, error) {
+type GetCustomerUserRow struct {
+	User                User
+	CustomerDeactivated bool
+}
+
+func (q *Queries) GetCustomerUser(ctx context.Context, arg GetCustomerUserParams) (GetCustomerUserRow, error) {
 	row := q.db.QueryRow(ctx, getCustomerUser, arg.CustomerID, arg.ID)
-	var i User
+	var i GetCustomerUserRow
 	err := row.Scan(
-		&i.ID,
-		&i.CognitoSub,
-		&i.Email,
-		&i.CustomerID,
-		&i.RoleID,
-		&i.CreatedAt,
-		&i.DisabledAt,
+		&i.User.ID,
+		&i.User.CognitoSub,
+		&i.User.Email,
+		&i.User.CustomerID,
+		&i.User.RoleID,
+		&i.User.CreatedAt,
+		&i.User.DisabledAt,
+		&i.CustomerDeactivated,
 	)
 	return i, err
 }
 
 const getUserBySub = `-- name: GetUserBySub :one
-SELECT u.id, u.email, u.customer_id, u.role_id,
-       (u.disabled_at IS NOT NULL)::boolean AS disabled,
-       (c.deactivated_at IS NOT NULL)::boolean AS customer_deactivated
+SELECT u.id, u.cognito_sub, u.email, u.customer_id, u.role_id, u.created_at, u.disabled_at, (c.deactivated_at IS NOT NULL)::boolean AS customer_deactivated
 FROM users u
 LEFT JOIN customers c ON c.id = u.customer_id
 WHERE u.cognito_sub = $1
 `
 
 type GetUserBySubRow struct {
-	ID                  uuid.UUID
-	Email               string
-	CustomerID          pgtype.UUID
-	RoleID              int16
-	Disabled            bool
+	User                User
 	CustomerDeactivated bool
 }
 
@@ -101,11 +99,13 @@ func (q *Queries) GetUserBySub(ctx context.Context, cognitoSub string) (GetUserB
 	row := q.db.QueryRow(ctx, getUserBySub, cognitoSub)
 	var i GetUserBySubRow
 	err := row.Scan(
-		&i.ID,
-		&i.Email,
-		&i.CustomerID,
-		&i.RoleID,
-		&i.Disabled,
+		&i.User.ID,
+		&i.User.CognitoSub,
+		&i.User.Email,
+		&i.User.CustomerID,
+		&i.User.RoleID,
+		&i.User.CreatedAt,
+		&i.User.DisabledAt,
 		&i.CustomerDeactivated,
 	)
 	return i, err
@@ -139,29 +139,36 @@ func (q *Queries) InsertUser(ctx context.Context, arg InsertUserParams) (time.Ti
 }
 
 const listCustomerUsers = `-- name: ListCustomerUsers :many
-SELECT id, cognito_sub, email, customer_id, role_id, created_at, disabled_at
-FROM users
-WHERE customer_id = $1
-ORDER BY email
+SELECT u.id, u.cognito_sub, u.email, u.customer_id, u.role_id, u.created_at, u.disabled_at, (c.deactivated_at IS NOT NULL)::boolean AS customer_deactivated
+FROM users u
+JOIN customers c ON c.id = u.customer_id
+WHERE u.customer_id = $1
+ORDER BY u.email
 `
 
-func (q *Queries) ListCustomerUsers(ctx context.Context, customerID pgtype.UUID) ([]User, error) {
+type ListCustomerUsersRow struct {
+	User                User
+	CustomerDeactivated bool
+}
+
+func (q *Queries) ListCustomerUsers(ctx context.Context, customerID pgtype.UUID) ([]ListCustomerUsersRow, error) {
 	rows, err := q.db.Query(ctx, listCustomerUsers, customerID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []User
+	var items []ListCustomerUsersRow
 	for rows.Next() {
-		var i User
+		var i ListCustomerUsersRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.CognitoSub,
-			&i.Email,
-			&i.CustomerID,
-			&i.RoleID,
-			&i.CreatedAt,
-			&i.DisabledAt,
+			&i.User.ID,
+			&i.User.CognitoSub,
+			&i.User.Email,
+			&i.User.CustomerID,
+			&i.User.RoleID,
+			&i.User.CreatedAt,
+			&i.User.DisabledAt,
+			&i.CustomerDeactivated,
 		); err != nil {
 			return nil, err
 		}
@@ -182,11 +189,10 @@ func (q *Queries) LockCustomer(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
-const setUserRole = `-- name: SetUserRole :one
+const setUserRole = `-- name: SetUserRole :exec
 UPDATE users
 SET role_id = $2
 WHERE id = $1
-RETURNING id, cognito_sub, email, customer_id, role_id, created_at, disabled_at
 `
 
 type SetUserRoleParams struct {
@@ -194,17 +200,7 @@ type SetUserRoleParams struct {
 	RoleID int16
 }
 
-func (q *Queries) SetUserRole(ctx context.Context, arg SetUserRoleParams) (User, error) {
-	row := q.db.QueryRow(ctx, setUserRole, arg.ID, arg.RoleID)
-	var i User
-	err := row.Scan(
-		&i.ID,
-		&i.CognitoSub,
-		&i.Email,
-		&i.CustomerID,
-		&i.RoleID,
-		&i.CreatedAt,
-		&i.DisabledAt,
-	)
-	return i, err
+func (q *Queries) SetUserRole(ctx context.Context, arg SetUserRoleParams) error {
+	_, err := q.db.Exec(ctx, setUserRole, arg.ID, arg.RoleID)
+	return err
 }

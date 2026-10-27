@@ -68,3 +68,16 @@ func TestDisableUserStoresNothingWhenCognitoFails(t *testing.T) {
 		t.Errorf("err = %v, want the Cognito failure and the User still able to sign in", err)
 	}
 }
+
+func TestDisablingTheLastCustomerAdminLeavesThemInCognito(t *testing.T) {
+	t.Parallel()
+	admin := &fakeAdmin{}
+	svc, db := newService(t, admin)
+	caller := customerAdmin(t, svc, db, admin)
+
+	_, err := svc.DisableUser(context.Background(), caller, caller.ID())
+
+	if !errors.Is(err, tenancy.ErrLastCustomerAdmin) || len(admin.disabled) != 0 {
+		t.Errorf("err = %v, disabled in cognito = %v, want ErrLastCustomerAdmin and nobody disabled", err, admin.disabled)
+	}
+}

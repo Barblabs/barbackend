@@ -6,12 +6,7 @@ import (
 
 	"barbackend/internal/postgres"
 	"barbackend/internal/tenancy"
-	"github.com/google/uuid"
 )
-
-type StoredUser = postgres.StoredUser
-
-var ErrUserNotFound = postgres.ErrUserNotFound
 
 // Users are the Users of the caller's Customer, disabled ones included.
 func (s *Service) Users(ctx context.Context, caller tenancy.User) ([]StoredUser, error) {
@@ -34,24 +29,30 @@ func (s *Service) InviteUser(ctx context.Context, caller tenancy.User, email str
 	if err != nil {
 		return StoredUser{}, err
 	}
-	u, err := tenancy.NewUser(tenancy.UserID(uuid.New()), email, role, customer)
-	if err != nil {
-		return StoredUser{}, err
-	}
-	return s.invite(ctx, u, nil)
+	return s.Create(ctx, email, role, customer)
 }
 
 // ChangeRole makes a User of the caller's Customer a Viewer or a Customer
 // Admin. Demoting the last active Customer Admin fails with
 // tenancy.ErrLastCustomerAdmin.
 func (s *Service) ChangeRole(ctx context.Context, caller tenancy.User, id tenancy.UserID, role tenancy.Role) (StoredUser, error) {
-	return s.changeUser(ctx, caller, id, func(tx *postgres.Tx, locked postgres.LockedUser) (StoredUser, error) {
-		changed, err := locked.User.User.WithRole(role, locked.ActiveAdmins)
-		if err != nil {
-			return StoredUser{}, err
+	var stored StoredUser
+	err := s.changeUsers(ctx, caller, func(tx *postgres.Tx, customer tenancy.CustomerID) (err error) {
+		if stored, err = tx.User(ctx, customer, id); err != nil {
+			return err
 		}
-		return tx.SetUserRole(ctx, changed)
+		if stored.User, err = stored.User.WithRole(role); err != nil {
+			return err
+		}
+		if err := tx.SetUserRole(ctx, stored.User); err != nil {
+			return err
+		}
+		return requireActiveCustomerAdmin(ctx, tx, customer)
 	})
+	if err != nil {
+		return StoredUser{}, err
+	}
+	return stored, nil
 }
 
 // DisableUser disables a User of the caller's Customer in Postgres and in
@@ -60,35 +61,42 @@ func (s *Service) ChangeRole(ctx context.Context, caller tenancy.User, id tenanc
 // stored, and when storing fails after Cognito the User stays disabled in
 // Cognito only, unable to sign in until a retry disables them in both.
 func (s *Service) DisableUser(ctx context.Context, caller tenancy.User, id tenancy.UserID) (StoredUser, error) {
-	return s.changeUser(ctx, caller, id, func(tx *postgres.Tx, locked postgres.LockedUser) (StoredUser, error) {
-		disabled, err := locked.User.User.Disable(locked.ActiveAdmins)
-		if err != nil {
-			return StoredUser{}, err
+	var stored StoredUser
+	err := s.changeUsers(ctx, caller, func(tx *postgres.Tx, customer tenancy.CustomerID) (err error) {
+		if stored, err = tx.DisableUser(ctx, customer, id); err != nil {
+			return err
 		}
-		stored, err := tx.DisableUser(ctx, disabled.ID())
-		if err != nil {
-			return StoredUser{}, err
+		if err := requireActiveCustomerAdmin(ctx, tx, customer); err != nil {
+			return err
 		}
-		if err := s.admin.DisableUser(ctx, locked.Sub); err != nil {
-			return StoredUser{}, fmt.Errorf("disable user %s: %w", id, err)
+		if err := s.admin.DisableUser(ctx, stored.Sub); err != nil {
+			return fmt.Errorf("disable user %s: %w", id, err)
 		}
-		return stored, nil
+		return nil
 	})
-}
-
-func (s *Service) changeUser(ctx context.Context, caller tenancy.User, id tenancy.UserID, change func(*postgres.Tx, postgres.LockedUser) (StoredUser, error)) (StoredUser, error) {
-	customer, err := caller.ManageUsers()
 	if err != nil {
 		return StoredUser{}, err
 	}
-	var stored StoredUser
-	err = s.db.InTx(ctx, func(tx *postgres.Tx) error {
-		locked, err := tx.LockUser(ctx, customer, id)
-		if err != nil {
+	return stored, nil
+}
+
+func (s *Service) changeUsers(ctx context.Context, caller tenancy.User, change func(*postgres.Tx, tenancy.CustomerID) error) error {
+	customer, err := caller.ManageUsers()
+	if err != nil {
+		return err
+	}
+	return s.db.InTx(ctx, func(tx *postgres.Tx) error {
+		if err := tx.LockCustomer(ctx, customer); err != nil {
 			return err
 		}
-		stored, err = change(tx, locked)
-		return err
+		return change(tx, customer)
 	})
-	return stored, err
+}
+
+func requireActiveCustomerAdmin(ctx context.Context, tx *postgres.Tx, customer tenancy.CustomerID) error {
+	admins, err := tx.ActiveCustomerAdmins(ctx, customer)
+	if err != nil {
+		return err
+	}
+	return tenancy.RequireActiveCustomerAdmin(admins)
 }

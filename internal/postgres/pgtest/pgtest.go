@@ -17,7 +17,9 @@ import (
 	"time"
 
 	"barbackend/internal/postgres"
+	"barbackend/internal/tenancy"
 	embeddedpostgres "github.com/fergusstrange/embedded-postgres"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -164,6 +166,20 @@ func Conn(t *testing.T, url string) *pgx.Conn {
 	}
 	t.Cleanup(func() { _ = conn.Close(ctx) })
 	return conn
+}
+
+// LockCustomer locks the Customer as Tx.LockCustomer does, in a transaction
+// on conn that holds the lock until the test ends it.
+func LockCustomer(t *testing.T, conn *pgx.Conn, customer tenancy.CustomerID) pgx.Tx {
+	t.Helper()
+	tx, err := conn.Begin(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(context.Background(), "SELECT id FROM customers WHERE id = $1 FOR UPDATE", uuid.UUID(customer)); err != nil {
+		t.Fatal(err)
+	}
+	return tx
 }
 
 // WaitForLockWaiters waits until n other sessions of conn's database are

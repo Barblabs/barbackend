@@ -75,15 +75,6 @@ func storeUser(t *testing.T, db *postgres.DB, email string, role tenancy.Role, c
 	return u
 }
 
-func lockUser(db *postgres.DB, customer tenancy.CustomerID, id tenancy.UserID) (postgres.LockedUser, error) {
-	var locked postgres.LockedUser
-	err := db.InTx(context.Background(), func(tx *postgres.Tx) (err error) {
-		locked, err = tx.LockUser(context.Background(), customer, id)
-		return err
-	})
-	return locked, err
-}
-
 func TestUsersAreOnlyTheCustomersOrderedByEmail(t *testing.T) {
 	t.Parallel()
 	db, _ := newDBWithConn(t)
@@ -103,43 +94,79 @@ func TestUsersAreOnlyTheCustomersOrderedByEmail(t *testing.T) {
 	}
 }
 
-func TestLockUserOfAnotherCustomerIsNotFound(t *testing.T) {
+func TestUsersOfADeactivatedCustomerCannotSignIn(t *testing.T) {
+	t.Parallel()
+	db, _ := newDBWithConn(t)
+	customer := newCustomer(t, db)
+	storeUser(t, db, "a@example.com", tenancy.CustomerAdmin, customer)
+
+	var got []postgres.StoredUser
+	inTx(t, db, func(tx *postgres.Tx) (err error) {
+		if _, err := tx.DeactivateCustomer(context.Background(), customer); err != nil {
+			return err
+		}
+		got, err = tx.Users(context.Background(), customer)
+		return err
+	})
+
+	if len(got) != 1 || got[0].User.CanSignIn() {
+		t.Errorf("users = %+v, want one User unable to sign in", got)
+	}
+}
+
+func TestAUserOfAnotherCustomerIsNotFound(t *testing.T) {
 	t.Parallel()
 	db, _ := newDBWithConn(t)
 	customer, other := newCustomer(t, db), newCustomer(t, db)
 	u := storeUser(t, db, "a@example.com", tenancy.Viewer, other)
+	tests := []struct {
+		name   string
+		lookUp func(*postgres.Tx) (postgres.StoredUser, error)
+	}{
+		{"get", func(tx *postgres.Tx) (postgres.StoredUser, error) {
+			return tx.User(context.Background(), customer, u.ID())
+		}},
+		{"disable", func(tx *postgres.Tx) (postgres.StoredUser, error) {
+			return tx.DisableUser(context.Background(), customer, u.ID())
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := db.InTx(context.Background(), func(tx *postgres.Tx) error {
+				_, err := tt.lookUp(tx)
+				return err
+			})
 
-	_, err := lockUser(db, customer, u.ID())
-
-	if !errors.Is(err, postgres.ErrUserNotFound) {
-		t.Errorf("err = %v, want ErrUserNotFound", err)
+			if !errors.Is(err, postgres.ErrUserNotFound) {
+				t.Errorf("err = %v, want ErrUserNotFound", err)
+			}
+		})
 	}
 }
 
-// The test holds the Customer's lock and disables an admin while LockUser
-// waits for it, which a count taken before the wait would miss.
-func TestLockUserCountsTheActiveCustomerAdminsOnceLocked(t *testing.T) {
+func TestActiveCustomerAdminsCountedAfterLockingSeeTheChangeTheLockWaitedFor(t *testing.T) {
 	t.Parallel()
 	db, conn := newDBWithConn(t)
 	customer := newCustomer(t, db)
-	target := storeUser(t, db, "a@example.com", tenancy.CustomerAdmin, customer)
+	storeUser(t, db, "a@example.com", tenancy.CustomerAdmin, customer)
 	other := storeUser(t, db, "b@example.com", tenancy.CustomerAdmin, customer)
 	storeUser(t, db, "c@example.com", tenancy.Viewer, customer)
-	holder, err := conn.Begin(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := holder.Exec(context.Background(), "SELECT id FROM customers WHERE id = $1 FOR UPDATE", uuid.UUID(customer)); err != nil {
-		t.Fatal(err)
-	}
+	holder := pgtest.LockCustomer(t, conn, customer)
 
-	done := make(chan postgres.LockedUser)
+	counted := make(chan int)
 	go func() {
-		locked, err := lockUser(db, customer, target.ID())
+		var admins int
+		err := db.InTx(context.Background(), func(tx *postgres.Tx) (err error) {
+			if err := tx.LockCustomer(context.Background(), customer); err != nil {
+				return err
+			}
+			admins, err = tx.ActiveCustomerAdmins(context.Background(), customer)
+			return err
+		})
 		if err != nil {
 			t.Error(err)
 		}
-		done <- locked
+		counted <- admins
 	}()
 	pgtest.WaitForLockWaiters(t, conn, 1)
 	if _, err := holder.Exec(context.Background(), "UPDATE users SET disabled_at = now() WHERE id = $1", uuid.UUID(other.ID())); err != nil {
@@ -149,19 +176,20 @@ func TestLockUserCountsTheActiveCustomerAdminsOnceLocked(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if locked := <-done; locked.ActiveAdmins != 1 || locked.User.User != target || locked.Sub == "" {
-		t.Errorf("locked = %+v, want %v with its sub and 1 active admin", locked, target.ID())
+	if admins := <-counted; admins != 1 {
+		t.Errorf("active customer admins = %d, want 1", admins)
 	}
 }
 
 func TestDisablingADisabledUserKeepsTheFirstTime(t *testing.T) {
 	t.Parallel()
 	db, _ := newDBWithConn(t)
-	u := storeUser(t, db, "a@example.com", tenancy.Viewer, newCustomer(t, db))
+	customer := newCustomer(t, db)
+	u := storeUser(t, db, "a@example.com", tenancy.Viewer, customer)
 	disable := func() postgres.StoredUser {
 		var stored postgres.StoredUser
 		inTx(t, db, func(tx *postgres.Tx) (err error) {
-			stored, err = tx.DisableUser(context.Background(), u.ID())
+			stored, err = tx.DisableUser(context.Background(), customer, u.ID())
 			return err
 		})
 		return stored
