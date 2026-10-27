@@ -7,7 +7,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -37,6 +39,15 @@ var operations = []struct{ method, path string }{
 	{http.MethodGet, "/assets"},
 }
 
+// platformOperations are those only a Platform Admin may call.
+var platformOperations = []struct{ method, path string }{
+	{http.MethodPost, "/customers"},
+	{http.MethodGet, "/customers"},
+	{http.MethodPatch, "/customers/" + uuid.Nil.String()},
+	{http.MethodPost, "/customers/" + uuid.Nil.String() + "/deactivate"},
+	{http.MethodPost, "/customers/" + uuid.Nil.String() + "/reactivate"},
+}
+
 type env struct {
 	db       *postgres.DB
 	conn     *pgx.Conn
@@ -45,6 +56,7 @@ type env struct {
 	// token signs in a Viewer of customer.
 	token    string
 	provider *providertest.Provider
+	admin    *fakeAdmin
 	cmdb     *cmdb.Service
 	router   http.Handler
 }
@@ -60,8 +72,9 @@ func newEnv(t *testing.T) env {
 	p := &providertest.Provider{}
 	pool := cognitotest.New(t)
 	svc := cmdb.New(db, p.Providers(), newKey(t), context.Background(), time.Minute)
-	router := httpapi.New(httpapi.Config{CMDB: svc, Users: users.New(db, pool.Verifier(t), nil), AllowedOrigins: []string{allowedOrigin}})
-	e := env{db: db, conn: pgtest.Conn(t, url), pool: pool, provider: p, cmdb: svc, router: router}
+	admin := &fakeAdmin{}
+	router := httpapi.New(httpapi.Config{CMDB: svc, Users: users.New(db, pool.Verifier(t), admin), AllowedOrigins: []string{allowedOrigin}})
+	e := env{db: db, conn: pgtest.Conn(t, url), pool: pool, provider: p, admin: admin, cmdb: svc, router: router}
 	e.customer = e.newCustomer(t)
 	e.token = e.signIn(t, e.newUser(t, tenancy.Viewer, e.customer))
 	return e
@@ -88,6 +101,28 @@ func (e env) newUser(t *testing.T, role tenancy.Role, customer tenancy.CustomerI
 		t.Fatal(err)
 	}
 	return sub
+}
+
+// fakeAdmin is a user pool that invites every email under a new sub.
+type fakeAdmin struct {
+	mu      sync.Mutex
+	created []string
+}
+
+func (a *fakeAdmin) CreateUser(context.Context, string) (string, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	sub := uuid.NewString()
+	a.created = append(a.created, sub)
+	return sub, nil
+}
+
+func (*fakeAdmin) DeleteUser(context.Context, string) error { return nil }
+
+func (a *fakeAdmin) invited() []string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return slices.Clone(a.created)
 }
 
 func (e env) signIn(t *testing.T, sub string) string {

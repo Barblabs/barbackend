@@ -15,3 +15,4 @@ Users are created only by the backend. Both a Platform Admin creating a Customer
 - A User belongs to at most one Customer. Letting a person work for several Customers would move the Customer and role from `users` into a membership table and require a Customer switcher.
 - Customers cannot sign in through their own identity provider (SSO). Adding it later fits the single pool, but federated Users would be created on first sign-in rather than by invitation.
 - Disabling a User means disabling them in Cognito and marking them disabled in Postgres, so the two must stay in step.
+- Deactivating a Customer is only recorded in Postgres: its Users stay enabled in Cognito and can still get a token, but every request they make is refused. Disabling each of them in Cognito would be many calls with no transaction, and reactivating the Customer could not tell them apart from Users a Customer Admin disabled.

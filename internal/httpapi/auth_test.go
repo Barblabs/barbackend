@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -72,7 +73,7 @@ func TestCustomerEndpointsRejectUnauthenticatedRequests(t *testing.T) {
 func TestEveryOperationRequiresAToken(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
-	for _, op := range operations {
+	for _, op := range slices.Concat(operations, platformOperations) {
 		rec := e.send(httptest.NewRequest(op.method, op.path, loginBody()))
 
 		if rec.Code != http.StatusUnauthorized {
