@@ -27,9 +27,10 @@ export CORS_ALLOWED_ORIGINS=http://localhost:5173
 
 ./barbackend migrate   # apply migrations in internal/postgres/migrations
 ./barbackend serve     # HTTP server (gin, :8080 unless PORT is set)
+./barbackend create-platform-admin <email>   # invite the first Platform Admin
 ```
 
-The Cognito user pool itself is created by Terraform outside this repo.
+`create-platform-admin` creates the user in Cognito, which emails the invitation, so it needs AWS credentials allowed to call `AdminCreateUser` and `AdminDeleteUser` on the pool, from the default AWS credential chain. The pool itself is created by Terraform outside this repo.
 
 ### HTTP API
 
