@@ -21,7 +21,7 @@ func TestListAssetsQueryCountIsIndependentOfPageSize(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(db.Close)
-	customer := newCustomer()
+	customer := newCustomer(t, db)
 	src := newSource(t, db, customer)
 	var records []inventory.Record
 	for i := range 20 {

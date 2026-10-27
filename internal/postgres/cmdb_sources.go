@@ -8,6 +8,7 @@ import (
 
 	"barbackend/internal/inventory"
 	"barbackend/internal/postgres/sqlcgen"
+	"barbackend/internal/tenancy"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -63,7 +64,7 @@ func (t *Tx) UpdateConnectedLogin(ctx context.Context, id inventory.CMDBSourceID
 // Disconnected one and its Assets Inactive, deleting nothing. It locks the
 // source as CommitSync does, so it fails at once with ErrSyncInProgress
 // while a Sync commits, and with ErrNotConnected when nothing is connected.
-func (t *Tx) DisconnectCMDBSource(ctx context.Context, customer inventory.CustomerID) error {
+func (t *Tx) DisconnectCMDBSource(ctx context.Context, customer tenancy.CustomerID) error {
 	id, err := t.q.LockConnectedCMDBSource(ctx, uuid.UUID(customer))
 	if err != nil {
 		return lockError(fmt.Sprintf("customer %s", customer), ErrNotConnected, err)
@@ -81,7 +82,7 @@ const connectedCustomerIndex = "cmdb_sources_connected_customer_idx"
 
 // ConnectedCMDBSource fails with ErrNotConnected when the Customer has no
 // Connected CMDB Source.
-func (t *Tx) ConnectedCMDBSource(ctx context.Context, customer inventory.CustomerID) (StoredCMDBSource, error) {
+func (t *Tx) ConnectedCMDBSource(ctx context.Context, customer tenancy.CustomerID) (StoredCMDBSource, error) {
 	row, err := t.q.GetConnectedCMDBSource(ctx, uuid.UUID(customer))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return StoredCMDBSource{}, fmt.Errorf("customer %s: %w", customer, ErrNotConnected)
@@ -91,7 +92,7 @@ func (t *Tx) ConnectedCMDBSource(ctx context.Context, customer inventory.Custome
 	}
 	src, err := inventory.NewCMDBSource(
 		inventory.CMDBSourceID(row.ID),
-		inventory.CustomerID(row.CustomerID),
+		tenancy.CustomerID(row.CustomerID),
 		inventory.CMDBProvider(row.Provider),
 	)
 	if err != nil {

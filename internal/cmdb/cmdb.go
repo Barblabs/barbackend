@@ -14,6 +14,7 @@ import (
 	"barbackend/internal/encryption"
 	"barbackend/internal/inventory"
 	"barbackend/internal/postgres"
+	"barbackend/internal/tenancy"
 	"github.com/google/uuid"
 )
 
@@ -89,7 +90,7 @@ func (s *Service) detach(ctx context.Context) (context.Context, context.CancelFu
 	}
 }
 
-func (s *Service) create(ctx context.Context, customer inventory.CustomerID, name inventory.CMDBProvider, settings, credentials json.RawMessage) error {
+func (s *Service) create(ctx context.Context, customer tenancy.CustomerID, name inventory.CMDBProvider, settings, credentials json.RawMessage) error {
 	src, err := inventory.NewCMDBSource(inventory.CMDBSourceID(uuid.New()), customer, name)
 	if err != nil {
 		return err
@@ -114,7 +115,7 @@ func (s *Service) TestLogin(ctx context.Context, name inventory.CMDBProvider, lo
 // source connected, so it is shown as LastSyncFailure rather than returned:
 // the admin fixes the CMDB and syncs again without reconnecting. Like
 // SyncConnected, it outlives ctx.
-func (s *Service) Connect(ctx context.Context, customer inventory.CustomerID, name inventory.CMDBProvider, login Login) (ConnectedSource, error) {
+func (s *Service) Connect(ctx context.Context, customer tenancy.CustomerID, name inventory.CMDBProvider, login Login) (ConnectedSource, error) {
 	ctx, cancel := s.detach(ctx)
 	defer cancel()
 	settings, credentials, err := s.checkLogin(ctx, name, login)
@@ -136,7 +137,7 @@ func (s *Service) Connect(ctx context.Context, customer inventory.CustomerID, na
 // Declarations. It stores nothing when the check fails, and runs no Sync.
 // The login is for the source's own CMDB Provider: another provider's Record
 // IDs would not match the Assets.
-func (s *Service) UpdateLogin(ctx context.Context, customer inventory.CustomerID, login Login) (ConnectedSource, error) {
+func (s *Service) UpdateLogin(ctx context.Context, customer tenancy.CustomerID, login Login) (ConnectedSource, error) {
 	stored, err := s.connected(ctx, customer)
 	if err != nil {
 		return ConnectedSource{}, err
@@ -159,7 +160,7 @@ func (s *Service) UpdateLogin(ctx context.Context, customer inventory.CustomerID
 // Disconnect makes the Customer's Connected CMDB Source a Disconnected one
 // and its Assets Inactive, in one transaction. It fails with ErrNotConnected
 // when there is none, and with ErrSyncInProgress while a Sync of it commits.
-func (s *Service) Disconnect(ctx context.Context, customer inventory.CustomerID) error {
+func (s *Service) Disconnect(ctx context.Context, customer tenancy.CustomerID) error {
 	return s.db.InTx(ctx, func(tx *postgres.Tx) error { return tx.DisconnectCMDBSource(ctx, customer) })
 }
 
@@ -184,7 +185,7 @@ func (s *Service) checkLogin(ctx context.Context, name inventory.CMDBProvider, l
 
 // ConnectedSource fails with ErrNotConnected when the Customer has no
 // Connected CMDB Source. It reads only plain settings, so it needs no key.
-func (s *Service) ConnectedSource(ctx context.Context, customer inventory.CustomerID) (ConnectedSource, error) {
+func (s *Service) ConnectedSource(ctx context.Context, customer tenancy.CustomerID) (ConnectedSource, error) {
 	var (
 		stored postgres.StoredCMDBSource
 		status postgres.SyncStatus
@@ -216,7 +217,7 @@ func (s *Service) ConnectedSource(ctx context.Context, customer inventory.Custom
 	return connected, nil
 }
 
-func (s *Service) connected(ctx context.Context, customer inventory.CustomerID) (postgres.StoredCMDBSource, error) {
+func (s *Service) connected(ctx context.Context, customer tenancy.CustomerID) (postgres.StoredCMDBSource, error) {
 	var stored postgres.StoredCMDBSource
 	err := s.db.InTx(ctx, func(tx *postgres.Tx) error {
 		var err error
@@ -267,13 +268,13 @@ func owner(id inventory.CMDBSourceID) []byte {
 // Nor is one that lost the source to a disconnect, which changed nothing.
 // The Sync outlives ctx: it ends when the Service's lifetime does, or at its
 // time limit.
-func (s *Service) SyncConnected(ctx context.Context, customer inventory.CustomerID) (inventory.SyncRun, error) {
+func (s *Service) SyncConnected(ctx context.Context, customer tenancy.CustomerID) (inventory.SyncRun, error) {
 	ctx, cancel := s.detach(ctx)
 	defer cancel()
 	return s.syncConnected(ctx, customer)
 }
 
-func (s *Service) syncConnected(ctx context.Context, customer inventory.CustomerID) (inventory.SyncRun, error) {
+func (s *Service) syncConnected(ctx context.Context, customer tenancy.CustomerID) (inventory.SyncRun, error) {
 	started := time.Now()
 	stored, err := s.connected(ctx, customer)
 	if err != nil {

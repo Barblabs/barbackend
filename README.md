@@ -18,18 +18,25 @@ go build ./cmd/barbackend
 export DATABASE_URL="postgres://user:pass@localhost:5432/barbackend?sslmode=disable"
 # serve seals and opens CMDB Source credentials with this key (ADR 0012)
 export CREDENTIALS_KEY="$(openssl rand -base64 32)"
-# serve acts for this Customer until authentication exists, so it is for local dev only
-export CUSTOMER_ID=<customer-uuid>
+# the Cognito user pool Users sign in with (ADR 0013); serve also needs the app client
+export COGNITO_REGION=us-east-1
+export COGNITO_USER_POOL_ID=<pool-id>
+export COGNITO_CLIENT_ID=<app-client-id>
 # browser origins allowed to call the HTTP API, comma-separated
 export CORS_ALLOWED_ORIGINS=http://localhost:5173
 
 ./barbackend migrate   # apply migrations in internal/postgres/migrations
 ./barbackend serve     # HTTP server (gin, :8080 unless PORT is set)
+./barbackend create-platform-admin <email>   # invite the first Platform Admin
 ```
+
+`create-platform-admin` creates the user in Cognito, which emails the invitation, so it needs AWS credentials allowed to call `AdminCreateUser` and `AdminDeleteUser` on the pool, from the default AWS credential chain. The pool itself is created by Terraform outside this repo.
 
 ### HTTP API
 
 Every error answers `{code, error}`: `code` is stable for the dashboard to translate, and `error` is readable on its own.
+
+Every endpoint below except `/ping` needs `Authorization: Bearer <Cognito access token>`, and acts for the Customer of the User it signs in. A missing or invalid token, or one of a disabled User or of a Deactivated Customer, answers 401 `unauthenticated`. A Platform Admin, who belongs to no Customer, answers 403 `forbidden`.
 
 The OpenAPI 3.1 spec is served at `/openapi.json` and `/openapi.yaml`, with a browsable reference at `/docs`.
 

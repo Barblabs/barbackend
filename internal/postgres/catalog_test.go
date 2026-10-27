@@ -8,6 +8,7 @@ import (
 
 	"barbackend/internal/inventory"
 	"barbackend/internal/postgres/pgtest"
+	"barbackend/internal/tenancy"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -19,6 +20,7 @@ func TestCatalogsMatchDomainConstants(t *testing.T) {
 		"exposures":      names(inventory.InternetFacing, inventory.Internal),
 		"software_roles": names(inventory.OperatingSystem, inventory.Application),
 		"sync_outcomes":  names(inventory.SyncSucceeded, inventory.SyncFailed),
+		"user_roles":     names(tenancy.PlatformAdmin, tenancy.CustomerAdmin, tenancy.Viewer),
 	}
 	ctx := context.Background()
 	conn := pgtest.Conn(t, pgtest.URL(t))

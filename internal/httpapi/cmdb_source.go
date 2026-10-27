@@ -12,8 +12,7 @@ import (
 )
 
 type cmdbSourceHandler struct {
-	cmdb     *cmdb.Service
-	customer inventory.CustomerID
+	cmdb *cmdb.Service
 }
 
 func (h cmdbSourceHandler) register(api huma.API) {
@@ -79,7 +78,11 @@ type syncFailureResponse struct {
 }
 
 func (h cmdbSourceHandler) get(ctx context.Context, _ *struct{}) (*body[*cmdbSourceResponse], error) {
-	src, err := h.cmdb.ConnectedSource(ctx, h.customer)
+	customer, err := customerOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+	src, err := h.cmdb.ConnectedSource(ctx, customer)
 	if errors.Is(err, cmdb.ErrNotConnected) {
 		return &body[*cmdbSourceResponse]{}, nil
 	}
@@ -115,6 +118,9 @@ type testResponse struct {
 }
 
 func (h cmdbSourceHandler) test(ctx context.Context, in *body[connectRequest]) (*body[testResponse], error) {
+	if _, err := customerOf(ctx); err != nil {
+		return nil, err
+	}
 	err := h.cmdb.TestLogin(ctx, inventory.CMDBProvider(in.Body.Provider), in.Body.login())
 	var failure *cmdb.Failure
 	switch {
@@ -128,7 +134,11 @@ func (h cmdbSourceHandler) test(ctx context.Context, in *body[connectRequest]) (
 }
 
 func (h cmdbSourceHandler) connect(ctx context.Context, in *body[connectRequest]) (*body[*cmdbSourceResponse], error) {
-	src, err := h.cmdb.Connect(ctx, h.customer, inventory.CMDBProvider(in.Body.Provider), in.Body.login())
+	customer, err := customerOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+	src, err := h.cmdb.Connect(ctx, customer, inventory.CMDBProvider(in.Body.Provider), in.Body.login())
 	if err != nil {
 		return nil, apiError(err)
 	}
@@ -136,7 +146,11 @@ func (h cmdbSourceHandler) connect(ctx context.Context, in *body[connectRequest]
 }
 
 func (h cmdbSourceHandler) update(ctx context.Context, in *body[LoginRequest]) (*body[*cmdbSourceResponse], error) {
-	src, err := h.cmdb.UpdateLogin(ctx, h.customer, in.Body.login())
+	customer, err := customerOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+	src, err := h.cmdb.UpdateLogin(ctx, customer, in.Body.login())
 	if err != nil {
 		return nil, apiError(err)
 	}
@@ -144,7 +158,11 @@ func (h cmdbSourceHandler) update(ctx context.Context, in *body[LoginRequest]) (
 }
 
 func (h cmdbSourceHandler) disconnect(ctx context.Context, _ *struct{}) (*struct{}, error) {
-	if err := h.cmdb.Disconnect(ctx, h.customer); err != nil {
+	customer, err := customerOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := h.cmdb.Disconnect(ctx, customer); err != nil {
 		return nil, apiError(err)
 	}
 	return &struct{}{}, nil
@@ -174,7 +192,11 @@ type syncResponse struct {
 }
 
 func (h cmdbSourceHandler) sync(ctx context.Context, _ *struct{}) (*body[syncResponse], error) {
-	run, err := h.cmdb.SyncConnected(ctx, h.customer)
+	customer, err := customerOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+	run, err := h.cmdb.SyncConnected(ctx, customer)
 	if err != nil {
 		return nil, apiError(err)
 	}

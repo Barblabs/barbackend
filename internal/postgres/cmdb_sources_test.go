@@ -17,7 +17,7 @@ func TestCMDBSourceRoundTrip(t *testing.T) {
 	t.Parallel()
 	db := pgtest.NewDB(t)
 	ctx := context.Background()
-	src, err := inventory.NewCMDBSource(inventory.CMDBSourceID(uuid.New()), newCustomer(), "itop")
+	src, err := inventory.NewCMDBSource(inventory.CMDBSourceID(uuid.New()), newCustomer(t, db), "itop")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +48,7 @@ func TestCMDBSourceRoundTrip(t *testing.T) {
 func TestSecondConnectedCMDBSourceIsRefused(t *testing.T) {
 	t.Parallel()
 	db := pgtest.NewDB(t)
-	customer := newCustomer()
+	customer := newCustomer(t, db)
 	newSource(t, db, customer)
 	second, err := inventory.NewCMDBSource(inventory.CMDBSourceID(uuid.New()), customer, "itop")
 	if err != nil {

@@ -46,7 +46,7 @@ func TestCreatedAssetRoundTrip(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			db := pgtest.NewDB(t)
-			src := newSource(t, db, newCustomer())
+			src := newSource(t, db, newCustomer(t, db))
 
 			r := syncRecords(t, db, src.ID(), record(t, "42", tt.imported))
 
@@ -61,7 +61,7 @@ func TestCreatedAssetRoundTrip(t *testing.T) {
 func TestAbsentHardwareAndProductAreStoredAsNull(t *testing.T) {
 	t.Parallel()
 	db, conn := newDBWithConn(t)
-	src := newSource(t, db, newCustomer())
+	src := newSource(t, db, newCustomer(t, db))
 	p := inventory.ImportedAssetParams{
 		Name:     "srv-01",
 		Kind:     inventory.Server,
@@ -81,9 +81,9 @@ func TestAbsentHardwareAndProductAreStoredAsNull(t *testing.T) {
 func TestAssetOwnersAreSharedWithinACustomer(t *testing.T) {
 	t.Parallel()
 	db, conn := newDBWithConn(t)
-	customer := newCustomer()
+	customer := newCustomer(t, db)
 	first := newSource(t, db, customer)
-	other := newSource(t, db, newCustomer())
+	other := newSource(t, db, newCustomer(t, db))
 	p := inventory.ImportedAssetParams{Name: "pc", Kind: inventory.Workstation, Owner: mustOwner(t, "owner@example.com")}
 
 	syncRecords(t, db, first.ID(), record(t, "a", p), record(t, "b", p))
@@ -105,7 +105,7 @@ func TestAssetOwnersAreSharedWithinACustomer(t *testing.T) {
 func TestImportedUpdateKeepsDeclarations(t *testing.T) {
 	t.Parallel()
 	db, conn := newDBWithConn(t)
-	src := newSource(t, db, newCustomer())
+	src := newSource(t, db, newCustomer(t, db))
 	syncRecords(t, db, src.ID(), record(t, "1", fullParams(t)))
 	_, err := conn.Exec(context.Background(), `
 		WITH owner AS (
@@ -140,7 +140,7 @@ func TestImportedUpdateKeepsDeclarations(t *testing.T) {
 func TestDeactivationKeepsFirstInactiveTime(t *testing.T) {
 	t.Parallel()
 	db, conn := newDBWithConn(t)
-	src := newSource(t, db, newCustomer())
+	src := newSource(t, db, newCustomer(t, db))
 	retired := fullParams(t)
 	syncRecords(t, db, src.ID(), record(t, "1", retired))
 	inactiveSince := func() *time.Time {
@@ -197,7 +197,7 @@ func TestSaveOfMissingAssetFails(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			db := pgtest.NewDB(t)
-			src := newSource(t, db, newCustomer())
+			src := newSource(t, db, newCustomer(t, db))
 			var s inventory.Snapshot
 			for _, p := range tt.snapshot {
 				s.Records = append(s.Records, record(t, "missing", p))
@@ -227,7 +227,7 @@ func TestCommitSyncOfMissingSource(t *testing.T) {
 func TestCommitSyncRejectsSupersededSync(t *testing.T) {
 	t.Parallel()
 	db := pgtest.NewDB(t)
-	src := newSource(t, db, newCustomer())
+	src := newSource(t, db, newCustomer(t, db))
 	start := time.Date(2026, 10, 10, 12, 0, 0, 0, time.UTC)
 	later := start.Add(time.Hour)
 	commitAt := func(started time.Time) error {
@@ -258,7 +258,7 @@ func TestCommitSyncRejectsSupersededSync(t *testing.T) {
 func TestCommitSyncFailsWhileLocked(t *testing.T) {
 	t.Parallel()
 	db := pgtest.NewDB(t)
-	src := newSource(t, db, newCustomer())
+	src := newSource(t, db, newCustomer(t, db))
 	reconcile := reconcileWith(src.ID(), inventory.Snapshot{})
 	commit := func() error {
 		_, err := db.CommitSync(context.Background(), src.ID(), time.Now(), reconcile)
@@ -293,8 +293,8 @@ func TestCommitSyncFailsWhileLocked(t *testing.T) {
 func TestCommitSyncOfAnotherSourceFails(t *testing.T) {
 	t.Parallel()
 	db, conn := newDBWithConn(t)
-	locked := newSource(t, db, newCustomer())
-	other := newSource(t, db, newCustomer())
+	locked := newSource(t, db, newCustomer(t, db))
+	other := newSource(t, db, newCustomer(t, db))
 
 	_, err := db.CommitSync(context.Background(), locked.ID(), time.Now(), func([]*inventory.Asset) (inventory.Reconciliation, error) {
 		return inventory.Reconcile(other.ID(), nil, inventory.Snapshot{Records: []inventory.Record{record(t, "1", fullParams(t))}})
@@ -311,7 +311,7 @@ func TestCommitSyncOfAnotherSourceFails(t *testing.T) {
 func TestCommitSyncAfterDisconnectFails(t *testing.T) {
 	t.Parallel()
 	db, conn := newDBWithConn(t)
-	customer := newCustomer()
+	customer := newCustomer(t, db)
 	src := newSource(t, db, customer)
 	started := time.Now()
 	inTx(t, db, func(tx *postgres.Tx) error { return tx.DisconnectCMDBSource(context.Background(), customer) })

@@ -22,17 +22,22 @@ var commands = []command{
 	{name: "serve", summary: "run the HTTP server", needsDB: true, run: serve},
 	{name: "feed", summary: "pull threat-intelligence Feeds", synopsis: feedSynopsis, run: feed},
 	{name: "migrate", summary: "apply database migrations", needsDB: true, run: migrate},
+	{name: "create-platform-admin", summary: "invite a Platform Admin through Cognito", synopsis: "<email>", needsDB: true, run: createPlatformAdmin},
 }
 
 func usage() string {
 	var b strings.Builder
 	b.WriteString("usage: barbackend <command>\n\ncommands:\n")
+	width := 0
+	for _, c := range commands {
+		width = max(width, len(c.name))
+	}
 	for _, c := range commands {
 		line := c.summary
 		if c.synopsis != "" {
 			line += ": " + c.synopsis
 		}
-		fmt.Fprintf(&b, "  %-10s%s\n", c.name, line)
+		fmt.Fprintf(&b, "  %-*s  %s\n", width, c.name, line)
 	}
 	var needDB []string
 	for _, c := range commands {

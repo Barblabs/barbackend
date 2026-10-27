@@ -9,6 +9,7 @@ import (
 	"barbackend/internal/inventory"
 	"barbackend/internal/postgres"
 	"barbackend/internal/postgres/pgtest"
+	"barbackend/internal/tenancy"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -20,7 +21,7 @@ func inTx(t *testing.T, db *postgres.DB, fn func(*postgres.Tx) error) {
 	}
 }
 
-func newSource(t *testing.T, db *postgres.DB, customer inventory.CustomerID) inventory.CMDBSource {
+func newSource(t *testing.T, db *postgres.DB, customer tenancy.CustomerID) inventory.CMDBSource {
 	t.Helper()
 	src, err := inventory.NewCMDBSource(inventory.CMDBSourceID(uuid.New()), customer, "itop")
 	if err != nil {
@@ -32,7 +33,14 @@ func newSource(t *testing.T, db *postgres.DB, customer inventory.CustomerID) inv
 	return src
 }
 
-func newCustomer() inventory.CustomerID { return inventory.CustomerID(uuid.New()) }
+func newCustomer(t *testing.T, db *postgres.DB) tenancy.CustomerID {
+	t.Helper()
+	id := tenancy.CustomerID(uuid.New())
+	if err := db.CreateCustomer(context.Background(), id); err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
 
 func mustImported(t *testing.T, p inventory.ImportedAssetParams) inventory.ImportedAsset {
 	t.Helper()

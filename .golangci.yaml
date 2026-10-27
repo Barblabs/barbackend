@@ -28,15 +28,31 @@ linters:
             - "**/internal/inventory/**"
           allow:
             - barbackend/internal/inventory
+            - barbackend/internal/tenancy
           deny:
             - pkg: barbackend/internal
-              desc: inventory is the pure domain and imports no other layer (ADR 0008)
+              desc: inventory is a pure domain and imports only tenancy (ADR 0008)
             - pkg: net/http
               desc: inventory is the pure domain and does no I/O (ADR 0008)
             - pkg: database/sql
               desc: inventory is the pure domain and does no I/O (ADR 0008)
             - pkg: github.com/jackc/pgx
               desc: inventory is the pure domain and does no I/O (ADR 0008)
+        tenancy:
+          list-mode: lax
+          files:
+            - "**/internal/tenancy/**"
+          allow:
+            - barbackend/internal/tenancy
+          deny:
+            - pkg: barbackend/internal
+              desc: tenancy is the lowest pure domain and imports no other layer (ADR 0008)
+            - pkg: net/http
+              desc: tenancy is a pure domain and does no I/O (ADR 0008)
+            - pkg: database/sql
+              desc: tenancy is a pure domain and does no I/O (ADR 0008)
+            - pkg: github.com/jackc/pgx
+              desc: tenancy is a pure domain and does no I/O (ADR 0008)
         scoring:
           list-mode: lax
           files:
@@ -105,6 +121,30 @@ linters:
           deny:
             - pkg: barbackend/internal
               desc: encryption imports no other layer; the cmdb use case seals and opens credentials with it (ADR 0008, ADR 0012)
+        cognito:
+          list-mode: lax
+          files:
+            - "**/internal/cognito/**"
+          allow:
+            - barbackend/internal/cognito
+            - barbackend/internal/tenancy
+          deny:
+            - pkg: barbackend/internal
+              desc: the Cognito adapter depends only on tenancy, never on persistence or the users use case (ADR 0008, ADR 0013)
+            - pkg: github.com/jackc/pgx
+              desc: the Cognito adapter never touches the database (ADR 0008)
+        users:
+          list-mode: lax
+          files:
+            - "**/internal/users/**"
+          allow:
+            - barbackend/internal/users
+            - barbackend/internal/cognito
+            - barbackend/internal/postgres
+            - barbackend/internal/tenancy
+          deny:
+            - pkg: barbackend/internal
+              desc: the users use case calls only cognito, postgres and tenancy (ADR 0008)
         postgres:
           list-mode: lax
           files:
@@ -112,9 +152,10 @@ linters:
           allow:
             - barbackend/internal/inventory
             - barbackend/internal/postgres
+            - barbackend/internal/tenancy
           deny:
             - pkg: barbackend/internal
-              desc: persistence depends only on inventory; use cases call it, not the reverse (ADR 0008)
+              desc: persistence depends only on the domain; use cases call it, not the reverse (ADR 0008)
         # Handlers reach persistence and adapters only through use cases, so
         # each new use-case package is added to allow when httpapi serves it.
         # Tests are exempt: they wire a real router on Postgres, as cmd does.
@@ -126,7 +167,9 @@ linters:
           allow:
             - barbackend/internal/httpapi
             - barbackend/internal/inventory
+            - barbackend/internal/tenancy
             - barbackend/internal/cmdb
+            - barbackend/internal/users
           deny:
             - pkg: barbackend/internal
               desc: HTTP transport calls use cases, never persistence or adapters directly (ADR 0008)

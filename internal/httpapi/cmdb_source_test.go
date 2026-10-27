@@ -15,7 +15,7 @@ import (
 func TestGetCMDBSourceWithoutConnectedSource(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
-	e.connect(t, newCustomer())
+	e.connect(t, e.newCustomer(t))
 
 	rec := e.do(httptest.NewRequest(http.MethodGet, "/cmdb/source", nil))
 
@@ -154,7 +154,7 @@ func TestSyncCMDBSource(t *testing.T) {
 func TestSyncCMDBSourceWithoutConnectedSource(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
-	e.connect(t, newCustomer())
+	e.connect(t, e.newCustomer(t))
 
 	rec := e.sync(context.Background())
 
@@ -287,7 +287,7 @@ func TestUpdateCMDBSource(t *testing.T) {
 func TestUpdateCMDBSourceWithoutConnectedSource(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
-	e.connect(t, newCustomer())
+	e.connect(t, e.newCustomer(t))
 
 	rec := e.sendLogin(http.MethodPut, "/cmdb/source", rotatedLogin())
 
@@ -318,7 +318,7 @@ func TestDisconnectCMDBSource(t *testing.T) {
 func TestDisconnectCMDBSourceWithoutConnectedSource(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
-	e.connect(t, newCustomer())
+	e.connect(t, e.newCustomer(t))
 
 	rec := e.disconnect()
 

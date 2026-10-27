@@ -3,6 +3,8 @@ package postgres
 import (
 	"context"
 
+	"barbackend/internal/tenancy"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -29,3 +31,8 @@ func (f queryTracer) TraceQueryStart(ctx context.Context, _ *pgx.Conn, data pgx.
 }
 
 func (queryTracer) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQueryEndData) {}
+
+func (db *DB) CreateCustomer(ctx context.Context, id tenancy.CustomerID) error {
+	_, err := db.pool.Exec(ctx, "INSERT INTO customers (id, name) VALUES ($1, $2)", uuid.UUID(id), id.String())
+	return err
+}

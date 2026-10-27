@@ -15,6 +15,7 @@ import (
 	"barbackend/internal/encryption"
 	"barbackend/internal/inventory"
 	"barbackend/internal/postgres"
+	"barbackend/internal/tenancy"
 	"github.com/google/uuid"
 )
 
@@ -114,7 +115,7 @@ func TestSyncWithoutConnectedSource(t *testing.T) {
 	e := newEnv(t)
 	e.connect(t)
 
-	if _, err := e.cmdb.SyncConnected(context.Background(), newCustomer()); !errors.Is(err, cmdb.ErrNotConnected) {
+	if _, err := e.cmdb.SyncConnected(context.Background(), e.newCustomer(t)); !errors.Is(err, cmdb.ErrNotConnected) {
 		t.Errorf("err = %v, want ErrNotConnected", err)
 	}
 }
@@ -163,7 +164,7 @@ func TestSyncOfSourceDisconnectedWhileItRunsChangesNothing(t *testing.T) {
 func TestSyncOfUnregisteredProviderFails(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
-	customer := newCustomer()
+	customer := e.newCustomer(t)
 	src, err := inventory.NewCMDBSource(inventory.CMDBSourceID(uuid.New()), customer, "removed")
 	if err != nil {
 		t.Fatal(err)
@@ -324,7 +325,7 @@ func TestSyncCanceledByShutdownFails(t *testing.T) {
 	e.wantFailedSync(t, customer, err, context.Canceled)
 }
 
-func (e env) wantFailedSync(t *testing.T, customer inventory.CustomerID, err, cause error) {
+func (e env) wantFailedSync(t *testing.T, customer tenancy.CustomerID, err, cause error) {
 	t.Helper()
 	var failed *cmdb.SyncError
 	if !errors.As(err, &failed) || !errors.Is(err, cause) {

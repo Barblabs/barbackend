@@ -22,6 +22,7 @@ type body[T any] struct {
 // Huma lists 422 on any operation with path parameters or a body, though
 // newHumaError answers those failures with 400.
 func register[I, O any](api huma.API, op huma.Operation, handler func(context.Context, *I) (*O, error)) {
+	op.Errors = append(op.Errors, http.StatusUnauthorized, http.StatusForbidden)
 	if !slices.Contains(op.Errors, http.StatusUnprocessableEntity) {
 		op.Metadata = map[string]any{omit422: true}
 	}
