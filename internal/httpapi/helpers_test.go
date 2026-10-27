@@ -48,6 +48,14 @@ var platformOperations = []struct{ method, path string }{
 	{http.MethodPost, "/customers/" + uuid.Nil.String() + "/reactivate"},
 }
 
+// customerAdminOperations are those only a Customer Admin may call.
+var customerAdminOperations = []struct{ method, path string }{
+	{http.MethodGet, "/users"},
+	{http.MethodPost, "/users"},
+	{http.MethodPatch, "/users/" + uuid.Nil.String()},
+	{http.MethodPost, "/users/" + uuid.Nil.String() + "/disable"},
+}
+
 type env struct {
 	db       *postgres.DB
 	conn     *pgx.Conn

@@ -66,6 +66,25 @@ const (
 
 func (r Role) valid() bool { return r >= PlatformAdmin && r <= Viewer }
 
+var roleCodes = map[Role]string{
+	PlatformAdmin: "platform_admin",
+	CustomerAdmin: "customer_admin",
+	Viewer:        "viewer",
+}
+
+// Code is the stable lowercase snake_case name clients use for the role.
+func (r Role) Code() string { return roleCodes[r] }
+
+// ParseRole is the inverse of Role.Code.
+func ParseRole(code string) (Role, error) {
+	for r, c := range roleCodes {
+		if c == code {
+			return r, nil
+		}
+	}
+	return 0, fmt.Errorf("%w: role %q", ErrInvalidUser, code)
+}
+
 func (r Role) String() string {
 	switch r {
 	case PlatformAdmin:
