@@ -1,13 +1,35 @@
 package httpapi
 
 import (
+	"context"
+	"net/http"
 	"reflect"
+	"slices"
 	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
 )
 
-const schemaPrefix = "#/components/schemas/"
+const (
+	schemaPrefix = "#/components/schemas/"
+	omit422      = "omit422"
+)
+
+// register adds an operation whose spec lists only the errors in op.Errors.
+// Huma also lists 422 on any operation with parameters or a body, though
+// newHumaError answers those failures with 400.
+func register[I, O any](api huma.API, op huma.Operation, handler func(context.Context, *I) (*O, error)) {
+	if !slices.Contains(op.Errors, http.StatusUnprocessableEntity) {
+		op.Metadata = map[string]any{omit422: true}
+	}
+	huma.Register(api, op, handler)
+}
+
+func dropUndeclared422(_ *huma.OpenAPI, op *huma.Operation) {
+	if op.Metadata[omit422] == true {
+		delete(op.Responses, "422")
+	}
+}
 
 // markNullableObjects lets a field holding a pointer to a struct be null in
 // the spec, as it is on the wire when the pointer is nil: Huma refuses

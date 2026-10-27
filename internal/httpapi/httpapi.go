@@ -48,6 +48,7 @@ func apiConfig() huma.Config {
 	config.CreateHooks = nil
 	config.Formats = map[string]huma.Format{"application/json": jsonFormat, "json": jsonFormat}
 	config.Transformers = []huma.Transformer{logCause}
+	config.OnAddOperation = append(config.OnAddOperation, dropUndeclared422)
 	return config
 }
 

@@ -16,7 +16,7 @@ type assetHandler struct {
 }
 
 func (h assetHandler) register(api huma.API) {
-	huma.Register(api, huma.Operation{
+	register(api, huma.Operation{
 		OperationID: "list-assets",
 		Method:      http.MethodGet,
 		Path:        "/assets",

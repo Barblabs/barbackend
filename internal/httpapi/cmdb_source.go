@@ -17,7 +17,7 @@ type cmdbSourceHandler struct {
 }
 
 func (h cmdbSourceHandler) register(api huma.API) {
-	huma.Register(api, huma.Operation{
+	register(api, huma.Operation{
 		OperationID: "get-cmdb-source",
 		Method:      http.MethodGet,
 		Path:        "/cmdb/source",
@@ -26,7 +26,7 @@ func (h cmdbSourceHandler) register(api huma.API) {
 		Responses:   nullableBody[cmdbSourceResponse](api),
 		Errors:      []int{http.StatusInternalServerError},
 	}, h.get)
-	huma.Register(api, huma.Operation{
+	register(api, huma.Operation{
 		OperationID: "connect-cmdb-source",
 		Method:      http.MethodPost,
 		Path:        "/cmdb/source",
@@ -34,21 +34,21 @@ func (h cmdbSourceHandler) register(api huma.API) {
 		Description: "A failed first Sync is reported in lastSyncFailure and leaves the CMDB Source connected.",
 		Errors:      []int{http.StatusBadRequest, http.StatusConflict, http.StatusUnprocessableEntity},
 	}, h.connect)
-	huma.Register(api, huma.Operation{
+	register(api, huma.Operation{
 		OperationID: "update-cmdb-source",
 		Method:      http.MethodPut,
 		Path:        "/cmdb/source",
 		Summary:     "Replace the login of the Connected CMDB Source",
 		Errors:      []int{http.StatusBadRequest, http.StatusNotFound, http.StatusUnprocessableEntity},
 	}, h.update)
-	huma.Register(api, huma.Operation{
+	register(api, huma.Operation{
 		OperationID: "disconnect-cmdb-source",
 		Method:      http.MethodDelete,
 		Path:        "/cmdb/source",
 		Summary:     "Disconnect the Connected CMDB Source",
 		Errors:      []int{http.StatusNotFound},
 	}, h.disconnect)
-	huma.Register(api, huma.Operation{
+	register(api, huma.Operation{
 		OperationID: "test-cmdb-source",
 		Method:      http.MethodPost,
 		Path:        "/cmdb/source/test",
@@ -56,7 +56,7 @@ func (h cmdbSourceHandler) register(api huma.API) {
 		Description: "A login the CMDB rejects is a 200 with ok false and the reason.",
 		Errors:      []int{http.StatusBadRequest},
 	}, h.test)
-	huma.Register(api, huma.Operation{
+	register(api, huma.Operation{
 		OperationID: "sync-cmdb-source",
 		Method:      http.MethodPost,
 		Path:        "/cmdb/source/sync",
