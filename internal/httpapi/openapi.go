@@ -15,13 +15,11 @@ const (
 	omit422      = "omit422"
 )
 
-// body is an operation input or output that is only a JSON body.
 type body[T any] struct {
 	Body T
 }
 
-// register adds an operation whose spec lists only the errors in op.Errors.
-// Huma also lists 422 on any operation with parameters or a body, though
+// Huma lists 422 on any operation with path parameters or a body, though
 // newHumaError answers those failures with 400.
 func register[I, O any](api huma.API, op huma.Operation, handler func(context.Context, *I) (*O, error)) {
 	if !slices.Contains(op.Errors, http.StatusUnprocessableEntity) {
@@ -36,11 +34,8 @@ func dropUndeclared422(_ *huma.OpenAPI, op *huma.Operation) {
 	}
 }
 
-// markNullableObjects lets a field holding a pointer to a struct be null in
-// the spec, as it is on the wire when the pointer is nil: Huma refuses
-// nullable on objects and documents them as never null. It runs as each
-// operation is added, so every schema is covered without New having to call
-// it last; a property it already wrapped has no Ref and is left alone.
+// Huma refuses nullable on objects and documents a pointer to a struct as
+// never null, though a nil pointer is null on the wire.
 func markNullableObjects(oapi *huma.OpenAPI, _ *huma.Operation) {
 	registry := oapi.Components.Schemas
 	for name, schema := range registry.Map() {
@@ -53,19 +48,21 @@ func markNullableObjects(oapi *huma.OpenAPI, _ *huma.Operation) {
 				continue
 			}
 			jsonName, _, _ := strings.Cut(f.Tag.Get("json"), ",")
-			if prop := schema.Properties[jsonName]; prop != nil && prop.Ref != "" {
+			if prop := schema.Properties[jsonName]; isUnwrappedObjectRef(prop) {
 				schema.Properties[jsonName] = orNull(prop)
 			}
 		}
 	}
 }
 
+func isUnwrappedObjectRef(s *huma.Schema) bool {
+	return s != nil && s.Ref != ""
+}
+
 func orNull(s *huma.Schema) *huma.Schema {
 	return &huma.Schema{AnyOf: []*huma.Schema{s, {Type: huma.TypeNull}}}
 }
 
-// nullableBody documents a 200 response whose body is T or null, for an
-// output whose Body is a *T.
 func nullableBody[T any](api huma.API) map[string]*huma.Response {
 	ref := api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[T](), true, "")
 	return map[string]*huma.Response{

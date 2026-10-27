@@ -26,9 +26,7 @@ func (h assetHandler) register(api huma.API) {
 	}, h.list)
 }
 
-// assetListInput declares the query as strings: cmdb.AssetQuery parses and
-// validates it, so its rules have one home.
-type assetListInput struct {
+type rawAssetQuery struct {
 	Limit       string `query:"limit" doc:"Page size, from 1 to 200; 50 by default"`
 	Cursor      string `query:"cursor" doc:"next_cursor of the previous page"`
 	Active      string `query:"active" doc:"true (the default), false or all"`
@@ -80,7 +78,7 @@ type ownerResponse struct {
 	Source string `json:"source"`
 }
 
-func (h assetHandler) list(ctx context.Context, in *assetListInput) (*body[assetListResponse], error) {
+func (h assetHandler) list(ctx context.Context, in *rawAssetQuery) (*body[assetListResponse], error) {
 	page, err := h.cmdb.ListAssets(ctx, h.customer, cmdb.AssetQuery{
 		Limit:       in.Limit,
 		Cursor:      in.Cursor,
@@ -137,7 +135,6 @@ func newAssetResponse(a cmdb.ListedAsset) assetResponse {
 	return resp
 }
 
-// code is a nullable string: the empty code of an unknown value is null.
 func code(s string) *string {
 	if s == "" {
 		return nil

@@ -66,11 +66,9 @@ func (h cmdbSourceHandler) register(api huma.API) {
 }
 
 type cmdbSourceResponse struct {
-	Provider string `json:"provider"`
-	URL      string `json:"url"`
-	// User is null for a source that authenticates without one, such as
-	// with a token.
-	User            *string              `json:"user"`
+	Provider        string               `json:"provider"`
+	URL             string               `json:"url"`
+	User            *string              `json:"user" doc:"Null for a source that authenticates without a user, such as with a token"`
 	LastSync        *time.Time           `json:"lastSync"`
 	LastSyncFailure *syncFailureResponse `json:"lastSyncFailure"`
 }
@@ -91,9 +89,8 @@ func (h cmdbSourceHandler) get(ctx context.Context, _ *struct{}) (*body[*cmdbSou
 	return newCMDBSourceOutput(src), nil
 }
 
-// The login requests keep rejecting an empty field as missing, as they did
-// before Huma, and tolerate unknown fields. LoginRequest is exported because
-// Huma leaves unexported embedded structs out of connectRequest's schema.
+// LoginRequest is exported because Huma leaves unexported embedded structs
+// out of connectRequest's schema.
 type LoginRequest struct {
 	_        struct{} `additionalProperties:"true"`
 	URL      string   `json:"url" minLength:"1"`

@@ -35,10 +35,10 @@ func New(cfg Config) http.Handler {
 	return router
 }
 
-// apiConfig serves the spec at /openapi.json and /openapi.yaml and the docs
-// UI at /docs.
 func apiConfig() huma.Config {
 	config := huma.DefaultConfig("barbattack", "1.0.0")
+	config.OpenAPIPath = "/openapi"
+	config.DocsPath = "/docs"
 	// The default hook adds a $schema field to every response body, which
 	// would change the wire format.
 	config.CreateHooks = nil
@@ -67,6 +67,5 @@ var jsonFormat = huma.Format{
 // huma.DefaultArrayNullable; both are global.
 func init() {
 	huma.NewError = newHumaError
-	// Every array the API sends is empty rather than null.
 	huma.DefaultArrayNullable = false
 }
