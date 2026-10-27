@@ -36,10 +36,6 @@ type assetListInput struct {
 	Criticality string `query:"criticality" doc:"Criticality code, such as high"`
 }
 
-type assetListOutput struct {
-	Body assetListResponse
-}
-
 type assetListResponse struct {
 	Assets     []assetResponse `json:"assets"`
 	NextCursor *string         `json:"next_cursor"`
@@ -84,7 +80,7 @@ type ownerResponse struct {
 	Source string `json:"source"`
 }
 
-func (h assetHandler) list(ctx context.Context, in *assetListInput) (*assetListOutput, error) {
+func (h assetHandler) list(ctx context.Context, in *assetListInput) (*body[assetListResponse], error) {
 	page, err := h.cmdb.ListAssets(ctx, h.customer, cmdb.AssetQuery{
 		Limit:       in.Limit,
 		Cursor:      in.Cursor,
@@ -95,7 +91,7 @@ func (h assetHandler) list(ctx context.Context, in *assetListInput) (*assetListO
 	if err != nil {
 		return nil, apiError(err)
 	}
-	return &assetListOutput{Body: newAssetListResponse(page)}, nil
+	return &body[assetListResponse]{Body: newAssetListResponse(page)}, nil
 }
 
 func newAssetListResponse(page cmdb.AssetPage) assetListResponse {

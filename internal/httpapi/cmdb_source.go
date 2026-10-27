@@ -65,11 +65,6 @@ func (h cmdbSourceHandler) register(api huma.API) {
 	}, h.sync)
 }
 
-type cmdbSourceOutput struct {
-	// Body is null when the Customer has no Connected CMDB Source.
-	Body *cmdbSourceResponse
-}
-
 type cmdbSourceResponse struct {
 	Provider string `json:"provider"`
 	URL      string `json:"url"`
@@ -85,10 +80,10 @@ type syncFailureResponse struct {
 	Error string    `json:"error"`
 }
 
-func (h cmdbSourceHandler) get(ctx context.Context, _ *struct{}) (*cmdbSourceOutput, error) {
+func (h cmdbSourceHandler) get(ctx context.Context, _ *struct{}) (*body[*cmdbSourceResponse], error) {
 	src, err := h.cmdb.ConnectedSource(ctx, h.customer)
 	if errors.Is(err, cmdb.ErrNotConnected) {
-		return &cmdbSourceOutput{}, nil
+		return &body[*cmdbSourceResponse]{}, nil
 	}
 	if err != nil {
 		return nil, apiError(err)
@@ -97,41 +92,23 @@ func (h cmdbSourceHandler) get(ctx context.Context, _ *struct{}) (*cmdbSourceOut
 }
 
 // The login requests keep rejecting an empty field as missing, as they did
-// before Huma, and tolerate unknown fields. connectRequest repeats the login
-// fields because Huma leaves unexported embedded structs out of the schema.
-type loginRequest struct {
+// before Huma, and tolerate unknown fields. LoginRequest is exported because
+// Huma leaves unexported embedded structs out of connectRequest's schema.
+type LoginRequest struct {
 	_        struct{} `additionalProperties:"true"`
 	URL      string   `json:"url" minLength:"1"`
 	User     string   `json:"user" minLength:"1"`
 	Password string   `json:"password" minLength:"1"`
 }
 
-func (r loginRequest) login() cmdb.Login {
+func (r LoginRequest) login() cmdb.Login {
 	return cmdb.Login{URL: r.URL, User: r.User, Password: r.Password}
 }
 
 type connectRequest struct {
 	_        struct{} `additionalProperties:"true"`
 	Provider string   `json:"provider" minLength:"1"`
-	URL      string   `json:"url" minLength:"1"`
-	User     string   `json:"user" minLength:"1"`
-	Password string   `json:"password" minLength:"1"`
-}
-
-func (r connectRequest) login() cmdb.Login {
-	return cmdb.Login{URL: r.URL, User: r.User, Password: r.Password}
-}
-
-type connectInput struct {
-	Body connectRequest
-}
-
-type loginInput struct {
-	Body loginRequest
-}
-
-type testOutput struct {
-	Body testResponse
+	LoginRequest
 }
 
 type testResponse struct {
@@ -140,20 +117,20 @@ type testResponse struct {
 	Error string `json:"error,omitempty"`
 }
 
-func (h cmdbSourceHandler) test(ctx context.Context, in *connectInput) (*testOutput, error) {
+func (h cmdbSourceHandler) test(ctx context.Context, in *body[connectRequest]) (*body[testResponse], error) {
 	err := h.cmdb.TestLogin(ctx, inventory.CMDBProvider(in.Body.Provider), in.Body.login())
 	var failure *cmdb.Failure
 	switch {
 	case err == nil:
-		return &testOutput{Body: testResponse{OK: true}}, nil
+		return &body[testResponse]{Body: testResponse{OK: true}}, nil
 	case errors.As(err, &failure):
-		return &testOutput{Body: testResponse{Code: string(failure.Code), Error: failure.Message}}, nil
+		return &body[testResponse]{Body: testResponse{Code: string(failure.Code), Error: failure.Message}}, nil
 	default:
 		return nil, apiError(err)
 	}
 }
 
-func (h cmdbSourceHandler) connect(ctx context.Context, in *connectInput) (*cmdbSourceOutput, error) {
+func (h cmdbSourceHandler) connect(ctx context.Context, in *body[connectRequest]) (*body[*cmdbSourceResponse], error) {
 	src, err := h.cmdb.Connect(ctx, h.customer, inventory.CMDBProvider(in.Body.Provider), in.Body.login())
 	if err != nil {
 		return nil, apiError(err)
@@ -161,7 +138,7 @@ func (h cmdbSourceHandler) connect(ctx context.Context, in *connectInput) (*cmdb
 	return newCMDBSourceOutput(src), nil
 }
 
-func (h cmdbSourceHandler) update(ctx context.Context, in *loginInput) (*cmdbSourceOutput, error) {
+func (h cmdbSourceHandler) update(ctx context.Context, in *body[LoginRequest]) (*body[*cmdbSourceResponse], error) {
 	src, err := h.cmdb.UpdateLogin(ctx, h.customer, in.Body.login())
 	if err != nil {
 		return nil, apiError(err)
@@ -176,7 +153,7 @@ func (h cmdbSourceHandler) disconnect(ctx context.Context, _ *struct{}) (*struct
 	return &struct{}{}, nil
 }
 
-func newCMDBSourceOutput(src cmdb.ConnectedSource) *cmdbSourceOutput {
+func newCMDBSourceOutput(src cmdb.ConnectedSource) *body[*cmdbSourceResponse] {
 	resp := &cmdbSourceResponse{Provider: string(src.Provider), URL: src.URL}
 	if src.User != "" {
 		resp.User = &src.User
@@ -187,11 +164,7 @@ func newCMDBSourceOutput(src cmdb.ConnectedSource) *cmdbSourceOutput {
 	if f := src.LastSyncFailure; f != nil {
 		resp.LastSyncFailure = &syncFailureResponse{At: f.At, Error: f.Error}
 	}
-	return &cmdbSourceOutput{Body: resp}
-}
-
-type syncOutput struct {
-	Body syncResponse
+	return &body[*cmdbSourceResponse]{Body: resp}
 }
 
 type syncResponse struct {
@@ -203,25 +176,12 @@ type syncResponse struct {
 	Skipped     int       `json:"skipped"`
 }
 
-func (h cmdbSourceHandler) sync(ctx context.Context, _ *struct{}) (*syncOutput, error) {
+func (h cmdbSourceHandler) sync(ctx context.Context, _ *struct{}) (*body[syncResponse], error) {
 	run, err := h.cmdb.SyncConnected(ctx, h.customer)
-	var failed *cmdb.SyncError
-	switch {
-	case err == nil:
-		return &syncOutput{Body: newSyncResponse(run)}, nil
-	case errors.As(err, &failed):
-		return nil, &codedError{status: http.StatusBadGateway, cause: err, Code: failureCode(failed), Message: failed.Error()}
-	default:
+	if err != nil {
 		return nil, apiError(err)
 	}
-}
-
-func failureCode(err *cmdb.SyncError) string {
-	var failure *cmdb.Failure
-	if errors.As(err, &failure) {
-		return string(failure.Code)
-	}
-	return syncFailed
+	return &body[syncResponse]{Body: newSyncResponse(run)}, nil
 }
 
 func newSyncResponse(run inventory.SyncRun) syncResponse {

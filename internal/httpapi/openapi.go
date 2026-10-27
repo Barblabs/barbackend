@@ -15,6 +15,11 @@ const (
 	omit422      = "omit422"
 )
 
+// body is an operation input or output that is only a JSON body.
+type body[T any] struct {
+	Body T
+}
+
 // register adds an operation whose spec lists only the errors in op.Errors.
 // Huma also lists 422 on any operation with parameters or a body, though
 // newHumaError answers those failures with 400.
@@ -33,9 +38,11 @@ func dropUndeclared422(_ *huma.OpenAPI, op *huma.Operation) {
 
 // markNullableObjects lets a field holding a pointer to a struct be null in
 // the spec, as it is on the wire when the pointer is nil: Huma refuses
-// nullable on objects and documents them as never null.
-func markNullableObjects(api huma.API) {
-	registry := api.OpenAPI().Components.Schemas
+// nullable on objects and documents them as never null. It runs as each
+// operation is added, so every schema is covered without New having to call
+// it last; a property it already wrapped has no Ref and is left alone.
+func markNullableObjects(oapi *huma.OpenAPI, _ *huma.Operation) {
+	registry := oapi.Components.Schemas
 	for name, schema := range registry.Map() {
 		t := registry.TypeFromRef(schemaPrefix + name)
 		if t == nil || t.Kind() != reflect.Struct {
