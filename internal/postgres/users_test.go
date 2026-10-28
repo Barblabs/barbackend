@@ -109,7 +109,7 @@ func TestUsersOfADeactivatedCustomerCannotSignIn(t *testing.T) {
 		return err
 	})
 
-	if len(got) != 1 || got[0].User.CanSignIn() {
+	if len(got) != 1 || !errors.Is(got[0].User.SignIn(), tenancy.ErrCustomerDeactivated) {
 		t.Errorf("users = %+v, want one User unable to sign in", got)
 	}
 }
@@ -198,7 +198,7 @@ func TestDisablingADisabledUserKeepsTheFirstTime(t *testing.T) {
 	first := disable()
 	second := disable()
 
-	if first.Disabled.IsZero() || !second.Disabled.Equal(first.Disabled) || second.User.CanSignIn() {
+	if first.Disabled.IsZero() || !second.Disabled.Equal(first.Disabled) || !errors.Is(second.User.SignIn(), tenancy.ErrUserDisabled) {
 		t.Errorf("disabled at %v then %v, want the first time kept and the User unable to sign in", first.Disabled, second.Disabled)
 	}
 }

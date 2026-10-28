@@ -71,8 +71,8 @@ func TestDeactivatedCustomerLosesAccessAndSyncUntilReactivated(t *testing.T) {
 	if deactivated.DeactivatedAt == nil {
 		t.Error("deactivated_at = null after deactivating")
 	}
-	if code := syncAsAna(); code != http.StatusUnauthorized {
-		t.Errorf("sync as its admin after deactivating = %d, want 401", code)
+	if code := syncAsAna(); code != http.StatusForbidden {
+		t.Errorf("sync as its admin after deactivating = %d, want 403", code)
 	}
 	if _, err := e.cmdb.SyncConnected(context.Background(), id); !errors.Is(err, cmdb.ErrCustomerDeactivated) {
 		t.Errorf("sync after deactivating: err = %v, want ErrCustomerDeactivated", err)

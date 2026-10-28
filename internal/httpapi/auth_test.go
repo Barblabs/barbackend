@@ -28,10 +28,11 @@ func TestUnauthenticatedRequestsAreRejected(t *testing.T) {
 		t.Fatal(err)
 	}
 	deactivated := e.newCustomer(t)
-	ofDeactivated := e.newUser(t, tenancy.Viewer, deactivated)
-	if _, err := e.conn.Exec(context.Background(), "UPDATE customers SET deactivated_at = now() WHERE id = $1", [16]byte(deactivated)); err != nil {
+	disabledOfDeactivated := e.newUser(t, tenancy.Viewer, deactivated)
+	if _, err := e.conn.Exec(context.Background(), "UPDATE users SET disabled_at = now() WHERE cognito_sub = $1", disabledOfDeactivated); err != nil {
 		t.Fatal(err)
 	}
+	deactivate(t, e, deactivated)
 
 	tests := []struct {
 		name          string
@@ -48,7 +49,7 @@ func TestUnauthenticatedRequestsAreRejected(t *testing.T) {
 		{"id token", "Bearer " + with(func(c map[string]any) { c["token_use"] = "id" })},
 		{"unknown user", "Bearer " + e.signIn(t, "unknown-sub")},
 		{"disabled user", "Bearer " + e.signIn(t, disabled)},
-		{"user of a deactivated customer", "Bearer " + e.signIn(t, ofDeactivated)},
+		{"disabled user of a deactivated customer", "Bearer " + e.signIn(t, disabledOfDeactivated)},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -81,6 +82,34 @@ func TestEveryOperationRequiresAToken(t *testing.T) {
 		if rec.Code != http.StatusUnauthorized {
 			t.Errorf("%s %s = %d %s, want 401", op.method, op.path, rec.Code, rec.Body)
 		}
+	}
+}
+
+func TestUserOfADeactivatedCustomerIsToldWhy(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	deactivated := e.newCustomer(t)
+	admin := "Bearer " + e.signIn(t, e.newUser(t, tenancy.CustomerAdmin, deactivated))
+	deactivate(t, e, deactivated)
+	for _, op := range slices.Concat(operations, platformOperations, customerAdminOperations, everyRoleOperations) {
+		req := httptest.NewRequest(op.method, op.path, loginBody())
+		req.Header.Set("Authorization", admin)
+
+		rec := e.send(req)
+
+		if rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), `"code":"customer_deactivated"`) {
+			t.Errorf("%s %s = %d %s, want 403 customer_deactivated", op.method, op.path, rec.Code, rec.Body)
+		}
+		if got := rec.Header().Get("WWW-Authenticate"); got != "" {
+			t.Errorf("%s %s WWW-Authenticate = %q, want none: the token is valid", op.method, op.path, got)
+		}
+	}
+}
+
+func deactivate(t *testing.T, e env, customer tenancy.CustomerID) {
+	t.Helper()
+	if _, err := e.conn.Exec(context.Background(), "UPDATE customers SET deactivated_at = now() WHERE id = $1", [16]byte(customer)); err != nil {
+		t.Fatal(err)
 	}
 }
 
