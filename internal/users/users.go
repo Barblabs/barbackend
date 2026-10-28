@@ -74,6 +74,32 @@ func (s *Service) authenticate(ctx context.Context, accessToken string) (tenancy
 	return u, nil
 }
 
+// Profile is the caller as the dashboard shows them.
+type Profile struct {
+	User tenancy.User
+	// Customer is the zero Customer for a Platform Admin, who belongs to none.
+	Customer tenancy.Customer
+}
+
+func (s *Service) Profile(ctx context.Context, caller tenancy.User) (Profile, error) {
+	id, err := caller.ActsFor()
+	if errors.Is(err, tenancy.ErrNoCustomer) {
+		return Profile{User: caller}, nil
+	}
+	if err != nil {
+		return Profile{}, err
+	}
+	var stored StoredCustomer
+	err = s.db.InTx(ctx, func(tx *postgres.Tx) (err error) {
+		stored, err = tx.Customer(ctx, id)
+		return err
+	})
+	if err != nil {
+		return Profile{}, err
+	}
+	return Profile{User: caller, Customer: stored.Customer}, nil
+}
+
 // Create invites a User through Cognito and stores them. It does not check
 // who asks: callers that act for a User must check their role and Customer
 // first.
