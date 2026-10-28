@@ -3,6 +3,7 @@ package httpapi_test
 import (
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -17,7 +18,7 @@ func TestOpenAPIListsEveryRoute(t *testing.T) {
 		} `json:"paths"`
 	}](t, rec, http.StatusOK)
 
-	for _, r := range operations {
+	for _, r := range slices.Concat(operations, everyRoleOperations) {
 		if op, ok := spec.Paths[r.path][strings.ToLower(r.method)]; !ok || op.OperationID == "" {
 			t.Errorf("spec lacks %s %s with an operationId", r.method, r.path)
 		}

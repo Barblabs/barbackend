@@ -56,6 +56,11 @@ var customerAdminOperations = []struct{ method, path string }{
 	{http.MethodPost, "/users/" + uuid.Nil.String() + "/disable"},
 }
 
+// everyRoleOperations are those every User may call, a Platform Admin included.
+var everyRoleOperations = []struct{ method, path string }{
+	{http.MethodGet, "/me"},
+}
+
 type env struct {
 	db       *postgres.DB
 	conn     *pgx.Conn

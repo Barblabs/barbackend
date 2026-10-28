@@ -14,7 +14,7 @@ import (
 	"barbackend/internal/tenancy"
 )
 
-func TestCustomerEndpointsRejectUnauthenticatedRequests(t *testing.T) {
+func TestUnauthenticatedRequestsAreRejected(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
 	sub := e.newUser(t, tenancy.Viewer, e.customer)
@@ -53,18 +53,20 @@ func TestCustomerEndpointsRejectUnauthenticatedRequests(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			req := httptest.NewRequest(http.MethodGet, "/assets", nil)
-			if tt.authorization != "" {
-				req.Header.Set("Authorization", tt.authorization)
-			}
+			for _, path := range []string{"/assets", "/me"} {
+				req := httptest.NewRequest(http.MethodGet, path, nil)
+				if tt.authorization != "" {
+					req.Header.Set("Authorization", tt.authorization)
+				}
 
-			rec := e.send(req)
+				rec := e.send(req)
 
-			if got := decode[codedError](t, rec, http.StatusUnauthorized); got.Code != "unauthenticated" {
-				t.Errorf("body = %s, want code unauthenticated", rec.Body)
-			}
-			if got := rec.Header().Get("WWW-Authenticate"); got != "Bearer" {
-				t.Errorf("WWW-Authenticate = %q, want Bearer", got)
+				if rec.Code != http.StatusUnauthorized || !strings.Contains(rec.Body.String(), `"code":"unauthenticated"`) {
+					t.Errorf("GET %s = %d %s, want 401 unauthenticated", path, rec.Code, rec.Body)
+				}
+				if got := rec.Header().Get("WWW-Authenticate"); got != "Bearer" {
+					t.Errorf("GET %s WWW-Authenticate = %q, want Bearer", path, got)
+				}
 			}
 		})
 	}
@@ -73,7 +75,7 @@ func TestCustomerEndpointsRejectUnauthenticatedRequests(t *testing.T) {
 func TestEveryOperationRequiresAToken(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
-	for _, op := range slices.Concat(operations, platformOperations, customerAdminOperations) {
+	for _, op := range slices.Concat(operations, platformOperations, customerAdminOperations, everyRoleOperations) {
 		rec := e.send(httptest.NewRequest(op.method, op.path, loginBody()))
 
 		if rec.Code != http.StatusUnauthorized {
