@@ -45,10 +45,16 @@ func New(db *postgres.DB, verifier *cognito.Verifier, admin Admin) *Service {
 	return &Service{db: db, verifier: verifier, admin: admin}
 }
 
-// Authenticate resolves a Cognito access token to the User it signs in. Every
-// failure is ErrUnauthenticated.
+// Authenticate resolves a Cognito access token to the User it signs in. A
+// valid token of a User of a Deactivated Customer fails with
+// tenancy.ErrCustomerDeactivated; every other failure is ErrUnauthenticated.
 func (s *Service) Authenticate(ctx context.Context, accessToken string) (tenancy.User, error) {
 	u, err := s.authenticate(ctx, accessToken)
+	// Not wrapped in ErrUnauthenticated: the token is fine, and a caller that
+	// checked ErrUnauthenticated first would answer it as a bad token.
+	if errors.Is(err, tenancy.ErrCustomerDeactivated) {
+		return tenancy.User{}, err
+	}
 	if err != nil {
 		return tenancy.User{}, fmt.Errorf("%w: %w", ErrUnauthenticated, err)
 	}

@@ -24,20 +24,21 @@ func (e *codedError) Error() string  { return e.Message }
 func (e *codedError) GetStatus() int { return e.status }
 
 const (
-	invalidRequest    = "invalid_request"
-	unauthenticated   = "unauthenticated"
-	forbidden         = "forbidden"
-	invalidLogin      = "invalid_login"
-	notConnected      = "not_connected"
-	alreadyConnected  = "already_connected"
-	syncInProgress    = "sync_in_progress"
-	syncFailed        = "sync_failed"
-	customerNotFound  = "customer_not_found"
-	customerNameTaken = "customer_name_taken"
-	emailTaken        = "email_taken"
-	userNotFound      = "user_not_found"
-	lastCustomerAdmin = "last_customer_admin"
-	internalError     = "internal_error"
+	invalidRequest      = "invalid_request"
+	unauthenticated     = "unauthenticated"
+	forbidden           = "forbidden"
+	invalidLogin        = "invalid_login"
+	notConnected        = "not_connected"
+	alreadyConnected    = "already_connected"
+	syncInProgress      = "sync_in_progress"
+	syncFailed          = "sync_failed"
+	customerNotFound    = "customer_not_found"
+	customerNameTaken   = "customer_name_taken"
+	customerDeactivated = "customer_deactivated"
+	emailTaken          = "email_taken"
+	userNotFound        = "user_not_found"
+	lastCustomerAdmin   = "last_customer_admin"
+	internalError       = "internal_error"
 )
 
 func apiError(err error) *codedError {
@@ -57,8 +58,8 @@ func apiError(err error) *codedError {
 		return &codedError{status: http.StatusForbidden, Code: forbidden, Message: "only a customer admin can manage users"}
 	case errors.Is(err, tenancy.ErrLastCustomerAdmin):
 		return &codedError{status: http.StatusConflict, Code: lastCustomerAdmin, Message: "a customer keeps at least one active customer admin"}
-	case errors.Is(err, cmdb.ErrCustomerDeactivated):
-		return &codedError{status: http.StatusUnauthorized, cause: err, Code: unauthenticated, Message: "the customer is deactivated"}
+	case errors.Is(err, tenancy.ErrCustomerDeactivated):
+		return &codedError{status: http.StatusForbidden, Code: customerDeactivated, Message: "your organization's access has been deactivated"}
 	case errors.Is(err, tenancy.ErrInvalidCustomer), errors.Is(err, tenancy.ErrInvalidUser):
 		return &codedError{status: http.StatusBadRequest, Code: invalidRequest, Message: err.Error()}
 	case errors.Is(err, users.ErrCustomerNotFound):
