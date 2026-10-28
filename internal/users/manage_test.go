@@ -46,7 +46,7 @@ func TestDisableUserDisablesThemInCognitoAndPostgres(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if len(admin.disabled) != 1 || admin.disabled[0] != sub || userBySub(t, db, sub).CanSignIn() {
+	if len(admin.disabled) != 1 || admin.disabled[0] != sub || !errors.Is(userBySub(t, db, sub).SignIn(), tenancy.ErrUserDisabled) {
 		t.Errorf("disabled in cognito = %v, want %s, and the stored User unable to sign in", admin.disabled, sub)
 	}
 }
@@ -64,7 +64,7 @@ func TestDisableUserStoresNothingWhenCognitoFails(t *testing.T) {
 
 	_, err = svc.DisableUser(context.Background(), caller, viewer.User.ID())
 
-	if !errors.Is(err, cognitoDown) || !userBySub(t, db, admin.created[len(admin.created)-1]).CanSignIn() {
+	if !errors.Is(err, cognitoDown) || userBySub(t, db, admin.created[len(admin.created)-1]).SignIn() != nil {
 		t.Errorf("err = %v, want the Cognito failure and the User still able to sign in", err)
 	}
 }

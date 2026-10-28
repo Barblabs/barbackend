@@ -53,15 +53,16 @@ func TestNewUserNormalizesEmail(t *testing.T) {
 	}
 }
 
-func TestCanSignIn(t *testing.T) {
+func TestSignIn(t *testing.T) {
 	tests := []struct {
 		name  string
 		state tenancy.UserState
-		want  bool
+		want  error
 	}{
-		{"active", tenancy.UserState{}, true},
-		{"disabled", tenancy.UserState{Disabled: true}, false},
-		{"deactivated customer", tenancy.UserState{CustomerDeactivated: true}, false},
+		{"active", tenancy.UserState{}, nil},
+		{"disabled", tenancy.UserState{Disabled: true}, tenancy.ErrUserDisabled},
+		{"deactivated customer", tenancy.UserState{CustomerDeactivated: true}, tenancy.ErrCustomerDeactivated},
+		{"disabled in a deactivated customer", tenancy.UserState{Disabled: true, CustomerDeactivated: true}, tenancy.ErrUserDisabled},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -69,8 +70,8 @@ func TestCanSignIn(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got := u.CanSignIn(); got != tt.want {
-				t.Errorf("CanSignIn = %v, want %v", got, tt.want)
+			if err := u.SignIn(); !errors.Is(err, tt.want) {
+				t.Errorf("SignIn = %v, want %v", err, tt.want)
 			}
 		})
 	}

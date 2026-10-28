@@ -10,6 +10,7 @@ import (
 
 	"barbackend/internal/inventory"
 	"barbackend/internal/postgres/sqlcgen"
+	"barbackend/internal/tenancy"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -32,7 +33,7 @@ var (
 	ErrNotConnected = errors.New("customer has no connected cmdb source")
 	// ErrCustomerDeactivated is a Sync refused because the CMDB Source's
 	// Customer is deactivated: its Assets stay as they were.
-	ErrCustomerDeactivated = errors.New("customer is deactivated")
+	ErrCustomerDeactivated = tenancy.ErrCustomerDeactivated
 )
 
 const (

@@ -68,8 +68,8 @@ func (s *Service) authenticate(ctx context.Context, accessToken string) (tenancy
 	if err != nil {
 		return tenancy.User{}, err
 	}
-	if !u.CanSignIn() {
-		return tenancy.User{}, fmt.Errorf("user %s cannot sign in", u.ID())
+	if err := u.SignIn(); err != nil {
+		return tenancy.User{}, err
 	}
 	return u, nil
 }
