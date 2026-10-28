@@ -16,8 +16,8 @@ import (
 )
 
 var (
-	// ErrUnauthenticated is a request that does not come from a User who can
-	// sign in. It wraps the cause, which is for logs only.
+	// ErrUnauthenticated is an access token that identifies no User. It wraps
+	// the cause, which is for logs only.
 	ErrUnauthenticated = errors.New("unauthenticated")
 	// ErrEmailTaken is an email that already signs in, in Cognito or in
 	// Postgres: the two disagree when a Cognito user is deleted by hand.
@@ -46,22 +46,20 @@ func New(db *postgres.DB, verifier *cognito.Verifier, admin Admin) *Service {
 }
 
 // Authenticate resolves a Cognito access token to the User it signs in. A
-// valid token of a User of a Deactivated Customer fails with
-// tenancy.ErrCustomerDeactivated; every other failure is ErrUnauthenticated.
+// token that identifies no User fails with ErrUnauthenticated; a User who
+// cannot sign in fails as tenancy.User.SignIn does.
 func (s *Service) Authenticate(ctx context.Context, accessToken string) (tenancy.User, error) {
-	u, err := s.authenticate(ctx, accessToken)
-	// Not wrapped in ErrUnauthenticated: the token is fine, and a caller that
-	// checked ErrUnauthenticated first would answer it as a bad token.
-	if errors.Is(err, tenancy.ErrCustomerDeactivated) {
-		return tenancy.User{}, err
-	}
+	u, err := s.identify(ctx, accessToken)
 	if err != nil {
 		return tenancy.User{}, fmt.Errorf("%w: %w", ErrUnauthenticated, err)
+	}
+	if err := u.SignIn(); err != nil {
+		return tenancy.User{}, err
 	}
 	return u, nil
 }
 
-func (s *Service) authenticate(ctx context.Context, accessToken string) (tenancy.User, error) {
+func (s *Service) identify(ctx context.Context, accessToken string) (tenancy.User, error) {
 	sub, err := s.verifier.Verify(ctx, accessToken)
 	if err != nil {
 		return tenancy.User{}, err
@@ -71,13 +69,7 @@ func (s *Service) authenticate(ctx context.Context, accessToken string) (tenancy
 		u, err = tx.UserBySub(ctx, sub)
 		return err
 	})
-	if err != nil {
-		return tenancy.User{}, err
-	}
-	if err := u.SignIn(); err != nil {
-		return tenancy.User{}, err
-	}
-	return u, nil
+	return u, err
 }
 
 // Profile is the caller as the dashboard shows them.

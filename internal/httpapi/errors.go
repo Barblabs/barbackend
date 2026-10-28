@@ -48,7 +48,7 @@ func apiError(err error) *codedError {
 	}
 	var failure *cmdb.Failure
 	switch {
-	case errors.Is(err, users.ErrUnauthenticated):
+	case errors.Is(err, users.ErrUnauthenticated), errors.Is(err, tenancy.ErrUserDisabled):
 		return &codedError{status: http.StatusUnauthorized, cause: err, Code: unauthenticated, Message: "a valid access token of a user who can sign in is required"}
 	case errors.Is(err, tenancy.ErrNoCustomer):
 		return &codedError{status: http.StatusForbidden, Code: forbidden, Message: "a platform admin cannot see customer data"}
