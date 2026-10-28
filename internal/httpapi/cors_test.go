@@ -47,11 +47,11 @@ func TestCORS(t *testing.T) {
 	}
 }
 
-// PUT and DELETE are not CORS-safelisted methods, so a browser sends them
+// PUT, PATCH and DELETE are not CORS-safelisted methods, so a browser sends them
 // only once the preflight allows them.
 func TestCORSPreflightAllowsUnsafelistedMethods(t *testing.T) {
 	t.Parallel()
-	for _, method := range []string{http.MethodPut, http.MethodDelete} {
+	for _, method := range []string{http.MethodPut, http.MethodPatch, http.MethodDelete} {
 		t.Run(method, func(t *testing.T) {
 			t.Parallel()
 			req := httptest.NewRequest(http.MethodOptions, "/cmdb/source", nil)
