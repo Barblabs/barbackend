@@ -30,9 +30,6 @@ var (
 	// ErrSyncInProgress is a Sync refused because another Sync of the same
 	// CMDB Source holds its lock.
 	ErrSyncInProgress = postgres.ErrSyncInProgress
-	// ErrCustomerDeactivated is a Sync refused because the Customer is
-	// deactivated.
-	ErrCustomerDeactivated = postgres.ErrCustomerDeactivated
 )
 
 type (
@@ -269,8 +266,8 @@ func owner(id inventory.CMDBSourceID) []byte {
 // with ErrSyncInProgress is not recorded: it would report the running Sync as
 // failed, and recording it would wait for that Sync to release the source.
 // Nor is one that lost the source to a disconnect, which changed nothing, or
-// one refused with ErrCustomerDeactivated, since the Customer is no longer
-// served.
+// one refused with tenancy.ErrCustomerDeactivated, since the Customer is no
+// longer served.
 // The Sync outlives ctx: it ends when the Service's lifetime does, or at its
 // time limit.
 func (s *Service) SyncConnected(ctx context.Context, customer tenancy.CustomerID) (inventory.SyncRun, error) {
@@ -289,7 +286,7 @@ func (s *Service) syncConnected(ctx context.Context, customer tenancy.CustomerID
 	switch {
 	case errors.Is(err, postgres.ErrDisconnected):
 		return inventory.SyncRun{}, fmt.Errorf("%w: %w", ErrNotConnected, err)
-	case errors.Is(err, ErrSyncInProgress), errors.Is(err, ErrCustomerDeactivated):
+	case errors.Is(err, ErrSyncInProgress), errors.Is(err, tenancy.ErrCustomerDeactivated):
 		return inventory.SyncRun{}, err
 	case err != nil:
 		return inventory.SyncRun{}, s.recordFailure(ctx, stored.Source.ID(), started, err)

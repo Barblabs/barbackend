@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"barbackend/internal/cmdb"
 	"barbackend/internal/tenancy"
 	"github.com/google/uuid"
 )
@@ -74,7 +73,7 @@ func TestDeactivatedCustomerLosesAccessAndSyncUntilReactivated(t *testing.T) {
 	if code := syncAsAna(); code != http.StatusForbidden {
 		t.Errorf("sync as its admin after deactivating = %d, want 403", code)
 	}
-	if _, err := e.cmdb.SyncConnected(context.Background(), id); !errors.Is(err, cmdb.ErrCustomerDeactivated) {
+	if _, err := e.cmdb.SyncConnected(context.Background(), id); !errors.Is(err, tenancy.ErrCustomerDeactivated) {
 		t.Errorf("sync after deactivating: err = %v, want ErrCustomerDeactivated", err)
 	}
 

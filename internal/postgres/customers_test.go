@@ -91,7 +91,7 @@ func TestCommitSyncOfADeactivatedCustomerFails(t *testing.T) {
 
 	_, err := db.CommitSync(context.Background(), src.ID(), time.Now(), reconcileWith(src.ID(), inventory.Snapshot{Records: []inventory.Record{record(t, "1", fullParams(t))}}))
 
-	if !errors.Is(err, postgres.ErrCustomerDeactivated) {
+	if !errors.Is(err, tenancy.ErrCustomerDeactivated) {
 		t.Errorf("err = %v, want ErrCustomerDeactivated", err)
 	}
 	if n := queryInt(t, conn, "SELECT count(*) FROM assets") + queryInt(t, conn, "SELECT count(*) FROM sync_runs"); n != 0 {
