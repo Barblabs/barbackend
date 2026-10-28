@@ -31,9 +31,6 @@ var (
 	ErrAlreadyConnected = errors.New("customer already has a connected cmdb source")
 	// ErrNotConnected is a Customer with no Connected CMDB Source.
 	ErrNotConnected = errors.New("customer has no connected cmdb source")
-	// ErrCustomerDeactivated is a Sync refused because the CMDB Source's
-	// Customer is deactivated: its Assets stay as they were.
-	ErrCustomerDeactivated = tenancy.ErrCustomerDeactivated
 )
 
 const (
@@ -99,7 +96,7 @@ func (db *DB) InTx(ctx context.Context, fn func(*Tx) error) error {
 // ErrSyncInProgress. A Sync of a Disconnected CMDB Source fails with
 // ErrDisconnected, even when the source was disconnected after the Sync read
 // it, because the disconnect takes the same lock. A Sync of a Deactivated
-// Customer's CMDB Source fails with ErrCustomerDeactivated; one that commits
+// Customer's CMDB Source fails with tenancy.ErrCustomerDeactivated; one that commits
 // while the Customer is being deactivated may still finish. A Sync started
 // before the source's latest successful one holds an older snapshot, so it
 // fails with ErrSuperseded instead of overwriting newer imported values. That
@@ -146,7 +143,7 @@ func lockSource(ctx context.Context, q *sqlcgen.Queries, id inventory.CMDBSource
 		return fmt.Errorf("cmdb source %s: %w", id, ErrDisconnected)
 	}
 	if locked.CustomerDeactivated {
-		return fmt.Errorf("cmdb source %s: %w", id, ErrCustomerDeactivated)
+		return fmt.Errorf("cmdb source %s: %w", id, tenancy.ErrCustomerDeactivated)
 	}
 	superseded, err := q.SucceededRunStartedAfter(ctx, sqlcgen.SucceededRunStartedAfterParams{
 		CmdbSourceID: uuid.UUID(id),
