@@ -31,6 +31,24 @@ func (q *Queries) DeactivateCustomer(ctx context.Context, id uuid.UUID) (Custome
 	return i, err
 }
 
+const getCustomer = `-- name: GetCustomer :one
+SELECT id, name, created_at, deactivated_at
+FROM customers
+WHERE id = $1
+`
+
+func (q *Queries) GetCustomer(ctx context.Context, id uuid.UUID) (Customer, error) {
+	row := q.db.QueryRow(ctx, getCustomer, id)
+	var i Customer
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.CreatedAt,
+		&i.DeactivatedAt,
+	)
+	return i, err
+}
+
 const insertCustomer = `-- name: InsertCustomer :one
 INSERT INTO customers (id, name)
 VALUES ($1, $2)

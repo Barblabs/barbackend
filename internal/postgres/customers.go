@@ -37,6 +37,14 @@ func (t *Tx) CreateCustomer(ctx context.Context, c tenancy.Customer) (StoredCust
 	return StoredCustomer{Customer: c, Created: created}, nil
 }
 
+func (t *Tx) Customer(ctx context.Context, id tenancy.CustomerID) (StoredCustomer, error) {
+	row, err := t.q.GetCustomer(ctx, uuid.UUID(id))
+	if err != nil {
+		return StoredCustomer{}, customerError("get", id, err)
+	}
+	return restoreCustomer(row)
+}
+
 // Customers are ordered by name, regardless of case.
 func (t *Tx) Customers(ctx context.Context) ([]StoredCustomer, error) {
 	rows, err := t.q.ListCustomers(ctx)

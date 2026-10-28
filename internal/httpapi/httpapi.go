@@ -33,6 +33,7 @@ func New(cfg Config) http.Handler {
 	assetHandler{cmdb: cfg.CMDB}.register(api)
 	customerHandler{users: cfg.Users}.register(api)
 	userHandler{users: cfg.Users}.register(api)
+	meHandler{users: cfg.Users}.register(api)
 	return router
 }
 

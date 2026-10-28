@@ -25,3 +25,8 @@ UPDATE customers
 SET deactivated_at = NULL
 WHERE id = $1
 RETURNING id, name, created_at, deactivated_at;
+
+-- name: GetCustomer :one
+SELECT id, name, created_at, deactivated_at
+FROM customers
+WHERE id = $1;
