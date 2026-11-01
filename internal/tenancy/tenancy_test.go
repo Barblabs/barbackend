@@ -88,6 +88,17 @@ func TestActsFor(t *testing.T) {
 	}
 }
 
+func TestCustomer(t *testing.T) {
+	viewer, _ := tenancy.NewUser(userID, "a@example.com", tenancy.Viewer, customer)
+	if got, ok := viewer.Customer(); !ok || got != customer {
+		t.Errorf("viewer belongs to %v, %v, want %v", got, ok, customer)
+	}
+	admin, _ := tenancy.NewUser(userID, "a@example.com", tenancy.PlatformAdmin, tenancy.CustomerID{})
+	if _, ok := admin.Customer(); ok {
+		t.Error("platform admin belongs to a customer")
+	}
+}
+
 func TestNewCustomer(t *testing.T) {
 	tests := []struct {
 		name     string

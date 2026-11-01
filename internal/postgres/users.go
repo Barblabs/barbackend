@@ -36,7 +36,7 @@ type StoredUser struct {
 // CreateUser stores a User with the Cognito sub that signs them in.
 func (t *Tx) CreateUser(ctx context.Context, u tenancy.User, sub string) (StoredUser, error) {
 	var customer pgtype.UUID
-	if id, err := u.ActsFor(); err == nil {
+	if id, ok := u.Customer(); ok {
 		customer = customerUUID(id)
 	}
 	created, err := t.q.InsertUser(ctx, sqlcgen.InsertUserParams{

@@ -40,7 +40,7 @@ func TestCreateCustomerStoresItWithItsFirstCustomerAdmin(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	actsFor, _ := stored.ActsFor()
+	actsFor, _ := stored.Customer()
 	if stored.Role() != tenancy.CustomerAdmin || actsFor != c.Customer.ID() || stored.Email() != "ana@example.com" {
 		t.Errorf("stored %s %s for %s, want Customer Admin ana@example.com for %s", stored.Role(), stored.Email(), actsFor, c.Customer.ID())
 	}

@@ -156,6 +156,10 @@ func (u User) Email() string { return u.email }
 
 func (u User) Role() Role { return u.role }
 
+// Customer is the Customer the User belongs to; a Platform Admin belongs to
+// none.
+func (u User) Customer() (CustomerID, bool) { return u.customer, u.role != PlatformAdmin }
+
 // SignIn fails with ErrUserDisabled before ErrCustomerDeactivated: a disabled
 // User is told to sign in again whatever their Customer's state, and learns
 // nothing about it.

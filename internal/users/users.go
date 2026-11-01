@@ -80,15 +80,12 @@ type Profile struct {
 }
 
 func (s *Service) Profile(ctx context.Context, caller tenancy.User) (Profile, error) {
-	id, err := caller.ActsFor()
-	if errors.Is(err, tenancy.ErrNoCustomer) {
+	id, ok := caller.Customer()
+	if !ok {
 		return Profile{User: caller}, nil
 	}
-	if err != nil {
-		return Profile{}, err
-	}
 	var stored StoredCustomer
-	err = s.db.InTx(ctx, func(tx *postgres.Tx) (err error) {
+	err := s.db.InTx(ctx, func(tx *postgres.Tx) (err error) {
 		stored, err = tx.Customer(ctx, id)
 		return err
 	})
