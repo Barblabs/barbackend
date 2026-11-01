@@ -22,16 +22,6 @@ import (
 // CMDB, such as a malformed URL, or one for an unknown provider.
 var ErrInvalidLogin = errors.New("invalid cmdb source login")
 
-var (
-	// ErrNotConnected is a Customer with no Connected CMDB Source.
-	ErrNotConnected = postgres.ErrNotConnected
-	// ErrAlreadyConnected is a Customer that already has a Connected CMDB Source.
-	ErrAlreadyConnected = postgres.ErrAlreadyConnected
-	// ErrSyncInProgress is a Sync refused because another Sync of the same
-	// CMDB Source holds its lock.
-	ErrSyncInProgress = postgres.ErrSyncInProgress
-)
-
 type (
 	Login   = provider.Login
 	Failure = provider.Failure
@@ -158,8 +148,9 @@ func (s *Service) UpdateLogin(ctx context.Context, customer tenancy.CustomerID, 
 }
 
 // Disconnect makes the Customer's Connected CMDB Source a Disconnected one
-// and its Assets Inactive, in one transaction. It fails with ErrNotConnected
-// when there is none, and with ErrSyncInProgress while a Sync of it commits.
+// and its Assets Inactive, in one transaction. It fails with
+// inventory.ErrNotConnected when there is none, and with
+// inventory.ErrSyncInProgress while a Sync of it commits.
 func (s *Service) Disconnect(ctx context.Context, customer tenancy.CustomerID) error {
 	return s.db.InTx(ctx, func(tx *postgres.Tx) error { return tx.DisconnectCMDBSource(ctx, customer) })
 }
@@ -183,8 +174,8 @@ func (s *Service) checkLogin(ctx context.Context, name inventory.CMDBProvider, l
 	return settings, credentials, nil
 }
 
-// ConnectedSource fails with ErrNotConnected when the Customer has no
-// Connected CMDB Source. It reads only plain settings, so it needs no key.
+// ConnectedSource fails with inventory.ErrNotConnected when the Customer has
+// no Connected CMDB Source. It reads only plain settings, so it needs no key.
 func (s *Service) ConnectedSource(ctx context.Context, customer tenancy.CustomerID) (ConnectedSource, error) {
 	var (
 		stored postgres.StoredCMDBSource
@@ -259,12 +250,13 @@ func owner(id inventory.CMDBSourceID) []byte {
 }
 
 // SyncConnected brings the Assets of the Customer's Connected CMDB Source in
-// line with a full snapshot of it. It fails with ErrNotConnected when the
-// Customer has none, including when the source is disconnected while the Sync
-// runs. Every failure after the source is read is recorded as a failed Sync
-// Run, which changed no Asset, and returned as a *SyncError. A Sync refused
-// with ErrSyncInProgress is not recorded: it would report the running Sync as
-// failed, and recording it would wait for that Sync to release the source.
+// line with a full snapshot of it. It fails with inventory.ErrNotConnected
+// when the Customer has none, including when the source is disconnected while
+// the Sync runs. Every failure after the source is read is recorded as a
+// failed Sync Run, which changed no Asset, and returned as a *SyncError. A
+// Sync refused with inventory.ErrSyncInProgress is not recorded: it would
+// report the running Sync as failed, and recording it would wait for that
+// Sync to release the source.
 // Nor is one that lost the source to a disconnect, which changed nothing, or
 // one refused with tenancy.ErrCustomerDeactivated, since the Customer is no
 // longer served.
@@ -285,8 +277,8 @@ func (s *Service) syncConnected(ctx context.Context, customer tenancy.CustomerID
 	run, err := s.sync(ctx, stored, started)
 	switch {
 	case errors.Is(err, postgres.ErrDisconnected):
-		return inventory.SyncRun{}, fmt.Errorf("%w: %w", ErrNotConnected, err)
-	case errors.Is(err, ErrSyncInProgress), errors.Is(err, tenancy.ErrCustomerDeactivated):
+		return inventory.SyncRun{}, fmt.Errorf("%w: %w", inventory.ErrNotConnected, err)
+	case errors.Is(err, inventory.ErrSyncInProgress), errors.Is(err, tenancy.ErrCustomerDeactivated):
 		return inventory.SyncRun{}, err
 	case err != nil:
 		return inventory.SyncRun{}, s.recordFailure(ctx, stored.Source.ID(), started, err)

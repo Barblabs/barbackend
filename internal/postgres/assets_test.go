@@ -277,7 +277,7 @@ func TestCommitSyncFailsWhileLocked(t *testing.T) {
 	}()
 	<-locked
 
-	if err := commit(); !errors.Is(err, postgres.ErrSyncInProgress) {
+	if err := commit(); !errors.Is(err, inventory.ErrSyncInProgress) {
 		t.Errorf("err = %v, want ErrSyncInProgress", err)
 	}
 

@@ -46,7 +46,7 @@ func TestCustomerNamesAreUniqueRegardlessOfCase(t *testing.T) {
 		return err
 	})
 
-	if !errors.Is(createErr, postgres.ErrCustomerNameTaken) || !errors.Is(renameErr, postgres.ErrCustomerNameTaken) {
+	if !errors.Is(createErr, tenancy.ErrCustomerNameTaken) || !errors.Is(renameErr, tenancy.ErrCustomerNameTaken) {
 		t.Errorf("create err = %v, rename err = %v, want ErrCustomerNameTaken for both", createErr, renameErr)
 	}
 }

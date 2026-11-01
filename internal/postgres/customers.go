@@ -15,12 +15,6 @@ import (
 
 const customerNameIndex = "customers_name_key"
 
-var (
-	ErrCustomerNotFound = errors.New("customer not found")
-	// ErrCustomerNameTaken is a name another Customer has, regardless of case.
-	ErrCustomerNameTaken = errors.New("another customer has this name")
-)
-
 // StoredCustomer is a Customer with what only the database records about it.
 type StoredCustomer struct {
 	Customer tenancy.Customer
@@ -93,9 +87,9 @@ func customerError(action string, id tenancy.CustomerID, err error) error {
 	var pgErr *pgconn.PgError
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return fmt.Errorf("%s customer %s: %w", action, id, ErrCustomerNotFound)
+		return fmt.Errorf("%s customer %s: %w", action, id, tenancy.ErrCustomerNotFound)
 	case errors.As(err, &pgErr) && pgErr.Code == uniqueViolation && pgErr.ConstraintName == customerNameIndex:
-		return fmt.Errorf("%s customer %s: %w", action, id, ErrCustomerNameTaken)
+		return fmt.Errorf("%s customer %s: %w", action, id, tenancy.ErrCustomerNameTaken)
 	default:
 		return fmt.Errorf("%s customer %s: %w", action, id, err)
 	}

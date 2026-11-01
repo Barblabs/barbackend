@@ -19,10 +19,6 @@ var (
 	// ErrUnauthenticated is an access token that identifies no User. It wraps
 	// the cause, which is for logs only.
 	ErrUnauthenticated = errors.New("unauthenticated")
-	// ErrEmailTaken is an email that already signs in, in Cognito or in
-	// Postgres: the two disagree when a Cognito user is deleted by hand.
-	ErrEmailTaken   = errors.New("a user with this email already exists")
-	ErrUserNotFound = postgres.ErrUserNotFound
 )
 
 type StoredUser = postgres.StoredUser
@@ -129,8 +125,9 @@ func (s *Service) invite(ctx context.Context, u tenancy.User, before func(*postg
 		stored, err = tx.CreateUser(ctx, u, sub)
 		return err
 	})
-	if errors.Is(err, cognito.ErrUsernameExists) || errors.Is(err, postgres.ErrEmailTaken) {
-		err = fmt.Errorf("%w: %w", ErrEmailTaken, err)
+	// Cognito and Postgres disagree when a Cognito user is deleted by hand.
+	if errors.Is(err, cognito.ErrUsernameExists) {
+		err = fmt.Errorf("%w: %w", tenancy.ErrEmailTaken, err)
 	}
 	if err != nil && sub != "" {
 		if delErr := s.admin.DeleteUser(context.WithoutCancel(ctx), sub); delErr != nil {

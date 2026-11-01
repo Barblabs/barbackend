@@ -10,11 +10,6 @@ import (
 
 type StoredCustomer = postgres.StoredCustomer
 
-var (
-	ErrCustomerNotFound  = postgres.ErrCustomerNotFound
-	ErrCustomerNameTaken = postgres.ErrCustomerNameTaken
-)
-
 // CreateCustomer creates a Customer together with its first Customer Admin,
 // who is invited by email. Neither is stored without the other.
 func (s *Service) CreateCustomer(ctx context.Context, caller tenancy.User, name, adminEmail string) (StoredCustomer, error) {

@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"barbackend/internal/cmdb"
 	"barbackend/internal/cmdb/provider"
 	"barbackend/internal/cmdb/provider/providertest"
 	"barbackend/internal/encryption"
@@ -144,7 +143,7 @@ func TestConnectWhenAlreadyConnected(t *testing.T) {
 
 	_, err := e.cmdb.Connect(context.Background(), customer, providertest.Name, other)
 
-	if !errors.Is(err, cmdb.ErrAlreadyConnected) {
+	if !errors.Is(err, inventory.ErrAlreadyConnected) {
 		t.Errorf("err = %v, want ErrAlreadyConnected", err)
 	}
 	if got := e.connectedSource(t, customer); got.URL != providertest.Login.URL {
@@ -302,7 +301,7 @@ func TestDisconnect(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := e.cmdb.ConnectedSource(context.Background(), customer); !errors.Is(err, cmdb.ErrNotConnected) {
+	if _, err := e.cmdb.ConnectedSource(context.Background(), customer); !errors.Is(err, inventory.ErrNotConnected) {
 		t.Errorf("connected source err = %v, want ErrNotConnected", err)
 	}
 	if got := e.rows(t, "SELECT record_id, inactive_since IS NOT NULL FROM assets WHERE cmdb_source_id = $1 ORDER BY record_id", src.String()); !reflect.DeepEqual(got, [][]string{{"a", "true"}, {"b", "true"}}) {
@@ -322,7 +321,7 @@ func TestDisconnectWhileASyncRuns(t *testing.T) {
 	err := e.cmdb.Disconnect(context.Background(), customer)
 	release()
 
-	if !errors.Is(err, cmdb.ErrSyncInProgress) {
+	if !errors.Is(err, inventory.ErrSyncInProgress) {
 		t.Errorf("err = %v, want ErrSyncInProgress", err)
 	}
 	if id := e.connected(t, customer).Source.ID(); id != src {

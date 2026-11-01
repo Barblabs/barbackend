@@ -115,7 +115,7 @@ func TestSyncWithoutConnectedSource(t *testing.T) {
 	e := newEnv(t)
 	e.connect(t)
 
-	if _, err := e.cmdb.SyncConnected(context.Background(), e.newCustomer(t)); !errors.Is(err, cmdb.ErrNotConnected) {
+	if _, err := e.cmdb.SyncConnected(context.Background(), e.newCustomer(t)); !errors.Is(err, inventory.ErrNotConnected) {
 		t.Errorf("err = %v, want ErrNotConnected", err)
 	}
 }
@@ -153,7 +153,7 @@ func TestSyncOfSourceDisconnectedWhileItRunsChangesNothing(t *testing.T) {
 
 	_, err := e.cmdb.SyncConnected(context.Background(), customer)
 
-	if !errors.Is(err, cmdb.ErrNotConnected) {
+	if !errors.Is(err, inventory.ErrNotConnected) {
 		t.Errorf("err = %v, want ErrNotConnected", err)
 	}
 	if after := stored(); !reflect.DeepEqual(after, before) {
@@ -255,7 +255,7 @@ func TestSyncOfDisconnectedSourceFails(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := e.cmdb.SyncConnected(context.Background(), customer); !errors.Is(err, cmdb.ErrNotConnected) {
+	if _, err := e.cmdb.SyncConnected(context.Background(), customer); !errors.Is(err, inventory.ErrNotConnected) {
 		t.Errorf("err = %v, want ErrNotConnected", err)
 	}
 	if n := e.failedRuns(t); n != 0 {
@@ -272,7 +272,7 @@ func TestSyncWhileAnotherSyncRunsIsNotRecorded(t *testing.T) {
 	_, err := e.cmdb.SyncConnected(context.Background(), customer)
 	release()
 
-	if !errors.Is(err, cmdb.ErrSyncInProgress) {
+	if !errors.Is(err, inventory.ErrSyncInProgress) {
 		t.Errorf("err = %v, want ErrSyncInProgress", err)
 	}
 	if got := e.connectedSource(t, customer); got.LastSyncFailure != nil {

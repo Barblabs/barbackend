@@ -83,7 +83,7 @@ func (h cmdbSourceHandler) get(ctx context.Context, _ *struct{}) (*body[*cmdbSou
 		return nil, err
 	}
 	src, err := h.cmdb.ConnectedSource(ctx, customer)
-	if errors.Is(err, cmdb.ErrNotConnected) {
+	if errors.Is(err, inventory.ErrNotConnected) {
 		return &body[*cmdbSourceResponse]{}, nil
 	}
 	if err != nil {

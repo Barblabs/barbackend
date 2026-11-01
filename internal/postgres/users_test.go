@@ -137,7 +137,7 @@ func TestAUserOfAnotherCustomerIsNotFound(t *testing.T) {
 				return err
 			})
 
-			if !errors.Is(err, postgres.ErrUserNotFound) {
+			if !errors.Is(err, tenancy.ErrUserNotFound) {
 				t.Errorf("err = %v, want ErrUserNotFound", err)
 			}
 		})
