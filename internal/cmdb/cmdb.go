@@ -23,15 +23,10 @@ import (
 var ErrInvalidLogin = errors.New("invalid cmdb source login")
 
 type (
-	Login   = provider.Login
-	Failure = provider.Failure
+	Login       = provider.Login
+	Failure     = provider.Failure
+	SyncFailure = postgres.SyncFailure
 )
-
-// SyncFailure is a failed Sync Run: when it finished and why.
-type SyncFailure struct {
-	At    time.Time
-	Error string
-}
 
 // SyncError is a Sync that failed after reading its CMDB Source and was
 // recorded as a failed Sync Run.
@@ -224,11 +219,13 @@ func (s *Service) connectedSource(ctx context.Context, customer tenancy.Customer
 	if err != nil {
 		return ConnectedSource{}, fmt.Errorf("describe %s: %w", src.ID(), err)
 	}
-	connected := ConnectedSource{Provider: src.Provider(), URL: desc.URL, User: desc.User, LastSync: status.LastSync}
-	if f := status.LastFailure; f != nil {
-		connected.LastSyncFailure = &SyncFailure{At: f.At, Error: f.Error}
-	}
-	return connected, nil
+	return ConnectedSource{
+		Provider:        src.Provider(),
+		URL:             desc.URL,
+		User:            desc.User,
+		LastSync:        status.LastSync,
+		LastSyncFailure: status.LastFailure,
+	}, nil
 }
 
 func (s *Service) connected(ctx context.Context, customer tenancy.CustomerID) (postgres.StoredCMDBSource, error) {
