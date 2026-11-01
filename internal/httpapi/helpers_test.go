@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"barbackend/internal/assets"
 	"barbackend/internal/cmdb"
 	"barbackend/internal/cmdb/provider/providertest"
 	"barbackend/internal/cognito/cognitotest"
@@ -86,7 +87,7 @@ func newEnv(t *testing.T) env {
 	pool := cognitotest.New(t)
 	svc := cmdb.New(db, p.Providers(), newKey(t), context.Background(), time.Minute)
 	admin := &fakeAdmin{}
-	router := httpapi.New(httpapi.Config{CMDB: svc, Users: users.New(db, pool.Verifier(t), admin), AllowedOrigins: []string{allowedOrigin}})
+	router := httpapi.New(httpapi.Config{Assets: assets.New(db), CMDB: svc, Users: users.New(db, pool.Verifier(t), admin), AllowedOrigins: []string{allowedOrigin}})
 	e := env{db: db, conn: pgtest.Conn(t, url), pool: pool, provider: p, admin: admin, cmdb: svc, router: router}
 	e.customer = e.newCustomer(t)
 	e.token = e.signIn(t, e.newUser(t, tenancy.Viewer, e.customer))

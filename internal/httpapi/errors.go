@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"barbackend/internal/assets"
 	"barbackend/internal/cmdb"
 	"barbackend/internal/inventory"
 	"barbackend/internal/tenancy"
@@ -75,7 +76,7 @@ func apiError(err error) *codedError {
 		return &codedError{status: http.StatusUnprocessableEntity, Code: string(failure.Code), Message: failure.Message}
 	case errors.Is(err, cmdb.ErrInvalidLogin):
 		return &codedError{status: http.StatusBadRequest, Code: invalidLogin, Message: err.Error()}
-	case errors.Is(err, cmdb.ErrInvalidAssetQuery):
+	case errors.Is(err, assets.ErrInvalidQuery):
 		return &codedError{status: http.StatusBadRequest, Code: invalidRequest, Message: err.Error()}
 	case errors.Is(err, inventory.ErrNotConnected):
 		return &codedError{status: http.StatusNotFound, Code: notConnected, Message: err.Error()}
