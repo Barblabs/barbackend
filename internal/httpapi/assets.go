@@ -52,14 +52,6 @@ func (criticalityCode) Schema(huma.Registry) *huma.Schema {
 	return &huma.Schema{Type: huma.TypeString, Enum: codes(inventory.CriticalityHigh, inventory.CriticalityMedium, inventory.CriticalityLow)}
 }
 
-func codes[T interface{ Code() string }](values ...T) []any {
-	enum := make([]any, len(values))
-	for i, v := range values {
-		enum[i] = v.Code()
-	}
-	return enum
-}
-
 func (in assetQuery) query() (assets.Query, error) {
 	q := assets.Query{Limit: int(in.Limit), Cursor: in.Cursor}
 	switch in.Active {

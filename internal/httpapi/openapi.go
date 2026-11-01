@@ -81,6 +81,14 @@ func orNull(s *huma.Schema) *huma.Schema {
 	return &huma.Schema{AnyOf: []*huma.Schema{s, {Type: huma.TypeNull}}}
 }
 
+func codes[T interface{ Code() string }](values ...T) []any {
+	enum := make([]any, len(values))
+	for i, v := range values {
+		enum[i] = v.Code()
+	}
+	return enum
+}
+
 func nullableBody[T any](api huma.API) map[string]*huma.Response {
 	ref := api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[T](), true, "")
 	return map[string]*huma.Response{
