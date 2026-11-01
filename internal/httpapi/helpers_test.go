@@ -194,11 +194,11 @@ type cmdbSource struct {
 	Provider        string     `json:"provider"`
 	URL             string     `json:"url"`
 	User            string     `json:"user"`
-	LastSync        *time.Time `json:"lastSync"`
+	LastSync        *time.Time `json:"last_sync"`
 	LastSyncFailure *struct {
 		At    time.Time `json:"at"`
 		Error string    `json:"error"`
-	} `json:"lastSyncFailure"`
+	} `json:"last_sync_failure"`
 }
 
 func (e env) getCMDBSource(t *testing.T) (cmdbSource, string) {
@@ -228,7 +228,7 @@ func (e env) sendLogin(method, path string, login map[string]string) *httptest.R
 }
 
 type syncResult struct {
-	LastSync    *time.Time `json:"lastSync"`
+	LastSync    *time.Time `json:"last_sync"`
 	Created     int        `json:"created"`
 	Updated     int        `json:"updated"`
 	Deactivated int        `json:"deactivated"`

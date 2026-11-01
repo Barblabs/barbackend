@@ -31,7 +31,7 @@ func (h cmdbSourceHandler) register(api huma.API) {
 		Method:      http.MethodPost,
 		Path:        "/cmdb/source",
 		Summary:     "Connect a CMDB Source and run its first Sync",
-		Description: "A failed first Sync is reported in lastSyncFailure and leaves the CMDB Source connected.",
+		Description: "A failed first Sync is reported in last_sync_failure and leaves the CMDB Source connected.",
 		Errors:      []int{http.StatusBadRequest, http.StatusConflict, http.StatusUnprocessableEntity},
 	}, h.connect)
 	register(api, huma.Operation{
@@ -69,8 +69,8 @@ type cmdbSourceResponse struct {
 	Provider        string               `json:"provider"`
 	URL             string               `json:"url"`
 	User            *string              `json:"user" doc:"Null for a source that authenticates without a user, such as with a token"`
-	LastSync        *time.Time           `json:"lastSync"`
-	LastSyncFailure *syncFailureResponse `json:"lastSyncFailure"`
+	LastSync        *time.Time           `json:"last_sync"`
+	LastSyncFailure *syncFailureResponse `json:"last_sync_failure"`
 }
 
 type syncFailureResponse struct {
@@ -154,7 +154,7 @@ func cmdbSourceOutput(src cmdb.ConnectedSource, err error) (*body[*cmdbSourceRes
 }
 
 type syncResponse struct {
-	LastSync    time.Time `json:"lastSync"`
+	LastSync    time.Time `json:"last_sync"`
 	Created     int       `json:"created"`
 	Updated     int       `json:"updated"`
 	Deactivated int       `json:"deactivated"`
