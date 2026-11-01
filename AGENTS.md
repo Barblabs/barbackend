@@ -6,6 +6,10 @@ Keep entries concise and useful across future sessions. Point to authoritative f
 
 - Package layers and where new features go: ADR 0008. `depguard` in `.golangci.yaml` enforces the import direction; if a rule blocks you, move the code to the right layer rather than loosening the rule.
 
+## Branches
+
+- `dev` is the default branch: branch off it and open PRs against it. `main` only moves on a formal release, by merging `dev` into it.
+
 ## Database
 
 - Schema lives in `internal/postgres/migrations` (goose); queries in `internal/postgres/queries`. After editing either, run `go tool -modfile=tools.mod sqlc generate`.
