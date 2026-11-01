@@ -8,6 +8,8 @@ disable-model-invocation: true
 
 Use this skill for an unusually strict review focused on implementation quality, maintainability, abstraction quality, and codebase health.
 
+Read `CODING_STANDARDS.md` first and apply every rule in it to the diff alongside the standards below. It holds this repo's own rules.
+
 Above all, this skill should push the reviewer to be **ambitious** about code structure. Do not merely identify local cleanup opportunities. Actively search for "code judo" moves: restructurings that preserve behavior while making the implementation dramatically simpler, smaller, more direct, and more elegant.
 
 ## Core Prompt
