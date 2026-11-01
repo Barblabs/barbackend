@@ -17,6 +17,10 @@ Review rules for judgement calls that no linter checks. Apply every rule to the 
 - **Tightening a domain invariant ships with a migration for existing rows**: stored Assets are rebuilt through the domain constructors, so a row that breaks a new rule fails the Sync of its CMDB Source until it is fixed.
 - **Merged migrations are immutable**: change the schema with a new migration.
 
+## HTTP
+
+- **One error mapping**: `apiError` (`internal/httpapi/errors.go`) is the only place an error becomes an HTTP status. Handlers return `apiError(err)` without building statuses of their own. Use cases return the domain's sentinel as it is, so `apiError` maps it in one case and no caller has to unwrap it with a special case.
+
 ## Tests
 
 - **Black-box**: `package <name>_test`, exercising only the exported interface, table-driven where cases share a shape.
@@ -27,4 +31,5 @@ Review rules for judgement calls that no linter checks. Apply every rule to the 
 ## Code hygiene
 
 - No dead code: every identifier, sentinel error and helper is used.
+- **One function per action**: a boolean parameter that picks between two actions (deactivate or reactivate) becomes two functions, each with its own query.
 - **Comments are foreign gotchas or API contracts**: a comment survives only if it records behaviour forced by a dependency (Huma, Gin, Postgres, iTop) and checked against its source or docs, or documents an exported identifier. A comment justifying our own code is an alibi: delete it and reshape the code so it reads on its own (rename, extract, a `doc:` tag).
