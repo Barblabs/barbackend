@@ -185,10 +185,8 @@ func (k AssetKind) Code() string { return assetKindCodes[k] }
 
 // ParseAssetKind is the inverse of AssetKind.Code.
 func ParseAssetKind(code string) (AssetKind, error) {
-	for k, c := range assetKindCodes {
-		if c == code {
-			return k, nil
-		}
+	if k, ok := parseCode(assetKindCodes, code); ok {
+		return k, nil
 	}
 	return 0, fmt.Errorf("%w: %q", ErrInvalidKind, code)
 }
@@ -199,10 +197,8 @@ func (c Criticality) Code() string { return criticalityCodes[c] }
 
 // ParseCriticality is the inverse of Criticality.Code. Unknown has no code.
 func ParseCriticality(code string) (Criticality, error) {
-	for c, name := range criticalityCodes {
-		if name == code {
-			return c, nil
-		}
+	if c, ok := parseCode(criticalityCodes, code); ok {
+		return c, nil
 	}
 	return 0, fmt.Errorf("%w: %q", ErrInvalidCriticality, code)
 }
@@ -213,3 +209,13 @@ func (e Exposure) Code() string { return exposureCodes[e] }
 
 // Code is the stable lowercase snake_case name clients use for the role.
 func (r SoftwareRole) Code() string { return softwareRoleCodes[r] }
+
+func parseCode[T comparable](codes map[T]string, code string) (T, bool) {
+	for v, c := range codes {
+		if c == code {
+			return v, true
+		}
+	}
+	var zero T
+	return zero, false
+}
