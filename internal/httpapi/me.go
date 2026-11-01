@@ -40,7 +40,7 @@ type meCustomer struct {
 type callerRole string
 
 func (callerRole) Schema(huma.Registry) *huma.Schema {
-	return &huma.Schema{Type: huma.TypeString, Enum: []any{tenancy.PlatformAdmin.Code(), tenancy.CustomerAdmin.Code(), tenancy.Viewer.Code()}}
+	return &huma.Schema{Type: huma.TypeString, Enum: codes(tenancy.PlatformAdmin, tenancy.CustomerAdmin, tenancy.Viewer)}
 }
 
 func (h meHandler) get(ctx context.Context, caller tenancy.User, _ *struct{}) (*body[meResponse], error) {

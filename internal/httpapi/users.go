@@ -60,7 +60,7 @@ type userResponse struct {
 type roleCode string
 
 func (roleCode) Schema(huma.Registry) *huma.Schema {
-	return &huma.Schema{Type: huma.TypeString, Enum: []any{tenancy.CustomerAdmin.Code(), tenancy.Viewer.Code()}}
+	return &huma.Schema{Type: huma.TypeString, Enum: codes(tenancy.CustomerAdmin, tenancy.Viewer)}
 }
 
 type userListResponse struct {
