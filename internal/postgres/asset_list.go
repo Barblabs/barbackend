@@ -3,7 +3,6 @@ package postgres
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"barbackend/internal/inventory"
 	"barbackend/internal/postgres/sqlcgen"
@@ -32,33 +31,9 @@ type AssetListQuery struct {
 	Limit int
 }
 
-// OwnerValue is the effective Asset Owner and where it comes from.
-type OwnerValue struct {
-	Email    inventory.OwnerEmail
-	Declared bool
-}
-
-// ListedAsset is an Asset as a list shows it: the imported values and the
-// effective Declarations, without the bookkeeping columns.
-type ListedAsset struct {
-	Ref         inventory.SourceReference
-	Name        string
-	Description string
-	Kind        inventory.AssetKind
-	// Hardware is nil for an Asset without any.
-	Hardware    *inventory.Hardware
-	Software    []inventory.SoftwareComponent
-	Criticality inventory.Criticality
-	Exposure    inventory.Exposure
-	// Owner is nil when the Asset has neither a declared nor an imported owner.
-	Owner         *OwnerValue
-	Retired       bool
-	InactiveSince *time.Time
-}
-
 // AssetPage is one page of ListAssets.
 type AssetPage struct {
-	Assets []ListedAsset
+	Assets []StoredAsset
 	// More is whether Assets past this page match the query.
 	More bool
 	// Total counts every matching Asset, ignoring After and Limit.
@@ -103,51 +78,18 @@ func (t *Tx) ListAssets(ctx context.Context, q AssetListQuery) (AssetPage, error
 	if err != nil {
 		return AssetPage{}, err
 	}
-	page.Assets = make([]ListedAsset, len(rows))
+	page.Assets = make([]StoredAsset, len(rows))
 	for i, row := range rows {
-		ref := inventory.SourceReference{Source: inventory.CMDBSourceID(row.CmdbSourceID), RecordID: row.RecordID}
-		page.Assets[i], err = listedAsset(ref, row, software[ref])
-		if err != nil {
-			return AssetPage{}, fmt.Errorf("restore asset %v: %w", ref, err)
+		if page.Assets[i], err = restoreAsset(sqlcgen.ListAssetsRow(row), software); err != nil {
+			return AssetPage{}, err
 		}
 	}
 	return page, nil
 }
 
-func listedAsset(ref inventory.SourceReference, row sqlcgen.ListCustomerAssetsRow, software []inventory.SoftwareComponent) (ListedAsset, error) {
-	a := ListedAsset{
-		Ref:           ref,
-		Name:          row.Name,
-		Description:   row.Description,
-		Kind:          inventory.AssetKind(row.KindID),
-		Software:      software,
-		Criticality:   inventory.Criticality(valueOrZero(row.CriticalityID)),
-		Exposure:      inventory.Exposure(valueOrZero(row.DeclaredExposureID)),
-		Retired:       row.Retired,
-		InactiveSince: row.InactiveSince,
-	}
-	if row.HardwareVendor != nil {
-		a.Hardware = &inventory.Hardware{Vendor: *row.HardwareVendor, Model: valueOrZero(row.HardwareModel)}
-	}
-	// The Declaration wins over the imported value (ADR 0004).
-	email, declared := row.DeclaredOwner, true
-	if email == nil {
-		email, declared = row.ImportedOwner, false
-	}
-	if email != nil {
-		owner, err := inventory.NewOwnerEmail(*email)
-		if err != nil {
-			return ListedAsset{}, err
-		}
-		a.Owner = &OwnerValue{Email: owner, Declared: declared}
-	}
-	return a, nil
-}
-
 func (t *Tx) softwareOf(ctx context.Context, rows []sqlcgen.ListCustomerAssetsRow) (map[inventory.SourceReference][]inventory.SoftwareComponent, error) {
-	byAsset := make(map[inventory.SourceReference][]inventory.SoftwareComponent, len(rows))
 	if len(rows) == 0 {
-		return byAsset, nil
+		return nil, nil
 	}
 	sources := make([]uuid.UUID, len(rows))
 	records := make([]string, len(rows))
@@ -158,16 +100,7 @@ func (t *Tx) softwareOf(ctx context.Context, rows []sqlcgen.ListCustomerAssetsRo
 	if err != nil {
 		return nil, fmt.Errorf("list software of %d assets: %w", len(rows), err)
 	}
-	for _, row := range components {
-		ref := inventory.SourceReference{Source: inventory.CMDBSourceID(row.CmdbSourceID), RecordID: row.RecordID}
-		byAsset[ref] = append(byAsset[ref], inventory.SoftwareComponent{
-			Role:    inventory.SoftwareRole(row.RoleID),
-			Name:    row.Name,
-			Version: row.Version,
-			Product: inventory.Product{Vendor: valueOrZero(row.ProductVendor), Name: valueOrZero(row.ProductName)},
-		})
-	}
-	return byAsset, nil
+	return softwareByAsset(components), nil
 }
 
 func ptr[T any](v T) *T { return &v }

@@ -23,10 +23,7 @@ const (
 // cursor, including a cursor reused with other filters.
 var ErrInvalidAssetQuery = errors.New("invalid asset query")
 
-type (
-	ListedAsset = postgres.ListedAsset
-	OwnerValue  = postgres.OwnerValue
-)
+type StoredAsset = postgres.StoredAsset
 
 // AssetQuery is an asset list request as a client wrote it. Empty fields
 // take their defaults.
@@ -40,7 +37,7 @@ type AssetQuery struct {
 
 // AssetPage is one page of a Customer's Assets.
 type AssetPage struct {
-	Assets []ListedAsset
+	Assets []StoredAsset
 	// NextCursor continues after the last Asset, empty on the last page.
 	NextCursor string
 	// Total counts every Asset matching the filters, ignoring paging.
@@ -81,8 +78,8 @@ func (s *Service) ListAssets(ctx context.Context, customer tenancy.CustomerID, q
 	}
 	result := AssetPage{Assets: page.Assets, Total: page.Total}
 	if page.More {
-		last := page.Assets[len(page.Assets)-1]
-		result.NextCursor = encodeCursor(cursor{Name: last.Name, Source: uuid.UUID(last.Ref.Source), Record: last.Ref.RecordID, Filters: filters})
+		last := page.Assets[len(page.Assets)-1].Asset
+		result.NextCursor = encodeCursor(cursor{Name: last.Imported().Name(), Source: uuid.UUID(last.Ref().Source), Record: last.Ref().RecordID, Filters: filters})
 	}
 	return result, nil
 }

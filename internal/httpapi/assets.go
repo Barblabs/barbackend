@@ -105,32 +105,34 @@ func newAssetListResponse(page cmdb.AssetPage) assetListResponse {
 	return resp
 }
 
-func newAssetResponse(a cmdb.ListedAsset) assetResponse {
+func newAssetResponse(stored cmdb.StoredAsset) assetResponse {
+	a, imported := stored.Asset, stored.Asset.Imported()
+	software := imported.Software()
 	resp := assetResponse{
-		SourceID:      a.Ref.Source.String(),
-		RecordID:      a.Ref.RecordID,
-		Name:          a.Name,
-		Description:   a.Description,
-		Kind:          a.Kind.Code(),
-		Software:      make([]softwareResponse, len(a.Software)),
-		Criticality:   code(a.Criticality.Code()),
-		Exposure:      code(a.Exposure.Code()),
-		Retired:       a.Retired,
-		Active:        a.InactiveSince == nil,
-		InactiveSince: a.InactiveSince,
+		SourceID:      a.Ref().Source.String(),
+		RecordID:      a.Ref().RecordID,
+		Name:          imported.Name(),
+		Description:   imported.Description(),
+		Kind:          imported.Kind().Code(),
+		Software:      make([]softwareResponse, len(software)),
+		Criticality:   code(imported.Criticality().Code()),
+		Exposure:      code(a.Exposure().Code()),
+		Retired:       imported.Retired(),
+		Active:        a.Active(),
+		InactiveSince: stored.InactiveSince,
 	}
-	if hw := a.Hardware; hw != nil {
+	if hw, ok := imported.Hardware(); ok {
 		resp.Hardware = &hardwareResponse{Vendor: hw.Vendor, Model: hw.Model}
 	}
-	for i, sc := range a.Software {
+	for i, sc := range software {
 		resp.Software[i] = softwareResponse{Role: sc.Role.Code(), Name: sc.Name, Version: sc.Version}
 		if sc.Identified() {
 			resp.Software[i].Product = &productResponse{Vendor: sc.Product.Vendor, Name: sc.Product.Name}
 		}
 	}
-	if o := a.Owner; o != nil {
-		resp.Owner = &ownerResponse{Email: o.Email.String(), Source: "imported"}
-		if o.Declared {
+	if owner, ok := a.Owner(); ok {
+		resp.Owner = &ownerResponse{Email: owner.String(), Source: "imported"}
+		if _, declared := a.DeclaredOwner(); declared {
 			resp.Owner.Source = "declared"
 		}
 	}
