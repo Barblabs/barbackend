@@ -32,6 +32,7 @@ type SyncStatus struct {
 	LastFailure *SyncFailure
 }
 
+// SyncFailure is a failed Sync Run: when it finished and why.
 type SyncFailure struct {
 	At    time.Time
 	Error string

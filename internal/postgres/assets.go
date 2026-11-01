@@ -24,18 +24,18 @@ func (t *sourceTx) assets(ctx context.Context) ([]*inventory.Asset, error) {
 	if err != nil {
 		return nil, fmt.Errorf("list assets of %s: %w", t.source, err)
 	}
-	software, err := t.software(ctx)
+	components, err := t.q.ListSoftwareComponents(ctx, source)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list software of %s: %w", t.source, err)
 	}
-	assets := make([]*inventory.Asset, 0, len(rows))
-	for _, row := range rows {
-		ref := inventory.SourceReference{Source: t.source, RecordID: row.RecordID}
-		a, err := restoreAsset(ref, row, software[row.RecordID])
+	software := softwareByAsset(components)
+	assets := make([]*inventory.Asset, len(rows))
+	for i, row := range rows {
+		stored, err := restoreAsset(row, software)
 		if err != nil {
-			return nil, fmt.Errorf("restore asset %v: %w", ref, err)
+			return nil, err
 		}
-		assets = append(assets, a)
+		assets[i] = stored.Asset
 	}
 	return assets, nil
 }
@@ -247,7 +247,23 @@ func importedColumns(source inventory.CMDBSourceID, a *inventory.Asset, owners o
 	return p
 }
 
-func restoreAsset(ref inventory.SourceReference, row sqlcgen.ListAssetsRow, software []inventory.SoftwareComponent) (*inventory.Asset, error) {
+// StoredAsset is an Asset with what only the database records about it.
+type StoredAsset struct {
+	Asset *inventory.Asset
+	// InactiveSince is when the Asset became Inactive, nil while it is Active.
+	InactiveSince *time.Time
+}
+
+func restoreAsset(row sqlcgen.ListAssetsRow, software map[inventory.SourceReference][]inventory.SoftwareComponent) (StoredAsset, error) {
+	ref := inventory.SourceReference{Source: inventory.CMDBSourceID(row.CmdbSourceID), RecordID: row.RecordID}
+	a, err := restoreAssetValues(ref, row, software[ref])
+	if err != nil {
+		return StoredAsset{}, fmt.Errorf("restore asset %v: %w", ref, err)
+	}
+	return StoredAsset{Asset: a, InactiveSince: row.InactiveSince}, nil
+}
+
+func restoreAssetValues(ref inventory.SourceReference, row sqlcgen.ListAssetsRow, software []inventory.SoftwareComponent) (*inventory.Asset, error) {
 	importedOwner, err := ownerEmail(row.ImportedOwner)
 	if err != nil {
 		return nil, err
@@ -256,7 +272,7 @@ func restoreAsset(ref inventory.SourceReference, row sqlcgen.ListAssetsRow, soft
 	if err != nil {
 		return nil, err
 	}
-	p := inventory.ImportedAssetParams{
+	imported, err := inventory.NewImportedAsset(inventory.ImportedAssetParams{
 		Name:        row.Name,
 		Description: row.Description,
 		Kind:        inventory.AssetKind(row.KindID),
@@ -265,13 +281,12 @@ func restoreAsset(ref inventory.SourceReference, row sqlcgen.ListAssetsRow, soft
 		Criticality: inventory.Criticality(valueOrZero(row.CriticalityID)),
 		Owner:       importedOwner,
 		Retired:     row.Retired,
-	}
-	imported, err := inventory.NewImportedAsset(p)
+	})
 	if err != nil {
 		return nil, err
 	}
 	return inventory.RestoreAsset(ref, imported, inventory.AssetState{
-		Active:           row.Active,
+		Active:           row.InactiveSince == nil,
 		DeclaredOwner:    declaredOwner,
 		DeclaredExposure: inventory.Exposure(valueOrZero(row.DeclaredExposureID)),
 	})
@@ -284,22 +299,18 @@ func ownerEmail(email *string) (inventory.OwnerEmail, error) {
 	return inventory.NewOwnerEmail(*email)
 }
 
-func (t *sourceTx) software(ctx context.Context) (map[string][]inventory.SoftwareComponent, error) {
-	rows, err := t.q.ListSoftwareComponents(ctx, uuid.UUID(t.source))
-	if err != nil {
-		return nil, fmt.Errorf("list software of %s: %w", t.source, err)
-	}
-	byRecord := make(map[string][]inventory.SoftwareComponent)
+func softwareByAsset(rows []sqlcgen.SoftwareComponent) map[inventory.SourceReference][]inventory.SoftwareComponent {
+	byAsset := make(map[inventory.SourceReference][]inventory.SoftwareComponent)
 	for _, row := range rows {
-		c := inventory.SoftwareComponent{
+		ref := inventory.SourceReference{Source: inventory.CMDBSourceID(row.CmdbSourceID), RecordID: row.RecordID}
+		byAsset[ref] = append(byAsset[ref], inventory.SoftwareComponent{
 			Role:    inventory.SoftwareRole(row.RoleID),
 			Name:    row.Name,
 			Version: row.Version,
 			Product: inventory.Product{Vendor: valueOrZero(row.ProductVendor), Name: valueOrZero(row.ProductName)},
-		}
-		byRecord[row.RecordID] = append(byRecord[row.RecordID], c)
+		})
 	}
-	return byRecord, nil
+	return byAsset
 }
 
 func nullableID[T ~int](v, unset T) *int16 {

@@ -21,16 +21,11 @@ import (
 )
 
 var (
-	ErrNotFound       = errors.New("not found")
-	ErrSuperseded     = errors.New("superseded by a later successful sync")
-	ErrSyncInProgress = errors.New("another sync of the cmdb source is running")
+	ErrNotFound   = errors.New("not found")
+	ErrSuperseded = errors.New("superseded by a later successful sync")
 	// ErrDisconnected is a Sync refused because its CMDB Source was
 	// disconnected: its Assets stay as the disconnect left them.
 	ErrDisconnected = errors.New("cmdb source is disconnected")
-	// ErrAlreadyConnected is a Customer that already has a Connected CMDB Source.
-	ErrAlreadyConnected = errors.New("customer already has a connected cmdb source")
-	// ErrNotConnected is a Customer with no Connected CMDB Source.
-	ErrNotConnected = errors.New("customer has no connected cmdb source")
 )
 
 const (
@@ -85,6 +80,20 @@ func (db *DB) InTx(ctx context.Context, fn func(*Tx) error) error {
 	return pgx.BeginFunc(ctx, db.pool, func(tx pgx.Tx) error {
 		return fn(&Tx{q: sqlcgen.New(tx)})
 	})
+}
+
+// InTxValue runs fn in one transaction, as InTx does, and returns its result.
+func InTxValue[T any](ctx context.Context, db *DB, fn func(*Tx) (T, error)) (T, error) {
+	var v T
+	err := db.InTx(ctx, func(tx *Tx) (err error) {
+		v, err = fn(tx)
+		return err
+	})
+	if err != nil {
+		var zero T
+		return zero, err
+	}
+	return v, nil
 }
 
 // CommitSync is the transactional end of a Sync. It locks the CMDB Source,
@@ -165,7 +174,7 @@ func lockError(source string, missing, err error) error {
 	}
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == lockNotAvailable {
-		return fmt.Errorf("%s: %w", source, ErrSyncInProgress)
+		return fmt.Errorf("%s: %w", source, inventory.ErrSyncInProgress)
 	}
 	return fmt.Errorf("lock %s: %w", source, err)
 }

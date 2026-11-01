@@ -44,10 +44,10 @@ SET inactive_since = NULL
 WHERE cmdb_source_id = @cmdb_source_id AND record_id = ANY(@record_ids::text[]);
 
 -- name: ListAssets :many
-SELECT a.record_id, a.name, a.description, a.kind_id, a.hardware_vendor, a.hardware_model,
-       a.criticality_id, imported_owner.email AS imported_owner, a.retired,
-       declared_owner.email AS declared_owner, a.declared_exposure_id,
-       (a.inactive_since IS NULL)::boolean AS active
+SELECT a.cmdb_source_id, a.record_id, a.name, a.description, a.kind_id,
+       a.hardware_vendor, a.hardware_model, a.criticality_id,
+       imported_owner.email AS imported_owner, declared_owner.email AS declared_owner,
+       a.declared_exposure_id, a.retired, a.inactive_since
 FROM assets a
 LEFT JOIN asset_owners imported_owner ON imported_owner.id = a.imported_owner_id
 LEFT JOIN asset_owners declared_owner ON declared_owner.id = a.declared_owner_id
@@ -64,7 +64,7 @@ INSERT INTO software_components (
 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
 
 -- name: ListSoftwareComponents :many
-SELECT record_id, role_id, name, version, product_vendor, product_name
+SELECT *
 FROM software_components
 WHERE cmdb_source_id = @cmdb_source_id
 ORDER BY record_id, position;
@@ -106,7 +106,7 @@ WHERE s.customer_id = @customer_id
 
 -- The two arrays are parallel: element i of each names one Asset.
 -- name: ListSoftwareComponentsOf :many
-SELECT cmdb_source_id, record_id, role_id, name, version, product_vendor, product_name
+SELECT *
 FROM software_components
 WHERE (cmdb_source_id, record_id) IN (
     SELECT s.id, r.id

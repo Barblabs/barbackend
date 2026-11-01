@@ -113,10 +113,10 @@ type InsertSoftwareComponentsParams struct {
 }
 
 const listAssets = `-- name: ListAssets :many
-SELECT a.record_id, a.name, a.description, a.kind_id, a.hardware_vendor, a.hardware_model,
-       a.criticality_id, imported_owner.email AS imported_owner, a.retired,
-       declared_owner.email AS declared_owner, a.declared_exposure_id,
-       (a.inactive_since IS NULL)::boolean AS active
+SELECT a.cmdb_source_id, a.record_id, a.name, a.description, a.kind_id,
+       a.hardware_vendor, a.hardware_model, a.criticality_id,
+       imported_owner.email AS imported_owner, declared_owner.email AS declared_owner,
+       a.declared_exposure_id, a.retired, a.inactive_since
 FROM assets a
 LEFT JOIN asset_owners imported_owner ON imported_owner.id = a.imported_owner_id
 LEFT JOIN asset_owners declared_owner ON declared_owner.id = a.declared_owner_id
@@ -125,6 +125,7 @@ ORDER BY a.record_id
 `
 
 type ListAssetsRow struct {
+	CmdbSourceID       uuid.UUID
 	RecordID           string
 	Name               string
 	Description        string
@@ -133,10 +134,10 @@ type ListAssetsRow struct {
 	HardwareModel      *string
 	CriticalityID      *int16
 	ImportedOwner      *string
-	Retired            bool
 	DeclaredOwner      *string
 	DeclaredExposureID *int16
-	Active             bool
+	Retired            bool
+	InactiveSince      *time.Time
 }
 
 func (q *Queries) ListAssets(ctx context.Context, cmdbSourceID uuid.UUID) ([]ListAssetsRow, error) {
@@ -149,6 +150,7 @@ func (q *Queries) ListAssets(ctx context.Context, cmdbSourceID uuid.UUID) ([]Lis
 	for rows.Next() {
 		var i ListAssetsRow
 		if err := rows.Scan(
+			&i.CmdbSourceID,
 			&i.RecordID,
 			&i.Name,
 			&i.Description,
@@ -157,10 +159,10 @@ func (q *Queries) ListAssets(ctx context.Context, cmdbSourceID uuid.UUID) ([]Lis
 			&i.HardwareModel,
 			&i.CriticalityID,
 			&i.ImportedOwner,
-			&i.Retired,
 			&i.DeclaredOwner,
 			&i.DeclaredExposureID,
-			&i.Active,
+			&i.Retired,
+			&i.InactiveSince,
 		); err != nil {
 			return nil, err
 		}
@@ -265,32 +267,25 @@ func (q *Queries) ListCustomerAssets(ctx context.Context, arg ListCustomerAssets
 }
 
 const listSoftwareComponents = `-- name: ListSoftwareComponents :many
-SELECT record_id, role_id, name, version, product_vendor, product_name
+SELECT cmdb_source_id, record_id, position, role_id, name, version, product_vendor, product_name
 FROM software_components
 WHERE cmdb_source_id = $1
 ORDER BY record_id, position
 `
 
-type ListSoftwareComponentsRow struct {
-	RecordID      string
-	RoleID        int16
-	Name          string
-	Version       string
-	ProductVendor *string
-	ProductName   *string
-}
-
-func (q *Queries) ListSoftwareComponents(ctx context.Context, cmdbSourceID uuid.UUID) ([]ListSoftwareComponentsRow, error) {
+func (q *Queries) ListSoftwareComponents(ctx context.Context, cmdbSourceID uuid.UUID) ([]SoftwareComponent, error) {
 	rows, err := q.db.Query(ctx, listSoftwareComponents, cmdbSourceID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListSoftwareComponentsRow
+	var items []SoftwareComponent
 	for rows.Next() {
-		var i ListSoftwareComponentsRow
+		var i SoftwareComponent
 		if err := rows.Scan(
+			&i.CmdbSourceID,
 			&i.RecordID,
+			&i.Position,
 			&i.RoleID,
 			&i.Name,
 			&i.Version,
@@ -308,7 +303,7 @@ func (q *Queries) ListSoftwareComponents(ctx context.Context, cmdbSourceID uuid.
 }
 
 const listSoftwareComponentsOf = `-- name: ListSoftwareComponentsOf :many
-SELECT cmdb_source_id, record_id, role_id, name, version, product_vendor, product_name
+SELECT cmdb_source_id, record_id, position, role_id, name, version, product_vendor, product_name
 FROM software_components
 WHERE (cmdb_source_id, record_id) IN (
     SELECT s.id, r.id
@@ -323,29 +318,20 @@ type ListSoftwareComponentsOfParams struct {
 	RecordIds []string
 }
 
-type ListSoftwareComponentsOfRow struct {
-	CmdbSourceID  uuid.UUID
-	RecordID      string
-	RoleID        int16
-	Name          string
-	Version       string
-	ProductVendor *string
-	ProductName   *string
-}
-
 // The two arrays are parallel: element i of each names one Asset.
-func (q *Queries) ListSoftwareComponentsOf(ctx context.Context, arg ListSoftwareComponentsOfParams) ([]ListSoftwareComponentsOfRow, error) {
+func (q *Queries) ListSoftwareComponentsOf(ctx context.Context, arg ListSoftwareComponentsOfParams) ([]SoftwareComponent, error) {
 	rows, err := q.db.Query(ctx, listSoftwareComponentsOf, arg.SourceIds, arg.RecordIds)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListSoftwareComponentsOfRow
+	var items []SoftwareComponent
 	for rows.Next() {
-		var i ListSoftwareComponentsOfRow
+		var i SoftwareComponent
 		if err := rows.Scan(
 			&i.CmdbSourceID,
 			&i.RecordID,
+			&i.Position,
 			&i.RoleID,
 			&i.Name,
 			&i.Version,

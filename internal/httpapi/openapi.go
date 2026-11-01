@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"barbackend/internal/tenancy"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
 )
@@ -24,14 +25,25 @@ type idPath struct {
 	ID uuid.UUID `path:"id" format:"uuid"`
 }
 
-// Huma lists 422 on any operation with path parameters or a body, though
-// newHumaError answers those failures with 400.
-func register[I, O any](api huma.API, op huma.Operation, handler func(context.Context, *I) (*O, error)) {
+// register serves an operation to the signed-in caller, answering its errors
+// through apiError. Huma lists 422 on any operation with path parameters or
+// a body, though newHumaError answers those failures with 400.
+func register[I, O any](api huma.API, op huma.Operation, handler func(ctx context.Context, caller tenancy.User, in *I) (*O, error)) {
 	op.Errors = append(op.Errors, http.StatusUnauthorized, http.StatusForbidden)
 	if !slices.Contains(op.Errors, http.StatusUnprocessableEntity) {
 		op.Metadata = map[string]any{omit422: true}
 	}
-	huma.Register(api, op, handler)
+	huma.Register(api, op, func(ctx context.Context, in *I) (*O, error) {
+		caller, err := callerOf(ctx)
+		if err != nil {
+			return nil, err
+		}
+		out, err := handler(ctx, caller, in)
+		if err != nil {
+			return nil, apiError(err)
+		}
+		return out, nil
+	})
 }
 
 func dropUndeclared422(_ *huma.OpenAPI, op *huma.Operation) {
@@ -67,6 +79,14 @@ func isUnwrappedObjectRef(s *huma.Schema) bool {
 
 func orNull(s *huma.Schema) *huma.Schema {
 	return &huma.Schema{AnyOf: []*huma.Schema{s, {Type: huma.TypeNull}}}
+}
+
+func codes[T interface{ Code() string }](values ...T) []any {
+	enum := make([]any, len(values))
+	for i, v := range values {
+		enum[i] = v.Code()
+	}
+	return enum
 }
 
 func nullableBody[T any](api huma.API) map[string]*huma.Response {

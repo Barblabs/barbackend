@@ -5,12 +5,14 @@ import (
 	"net/http"
 	"time"
 
-	"barbackend/internal/cmdb"
+	"barbackend/internal/assets"
+	"barbackend/internal/inventory"
+	"barbackend/internal/tenancy"
 	"github.com/danielgtaylor/huma/v2"
 )
 
 type assetHandler struct {
-	cmdb *cmdb.Service
+	assets *assets.Service
 }
 
 func (h assetHandler) register(api huma.API) {
@@ -24,12 +26,55 @@ func (h assetHandler) register(api huma.API) {
 	}, h.list)
 }
 
-type rawAssetQuery struct {
-	Limit       string `query:"limit" doc:"Page size, from 1 to 200; 50 by default"`
-	Cursor      string `query:"cursor" doc:"next_cursor of the previous page"`
-	Active      string `query:"active" doc:"true (the default), false or all"`
-	Kind        string `query:"kind" doc:"Asset Kind code, such as server"`
-	Criticality string `query:"criticality" doc:"Criticality code, such as high"`
+type assetQuery struct {
+	Limit       pageSize        `query:"limit" doc:"Page size"`
+	Cursor      string          `query:"cursor" doc:"next_cursor of the previous page"`
+	Active      string          `query:"active" enum:"true,false,all" default:"true"`
+	Kind        assetKindCode   `query:"kind" doc:"Asset Kind code"`
+	Criticality criticalityCode `query:"criticality" doc:"Criticality code"`
+}
+
+type pageSize int
+
+func (pageSize) Schema(huma.Registry) *huma.Schema {
+	return &huma.Schema{Type: huma.TypeInteger, Minimum: ptr(1.0), Maximum: ptr(float64(assets.MaxLimit)), Default: assets.DefaultLimit}
+}
+
+type assetKindCode string
+
+func (assetKindCode) Schema(huma.Registry) *huma.Schema {
+	return &huma.Schema{Type: huma.TypeString, Enum: codes(inventory.Server, inventory.VirtualMachine, inventory.Workstation, inventory.NetworkDevice)}
+}
+
+type criticalityCode string
+
+func (criticalityCode) Schema(huma.Registry) *huma.Schema {
+	return &huma.Schema{Type: huma.TypeString, Enum: codes(inventory.CriticalityHigh, inventory.CriticalityMedium, inventory.CriticalityLow)}
+}
+
+func (in assetQuery) query() (assets.Query, error) {
+	q := assets.Query{Limit: int(in.Limit), Cursor: in.Cursor}
+	switch in.Active {
+	case "true":
+		q.Active = ptr(true)
+	case "false":
+		q.Active = ptr(false)
+	}
+	if in.Kind != "" {
+		kind, err := inventory.ParseAssetKind(string(in.Kind))
+		if err != nil {
+			return assets.Query{}, err
+		}
+		q.Kind = &kind
+	}
+	if in.Criticality != "" {
+		criticality, err := inventory.ParseCriticality(string(in.Criticality))
+		if err != nil {
+			return assets.Query{}, err
+		}
+		q.Criticality = &criticality
+	}
+	return q, nil
 }
 
 type assetListResponse struct {
@@ -76,25 +121,19 @@ type ownerResponse struct {
 	Source string `json:"source"`
 }
 
-func (h assetHandler) list(ctx context.Context, in *rawAssetQuery) (*body[assetListResponse], error) {
-	customer, err := customerOf(ctx)
+func (h assetHandler) list(ctx context.Context, caller tenancy.User, in *assetQuery) (*body[assetListResponse], error) {
+	q, err := in.query()
 	if err != nil {
 		return nil, err
 	}
-	page, err := h.cmdb.ListAssets(ctx, customer, cmdb.AssetQuery{
-		Limit:       in.Limit,
-		Cursor:      in.Cursor,
-		Active:      in.Active,
-		Kind:        in.Kind,
-		Criticality: in.Criticality,
-	})
+	page, err := h.assets.List(ctx, caller, q)
 	if err != nil {
-		return nil, apiError(err)
+		return nil, err
 	}
 	return &body[assetListResponse]{Body: newAssetListResponse(page)}, nil
 }
 
-func newAssetListResponse(page cmdb.AssetPage) assetListResponse {
+func newAssetListResponse(page assets.Page) assetListResponse {
 	resp := assetListResponse{Assets: make([]assetResponse, len(page.Assets)), Total: page.Total}
 	for i, a := range page.Assets {
 		resp.Assets[i] = newAssetResponse(a)
@@ -105,37 +144,41 @@ func newAssetListResponse(page cmdb.AssetPage) assetListResponse {
 	return resp
 }
 
-func newAssetResponse(a cmdb.ListedAsset) assetResponse {
+func newAssetResponse(stored assets.StoredAsset) assetResponse {
+	a, imported := stored.Asset, stored.Asset.Imported()
+	software := imported.Software()
 	resp := assetResponse{
-		SourceID:      a.Ref.Source.String(),
-		RecordID:      a.Ref.RecordID,
-		Name:          a.Name,
-		Description:   a.Description,
-		Kind:          a.Kind.Code(),
-		Software:      make([]softwareResponse, len(a.Software)),
-		Criticality:   code(a.Criticality.Code()),
-		Exposure:      code(a.Exposure.Code()),
-		Retired:       a.Retired,
-		Active:        a.InactiveSince == nil,
-		InactiveSince: a.InactiveSince,
+		SourceID:      a.Ref().Source.String(),
+		RecordID:      a.Ref().RecordID,
+		Name:          imported.Name(),
+		Description:   imported.Description(),
+		Kind:          imported.Kind().Code(),
+		Software:      make([]softwareResponse, len(software)),
+		Criticality:   code(imported.Criticality().Code()),
+		Exposure:      code(a.Exposure().Code()),
+		Retired:       imported.Retired(),
+		Active:        a.Active(),
+		InactiveSince: stored.InactiveSince,
 	}
-	if hw := a.Hardware; hw != nil {
+	if hw, ok := imported.Hardware(); ok {
 		resp.Hardware = &hardwareResponse{Vendor: hw.Vendor, Model: hw.Model}
 	}
-	for i, sc := range a.Software {
+	for i, sc := range software {
 		resp.Software[i] = softwareResponse{Role: sc.Role.Code(), Name: sc.Name, Version: sc.Version}
 		if sc.Identified() {
 			resp.Software[i].Product = &productResponse{Vendor: sc.Product.Vendor, Name: sc.Product.Name}
 		}
 	}
-	if o := a.Owner; o != nil {
-		resp.Owner = &ownerResponse{Email: o.Email.String(), Source: "imported"}
-		if o.Declared {
+	if owner, ok := a.Owner(); ok {
+		resp.Owner = &ownerResponse{Email: owner.String(), Source: "imported"}
+		if _, declared := a.DeclaredOwner(); declared {
 			resp.Owner.Source = "declared"
 		}
 	}
 	return resp
 }
+
+func ptr[T any](v T) *T { return &v }
 
 func code(s string) *string {
 	if s == "" {
