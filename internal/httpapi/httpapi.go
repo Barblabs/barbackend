@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 
+	"barbackend/internal/assets"
 	"barbackend/internal/cmdb"
 	"barbackend/internal/users"
 	"github.com/danielgtaylor/huma/v2"
@@ -15,8 +16,9 @@ import (
 )
 
 type Config struct {
-	CMDB  *cmdb.Service
-	Users *users.Service
+	Assets *assets.Service
+	CMDB   *cmdb.Service
+	Users  *users.Service
 	// AllowedOrigins may call the API from a browser.
 	AllowedOrigins []string
 }
@@ -30,7 +32,7 @@ func New(cfg Config) http.Handler {
 	api := humagin.New(router, apiConfig())
 	api.UseMiddleware(authenticate(api, cfg.Users))
 	cmdbSourceHandler{cmdb: cfg.CMDB}.register(api)
-	assetHandler{cmdb: cfg.CMDB}.register(api)
+	assetHandler{assets: cfg.Assets}.register(api)
 	customerHandler{users: cfg.Users}.register(api)
 	userHandler{users: cfg.Users}.register(api)
 	meHandler{users: cfg.Users}.register(api)

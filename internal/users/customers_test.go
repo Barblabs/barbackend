@@ -7,7 +7,6 @@ import (
 
 	"barbackend/internal/postgres"
 	"barbackend/internal/tenancy"
-	"barbackend/internal/users"
 	"github.com/google/uuid"
 )
 
@@ -40,7 +39,7 @@ func TestCreateCustomerStoresItWithItsFirstCustomerAdmin(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	actsFor, _ := stored.ActsFor()
+	actsFor, _ := stored.Customer()
 	if stored.Role() != tenancy.CustomerAdmin || actsFor != c.Customer.ID() || stored.Email() != "ana@example.com" {
 		t.Errorf("stored %s %s for %s, want Customer Admin ana@example.com for %s", stored.Role(), stored.Email(), actsFor, c.Customer.ID())
 	}
@@ -56,7 +55,7 @@ func TestCreateCustomerWithATakenNameSendsNoInvitation(t *testing.T) {
 
 	_, err := svc.CreateCustomer(context.Background(), platformAdmin(t), "acme", "b@example.com")
 
-	if !errors.Is(err, users.ErrCustomerNameTaken) || len(admin.created) != 1 {
+	if !errors.Is(err, tenancy.ErrCustomerNameTaken) || len(admin.created) != 1 {
 		t.Errorf("err = %v, invited %d users, want ErrCustomerNameTaken and only the first invitation", err, len(admin.created))
 	}
 }

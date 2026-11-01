@@ -14,12 +14,7 @@ func (s *Service) Users(ctx context.Context, caller tenancy.User) ([]StoredUser,
 	if err != nil {
 		return nil, err
 	}
-	var users []StoredUser
-	err = s.db.InTx(ctx, func(tx *postgres.Tx) (err error) {
-		users, err = tx.Users(ctx, customer)
-		return err
-	})
-	return users, err
+	return postgres.InTxValue(ctx, s.db, func(tx *postgres.Tx) ([]StoredUser, error) { return tx.Users(ctx, customer) })
 }
 
 // InviteUser creates a Viewer or Customer Admin of the caller's Customer,

@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"barbackend/internal/assets"
 	"barbackend/internal/cmdb"
 	"barbackend/internal/cmdb/provider/providertest"
 	"barbackend/internal/cognito/cognitotest"
@@ -86,7 +87,7 @@ func newEnv(t *testing.T) env {
 	pool := cognitotest.New(t)
 	svc := cmdb.New(db, p.Providers(), newKey(t), context.Background(), time.Minute)
 	admin := &fakeAdmin{}
-	router := httpapi.New(httpapi.Config{CMDB: svc, Users: users.New(db, pool.Verifier(t), admin), AllowedOrigins: []string{allowedOrigin}})
+	router := httpapi.New(httpapi.Config{Assets: assets.New(db), CMDB: svc, Users: users.New(db, pool.Verifier(t), admin), AllowedOrigins: []string{allowedOrigin}})
 	e := env{db: db, conn: pgtest.Conn(t, url), pool: pool, provider: p, admin: admin, cmdb: svc, router: router}
 	e.customer = e.newCustomer(t)
 	e.token = e.signIn(t, e.newUser(t, tenancy.Viewer, e.customer))
@@ -162,7 +163,7 @@ func newKey(t *testing.T) encryption.Key {
 // connect connects a CMDB Source for customer, running its first Sync.
 func (e env) connect(t *testing.T, customer tenancy.CustomerID) inventory.CMDBSourceID {
 	t.Helper()
-	if _, err := e.cmdb.Connect(context.Background(), customer, providertest.Name, providertest.Login); err != nil {
+	if _, err := e.cmdb.Connect(context.Background(), viewerOf(customer), providertest.Name, providertest.Login); err != nil {
 		t.Fatal(err)
 	}
 	var stored postgres.StoredCMDBSource
@@ -193,11 +194,11 @@ type cmdbSource struct {
 	Provider        string     `json:"provider"`
 	URL             string     `json:"url"`
 	User            string     `json:"user"`
-	LastSync        *time.Time `json:"lastSync"`
+	LastSync        *time.Time `json:"last_sync"`
 	LastSyncFailure *struct {
 		At    time.Time `json:"at"`
 		Error string    `json:"error"`
-	} `json:"lastSyncFailure"`
+	} `json:"last_sync_failure"`
 }
 
 func (e env) getCMDBSource(t *testing.T) (cmdbSource, string) {
@@ -227,7 +228,7 @@ func (e env) sendLogin(method, path string, login map[string]string) *httptest.R
 }
 
 type syncResult struct {
-	LastSync    *time.Time `json:"lastSync"`
+	LastSync    *time.Time `json:"last_sync"`
 	Created     int        `json:"created"`
 	Updated     int        `json:"updated"`
 	Deactivated int        `json:"deactivated"`
@@ -283,4 +284,12 @@ func (e env) holdSyncLock(t *testing.T, src inventory.CMDBSourceID) (release fun
 			t.Fatal(err)
 		}
 	}
+}
+
+func viewerOf(customer tenancy.CustomerID) tenancy.User {
+	u, err := tenancy.NewUser(tenancy.UserID(uuid.New()), "viewer@example.com", tenancy.Viewer, customer)
+	if err != nil {
+		panic(err)
+	}
+	return u
 }

@@ -19,10 +19,6 @@ var (
 	// ErrUnauthenticated is an access token that identifies no User. It wraps
 	// the cause, which is for logs only.
 	ErrUnauthenticated = errors.New("unauthenticated")
-	// ErrEmailTaken is an email that already signs in, in Cognito or in
-	// Postgres: the two disagree when a Cognito user is deleted by hand.
-	ErrEmailTaken   = errors.New("a user with this email already exists")
-	ErrUserNotFound = postgres.ErrUserNotFound
 )
 
 type StoredUser = postgres.StoredUser
@@ -64,12 +60,7 @@ func (s *Service) identify(ctx context.Context, accessToken string) (tenancy.Use
 	if err != nil {
 		return tenancy.User{}, err
 	}
-	var u tenancy.User
-	err = s.db.InTx(ctx, func(tx *postgres.Tx) (err error) {
-		u, err = tx.UserBySub(ctx, sub)
-		return err
-	})
-	return u, err
+	return postgres.InTxValue(ctx, s.db, func(tx *postgres.Tx) (tenancy.User, error) { return tx.UserBySub(ctx, sub) })
 }
 
 // Profile is the caller as the dashboard shows them.
@@ -80,18 +71,11 @@ type Profile struct {
 }
 
 func (s *Service) Profile(ctx context.Context, caller tenancy.User) (Profile, error) {
-	id, err := caller.ActsFor()
-	if errors.Is(err, tenancy.ErrNoCustomer) {
+	id, ok := caller.Customer()
+	if !ok {
 		return Profile{User: caller}, nil
 	}
-	if err != nil {
-		return Profile{}, err
-	}
-	var stored StoredCustomer
-	err = s.db.InTx(ctx, func(tx *postgres.Tx) (err error) {
-		stored, err = tx.Customer(ctx, id)
-		return err
-	})
+	stored, err := postgres.InTxValue(ctx, s.db, func(tx *postgres.Tx) (StoredCustomer, error) { return tx.Customer(ctx, id) })
 	if err != nil {
 		return Profile{}, err
 	}
@@ -132,8 +116,9 @@ func (s *Service) invite(ctx context.Context, u tenancy.User, before func(*postg
 		stored, err = tx.CreateUser(ctx, u, sub)
 		return err
 	})
-	if errors.Is(err, cognito.ErrUsernameExists) || errors.Is(err, postgres.ErrEmailTaken) {
-		err = fmt.Errorf("%w: %w", ErrEmailTaken, err)
+	// Cognito and Postgres disagree when a Cognito user is deleted by hand.
+	if errors.Is(err, cognito.ErrUsernameExists) {
+		err = fmt.Errorf("%w: %w", tenancy.ErrEmailTaken, err)
 	}
 	if err != nil && sub != "" {
 		if delErr := s.admin.DeleteUser(context.WithoutCancel(ctx), sub); delErr != nil {

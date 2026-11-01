@@ -147,7 +147,7 @@ func TestSyncCMDBSource(t *testing.T) {
 		t.Errorf("body = %s, want counts %+v", rec.Body, want)
 	}
 	if src, body := e.getCMDBSource(t); got.LastSync == nil || src.LastSync == nil || !got.LastSync.Equal(*src.LastSync) {
-		t.Errorf("lastSync = %v, want GET /cmdb/source's %s", got.LastSync, body)
+		t.Errorf("last_sync = %v, want GET /cmdb/source's %s", got.LastSync, body)
 	}
 }
 
@@ -214,7 +214,7 @@ func TestConnectCMDBSource(t *testing.T) {
 
 	got := decode[cmdbSource](t, rec, http.StatusOK)
 	if got.Provider != "fake" || got.URL != "http://cmdb" || got.User != "admin" || got.LastSync == nil || got.LastSyncFailure != nil {
-		t.Errorf("body = %s, want the source with a lastSync and no failure", rec.Body)
+		t.Errorf("body = %s, want the source with a last_sync and no failure", rec.Body)
 	}
 	if _, body := e.getCMDBSource(t); body != rec.Body.String() {
 		t.Errorf("GET /cmdb/source = %s, want the connect response %s", body, rec.Body)
@@ -242,7 +242,7 @@ func TestConnectCMDBSourceWithFailedFirstSync(t *testing.T) {
 
 	got := decode[cmdbSource](t, rec, http.StatusOK)
 	if got.LastSync != nil || got.LastSyncFailure == nil || !strings.Contains(got.LastSyncFailure.Error, "cmdb unreachable") {
-		t.Errorf("body = %s, want no lastSync and the failure", rec.Body)
+		t.Errorf("body = %s, want no last_sync and the failure", rec.Body)
 	}
 }
 
@@ -274,7 +274,7 @@ func TestUpdateCMDBSource(t *testing.T) {
 
 	got := decode[cmdbSource](t, rec, http.StatusOK)
 	if got.URL != "http://new-cmdb" || got.User != "new-admin" || got.LastSync == nil {
-		t.Errorf("body = %s, want the new url and user, and the lastSync of the first Sync", rec.Body)
+		t.Errorf("body = %s, want the new url and user, and the last_sync of the first Sync", rec.Body)
 	}
 	if _, body := e.getCMDBSource(t); body != rec.Body.String() {
 		t.Errorf("GET /cmdb/source = %s, want the update response %s", body, rec.Body)

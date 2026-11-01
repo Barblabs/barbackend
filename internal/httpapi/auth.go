@@ -66,15 +66,3 @@ func callerOf(ctx context.Context) (tenancy.User, error) {
 	}
 	return u, nil
 }
-
-func customerOf(ctx context.Context) (tenancy.CustomerID, error) {
-	u, err := callerOf(ctx)
-	if err != nil {
-		return tenancy.CustomerID{}, err
-	}
-	id, err := u.ActsFor()
-	if err != nil {
-		return tenancy.CustomerID{}, apiError(err)
-	}
-	return id, nil
-}

@@ -7,12 +7,19 @@ cmd/barbackend/        flags, usage, wiring only
 internal/
   httpapi/             router + handlers           -> use-case packages, inventory, tenancy
   users/               use cases on Users          -> cognito, postgres, tenancy
+  assets/              use cases on Assets         -> inventory, postgres, tenancy
   cmdb/                use cases on CMDB Sources   -> cmdb/provider, encryption, inventory, postgres
     provider/          CMDB Provider seam          -> inventory
       <provider>/      adapters                    -> cmdb/provider, inventory, own subpackages
+  ingest/              use case polling Feeds      -> feeds, stixext
+  feeds/               Feed seam                   -> stixext
+    httpx/             shared HTTP client setup    -> nothing internal
+    <feed>/            adapters                    -> feeds, httpx, stixext
   cognito/             Cognito adapter             -> tenancy
   encryption/          sealing credentials         -> nothing internal
   postgres/            all persistence             -> inventory, tenancy
+  scoring/             pure domain                 -> inventory
+  stixext/             barbattack's STIX conventions -> nothing internal
   inventory/           pure domain                 -> tenancy
   tenancy/             pure domain                 -> nothing internal
 ```
@@ -23,7 +30,7 @@ Everything about CMDBs lives under `internal/cmdb`, but the use case and the sea
 
 New features get a home before they get code:
 
-- **Declarations**: a use-case package such as `internal/assets`, with its queries in `postgres`.
+- **Declarations**: the use-case package `internal/assets`, which already lists Assets, with its queries in `postgres`.
 - **Slack alerts**: an adapter under `internal/slack`, called from an alerting use-case package.
 - **Customers and Users**: Customer, User and Role are a pure domain package, `internal/tenancy`, which takes `CustomerID` out of `inventory`. It sits below `inventory`, since every CMDB Source belongs to a Customer, so it cannot also hold the use cases: they call `postgres`, which stores Users and so imports `tenancy`. Authenticating and creating Users is the use-case package `internal/users`, which also manages Customers, since creating a Customer creates its first Customer Admin in the same transaction, and Cognito is an adapter, `internal/cognito`, that `users` calls (ADR 0013).
 - **Threat matching**: a new domain package that imports `inventory`, never the reverse.

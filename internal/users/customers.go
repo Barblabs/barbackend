@@ -10,11 +10,6 @@ import (
 
 type StoredCustomer = postgres.StoredCustomer
 
-var (
-	ErrCustomerNotFound  = postgres.ErrCustomerNotFound
-	ErrCustomerNameTaken = postgres.ErrCustomerNameTaken
-)
-
 // CreateCustomer creates a Customer together with its first Customer Admin,
 // who is invited by email. Neither is stored without the other.
 func (s *Service) CreateCustomer(ctx context.Context, caller tenancy.User, name, adminEmail string) (StoredCustomer, error) {
@@ -41,12 +36,7 @@ func (s *Service) Customers(ctx context.Context, caller tenancy.User) ([]StoredC
 	if err := caller.ManageCustomers(); err != nil {
 		return nil, err
 	}
-	var customers []StoredCustomer
-	err := s.db.InTx(ctx, func(tx *postgres.Tx) (err error) {
-		customers, err = tx.Customers(ctx)
-		return err
-	})
-	return customers, err
+	return postgres.InTxValue(ctx, s.db, func(tx *postgres.Tx) ([]StoredCustomer, error) { return tx.Customers(ctx) })
 }
 
 func (s *Service) RenameCustomer(ctx context.Context, caller tenancy.User, id tenancy.CustomerID, name string) (StoredCustomer, error) {
@@ -80,10 +70,5 @@ func (s *Service) changeCustomer(ctx context.Context, caller tenancy.User, chang
 	if err := caller.ManageCustomers(); err != nil {
 		return StoredCustomer{}, err
 	}
-	var stored StoredCustomer
-	err := s.db.InTx(ctx, func(tx *postgres.Tx) (err error) {
-		stored, err = change(tx)
-		return err
-	})
-	return stored, err
+	return postgres.InTxValue(ctx, s.db, change)
 }

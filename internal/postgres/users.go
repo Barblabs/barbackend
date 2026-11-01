@@ -16,13 +16,6 @@ import (
 
 const userEmailKey = "users_email_key"
 
-var (
-	// ErrEmailTaken is an email another User has.
-	ErrEmailTaken = errors.New("another user has this email")
-	// ErrUserNotFound is a User the Customer does not have.
-	ErrUserNotFound = errors.New("user not found")
-)
-
 // StoredUser is a User with what only the database records about them.
 type StoredUser struct {
 	User tenancy.User
@@ -36,7 +29,7 @@ type StoredUser struct {
 // CreateUser stores a User with the Cognito sub that signs them in.
 func (t *Tx) CreateUser(ctx context.Context, u tenancy.User, sub string) (StoredUser, error) {
 	var customer pgtype.UUID
-	if id, err := u.ActsFor(); err == nil {
+	if id, ok := u.Customer(); ok {
 		customer = customerUUID(id)
 	}
 	created, err := t.q.InsertUser(ctx, sqlcgen.InsertUserParams{
@@ -48,7 +41,7 @@ func (t *Tx) CreateUser(ctx context.Context, u tenancy.User, sub string) (Stored
 	})
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == uniqueViolation && pgErr.ConstraintName == userEmailKey {
-		return StoredUser{}, fmt.Errorf("insert user %s: %w", u.ID(), ErrEmailTaken)
+		return StoredUser{}, fmt.Errorf("insert user %s: %w", u.ID(), tenancy.ErrEmailTaken)
 	}
 	if err != nil {
 		return StoredUser{}, fmt.Errorf("insert user %s: %w", u.ID(), err)
@@ -91,7 +84,7 @@ func (t *Tx) Users(ctx context.Context, customer tenancy.CustomerID) ([]StoredUs
 func (t *Tx) User(ctx context.Context, customer tenancy.CustomerID, id tenancy.UserID) (StoredUser, error) {
 	row, err := t.q.GetCustomerUser(ctx, sqlcgen.GetCustomerUserParams{CustomerID: customerUUID(customer), ID: uuid.UUID(id)})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return StoredUser{}, fmt.Errorf("user %s of customer %s: %w", id, customer, ErrUserNotFound)
+		return StoredUser{}, fmt.Errorf("user %s of customer %s: %w", id, customer, tenancy.ErrUserNotFound)
 	}
 	if err != nil {
 		return StoredUser{}, fmt.Errorf("get user %s: %w", id, err)
@@ -138,7 +131,7 @@ func (t *Tx) DisableUser(ctx context.Context, customer tenancy.CustomerID, id te
 		return StoredUser{}, fmt.Errorf("disable user %s: %w", id, err)
 	}
 	if n == 0 {
-		return StoredUser{}, fmt.Errorf("user %s of customer %s: %w", id, customer, ErrUserNotFound)
+		return StoredUser{}, fmt.Errorf("user %s of customer %s: %w", id, customer, tenancy.ErrUserNotFound)
 	}
 	return t.User(ctx, customer, id)
 }

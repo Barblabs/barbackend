@@ -59,7 +59,7 @@ func TestSecondConnectedCMDBSourceIsRefused(t *testing.T) {
 		return tx.CreateCMDBSource(context.Background(), second, []byte(`{}`), []byte{})
 	})
 
-	if !errors.Is(err, postgres.ErrAlreadyConnected) {
+	if !errors.Is(err, inventory.ErrAlreadyConnected) {
 		t.Errorf("err = %v, want ErrAlreadyConnected", err)
 	}
 }

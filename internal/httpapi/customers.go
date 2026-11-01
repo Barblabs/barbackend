@@ -82,22 +82,14 @@ type renameCustomerInput struct {
 	Body renameCustomerRequest
 }
 
-func (h customerHandler) create(ctx context.Context, in *body[createCustomerRequest]) (*body[customerResponse], error) {
-	caller, err := callerOf(ctx)
-	if err != nil {
-		return nil, err
-	}
+func (h customerHandler) create(ctx context.Context, caller tenancy.User, in *body[createCustomerRequest]) (*body[customerResponse], error) {
 	return customerOutput(h.users.CreateCustomer(ctx, caller, in.Body.Name, in.Body.AdminEmail))
 }
 
-func (h customerHandler) list(ctx context.Context, _ *struct{}) (*body[customerListResponse], error) {
-	caller, err := callerOf(ctx)
-	if err != nil {
-		return nil, err
-	}
+func (h customerHandler) list(ctx context.Context, caller tenancy.User, _ *struct{}) (*body[customerListResponse], error) {
 	customers, err := h.users.Customers(ctx, caller)
 	if err != nil {
-		return nil, apiError(err)
+		return nil, err
 	}
 	resp := customerListResponse{Customers: make([]customerResponse, 0, len(customers))}
 	for _, c := range customers {
@@ -106,33 +98,21 @@ func (h customerHandler) list(ctx context.Context, _ *struct{}) (*body[customerL
 	return &body[customerListResponse]{Body: resp}, nil
 }
 
-func (h customerHandler) rename(ctx context.Context, in *renameCustomerInput) (*body[customerResponse], error) {
-	caller, err := callerOf(ctx)
-	if err != nil {
-		return nil, err
-	}
+func (h customerHandler) rename(ctx context.Context, caller tenancy.User, in *renameCustomerInput) (*body[customerResponse], error) {
 	return customerOutput(h.users.RenameCustomer(ctx, caller, tenancy.CustomerID(in.ID), in.Body.Name))
 }
 
-func (h customerHandler) deactivate(ctx context.Context, in *idPath) (*body[customerResponse], error) {
-	caller, err := callerOf(ctx)
-	if err != nil {
-		return nil, err
-	}
+func (h customerHandler) deactivate(ctx context.Context, caller tenancy.User, in *idPath) (*body[customerResponse], error) {
 	return customerOutput(h.users.DeactivateCustomer(ctx, caller, tenancy.CustomerID(in.ID)))
 }
 
-func (h customerHandler) reactivate(ctx context.Context, in *idPath) (*body[customerResponse], error) {
-	caller, err := callerOf(ctx)
-	if err != nil {
-		return nil, err
-	}
+func (h customerHandler) reactivate(ctx context.Context, caller tenancy.User, in *idPath) (*body[customerResponse], error) {
 	return customerOutput(h.users.ReactivateCustomer(ctx, caller, tenancy.CustomerID(in.ID)))
 }
 
 func customerOutput(c users.StoredCustomer, err error) (*body[customerResponse], error) {
 	if err != nil {
-		return nil, apiError(err)
+		return nil, err
 	}
 	return &body[customerResponse]{Body: newCustomerResponse(c)}, nil
 }

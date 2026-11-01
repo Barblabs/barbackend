@@ -6,7 +6,9 @@ import (
 	"net/http"
 	"strings"
 
+	"barbackend/internal/assets"
 	"barbackend/internal/cmdb"
+	"barbackend/internal/inventory"
 	"barbackend/internal/tenancy"
 	"barbackend/internal/users"
 	"github.com/danielgtaylor/huma/v2"
@@ -42,6 +44,10 @@ const (
 )
 
 func apiError(err error) *codedError {
+	var coded *codedError
+	if errors.As(err, &coded) {
+		return coded
+	}
 	var failed *cmdb.SyncError
 	if errors.As(err, &failed) {
 		return &codedError{status: http.StatusBadGateway, cause: err, Code: failureCode(failed), Message: failed.Error()}
@@ -62,25 +68,25 @@ func apiError(err error) *codedError {
 		return &codedError{status: http.StatusForbidden, Code: customerDeactivated, Message: "your organization's access has been deactivated"}
 	case errors.Is(err, tenancy.ErrInvalidCustomer), errors.Is(err, tenancy.ErrInvalidUser):
 		return &codedError{status: http.StatusBadRequest, Code: invalidRequest, Message: err.Error()}
-	case errors.Is(err, users.ErrCustomerNotFound):
+	case errors.Is(err, tenancy.ErrCustomerNotFound):
 		return &codedError{status: http.StatusNotFound, Code: customerNotFound, Message: "customer not found"}
-	case errors.Is(err, users.ErrCustomerNameTaken):
+	case errors.Is(err, tenancy.ErrCustomerNameTaken):
 		return &codedError{status: http.StatusConflict, Code: customerNameTaken, Message: "another customer has this name"}
-	case errors.Is(err, users.ErrEmailTaken):
+	case errors.Is(err, tenancy.ErrEmailTaken):
 		return &codedError{status: http.StatusConflict, Code: emailTaken, Message: "a user with this email already exists"}
-	case errors.Is(err, users.ErrUserNotFound):
+	case errors.Is(err, tenancy.ErrUserNotFound):
 		return &codedError{status: http.StatusNotFound, Code: userNotFound, Message: "user not found"}
 	case errors.As(err, &failure):
 		return &codedError{status: http.StatusUnprocessableEntity, Code: string(failure.Code), Message: failure.Message}
 	case errors.Is(err, cmdb.ErrInvalidLogin):
 		return &codedError{status: http.StatusBadRequest, Code: invalidLogin, Message: err.Error()}
-	case errors.Is(err, cmdb.ErrInvalidAssetQuery):
+	case errors.Is(err, assets.ErrInvalidQuery):
 		return &codedError{status: http.StatusBadRequest, Code: invalidRequest, Message: err.Error()}
-	case errors.Is(err, cmdb.ErrNotConnected):
+	case errors.Is(err, inventory.ErrNotConnected):
 		return &codedError{status: http.StatusNotFound, Code: notConnected, Message: err.Error()}
-	case errors.Is(err, cmdb.ErrAlreadyConnected):
+	case errors.Is(err, inventory.ErrAlreadyConnected):
 		return &codedError{status: http.StatusConflict, Code: alreadyConnected, Message: err.Error()}
-	case errors.Is(err, cmdb.ErrSyncInProgress):
+	case errors.Is(err, inventory.ErrSyncInProgress):
 		return &codedError{status: http.StatusConflict, Code: syncInProgress, Message: err.Error()}
 	default:
 		return internal(err)
