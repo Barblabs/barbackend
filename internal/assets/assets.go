@@ -90,11 +90,7 @@ func (s *Service) List(ctx context.Context, caller tenancy.User, q Query) (Page,
 			return Page{}, err
 		}
 	}
-	var page postgres.AssetPage
-	err = s.db.InTx(ctx, func(tx *postgres.Tx) (err error) {
-		page, err = tx.ListAssets(ctx, query)
-		return err
-	})
+	page, err := postgres.InTxValue(ctx, s.db, func(tx *postgres.Tx) (postgres.AssetPage, error) { return tx.ListAssets(ctx, query) })
 	if err != nil {
 		return Page{}, err
 	}

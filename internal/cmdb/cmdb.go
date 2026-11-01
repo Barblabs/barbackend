@@ -232,13 +232,9 @@ func (s *Service) connectedSource(ctx context.Context, customer tenancy.Customer
 }
 
 func (s *Service) connected(ctx context.Context, customer tenancy.CustomerID) (postgres.StoredCMDBSource, error) {
-	var stored postgres.StoredCMDBSource
-	err := s.db.InTx(ctx, func(tx *postgres.Tx) error {
-		var err error
-		stored, err = tx.ConnectedCMDBSource(ctx, customer)
-		return err
+	return postgres.InTxValue(ctx, s.db, func(tx *postgres.Tx) (postgres.StoredCMDBSource, error) {
+		return tx.ConnectedCMDBSource(ctx, customer)
 	})
-	return stored, err
 }
 
 func (s *Service) seal(id inventory.CMDBSourceID, credentials json.RawMessage) ([]byte, error) {

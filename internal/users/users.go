@@ -60,12 +60,7 @@ func (s *Service) identify(ctx context.Context, accessToken string) (tenancy.Use
 	if err != nil {
 		return tenancy.User{}, err
 	}
-	var u tenancy.User
-	err = s.db.InTx(ctx, func(tx *postgres.Tx) (err error) {
-		u, err = tx.UserBySub(ctx, sub)
-		return err
-	})
-	return u, err
+	return postgres.InTxValue(ctx, s.db, func(tx *postgres.Tx) (tenancy.User, error) { return tx.UserBySub(ctx, sub) })
 }
 
 // Profile is the caller as the dashboard shows them.
@@ -80,11 +75,7 @@ func (s *Service) Profile(ctx context.Context, caller tenancy.User) (Profile, er
 	if !ok {
 		return Profile{User: caller}, nil
 	}
-	var stored StoredCustomer
-	err := s.db.InTx(ctx, func(tx *postgres.Tx) (err error) {
-		stored, err = tx.Customer(ctx, id)
-		return err
-	})
+	stored, err := postgres.InTxValue(ctx, s.db, func(tx *postgres.Tx) (StoredCustomer, error) { return tx.Customer(ctx, id) })
 	if err != nil {
 		return Profile{}, err
 	}

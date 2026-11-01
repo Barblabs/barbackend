@@ -82,6 +82,20 @@ func (db *DB) InTx(ctx context.Context, fn func(*Tx) error) error {
 	})
 }
 
+// InTxValue runs fn in one transaction, as InTx does, and returns its result.
+func InTxValue[T any](ctx context.Context, db *DB, fn func(*Tx) (T, error)) (T, error) {
+	var v T
+	err := db.InTx(ctx, func(tx *Tx) (err error) {
+		v, err = fn(tx)
+		return err
+	})
+	if err != nil {
+		var zero T
+		return zero, err
+	}
+	return v, nil
+}
+
 // CommitSync is the transactional end of a Sync. It locks the CMDB Source,
 // passes its stored Assets to reconcile, saves the Reconciliation and records
 // its succeeded Sync Run, all in one transaction. reconcile runs while the
