@@ -43,14 +43,10 @@ func (callerRole) Schema(huma.Registry) *huma.Schema {
 	return &huma.Schema{Type: huma.TypeString, Enum: []any{tenancy.PlatformAdmin.Code(), tenancy.CustomerAdmin.Code(), tenancy.Viewer.Code()}}
 }
 
-func (h meHandler) get(ctx context.Context, _ *struct{}) (*body[meResponse], error) {
-	caller, err := callerOf(ctx)
-	if err != nil {
-		return nil, err
-	}
+func (h meHandler) get(ctx context.Context, caller tenancy.User, _ *struct{}) (*body[meResponse], error) {
 	p, err := h.users.Profile(ctx, caller)
 	if err != nil {
-		return nil, apiError(err)
+		return nil, err
 	}
 	resp := meResponse{ID: p.User.ID().String(), Email: p.User.Email(), Role: callerRole(p.User.Role().Code())}
 	if p.Customer != (tenancy.Customer{}) {

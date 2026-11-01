@@ -163,7 +163,7 @@ func newKey(t *testing.T) encryption.Key {
 // connect connects a CMDB Source for customer, running its first Sync.
 func (e env) connect(t *testing.T, customer tenancy.CustomerID) inventory.CMDBSourceID {
 	t.Helper()
-	if _, err := e.cmdb.Connect(context.Background(), customer, providertest.Name, providertest.Login); err != nil {
+	if _, err := e.cmdb.Connect(context.Background(), viewerOf(customer), providertest.Name, providertest.Login); err != nil {
 		t.Fatal(err)
 	}
 	var stored postgres.StoredCMDBSource
@@ -284,4 +284,12 @@ func (e env) holdSyncLock(t *testing.T, src inventory.CMDBSourceID) (release fun
 			t.Fatal(err)
 		}
 	}
+}
+
+func viewerOf(customer tenancy.CustomerID) tenancy.User {
+	u, err := tenancy.NewUser(tenancy.UserID(uuid.New()), "viewer@example.com", tenancy.Viewer, customer)
+	if err != nil {
+		panic(err)
+	}
+	return u
 }

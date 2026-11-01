@@ -69,7 +69,11 @@ type cursor struct {
 // Disconnected ones included, sorted by name, then CMDB Source, then Record
 // ID. A Customer without Assets gets an empty page. It fails with
 // ErrInvalidQuery.
-func (s *Service) List(ctx context.Context, customer tenancy.CustomerID, q Query) (Page, error) {
+func (s *Service) List(ctx context.Context, caller tenancy.User, q Query) (Page, error) {
+	customer, err := caller.ActsFor()
+	if err != nil {
+		return Page{}, err
+	}
 	query := postgres.AssetListQuery{Customer: customer, Active: q.Active, Kind: q.Kind, Criticality: q.Criticality, Limit: q.Limit}
 	if query.Limit == 0 {
 		query.Limit = DefaultLimit

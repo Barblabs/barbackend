@@ -7,6 +7,7 @@ import (
 
 	"barbackend/internal/assets"
 	"barbackend/internal/inventory"
+	"barbackend/internal/tenancy"
 	"github.com/danielgtaylor/huma/v2"
 )
 
@@ -128,18 +129,14 @@ type ownerResponse struct {
 	Source string `json:"source"`
 }
 
-func (h assetHandler) list(ctx context.Context, in *assetQuery) (*body[assetListResponse], error) {
-	customer, err := customerOf(ctx)
+func (h assetHandler) list(ctx context.Context, caller tenancy.User, in *assetQuery) (*body[assetListResponse], error) {
+	q, err := in.query()
 	if err != nil {
 		return nil, err
 	}
-	q, err := in.query()
+	page, err := h.assets.List(ctx, caller, q)
 	if err != nil {
-		return nil, apiError(err)
-	}
-	page, err := h.assets.List(ctx, customer, q)
-	if err != nil {
-		return nil, apiError(err)
+		return nil, err
 	}
 	return &body[assetListResponse]{Body: newAssetListResponse(page)}, nil
 }

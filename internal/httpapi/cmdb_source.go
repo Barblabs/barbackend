@@ -8,6 +8,7 @@ import (
 
 	"barbackend/internal/cmdb"
 	"barbackend/internal/inventory"
+	"barbackend/internal/tenancy"
 	"github.com/danielgtaylor/huma/v2"
 )
 
@@ -77,19 +78,12 @@ type syncFailureResponse struct {
 	Error string    `json:"error"`
 }
 
-func (h cmdbSourceHandler) get(ctx context.Context, _ *struct{}) (*body[*cmdbSourceResponse], error) {
-	customer, err := customerOf(ctx)
-	if err != nil {
-		return nil, err
-	}
-	src, err := h.cmdb.ConnectedSource(ctx, customer)
+func (h cmdbSourceHandler) get(ctx context.Context, caller tenancy.User, _ *struct{}) (*body[*cmdbSourceResponse], error) {
+	src, err := h.cmdb.ConnectedSource(ctx, caller)
 	if errors.Is(err, inventory.ErrNotConnected) {
 		return &body[*cmdbSourceResponse]{}, nil
 	}
-	if err != nil {
-		return nil, apiError(err)
-	}
-	return newCMDBSourceOutput(src), nil
+	return cmdbSourceOutput(src, err)
 }
 
 // LoginRequest is exported because Huma leaves unexported embedded structs
@@ -117,11 +111,8 @@ type testResponse struct {
 	Error string `json:"error,omitempty"`
 }
 
-func (h cmdbSourceHandler) test(ctx context.Context, in *body[connectRequest]) (*body[testResponse], error) {
-	if _, err := customerOf(ctx); err != nil {
-		return nil, err
-	}
-	err := h.cmdb.TestLogin(ctx, inventory.CMDBProvider(in.Body.Provider), in.Body.login())
+func (h cmdbSourceHandler) test(ctx context.Context, caller tenancy.User, in *body[connectRequest]) (*body[testResponse], error) {
+	err := h.cmdb.TestLogin(ctx, caller, inventory.CMDBProvider(in.Body.Provider), in.Body.login())
 	var failure *cmdb.Failure
 	switch {
 	case err == nil:
@@ -129,46 +120,26 @@ func (h cmdbSourceHandler) test(ctx context.Context, in *body[connectRequest]) (
 	case errors.As(err, &failure):
 		return &body[testResponse]{Body: testResponse{Code: string(failure.Code), Error: failure.Message}}, nil
 	default:
-		return nil, apiError(err)
+		return nil, err
 	}
 }
 
-func (h cmdbSourceHandler) connect(ctx context.Context, in *body[connectRequest]) (*body[*cmdbSourceResponse], error) {
-	customer, err := customerOf(ctx)
+func (h cmdbSourceHandler) connect(ctx context.Context, caller tenancy.User, in *body[connectRequest]) (*body[*cmdbSourceResponse], error) {
+	return cmdbSourceOutput(h.cmdb.Connect(ctx, caller, inventory.CMDBProvider(in.Body.Provider), in.Body.login()))
+}
+
+func (h cmdbSourceHandler) update(ctx context.Context, caller tenancy.User, in *body[LoginRequest]) (*body[*cmdbSourceResponse], error) {
+	return cmdbSourceOutput(h.cmdb.UpdateLogin(ctx, caller, in.Body.login()))
+}
+
+func (h cmdbSourceHandler) disconnect(ctx context.Context, caller tenancy.User, _ *struct{}) (*struct{}, error) {
+	return &struct{}{}, h.cmdb.Disconnect(ctx, caller)
+}
+
+func cmdbSourceOutput(src cmdb.ConnectedSource, err error) (*body[*cmdbSourceResponse], error) {
 	if err != nil {
 		return nil, err
 	}
-	src, err := h.cmdb.Connect(ctx, customer, inventory.CMDBProvider(in.Body.Provider), in.Body.login())
-	if err != nil {
-		return nil, apiError(err)
-	}
-	return newCMDBSourceOutput(src), nil
-}
-
-func (h cmdbSourceHandler) update(ctx context.Context, in *body[LoginRequest]) (*body[*cmdbSourceResponse], error) {
-	customer, err := customerOf(ctx)
-	if err != nil {
-		return nil, err
-	}
-	src, err := h.cmdb.UpdateLogin(ctx, customer, in.Body.login())
-	if err != nil {
-		return nil, apiError(err)
-	}
-	return newCMDBSourceOutput(src), nil
-}
-
-func (h cmdbSourceHandler) disconnect(ctx context.Context, _ *struct{}) (*struct{}, error) {
-	customer, err := customerOf(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if err := h.cmdb.Disconnect(ctx, customer); err != nil {
-		return nil, apiError(err)
-	}
-	return &struct{}{}, nil
-}
-
-func newCMDBSourceOutput(src cmdb.ConnectedSource) *body[*cmdbSourceResponse] {
 	resp := &cmdbSourceResponse{Provider: string(src.Provider), URL: src.URL}
 	if src.User != "" {
 		resp.User = &src.User
@@ -179,7 +150,7 @@ func newCMDBSourceOutput(src cmdb.ConnectedSource) *body[*cmdbSourceResponse] {
 	if f := src.LastSyncFailure; f != nil {
 		resp.LastSyncFailure = &syncFailureResponse{At: f.At, Error: f.Error}
 	}
-	return &body[*cmdbSourceResponse]{Body: resp}
+	return &body[*cmdbSourceResponse]{Body: resp}, nil
 }
 
 type syncResponse struct {
@@ -191,14 +162,10 @@ type syncResponse struct {
 	Skipped     int       `json:"skipped"`
 }
 
-func (h cmdbSourceHandler) sync(ctx context.Context, _ *struct{}) (*body[syncResponse], error) {
-	customer, err := customerOf(ctx)
+func (h cmdbSourceHandler) sync(ctx context.Context, caller tenancy.User, _ *struct{}) (*body[syncResponse], error) {
+	run, err := h.cmdb.SyncConnected(ctx, caller)
 	if err != nil {
 		return nil, err
-	}
-	run, err := h.cmdb.SyncConnected(ctx, customer)
-	if err != nil {
-		return nil, apiError(err)
 	}
 	return &body[syncResponse]{Body: newSyncResponse(run)}, nil
 }

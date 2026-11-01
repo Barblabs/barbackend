@@ -44,6 +44,10 @@ const (
 )
 
 func apiError(err error) *codedError {
+	var coded *codedError
+	if errors.As(err, &coded) {
+		return coded
+	}
 	var failed *cmdb.SyncError
 	if errors.As(err, &failed) {
 		return &codedError{status: http.StatusBadGateway, cause: err, Code: failureCode(failed), Message: failed.Error()}

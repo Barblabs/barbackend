@@ -83,14 +83,10 @@ type changeRoleInput struct {
 	Body changeRoleRequest
 }
 
-func (h userHandler) list(ctx context.Context, _ *struct{}) (*body[userListResponse], error) {
-	caller, err := callerOf(ctx)
-	if err != nil {
-		return nil, err
-	}
+func (h userHandler) list(ctx context.Context, caller tenancy.User, _ *struct{}) (*body[userListResponse], error) {
 	stored, err := h.users.Users(ctx, caller)
 	if err != nil {
-		return nil, apiError(err)
+		return nil, err
 	}
 	resp := userListResponse{Users: make([]userResponse, 0, len(stored))}
 	for _, u := range stored {
@@ -99,41 +95,29 @@ func (h userHandler) list(ctx context.Context, _ *struct{}) (*body[userListRespo
 	return &body[userListResponse]{Body: resp}, nil
 }
 
-func (h userHandler) invite(ctx context.Context, in *body[inviteUserRequest]) (*body[userResponse], error) {
-	caller, err := callerOf(ctx)
-	if err != nil {
-		return nil, err
-	}
+func (h userHandler) invite(ctx context.Context, caller tenancy.User, in *body[inviteUserRequest]) (*body[userResponse], error) {
 	role, err := tenancy.ParseRole(string(in.Body.Role))
 	if err != nil {
-		return nil, apiError(err)
+		return nil, err
 	}
 	return userOutput(h.users.InviteUser(ctx, caller, in.Body.Email, role))
 }
 
-func (h userHandler) changeRole(ctx context.Context, in *changeRoleInput) (*body[userResponse], error) {
-	caller, err := callerOf(ctx)
-	if err != nil {
-		return nil, err
-	}
+func (h userHandler) changeRole(ctx context.Context, caller tenancy.User, in *changeRoleInput) (*body[userResponse], error) {
 	role, err := tenancy.ParseRole(string(in.Body.Role))
 	if err != nil {
-		return nil, apiError(err)
+		return nil, err
 	}
 	return userOutput(h.users.ChangeRole(ctx, caller, tenancy.UserID(in.ID), role))
 }
 
-func (h userHandler) disable(ctx context.Context, in *idPath) (*body[userResponse], error) {
-	caller, err := callerOf(ctx)
-	if err != nil {
-		return nil, err
-	}
+func (h userHandler) disable(ctx context.Context, caller tenancy.User, in *idPath) (*body[userResponse], error) {
 	return userOutput(h.users.DisableUser(ctx, caller, tenancy.UserID(in.ID)))
 }
 
 func userOutput(u users.StoredUser, err error) (*body[userResponse], error) {
 	if err != nil {
-		return nil, apiError(err)
+		return nil, err
 	}
 	return &body[userResponse]{Body: newUserResponse(u)}, nil
 }
