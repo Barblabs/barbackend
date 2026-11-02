@@ -22,6 +22,7 @@ internal/
   cognito/             Cognito adapter             -> tenancy
   encryption/          sealing credentials         -> nothing internal
   postgres/            all persistence             -> assessment, business, inventory, tenancy
+  matching/            pure domain                 -> inventory, stixext
   assessment/          pure domain                 -> inventory, scoring, stixext
   business/            pure domain                 -> nothing internal
   scoring/             pure domain                 -> inventory
@@ -40,7 +41,7 @@ New features get a home before they get code:
 - **Areas**: the use-case package `internal/areas`, which lists a Customer's Areas and states their Area Owners, with its queries in `postgres`. The Sync that imports Areas stays in `internal/cmdb` (ADR 0018).
 - **Slack alerts**: an adapter under `internal/slack`, called from an alerting use-case package.
 - **Customers and Users**: Customer, User and Role are a pure domain package, `internal/tenancy`, which takes `CustomerID` out of `inventory`. It sits below `inventory`, since every CMDB Source belongs to a Customer, so it cannot also hold the use cases: they call `postgres`, which stores Users and so imports `tenancy`. Authenticating and creating Users is the use-case package `internal/users`, which also manages Customers, since creating a Customer creates its first Customer Admin in the same transaction, and Cognito is an adapter, `internal/cognito`, that `users` calls (ADR 0013).
-- **Threat matching**: a new domain package that imports `inventory`, never the reverse.
+- **Threat matching**: the pure domain package `internal/matching`, which imports `inventory` and reads Feed objects through `stixext` (ADR 0010), never the reverse.
 - **Business Context**: the pure domain package `internal/business`, which imports no other layer, and the use-case package `internal/businesscontext`, which reads and saves it. The Drafter is an Agent, so it lives in `internal/agents`, which reads the Business Context through `postgres`, never through `businesscontext` (ADR 0017).
 
 The direction is enforced by `depguard` rules in `.golangci.yaml`, which deny all of `barbackend/internal` to a layer and allow back only the layers below it, so a new use-case package is forbidden to `inventory`, `cmdb/provider` and `postgres` without touching the config. `internal/httpapi` may import only the domain packages `inventory`, `tenancy` and `business` and the use-case packages it serves, listed by name, so serving a new use case means adding it to that list. It is denied `cmdb/provider` by name, since allowing `cmdb` would otherwise allow everything under it; for the same reason, every layer allowed `business` is denied `businesscontext` by name. Its tests are exempt, because they wire a real router on Postgres as `cmd` does. Only `cmd` and `internal/httpapi` may import gin.

@@ -98,6 +98,23 @@ linters:
           deny:
             - pkg: barbackend/internal
               desc: the businesscontext use case calls only business, postgres and tenancy (ADR 0017)
+        matching:
+          list-mode: lax
+          files:
+            - "**/internal/matching/**"
+          allow:
+            - barbackend/internal/inventory
+            - barbackend/internal/matching
+            - barbackend/internal/stixext
+          deny:
+            - pkg: barbackend/internal
+              desc: matching is a pure domain package that imports only inventory and stixext (ADR 0008, ADR 0010)
+            - pkg: net/http
+              desc: matching is pure and does no I/O (ADR 0008)
+            - pkg: database/sql
+              desc: matching is pure and does no I/O (ADR 0008)
+            - pkg: github.com/jackc/pgx
+              desc: matching is pure and does no I/O (ADR 0008)
         cmdb-provider:
           list-mode: lax
           files:
