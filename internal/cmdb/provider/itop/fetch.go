@@ -89,7 +89,7 @@ func fetchLookups(ctx context.Context, c *rest.Client, cis []ci) (lookups, error
 	if lk.persons, err = getByID[person](ctx, c, "Person", []string{"email"}, personIDs); err != nil {
 		return lookups{}, err
 	}
-	if lk.software, err = getByID[software](ctx, c, "Software", []string{"name", "version"}, softwareIDs); err != nil {
+	if lk.software, err = getByID[software](ctx, c, "Software", []string{"vendor", "name", "version"}, softwareIDs); err != nil {
 		return lookups{}, err
 	}
 	if lk.iosVersions, err = getByID[iosVersion](ctx, c, "IOSVersion", []string{"brand_name", "name"}, iosVersionIDs); err != nil {
