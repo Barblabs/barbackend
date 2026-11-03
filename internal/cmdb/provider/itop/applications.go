@@ -1,10 +1,6 @@
 package itop
 
-import (
-	"strings"
-
-	"barbackend/internal/inventory"
-)
+import "barbackend/internal/inventory"
 
 func applications(c ci, lk lookups) []inventory.SoftwareComponent {
 	var apps []inventory.SoftwareComponent
@@ -22,7 +18,7 @@ func applications(c ci, lk lookups) []inventory.SoftwareComponent {
 // product leaves a Software with a blank vendor or name unidentified, because
 // inventory rejects a half Product and that would skip the whole Asset.
 func product(sw software) inventory.Product {
-	if strings.TrimSpace(sw.Vendor) == "" || strings.TrimSpace(sw.Name) == "" {
+	if blank(sw.Vendor) || blank(sw.Name) {
 		return inventory.Product{}
 	}
 	return inventory.Product{Vendor: sw.Vendor, Name: sw.Name}
