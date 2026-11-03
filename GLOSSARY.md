@@ -53,7 +53,7 @@ A piece of software running on an Asset, with a role of either Operating System 
 _Avoid_: Software instance, package, installed software
 
 **Product**:
-The canonical identity of a piece of hardware or software, in the terms threat intelligence uses to say what is affected.
+The canonical identity of a piece of hardware or software, in the terms threat intelligence uses to say what is affected. A Product may also be imported from a CMDB Source as free text, which is not yet normalized to threat intelligence terms (ADR 0010).
 _Avoid_: CPE, package, SKU
 
 **Unidentified Component**:

@@ -8,6 +8,9 @@ func applications(c ci, lk lookups) []inventory.SoftwareComponent {
 		app := inventory.SoftwareComponent{Role: inventory.Application, Name: in.Name}
 		if sw, ok := lk.software[in.SoftwareID]; ok {
 			app.Name, app.Version = sw.Name, sw.Version
+			if !blank(sw.Vendor) {
+				app.Product = inventory.Product{Vendor: sw.Vendor, Name: sw.Name}
+			}
 		}
 		apps = append(apps, app)
 	}
