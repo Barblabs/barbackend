@@ -143,7 +143,7 @@ The schema is not decided by this ADR and comes with the first Feed's migration.
 
 ## Open questions
 
-- **How a Product is keyed**: filters match `nvd/1.affected` `vendor`/`product` against `software_components.product_vendor`/`product_name`. Today those columns hold free text (`Canonical`/`Ubuntu`, `f5`/`nginx`). For matching to work, a Product must be keyed by the CPE 2.3 vendor and product tokens (`canonical`/`ubuntu_linux`). This has to be agreed with whoever owns Product identification before the filters are built.
+- **How a Product is keyed**: filters match `nvd/1.affected` `vendor`/`product` against `software_components.product_vendor`/`product_name`. Today those columns hold free text (`Canonical`/`Ubuntu`, `f5`/`nginx`). For matching to work, a Product must be keyed by the CPE 2.3 vendor and product tokens (`canonical`/`ubuntu_linux`). This has to be agreed with whoever owns Product identification before the filters are built. Products imported from a CMDB Source (ADR 0002) are free text as well: iTop gives `Apache`/`Apache HTTP Server` where NVD has `apache`/`http_server`. Until Products are normalized, such a Product matches no CPE, so its Software Component can look "not affected" when barbattack could not actually check it.
 - **cve.org and CISA Vulnrichment**: ADR 0009 falls back to them for CVSS. They will be their own Feed with their own extension, not fields of `nvd/1`.
 - **TAXII**: neither publishing nor consuming TAXII is in scope. A TAXII server would only serve the objects described here.
 
