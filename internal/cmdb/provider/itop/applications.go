@@ -8,18 +8,11 @@ func applications(c ci, lk lookups) []inventory.SoftwareComponent {
 		app := inventory.SoftwareComponent{Role: inventory.Application, Name: in.Name}
 		if sw, ok := lk.software[in.SoftwareID]; ok {
 			app.Name, app.Version = sw.Name, sw.Version
-			app.Product = product(sw)
+			if !blank(sw.Vendor) {
+				app.Product = inventory.Product{Vendor: sw.Vendor, Name: sw.Name}
+			}
 		}
 		apps = append(apps, app)
 	}
 	return apps
-}
-
-// product leaves a Software with a blank vendor or name unidentified, because
-// inventory rejects a half Product and that would skip the whole Asset.
-func product(sw software) inventory.Product {
-	if blank(sw.Vendor) || blank(sw.Name) {
-		return inventory.Product{}
-	}
-	return inventory.Product{Vendor: sw.Vendor, Name: sw.Name}
 }
