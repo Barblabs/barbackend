@@ -121,6 +121,27 @@ func TestSnapshotMapsRecords(t *testing.T) {
 			},
 		},
 		{
+			name: "applications identified by their Software, and one with a blank vendor kept unidentified",
+			ci: mapped("Server", func(c *ci) {
+				c.Instances = []instance{{Class: "DBServer", Name: "db", SoftwareID: "2"}, {Class: "OtherSoftware", Name: "portal", SoftwareID: "7"}}
+			}),
+			lk: lookups{software: map[string]software{
+				"2": {Vendor: "Oracle", Name: "Oracle DB engine", Version: "19c"},
+				"7": {Name: "Internal portal", Version: "3.1"},
+			}},
+			want: inventory.ImportedAssetParams{
+				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server, Hardware: hpe,
+				Software: append(redHat(),
+					inventory.SoftwareComponent{
+						Role: inventory.Application, Name: "Oracle DB engine", Version: "19c",
+						Product: inventory.Product{Vendor: "Oracle", Name: "Oracle DB engine"},
+					},
+					inventory.SoftwareComponent{Role: inventory.Application, Name: "Internal portal", Version: "3.1"},
+				),
+				Criticality: inventory.CriticalityLow,
+			},
+		},
+		{
 			name: "network device os is its IOSVersion",
 			ci: mapped("NetworkDevice", func(c *ci) {
 				c.Brand, c.Model, c.OSFamily, c.OSVersion, c.IOSVersionID = "Cisco", "Cisco 6500", "", "", "90"
