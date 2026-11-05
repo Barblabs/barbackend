@@ -5,12 +5,89 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	"barbackend/internal/assessment"
 	"barbackend/internal/postgres"
 	"barbackend/internal/tenancy"
 	"github.com/google/uuid"
 )
+
+func TestConversationHistoryAndClaim(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	db, _ := newDBWithConn(t)
+	customer := newCustomer(t, db)
+	user, err := tenancy.NewUser(tenancy.UserID(uuid.New()), "viewer@example.com", tenancy.Viewer, customer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inTx(t, db, func(tx *postgres.Tx) error {
+		_, err := tx.CreateUser(ctx, user, uuid.NewString())
+		return err
+	})
+	owner := postgres.ConversationOwner{Customer: customer, User: user.ID()}
+	id := uuid.New()
+	history := json.RawMessage(`[{"role":"user",  "content":[{"z":1.0,"a":"  texto  "}]}]`)
+	inTx(t, db, func(tx *postgres.Tx) error { return tx.CreateConversation(ctx, owner, id, history) })
+	claim := func(lifetime time.Duration) (postgres.StoredConversation, error) {
+		return postgres.InTxValue(ctx, db, func(tx *postgres.Tx) (postgres.StoredConversation, error) {
+			return tx.ClaimConversation(ctx, owner, id, lifetime)
+		})
+	}
+
+	stored, err := claim(time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(stored.History) != string(history) || stored.Turns != 1 {
+		t.Errorf("stored = %s turn %d, want %s turn 1", stored.History, stored.Turns, history)
+	}
+
+	if _, err := claim(time.Hour); !errors.Is(err, postgres.ErrConversationClaimed) {
+		t.Errorf("a second claim: err = %v, want ErrConversationClaimed", err)
+	}
+	if _, err := claim(0); err != nil {
+		t.Errorf("claim over a stale one: err = %v", err)
+	}
+
+	stranger := postgres.ConversationOwner{Customer: customer, User: tenancy.UserID(uuid.New())}
+	err = db.InTx(ctx, func(tx *postgres.Tx) error {
+		_, err := tx.ClaimConversation(ctx, stranger, id, time.Hour)
+		return err
+	})
+	if !errors.Is(err, postgres.ErrNotFound) {
+		t.Errorf("another User's claim: err = %v, want ErrNotFound", err)
+	}
+	inTx(t, db, func(tx *postgres.Tx) error { return tx.ReleaseConversation(ctx, stranger, id, 1) })
+	if _, err := claim(time.Hour); !errors.Is(err, postgres.ErrConversationClaimed) {
+		t.Errorf("after another User's release: err = %v, want the claim to hold", err)
+	}
+	err = db.InTx(ctx, func(tx *postgres.Tx) error {
+		return tx.AdvanceConversation(ctx, stranger, id, 1, json.RawMessage(`[9]`))
+	})
+	if !errors.Is(err, postgres.ErrConversationClaimed) {
+		t.Errorf("another User's advance: err = %v, want ErrConversationClaimed", err)
+	}
+
+	inTx(t, db, func(tx *postgres.Tx) error { return tx.ReleaseConversation(ctx, owner, id, 1) })
+	if _, err := claim(time.Hour); err != nil {
+		t.Errorf("claim after a release: err = %v", err)
+	}
+
+	inTx(t, db, func(tx *postgres.Tx) error { return tx.AdvanceConversation(ctx, owner, id, 1, json.RawMessage(`[1]`)) })
+	err = db.InTx(ctx, func(tx *postgres.Tx) error { return tx.AdvanceConversation(ctx, owner, id, 1, json.RawMessage(`[2]`)) })
+	if !errors.Is(err, postgres.ErrConversationClaimed) {
+		t.Errorf("advancing a stale copy: err = %v, want ErrConversationClaimed", err)
+	}
+	stored, err = claim(time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(stored.History) != `[1]` || stored.Turns != 2 {
+		t.Errorf("after advancing = %s turn %d", stored.History, stored.Turns)
+	}
+}
 
 func TestPrioritizationsStayWithTheirCustomer(t *testing.T) {
 	t.Parallel()

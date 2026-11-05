@@ -185,3 +185,84 @@ func (t *Tx) Feedback(ctx context.Context, customer tenancy.CustomerID, prioriti
 	}
 	return feedback, nil
 }
+
+// ConversationOwner is who a conversation with the Analista belongs to.
+type ConversationOwner struct {
+	Customer tenancy.CustomerID
+	User     tenancy.UserID
+}
+
+// StoredConversation is a conversation with the Analista at one turn.
+type StoredConversation struct {
+	History json.RawMessage
+	Turns   int
+}
+
+// CreateConversation stores the first turn of a conversation.
+func (t *Tx) CreateConversation(ctx context.Context, owner ConversationOwner, id uuid.UUID, history json.RawMessage) error {
+	err := t.q.InsertAnalistaConversation(ctx, sqlcgen.InsertAnalistaConversationParams{
+		ID:         id,
+		CustomerID: uuid.UUID(owner.Customer),
+		UserID:     uuid.UUID(owner.User),
+		History:    history,
+	})
+	if err != nil {
+		return fmt.Errorf("insert conversation %s: %w", id, err)
+	}
+	return nil
+}
+
+// ClaimConversation marks the conversation as answering a message and returns
+// it. It fails with ErrNotFound unless owner has it, and with
+// ErrConversationClaimed while a claim younger than lifetime holds it.
+func (t *Tx) ClaimConversation(ctx context.Context, owner ConversationOwner, id uuid.UUID, lifetime time.Duration) (StoredConversation, error) {
+	row, err := t.q.ClaimAnalistaConversation(ctx, sqlcgen.ClaimAnalistaConversationParams{
+		ID:              id,
+		CustomerID:      uuid.UUID(owner.Customer),
+		UserID:          uuid.UUID(owner.User),
+		LifetimeSeconds: lifetime.Seconds(),
+	})
+	if err == nil {
+		return StoredConversation{History: row.History, Turns: int(row.Turns)}, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return StoredConversation{}, fmt.Errorf("claim conversation %s: %w", id, err)
+	}
+	exists, err := t.q.AnalistaConversationExists(ctx, sqlcgen.AnalistaConversationExistsParams{ID: id, CustomerID: uuid.UUID(owner.Customer), UserID: uuid.UUID(owner.User)})
+	if err != nil {
+		return StoredConversation{}, fmt.Errorf("find conversation %s: %w", id, err)
+	}
+	if exists {
+		return StoredConversation{}, fmt.Errorf("conversation %s: %w", id, ErrConversationClaimed)
+	}
+	return StoredConversation{}, fmt.Errorf("conversation %s: %w", id, ErrNotFound)
+}
+
+// ReleaseConversation lifts the claim taken at turns, leaving the history.
+func (t *Tx) ReleaseConversation(ctx context.Context, owner ConversationOwner, id uuid.UUID, turns int) error {
+	err := t.q.ReleaseAnalistaConversation(ctx, sqlcgen.ReleaseAnalistaConversationParams{ID: id, CustomerID: uuid.UUID(owner.Customer), UserID: uuid.UUID(owner.User), Turns: int32(turns)})
+	if err != nil {
+		return fmt.Errorf("release conversation %s: %w", id, err)
+	}
+	return nil
+}
+
+// AdvanceConversation replaces the history with one a turn longer and lifts
+// the claim. It fails with ErrConversationClaimed when the conversation is no
+// longer at turns, because a stale claim was overtaken.
+func (t *Tx) AdvanceConversation(ctx context.Context, owner ConversationOwner, id uuid.UUID, turns int, history json.RawMessage) error {
+	updated, err := t.q.AdvanceAnalistaConversation(ctx, sqlcgen.AdvanceAnalistaConversationParams{
+		ID:         id,
+		CustomerID: uuid.UUID(owner.Customer),
+		UserID:     uuid.UUID(owner.User),
+		Turns:      int32(turns),
+		History:    history,
+	})
+	if err != nil {
+		return fmt.Errorf("advance conversation %s: %w", id, err)
+	}
+	if updated == 0 {
+		return fmt.Errorf("conversation %s: %w", id, ErrConversationClaimed)
+	}
+	return nil
+}

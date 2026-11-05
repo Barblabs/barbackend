@@ -12,6 +12,86 @@ import (
 	"github.com/google/uuid"
 )
 
+const advanceAnalistaConversation = `-- name: AdvanceAnalistaConversation :execrows
+UPDATE analista_conversations
+SET history = $1, turns = turns + 1, answering_since = NULL, updated_at = now()
+WHERE id = $2 AND customer_id = $3 AND user_id = $4 AND turns = $5
+`
+
+type AdvanceAnalistaConversationParams struct {
+	History    []byte
+	ID         uuid.UUID
+	CustomerID uuid.UUID
+	UserID     uuid.UUID
+	Turns      int32
+}
+
+func (q *Queries) AdvanceAnalistaConversation(ctx context.Context, arg AdvanceAnalistaConversationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, advanceAnalistaConversation,
+		arg.History,
+		arg.ID,
+		arg.CustomerID,
+		arg.UserID,
+		arg.Turns,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const analistaConversationExists = `-- name: AnalistaConversationExists :one
+SELECT EXISTS (
+    SELECT 1 FROM analista_conversations
+    WHERE id = $1 AND customer_id = $2 AND user_id = $3
+)
+`
+
+type AnalistaConversationExistsParams struct {
+	ID         uuid.UUID
+	CustomerID uuid.UUID
+	UserID     uuid.UUID
+}
+
+func (q *Queries) AnalistaConversationExists(ctx context.Context, arg AnalistaConversationExistsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, analistaConversationExists, arg.ID, arg.CustomerID, arg.UserID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const claimAnalistaConversation = `-- name: ClaimAnalistaConversation :one
+UPDATE analista_conversations
+SET answering_since = now()
+WHERE id = $1 AND customer_id = $2 AND user_id = $3
+  AND (answering_since IS NULL OR answering_since < now() - make_interval(secs => $4::float8))
+RETURNING history, turns
+`
+
+type ClaimAnalistaConversationParams struct {
+	ID              uuid.UUID
+	CustomerID      uuid.UUID
+	UserID          uuid.UUID
+	LifetimeSeconds float64
+}
+
+type ClaimAnalistaConversationRow struct {
+	History []byte
+	Turns   int32
+}
+
+func (q *Queries) ClaimAnalistaConversation(ctx context.Context, arg ClaimAnalistaConversationParams) (ClaimAnalistaConversationRow, error) {
+	row := q.db.QueryRow(ctx, claimAnalistaConversation,
+		arg.ID,
+		arg.CustomerID,
+		arg.UserID,
+		arg.LifetimeSeconds,
+	)
+	var i ClaimAnalistaConversationRow
+	err := row.Scan(&i.History, &i.Turns)
+	return i, err
+}
+
 const getPrioritization = `-- name: GetPrioritization :one
 SELECT id, content, created_at
 FROM prioritizations
@@ -63,6 +143,28 @@ func (q *Queries) InsertActionPlan(ctx context.Context, arg InsertActionPlanPara
 	var created_at time.Time
 	err := row.Scan(&created_at)
 	return created_at, err
+}
+
+const insertAnalistaConversation = `-- name: InsertAnalistaConversation :exec
+INSERT INTO analista_conversations (id, customer_id, user_id, history, turns)
+VALUES ($1, $2, $3, $4, 1)
+`
+
+type InsertAnalistaConversationParams struct {
+	ID         uuid.UUID
+	CustomerID uuid.UUID
+	UserID     uuid.UUID
+	History    []byte
+}
+
+func (q *Queries) InsertAnalistaConversation(ctx context.Context, arg InsertAnalistaConversationParams) error {
+	_, err := q.db.Exec(ctx, insertAnalistaConversation,
+		arg.ID,
+		arg.CustomerID,
+		arg.UserID,
+		arg.History,
+	)
+	return err
 }
 
 const insertPrioritization = `-- name: InsertPrioritization :one
@@ -285,4 +387,27 @@ func (q *Queries) PrioritizationHolds(ctx context.Context, arg PrioritizationHol
 	var holds bool
 	err := row.Scan(&holds)
 	return holds, err
+}
+
+const releaseAnalistaConversation = `-- name: ReleaseAnalistaConversation :exec
+UPDATE analista_conversations
+SET answering_since = NULL
+WHERE id = $1 AND customer_id = $2 AND user_id = $3 AND turns = $4
+`
+
+type ReleaseAnalistaConversationParams struct {
+	ID         uuid.UUID
+	CustomerID uuid.UUID
+	UserID     uuid.UUID
+	Turns      int32
+}
+
+func (q *Queries) ReleaseAnalistaConversation(ctx context.Context, arg ReleaseAnalistaConversationParams) error {
+	_, err := q.db.Exec(ctx, releaseAnalistaConversation,
+		arg.ID,
+		arg.CustomerID,
+		arg.UserID,
+		arg.Turns,
+	)
+	return err
 }

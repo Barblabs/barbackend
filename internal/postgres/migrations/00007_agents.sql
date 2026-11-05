@@ -45,7 +45,20 @@ CREATE TABLE prioritization_feedback (
 );
 CREATE INDEX prioritization_feedback_idx ON prioritization_feedback (prioritization_id, created_at);
 
+-- json, not jsonb: the history goes back to the model as it was stored.
+CREATE TABLE analista_conversations (
+    id          uuid PRIMARY KEY,
+    customer_id uuid NOT NULL REFERENCES customers (id),
+    user_id     uuid NOT NULL REFERENCES users (id),
+    history     json NOT NULL,
+    turns       integer NOT NULL,
+    answering_since timestamptz,
+    created_at  timestamptz NOT NULL DEFAULT now(),
+    updated_at  timestamptz NOT NULL DEFAULT now()
+);
+
 -- +goose Down
+DROP TABLE analista_conversations;
 DROP TABLE prioritization_feedback;
 DROP TABLE action_plans;
 DROP TABLE prioritizations;

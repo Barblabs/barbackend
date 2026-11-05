@@ -19,6 +19,17 @@ type ActionPlan struct {
 	CreatedAt        time.Time
 }
 
+type AnalistaConversation struct {
+	ID             uuid.UUID
+	CustomerID     uuid.UUID
+	UserID         uuid.UUID
+	History        []byte
+	Turns          int32
+	AnsweringSince *time.Time
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
 type Asset struct {
 	CmdbSourceID       uuid.UUID
 	RecordID           string

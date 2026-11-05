@@ -47,3 +47,30 @@ FROM prioritization_feedback f
 JOIN prioritizations p ON p.id = f.prioritization_id
 WHERE f.prioritization_id = @prioritization_id AND p.customer_id = @customer_id
 ORDER BY f.created_at, f.id;
+
+-- name: InsertAnalistaConversation :exec
+INSERT INTO analista_conversations (id, customer_id, user_id, history, turns)
+VALUES ($1, $2, $3, $4, 1);
+
+-- name: ClaimAnalistaConversation :one
+UPDATE analista_conversations
+SET answering_since = now()
+WHERE id = @id AND customer_id = @customer_id AND user_id = @user_id
+  AND (answering_since IS NULL OR answering_since < now() - make_interval(secs => @lifetime_seconds::float8))
+RETURNING history, turns;
+
+-- name: AnalistaConversationExists :one
+SELECT EXISTS (
+    SELECT 1 FROM analista_conversations
+    WHERE id = @id AND customer_id = @customer_id AND user_id = @user_id
+);
+
+-- name: ReleaseAnalistaConversation :exec
+UPDATE analista_conversations
+SET answering_since = NULL
+WHERE id = @id AND customer_id = @customer_id AND user_id = @user_id AND turns = @turns;
+
+-- name: AdvanceAnalistaConversation :execrows
+UPDATE analista_conversations
+SET history = @history, turns = turns + 1, answering_since = NULL, updated_at = now()
+WHERE id = @id AND customer_id = @customer_id AND user_id = @user_id AND turns = @turns;
