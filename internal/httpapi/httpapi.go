@@ -36,6 +36,7 @@ func New(cfg Config) http.Handler {
 	cmdbSourceHandler{cmdb: cfg.CMDB}.register(api)
 	assetHandler{assets: cfg.Assets}.register(api)
 	prioritizationHandler{agents: cfg.Agents}.register(api)
+	analistaHandler{agents: cfg.Agents}.register(api)
 	customerHandler{users: cfg.Users}.register(api)
 	userHandler{users: cfg.Users}.register(api)
 	meHandler{users: cfg.Users}.register(api)
