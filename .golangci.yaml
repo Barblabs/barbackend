@@ -81,6 +81,46 @@ linters:
               desc: CMDB Provider adapters depend only on the seam and inventory, never on persistence or the cmdb use case (ADR 0008)
             - pkg: github.com/jackc/pgx
               desc: CMDB Provider adapters never touch the database (ADR 0008)
+        assessment:
+          list-mode: lax
+          files:
+            - "**/internal/assessment/**"
+          allow:
+            - barbackend/internal/assessment
+            - barbackend/internal/inventory
+            - barbackend/internal/scoring
+            - barbackend/internal/stixext
+          deny:
+            - pkg: barbackend/internal
+              desc: assessment is a pure domain package that imports only inventory, scoring and stixext (ADR 0016)
+            - pkg: net/http
+              desc: assessment is pure and does no I/O (ADR 0016)
+            - pkg: github.com/jackc/pgx
+              desc: assessment is pure and does no I/O (ADR 0016)
+        claude:
+          list-mode: lax
+          files:
+            - "**/internal/claude/**"
+          allow:
+            - barbackend/internal/claude
+          deny:
+            - pkg: barbackend/internal
+              desc: the Claude adapter imports no other layer; the agents use case calls it (ADR 0016)
+        agents:
+          list-mode: lax
+          files:
+            - "**/internal/agents/**"
+          allow:
+            - barbackend/internal/agents
+            - barbackend/internal/assessment
+            - barbackend/internal/claude
+            - barbackend/internal/inventory
+            - barbackend/internal/postgres
+            - barbackend/internal/stixext
+            - barbackend/internal/tenancy
+          deny:
+            - pkg: barbackend/internal
+              desc: the agents use case calls the domain, postgres and the Claude adapter, and reads no Feed (ADR 0016)
         stixext:
           list-mode: lax
           files:
@@ -90,10 +130,12 @@ linters:
           deny:
             - pkg: barbackend/internal
               desc: stixext is pure and imports no other layer (ADR 0010)
+        # Tests are exempt: a black-box test of an adapter imports that adapter.
         feeds:
           list-mode: lax
           files:
             - "**/internal/feeds/**"
+            - "!$test"
           allow:
             - barbackend/internal/feeds
             - barbackend/internal/feeds/httpx
@@ -162,6 +204,7 @@ linters:
           files:
             - "**/internal/postgres/**"
           allow:
+            - barbackend/internal/assessment
             - barbackend/internal/inventory
             - barbackend/internal/postgres
             - barbackend/internal/tenancy
@@ -180,6 +223,7 @@ linters:
             - barbackend/internal/httpapi
             - barbackend/internal/inventory
             - barbackend/internal/tenancy
+            - barbackend/internal/agents
             - barbackend/internal/assets
             - barbackend/internal/cmdb
             - barbackend/internal/users
