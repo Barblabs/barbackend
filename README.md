@@ -66,7 +66,34 @@ The OpenAPI 3.1 spec is served at `/openapi.json` and `/openapi.yaml`, with a br
 - `DELETE /cmdb/source`: disconnects the Connected CMDB Source, deleting nothing: the source and its Assets stay stored, its Assets become Inactive, and a Sync of it is refused from then on. Connecting again creates a new CMDB Source. Answers 204, 404 `not_connected` if no source is connected, and 409 `sync_in_progress` while a Sync of it commits.
 - `POST /cmdb/source/sync`: runs a Sync of the Connected CMDB Source and answers `{last_sync, created, updated, deactivated, reactivated, skipped}`. The Sync outlives its request and is cancelled only by a 5-minute limit or server shutdown. Answers 404 `not_connected` if no source is connected, 409 `sync_in_progress` while another Sync of it runs, and 502 when the Sync fails, which is recorded as a failed Sync Run. Its code is the CMDB's failure code, such as `invalid_credentials` after a password rotation, or `sync_failed` when the CMDB Provider did not classify why.
 
+- `GET /prioritizations`: the Customer's Prioritizations, newest first, as `{id, created_at, findings, groups}`. The newest is the order to follow. Takes `limit`.
+- `GET /prioritizations/{id}`: one Prioritization: its `groups` in the order to attend them, each `{position, title, reason, finding_ids, evidence}`; its `findings`, each with its `score`, its `score_rank` by Score alone, its `group` and its `dossier`, whose shape is not a contract; the newest Action Plan of each Finding that has one in `plans`; and its `feedback`. Answers 404 `prioritization_not_found`.
+- `POST /prioritizations/{id}/plans`: has Luna write the Action Plan of `{finding_id}` and answers 201 with it, which can take a minute. Answers 404 `prioritization_not_found` or `finding_not_found`, and 502 `agent_refused`, `agent_rejected` or `agent_unavailable` when Luna has no verified answer, storing nothing.
+- `POST /prioritizations/{id}/feedback`: records `{finding_id, verdict, note}`, where `verdict` is `applies`, `does_not_apply`, `remediated`, `should_be_earlier` or `should_be_later`. It changes no Score and no order.
+- `POST /analista/conversations`: starts a conversation with the Analista from `{message}` and answers 201 with `{conversation_id, reply}`.
+- `POST /analista/conversations/{id}/messages`: sends `{message}` in one of the User's conversations. Answers 404 `conversation_not_found`, 409 `conversation_busy` while it answers another message, refused without calling the model, and 409 `conversation_full` after 40 turns. A server that dies mid-answer leaves that conversation busy for up to 10 minutes. Both Analista endpoints answer 502 `agent_refused` or `agent_unavailable` when the model does not answer, storing nothing. A `reply`, like all other Agent text, comes from a model: render it as plain text.
+
 Run `./barbackend` with no arguments to print the usage.
+
+## Agents
+
+The Prioritizer, Luna (Advisor) and the Analista (feedback) run on Anthropic's models; `docs/adr/0016-the-prioritizer-orders-findings-from-their-dossiers.md` explains what they read and how they are kept honest. They need credentials, usually `ANTHROPIC_API_KEY`. No Agent reads a Feed: the Findings pipeline hands them one Dossier per Finding, in the shape of `docs/examples/findings.json`. Until that pipeline exists, `agent finding` builds one from the live Feeds.
+
+```sh
+# The Dossier of one Finding, from the live Feeds. Collect several into a JSON list.
+./barbackend agent finding --asset docs/examples/asset.json --component PostgreSQL --cve CVE-2025-1094 --id f-1
+
+# Prioritize the Findings of a file, and with --plans have Luna write each Action Plan. Needs no database and stores nothing.
+./barbackend agent run --findings docs/examples/findings.json --plans
+
+# The same for a Customer, acting as one of its Users, storing the Prioritization; then an Action Plan. These need DATABASE_URL.
+./barbackend agent prioritize --as <email> --findings docs/examples/findings.json
+./barbackend agent plan --as <email> --prioritization <id> --finding f-1
+
+# Talk with the Analista. Pass the printed conversation id to continue.
+./barbackend agent ask --as <email> "¿qué atiendo primero?"
+./barbackend agent ask --as <email> --conversation <id> "el de lab-01 debería ir antes, ahí corre la nómina"
+```
 
 ## CMDB Sources
 
