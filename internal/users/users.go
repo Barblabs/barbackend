@@ -63,6 +63,25 @@ func (s *Service) identify(ctx context.Context, accessToken string) (tenancy.Use
 	return postgres.InTxValue(ctx, s.db, func(tx *postgres.Tx) (tenancy.User, error) { return tx.UserBySub(ctx, sub) })
 }
 
+// ByEmail resolves an email, as an operator types it, to the User it names. It
+// fails with ErrUserNotFound, and as tenancy.User.SignIn does for a User who
+// cannot sign in, so nobody acts as them from the command line either.
+func (s *Service) ByEmail(ctx context.Context, email string) (tenancy.User, error) {
+	u, err := postgres.InTxValue(ctx, s.db, func(tx *postgres.Tx) (tenancy.User, error) {
+		return tx.UserByEmail(ctx, tenancy.CanonicalEmail(email))
+	})
+	if errors.Is(err, postgres.ErrNotFound) {
+		return tenancy.User{}, fmt.Errorf("%w: %w", tenancy.ErrUserNotFound, err)
+	}
+	if err != nil {
+		return tenancy.User{}, err
+	}
+	if err := u.SignIn(); err != nil {
+		return tenancy.User{}, err
+	}
+	return u, nil
+}
+
 // Profile is the caller as the dashboard shows them.
 type Profile struct {
 	User tenancy.User
