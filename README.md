@@ -32,6 +32,24 @@ export CORS_ALLOWED_ORIGINS=http://localhost:5173
 
 `create-platform-admin` creates the user in Cognito, which emails the invitation, so it needs AWS credentials allowed to call `AdminCreateUser` and `AdminDeleteUser` on the pool, from the default AWS credential chain. The pool itself is created by Terraform outside this repo.
 
+### Container image
+
+The `Dockerfile` builds an image with the static binary and CA certificates only, running as a non-root user with Gin in release mode. `serve` is the default command, and any other command replaces it.
+
+```bash
+docker build -t barbackend .
+# both architectures, as CI builds them
+docker buildx build --platform linux/amd64,linux/arm64 -t barbackend .
+
+docker run --rm --env-file barbackend.env barbackend migrate   # before every deploy; safe to repeat
+docker run -d --restart unless-stopped -p 8080:8080 --env-file barbackend.env barbackend
+docker run --rm --env-file barbackend.env barbackend create-platform-admin <email>
+```
+
+`barbackend.env` holds the variables above as plain `KEY=value` lines: Docker reads no `export` and no quotes. Health checks go to `GET /ping`, as the image has no shell for a `HEALTHCHECK`.
+
+On EC2, give the instance a role allowed to call `AdminCreateUser` and `AdminDeleteUser` on the pool, and leave AWS keys out of the env file: the SDK falls back to the instance role. With IMDSv2, the container is one network hop further from the metadata service, so set the instance's metadata hop limit to at least 2 (`http_put_response_hop_limit = 2` in Terraform), or Cognito admin calls fail to get credentials.
+
 ### HTTP API
 
 Every error answers `{code, error}`: `code` is stable for the dashboard to translate, and `error` is readable on its own.
