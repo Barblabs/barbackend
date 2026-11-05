@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"barbackend/internal/agents"
 	"barbackend/internal/assets"
 	"barbackend/internal/cmdb"
 	"barbackend/internal/httpapi"
@@ -53,6 +54,7 @@ func serve(ctx context.Context, _ []string) error {
 
 	return withDB(ctx, func(db *postgres.DB) error {
 		return listen(ctx, feedsDone, httpapi.New(httpapi.Config{
+			Agents:         agents.NewService(db, newCrew()),
 			Assets:         assets.New(db),
 			CMDB:           cmdb.New(db, providers(), key, ctx, syncTimeout),
 			Users:          users.New(db, verifier, admin),
