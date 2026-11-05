@@ -125,7 +125,7 @@ type User struct {
 // receives it. A Platform Admin has no Customer and every other role has one;
 // the zero CustomerID means none.
 func NewUser(id UserID, email string, role Role, customer CustomerID) (User, error) {
-	email = strings.ToLower(strings.TrimSpace(email))
+	email = CanonicalEmail(email)
 	switch {
 	case id == UserID{}:
 		return User{}, fmt.Errorf("%w: zero id", ErrInvalidUser)
@@ -140,6 +140,9 @@ func NewUser(id UserID, email string, role Role, customer CustomerID) (User, err
 	}
 	return User{id: id, email: email, role: role, customer: customer}, nil
 }
+
+// CanonicalEmail is the form of ADR 0003, in which Users are stored.
+func CanonicalEmail(email string) string { return strings.ToLower(strings.TrimSpace(email)) }
 
 // UserState is what can stop a stored User from signing in.
 type UserState struct {

@@ -11,13 +11,16 @@ internal/
   cmdb/                use cases on CMDB Sources   -> cmdb/provider, encryption, inventory, postgres
     provider/          CMDB Provider seam          -> inventory
       <provider>/      adapters                    -> cmdb/provider, inventory, own subpackages
+  agents/              use case on the Agents      -> assessment, claude, inventory, postgres, tenancy
   ingest/              use case polling Feeds      -> feeds, stixext
   feeds/               Feed seam                   -> stixext
     httpx/             shared HTTP client setup    -> nothing internal
     <feed>/            adapters                    -> feeds, httpx, stixext
+  claude/              Anthropic adapter           -> nothing internal
   cognito/             Cognito adapter             -> tenancy
   encryption/          sealing credentials         -> nothing internal
-  postgres/            all persistence             -> inventory, tenancy
+  postgres/            all persistence             -> assessment, inventory, tenancy
+  assessment/          pure domain                 -> inventory, scoring, stixext
   scoring/             pure domain                 -> inventory
   stixext/             barbattack's STIX conventions -> nothing internal
   inventory/           pure domain                 -> tenancy

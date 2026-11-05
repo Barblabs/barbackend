@@ -83,6 +83,34 @@ func (q *Queries) GetCustomerUser(ctx context.Context, arg GetCustomerUserParams
 	return i, err
 }
 
+const getUserByEmail = `-- name: GetUserByEmail :one
+SELECT u.id, u.cognito_sub, u.email, u.customer_id, u.role_id, u.created_at, u.disabled_at, (c.deactivated_at IS NOT NULL)::boolean AS customer_deactivated
+FROM users u
+LEFT JOIN customers c ON c.id = u.customer_id
+WHERE u.email = $1
+`
+
+type GetUserByEmailRow struct {
+	User                User
+	CustomerDeactivated bool
+}
+
+func (q *Queries) GetUserByEmail(ctx context.Context, email string) (GetUserByEmailRow, error) {
+	row := q.db.QueryRow(ctx, getUserByEmail, email)
+	var i GetUserByEmailRow
+	err := row.Scan(
+		&i.User.ID,
+		&i.User.CognitoSub,
+		&i.User.Email,
+		&i.User.CustomerID,
+		&i.User.RoleID,
+		&i.User.CreatedAt,
+		&i.User.DisabledAt,
+		&i.CustomerDeactivated,
+	)
+	return i, err
+}
+
 const getUserBySub = `-- name: GetUserBySub :one
 SELECT u.id, u.cognito_sub, u.email, u.customer_id, u.role_id, u.created_at, u.disabled_at, (c.deactivated_at IS NOT NULL)::boolean AS customer_deactivated
 FROM users u

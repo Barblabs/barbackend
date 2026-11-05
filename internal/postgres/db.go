@@ -26,6 +26,9 @@ var (
 	// ErrDisconnected is a Sync refused because its CMDB Source was
 	// disconnected: its Assets stay as the disconnect left them.
 	ErrDisconnected = errors.New("cmdb source is disconnected")
+	// ErrConversationClaimed is a conversation another message is being
+	// answered in, or was answered in first.
+	ErrConversationClaimed = errors.New("conversation is claimed by another message")
 )
 
 const (

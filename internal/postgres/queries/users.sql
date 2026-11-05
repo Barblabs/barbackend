@@ -39,3 +39,9 @@ WHERE id = $1;
 UPDATE users
 SET disabled_at = coalesce(disabled_at, now())
 WHERE customer_id = $1 AND id = $2;
+
+-- name: GetUserByEmail :one
+SELECT sqlc.embed(u), (c.deactivated_at IS NOT NULL)::boolean AS customer_deactivated
+FROM users u
+LEFT JOIN customers c ON c.id = u.customer_id
+WHERE u.email = $1;

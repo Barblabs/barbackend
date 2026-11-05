@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"barbackend/internal/agents"
 	"barbackend/internal/assets"
 	"barbackend/internal/cmdb"
 	"barbackend/internal/inventory"
@@ -41,12 +42,24 @@ const (
 	userNotFound        = "user_not_found"
 	lastCustomerAdmin   = "last_customer_admin"
 	internalError       = "internal_error"
+
+	prioritizationNotFound = "prioritization_not_found"
+	findingNotFound        = "finding_not_found"
+	conversationNotFound   = "conversation_not_found"
+	conversationBusy       = "conversation_busy"
+	conversationFull       = "conversation_full"
+	agentRefused           = "agent_refused"
+	agentRejected          = "agent_rejected"
+	agentUnavailable       = "agent_unavailable"
 )
 
 func apiError(err error) *codedError {
 	var coded *codedError
 	if errors.As(err, &coded) {
 		return coded
+	}
+	if e := agentError(err); e != nil {
+		return e
 	}
 	var failed *cmdb.SyncError
 	if errors.As(err, &failed) {
@@ -90,6 +103,31 @@ func apiError(err error) *codedError {
 		return &codedError{status: http.StatusConflict, Code: syncInProgress, Message: err.Error()}
 	default:
 		return internal(err)
+	}
+}
+
+func agentError(err error) *codedError {
+	switch {
+	case errors.Is(err, agents.ErrEmptyMessage), errors.Is(err, agents.ErrInvalidFeedback), errors.Is(err, agents.ErrInvalidLimit):
+		return &codedError{status: http.StatusBadRequest, Code: invalidRequest, Message: err.Error()}
+	case errors.Is(err, agents.ErrConversationFull):
+		return &codedError{status: http.StatusConflict, Code: conversationFull, Message: agents.ErrConversationFull.Error()}
+	case errors.Is(err, agents.ErrPrioritizationNotFound):
+		return &codedError{status: http.StatusNotFound, Code: prioritizationNotFound, Message: agents.ErrPrioritizationNotFound.Error()}
+	case errors.Is(err, agents.ErrFindingNotFound):
+		return &codedError{status: http.StatusNotFound, Code: findingNotFound, Message: agents.ErrFindingNotFound.Error()}
+	case errors.Is(err, agents.ErrConversationNotFound):
+		return &codedError{status: http.StatusNotFound, Code: conversationNotFound, Message: agents.ErrConversationNotFound.Error()}
+	case errors.Is(err, agents.ErrConversationBusy):
+		return &codedError{status: http.StatusConflict, Code: conversationBusy, Message: agents.ErrConversationBusy.Error()}
+	case errors.Is(err, agents.ErrRefused):
+		return &codedError{status: http.StatusBadGateway, cause: err, Code: agentRefused, Message: agents.ErrRefused.Error()}
+	case errors.Is(err, agents.ErrRejected):
+		return &codedError{status: http.StatusBadGateway, cause: err, Code: agentRejected, Message: agents.ErrRejected.Error()}
+	case errors.Is(err, agents.ErrUnavailable):
+		return &codedError{status: http.StatusBadGateway, cause: err, Code: agentUnavailable, Message: agents.ErrUnavailable.Error()}
+	default:
+		return nil
 	}
 }
 

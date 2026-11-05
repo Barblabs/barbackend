@@ -91,7 +91,7 @@ func registeredFeeds() []ingest.Feed {
 		{
 			Name:     "epss",
 			Interval: epssInterval,
-			Pull:     epss.New(nil, "").Pull,
+			Pull:     epss.New(nil, "", "").Pull,
 		},
 	}
 }

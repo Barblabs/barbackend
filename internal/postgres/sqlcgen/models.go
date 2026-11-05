@@ -11,6 +11,25 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type ActionPlan struct {
+	ID               uuid.UUID
+	PrioritizationID uuid.UUID
+	FindingID        string
+	Content          []byte
+	CreatedAt        time.Time
+}
+
+type AnalistaConversation struct {
+	ID             uuid.UUID
+	CustomerID     uuid.UUID
+	UserID         uuid.UUID
+	History        []byte
+	Turns          int32
+	AnsweringSince *time.Time
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
 type Asset struct {
 	CmdbSourceID       uuid.UUID
 	RecordID           string
@@ -65,6 +84,31 @@ type Customer struct {
 type Exposure struct {
 	ID   int16
 	Name string
+}
+
+type FeedbackVerdict struct {
+	ID   int16
+	Name string
+}
+
+type Prioritization struct {
+	ID           uuid.UUID
+	CustomerID   uuid.UUID
+	FindingCount int32
+	GroupCount   int32
+	Content      []byte
+	CreatedAt    time.Time
+}
+
+type PrioritizationFeedback struct {
+	ID               uuid.UUID
+	PrioritizationID uuid.UUID
+	FindingID        string
+	AuthorID         uuid.UUID
+	VerdictID        int16
+	Note             string
+	ViaAnalista      bool
+	CreatedAt        time.Time
 }
 
 type SoftwareComponent struct {
