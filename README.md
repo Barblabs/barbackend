@@ -77,7 +77,7 @@ Run `./barbackend` with no arguments to print the usage.
 
 ## Agents
 
-The Prioritizer, Luna (Advisor) and the Analista (feedback) run on Anthropic's models; `docs/adr/0016-the-prioritizer-orders-findings-from-their-dossiers.md` explains what they read and how they are kept honest. They need credentials, usually `ANTHROPIC_API_KEY`. No Agent reads a Feed: the Findings pipeline hands them one Dossier per Finding, in the shape of `docs/examples/findings.json`. Until that pipeline exists, `agent finding` builds one from the live Feeds.
+The Prioritizer, Luna (Advisor) and the Analista (feedback) run on Anthropic's models; `docs/adr/0016-the-prioritizer-orders-findings-from-their-dossiers.md` explains what they read and how they are kept honest. They need credentials, usually `ANTHROPIC_API_KEY`. No Agent reads a Feed: the Findings pipeline hands them one Dossier per Finding, in the shape of `docs/examples/findings.json`. Until that pipeline exists, `agent finding` builds one from the live Feeds. What they still lack, starting with each Customer's business context in the Prioritizer's criterion, is in `docs/agents-pending.md`.
 
 ```sh
 # The Dossier of one Finding, from the live Feeds. Collect several into a JSON list.

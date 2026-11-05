@@ -44,9 +44,10 @@ internal/
 - **Findings are not stored yet.** Until the pipeline exists, `agent finding` builds a Dossier from the live Feeds for a file that `agent run` and `agent prioritize` read, and a stored Finding is the id the pipeline gave it, so Action Plans and Feedback reference it as text. When Findings are stored, the pipeline calls `Service.Prioritize` with the Customer's open Findings and those ids become references.
 - **The Analista has no Slack transport yet.** It is reached over HTTP and the CLI. Connecting it to Slack (issue #96) must also decide what an Asset Owner, who is not a User, may ask it.
 - **`nvd/1` gains the optional `cna_affected`.** NVD no longer analyzes most CVEs, so many have no CPE matches and what is affected comes only from the CVE's numbering authority.
-- **The business context is the Asset's.** The Prioritizer weighs Criticality, Exposure, the kind of Asset and what its name and components say. What else a Customer knows, such as which Asset runs payments, reaches it only through Feedback until barbattack stores it.
+- **The business context is the Asset's.** The Prioritizer weighs Criticality, Exposure, the kind of Asset and what its name and components say. What else a Customer knows, such as which Asset runs payments, reaches it only through Feedback until barbattack stores it, which is the first item of `docs/agents-pending.md`.
 - **The order can differ between runs** on the same Findings, as any model's can. The Score does not, and each Finding shows both.
 - A Prioritization costs one request and an Action Plan another. There is no quota yet.
+- What is still missing, from that context to a first run against the real model, is in `docs/agents-pending.md`.
 
 ## Considered Options
 
