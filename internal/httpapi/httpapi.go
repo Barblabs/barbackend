@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 
+	"barbackend/internal/agents"
 	"barbackend/internal/assets"
 	"barbackend/internal/cmdb"
 	"barbackend/internal/users"
@@ -16,6 +17,7 @@ import (
 )
 
 type Config struct {
+	Agents *agents.Service
 	Assets *assets.Service
 	CMDB   *cmdb.Service
 	Users  *users.Service
@@ -33,6 +35,7 @@ func New(cfg Config) http.Handler {
 	api.UseMiddleware(authenticate(api, cfg.Users))
 	cmdbSourceHandler{cmdb: cfg.CMDB}.register(api)
 	assetHandler{assets: cfg.Assets}.register(api)
+	prioritizationHandler{agents: cfg.Agents}.register(api)
 	customerHandler{users: cfg.Users}.register(api)
 	userHandler{users: cfg.Users}.register(api)
 	meHandler{users: cfg.Users}.register(api)
