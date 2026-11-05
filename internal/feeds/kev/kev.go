@@ -55,6 +55,25 @@ func (a *Adapter) Pull(ctx context.Context, emit feeds.Emit) error {
 	return nil
 }
 
+// Lookup fetches the catalog and returns the entry of cveID, or nil when the catalog does not list it.
+func (a *Adapter) Lookup(ctx context.Context, cveID string) (*stix2.Vulnerability, error) {
+	c, err := a.fetch(ctx)
+	if err != nil {
+		return nil, err
+	}
+	released, err := time.Parse(time.RFC3339, c.DateReleased)
+	if err != nil {
+		return nil, fmt.Errorf("kev: catalog date released %q: %w", c.DateReleased, err)
+	}
+	for _, e := range c.Vulnerabilities {
+		if id, ok := stixext.CVEID(e.CVEID); ok && id == cveID {
+			v, _, err := vulnerability(e, c.CatalogVersion, released)
+			return v, err
+		}
+	}
+	return nil, nil
+}
+
 func (a *Adapter) fetch(ctx context.Context) (catalog, error) {
 	resp, err := a.Get(ctx, "kev")
 	if err != nil {

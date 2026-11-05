@@ -6,6 +6,7 @@ import (
 	"maps"
 	"testing"
 
+	"barbackend/internal/assessment"
 	"barbackend/internal/inventory"
 	"barbackend/internal/postgres/pgtest"
 	"barbackend/internal/tenancy"
@@ -15,12 +16,13 @@ import (
 func TestCatalogsMatchDomainConstants(t *testing.T) {
 	t.Parallel()
 	catalogs := map[string]map[int16]string{
-		"asset_kinds":    names(inventory.Server, inventory.VirtualMachine, inventory.Workstation, inventory.NetworkDevice),
-		"criticalities":  names(inventory.CriticalityHigh, inventory.CriticalityMedium, inventory.CriticalityLow),
-		"exposures":      names(inventory.InternetFacing, inventory.Internal),
-		"software_roles": names(inventory.OperatingSystem, inventory.Application),
-		"sync_outcomes":  names(inventory.SyncSucceeded, inventory.SyncFailed),
-		"user_roles":     names(tenancy.PlatformAdmin, tenancy.CustomerAdmin, tenancy.Viewer),
+		"asset_kinds":       names(inventory.Server, inventory.VirtualMachine, inventory.Workstation, inventory.NetworkDevice),
+		"criticalities":     names(inventory.CriticalityHigh, inventory.CriticalityMedium, inventory.CriticalityLow),
+		"exposures":         names(inventory.InternetFacing, inventory.Internal),
+		"software_roles":    names(inventory.OperatingSystem, inventory.Application),
+		"sync_outcomes":     names(inventory.SyncSucceeded, inventory.SyncFailed),
+		"user_roles":        names(tenancy.PlatformAdmin, tenancy.CustomerAdmin, tenancy.Viewer),
+		"feedback_verdicts": names(assessment.VerdictApplies, assessment.VerdictDoesNotApply, assessment.VerdictRemediated, assessment.VerdictShouldBeEarlier, assessment.VerdictShouldBeLater),
 	}
 	ctx := context.Background()
 	conn := pgtest.Conn(t, pgtest.URL(t))

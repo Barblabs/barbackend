@@ -1,0 +1,1723 @@
+[
+  {
+    "finding": "f-1",
+    "cve": "CVE-2025-1094",
+    "description": "Improper neutralization of quoting syntax in PostgreSQL libpq functions PQescapeLiteral(), PQescapeIdentifier(), PQescapeString(), and PQescapeStringConn() allows a database input provider to achieve SQL injection in certain usage patterns.  Specifically, SQL injection requires the application to use the function result to construct input to psql, the PostgreSQL interactive terminal.  Similarly, improper neutralization of quoting syntax in PostgreSQL command line utility programs allows a source of command line arguments to achieve SQL injection when client_encoding is BIG5 and server_encoding is one of EUC_TW or MULE_INTERNAL.  Versions before PostgreSQL 17.3, 16.7, 15.11, 14.16, and 13.19 are affected.",
+    "asset": {
+      "name": "pg-prod-01",
+      "kind": "server",
+      "criticality": "high",
+      "exposure": "internal",
+      "software": [
+        {
+          "role": "operating_system",
+          "name": "Ubuntu Server",
+          "version": "22.04"
+        },
+        {
+          "role": "application",
+          "name": "PostgreSQL",
+          "version": "15.6"
+        }
+      ]
+    },
+    "component": {
+      "role": "application",
+      "name": "PostgreSQL",
+      "version": "15.6"
+    },
+    "score": {
+      "scoring_model": 1,
+      "value": 0.3079,
+      "alpha": 0.81,
+      "beta": 0.9003,
+      "gamma": 0,
+      "vulnerability": 0.5131,
+      "criticality_multiplier": 1,
+      "exposure_multiplier": 0.6,
+      "data_gaps": []
+    },
+    "kev": null,
+    "epss": {
+      "extension_type": "property-extension",
+      "probability": 0.9003,
+      "percentile": 0.99795,
+      "score_date": "2026-11-05"
+    },
+    "nvd": {
+      "extension_type": "property-extension",
+      "published": "2025-02-13T13:15:09Z",
+      "last_modified": "2026-11-03T22:17:33Z",
+      "vuln_status": "Deferred",
+      "cvss": [
+        {
+          "version": "3.1",
+          "base_score": 8.1,
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H",
+          "source": "f86ef6dc-4d3a-42ad-8f28-e6d5547a5007",
+          "type": "Secondary"
+        }
+      ],
+      "cwes": [
+        "CWE-149"
+      ],
+      "affected": null,
+      "cna_affected": [
+        {
+          "source": "f86ef6dc-4d3a-42ad-8f28-e6d5547a5007",
+          "vendor": "n/a",
+          "product": "PostgreSQL",
+          "default_status": "unaffected",
+          "versions": [
+            {
+              "version": "17",
+              "less_than": "17.3",
+              "status": "affected"
+            },
+            {
+              "version": "16",
+              "less_than": "16.7",
+              "status": "affected"
+            },
+            {
+              "version": "15",
+              "less_than": "15.11",
+              "status": "affected"
+            },
+            {
+              "version": "14",
+              "less_than": "14.16",
+              "status": "affected"
+            },
+            {
+              "version": "0",
+              "less_than": "13.19",
+              "status": "affected"
+            }
+          ]
+        }
+      ],
+      "references": [
+        "https://www.postgresql.org/support/security/CVE-2025-1094/",
+        "http://www.openwall.com/lists/oss-security/2025/02/16/3",
+        "http://www.openwall.com/lists/oss-security/2025/02/20/1",
+        "https://lists.debian.org/debian-lts-announce/2025/02/msg00015.html",
+        "https://lists.debian.org/debian-lts-announce/2025/02/msg00024.html",
+        "https://security.netapp.com/advisory/ntap-20250221-0010/"
+      ]
+    },
+    "unavailable_feeds": []
+  },
+  {
+    "finding": "f-2",
+    "cve": "CVE-2024-6387",
+    "description": "A security regression (CVE-2006-5051) was discovered in OpenSSH's server (sshd). There is a race condition which can lead sshd to handle some signals in an unsafe manner. An unauthenticated, remote attacker may be able to trigger it by failing to authenticate within a set time period.",
+    "asset": {
+      "name": "pg-prod-01",
+      "kind": "server",
+      "criticality": "high",
+      "exposure": "internal",
+      "software": [
+        {
+          "role": "operating_system",
+          "name": "Ubuntu Server",
+          "version": "22.04"
+        },
+        {
+          "role": "application",
+          "name": "PostgreSQL",
+          "version": "15.6"
+        }
+      ]
+    },
+    "component": {
+      "role": "operating_system",
+      "name": "Ubuntu Server",
+      "version": "22.04"
+    },
+    "score": {
+      "scoring_model": 1,
+      "value": 0.3249,
+      "alpha": 0.81,
+      "beta": 0.9951,
+      "gamma": 0,
+      "vulnerability": 0.5415,
+      "criticality_multiplier": 1,
+      "exposure_multiplier": 0.6,
+      "data_gaps": []
+    },
+    "kev": null,
+    "epss": {
+      "extension_type": "property-extension",
+      "probability": 0.99506,
+      "percentile": 0.99945,
+      "score_date": "2026-11-05"
+    },
+    "nvd": {
+      "extension_type": "property-extension",
+      "published": "2024-07-01T13:15:06Z",
+      "last_modified": "2026-10-15T03:17:04Z",
+      "vuln_status": "Modified",
+      "cvss": [
+        {
+          "version": "3.1",
+          "base_score": 8.1,
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H",
+          "source": "secalert@redhat.com",
+          "type": "Secondary"
+        },
+        {
+          "version": "3.1",
+          "base_score": 8.1,
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H",
+          "source": "nvd@nist.gov",
+          "type": "Primary"
+        }
+      ],
+      "cwes": [
+        "CWE-364",
+        "CWE-362"
+      ],
+      "affected": [
+        {
+          "criteria": "cpe:2.3:o:sonicwall:sma_6200_firmware:-:*:*:*:*:*:*:*",
+          "vendor": "sonicwall",
+          "product": "sma_6200_firmware"
+        },
+        {
+          "criteria": "cpe:2.3:o:sonicwall:sma_7200_firmware:-:*:*:*:*:*:*:*",
+          "vendor": "sonicwall",
+          "product": "sma_7200_firmware"
+        },
+        {
+          "criteria": "cpe:2.3:o:arista:eos:*:*:*:*:*:*:*:*",
+          "vendor": "arista",
+          "product": "eos",
+          "version_start_including": "4.32.0",
+          "version_end_including": "4.32.1f"
+        },
+        {
+          "criteria": "cpe:2.3:o:canonical:ubuntu_linux:23.10:*:*:*:*:*:*:*",
+          "vendor": "canonical",
+          "product": "ubuntu_linux"
+        },
+        {
+          "criteria": "cpe:2.3:o:canonical:ubuntu_linux:24.04:*:*:*:lts:*:*:*",
+          "vendor": "canonical",
+          "product": "ubuntu_linux"
+        },
+        {
+          "criteria": "cpe:2.3:o:almalinux:almalinux:9.0:-:*:*:*:*:*:*",
+          "vendor": "almalinux",
+          "product": "almalinux"
+        },
+        {
+          "criteria": "cpe:2.3:o:sonicwall:sma_6210_firmware:-:*:*:*:*:*:*:*",
+          "vendor": "sonicwall",
+          "product": "sma_6210_firmware"
+        },
+        {
+          "criteria": "cpe:2.3:o:sonicwall:sma_7210_firmware:-:*:*:*:*:*:*:*",
+          "vendor": "sonicwall",
+          "product": "sma_7210_firmware"
+        },
+        {
+          "criteria": "cpe:2.3:o:sonicwall:sma_8200v_firmware:-:*:*:*:*:*:*:*",
+          "vendor": "sonicwall",
+          "product": "sma_8200v_firmware"
+        },
+        {
+          "criteria": "cpe:2.3:o:sonicwall:sra_ex_7000_firmware:-:*:*:*:*:*:*:*",
+          "vendor": "sonicwall",
+          "product": "sra_ex_7000_firmware"
+        },
+        {
+          "criteria": "cpe:2.3:o:netapp:a1k_firmware:-:*:*:*:*:*:*:*",
+          "vendor": "netapp",
+          "product": "a1k_firmware"
+        },
+        {
+          "criteria": "cpe:2.3:o:netapp:a70_firmware:-:*:*:*:*:*:*:*",
+          "vendor": "netapp",
+          "product": "a70_firmware"
+        },
+        {
+          "criteria": "cpe:2.3:o:netapp:a90_firmware:-:*:*:*:*:*:*:*",
+          "vendor": "netapp",
+          "product": "a90_firmware"
+        },
+        {
+          "criteria": "cpe:2.3:o:netapp:a700s_firmware:-:*:*:*:*:*:*:*",
+          "vendor": "netapp",
+          "product": "a700s_firmware"
+        },
+        {
+          "criteria": "cpe:2.3:o:netapp:8300_firmware:-:*:*:*:*:*:*:*",
+          "vendor": "netapp",
+          "product": "8300_firmware"
+        },
+        {
+          "criteria": "cpe:2.3:o:netapp:8700_firmware:-:*:*:*:*:*:*:*",
+          "vendor": "netapp",
+          "product": "8700_firmware"
+        },
+        {
+          "criteria": "cpe:2.3:o:netapp:a400_firmware:-:*:*:*:*:*:*:*",
+          "vendor": "netapp",
+          "product": "a400_firmware"
+        },
+        {
+          "criteria": "cpe:2.3:o:netapp:c400_firmware:-:*:*:*:*:*:*:*",
+          "vendor": "netapp",
+          "product": "c400_firmware"
+        },
+        {
+          "criteria": "cpe:2.3:o:netapp:a250_firmware:-:*:*:*:*:*:*:*",
+          "vendor": "netapp",
+          "product": "a250_firmware"
+        },
+        {
+          "criteria": "cpe:2.3:o:netapp:500f_firmware:-:*:*:*:*:*:*:*",
+          "vendor": "netapp",
+          "product": "500f_firmware"
+        },
+        {
+          "criteria": "cpe:2.3:o:netapp:c250_firmware:-:*:*:*:*:*:*:*",
+          "vendor": "netapp",
+          "product": "c250_firmware"
+        },
+        {
+          "criteria": "cpe:2.3:o:netapp:a800_firmware:-:*:*:*:*:*:*:*",
+          "vendor": "netapp",
+          "product": "a800_firmware"
+        },
+        {
+          "criteria": "cpe:2.3:o:netapp:c800_firmware:-:*:*:*:*:*:*:*",
+          "vendor": "netapp",
+          "product": "c800_firmware"
+        },
+        {
+          "criteria": "cpe:2.3:o:netapp:a900_firmware:-:*:*:*:*:*:*:*",
+          "vendor": "netapp",
+          "product": "a900_firmware"
+        },
+        {
+          "criteria": "cpe:2.3:o:netapp:a9500_firmware:-:*:*:*:*:*:*:*",
+          "vendor": "netapp",
+          "product": "a9500_firmware"
+        },
+        {
+          "criteria": "cpe:2.3:o:netapp:c190_firmware:-:*:*:*:*:*:*:*",
+          "vendor": "netapp",
+          "product": "c190_firmware"
+        },
+        {
+          "criteria": "cpe:2.3:o:netapp:a150_firmware:-:*:*:*:*:*:*:*",
+          "vendor": "netapp",
+          "product": "a150_firmware"
+        },
+        {
+          "criteria": "cpe:2.3:o:netapp:a220_firmware:-:*:*:*:*:*:*:*",
+          "vendor": "netapp",
+          "product": "a220_firmware"
+        },
+        {
+          "criteria": "cpe:2.3:o:netapp:fas2720_firmware:-:*:*:*:*:*:*:*",
+          "vendor": "netapp",
+          "product": "fas2720_firmware"
+        },
+        {
+          "criteria": "cpe:2.3:o:netapp:fas2750_firmware:-:*:*:*:*:*:*:*",
+          "vendor": "netapp",
+          "product": "fas2750_firmware"
+        },
+        {
+          "criteria": "cpe:2.3:o:netapp:fas2820_firmware:-:*:*:*:*:*:*:*",
+          "vendor": "netapp",
+          "product": "fas2820_firmware"
+        },
+        {
+          "criteria": "cpe:2.3:o:netapp:bootstrap_os:-:*:*:*:*:*:*:*",
+          "vendor": "netapp",
+          "product": "bootstrap_os"
+        },
+        {
+          "criteria": "cpe:2.3:o:apple:macos:*:*:*:*:*:*:*:*",
+          "vendor": "apple",
+          "product": "macos",
+          "version_start_including": "12.0",
+          "version_end_excluding": "12.7.6"
+        },
+        {
+          "criteria": "cpe:2.3:o:apple:macos:*:*:*:*:*:*:*:*",
+          "vendor": "apple",
+          "product": "macos",
+          "version_start_including": "13.0",
+          "version_end_excluding": "13.6.8"
+        },
+        {
+          "criteria": "cpe:2.3:o:apple:macos:*:*:*:*:*:*:*:*",
+          "vendor": "apple",
+          "product": "macos",
+          "version_start_including": "14.0",
+          "version_end_excluding": "14.6"
+        },
+        {
+          "criteria": "cpe:2.3:a:openbsd:openssh:*:*:*:*:*:*:*:*",
+          "vendor": "openbsd",
+          "product": "openssh",
+          "version_end_excluding": "4.4"
+        },
+        {
+          "criteria": "cpe:2.3:a:openbsd:openssh:*:*:*:*:*:*:*:*",
+          "vendor": "openbsd",
+          "product": "openssh",
+          "version_start_including": "8.6",
+          "version_end_including": "9.8"
+        },
+        {
+          "criteria": "cpe:2.3:a:openbsd:openssh:4.4:-:*:*:*:*:*:*",
+          "vendor": "openbsd",
+          "product": "openssh"
+        },
+        {
+          "criteria": "cpe:2.3:a:openbsd:openssh:8.5:p1:*:*:*:*:*:*",
+          "vendor": "openbsd",
+          "product": "openssh"
+        },
+        {
+          "criteria": "cpe:2.3:a:openbsd:openssh:8.6:-:*:*:*:*:*:*",
+          "vendor": "openbsd",
+          "product": "openssh"
+        },
+        {
+          "criteria": "cpe:2.3:a:redhat:openshift_container_platform:4.0:*:*:*:*:*:*:*",
+          "vendor": "redhat",
+          "product": "openshift_container_platform"
+        },
+        {
+          "criteria": "cpe:2.3:o:redhat:enterprise_linux:9.0:*:*:*:*:*:*:*",
+          "vendor": "redhat",
+          "product": "enterprise_linux"
+        },
+        {
+          "criteria": "cpe:2.3:o:redhat:enterprise_linux_eus:9.4:*:*:*:*:*:*:*",
+          "vendor": "redhat",
+          "product": "enterprise_linux_eus"
+        },
+        {
+          "criteria": "cpe:2.3:o:redhat:enterprise_linux_for_arm_64:9.0_aarch64:*:*:*:*:*:*:*",
+          "vendor": "redhat",
+          "product": "enterprise_linux_for_arm_64"
+        },
+        {
+          "criteria": "cpe:2.3:o:redhat:enterprise_linux_for_arm_64_eus:9.4_aarch64:*:*:*:*:*:*:*",
+          "vendor": "redhat",
+          "product": "enterprise_linux_for_arm_64_eus"
+        },
+        {
+          "criteria": "cpe:2.3:o:redhat:enterprise_linux_for_ibm_z_systems:9.0_s390x:*:*:*:*:*:*:*",
+          "vendor": "redhat",
+          "product": "enterprise_linux_for_ibm_z_systems"
+        },
+        {
+          "criteria": "cpe:2.3:o:redhat:enterprise_linux_for_ibm_z_systems_eus:9.4_s390x:*:*:*:*:*:*:*",
+          "vendor": "redhat",
+          "product": "enterprise_linux_for_ibm_z_systems_eus"
+        },
+        {
+          "criteria": "cpe:2.3:o:redhat:enterprise_linux_for_power_little_endian:9.0_ppc64le:*:*:*:*:*:*:*",
+          "vendor": "redhat",
+          "product": "enterprise_linux_for_power_little_endian"
+        },
+        {
+          "criteria": "cpe:2.3:o:redhat:enterprise_linux_for_power_little_endian_eus:9.4_ppc64le:*:*:*:*:*:*:*",
+          "vendor": "redhat",
+          "product": "enterprise_linux_for_power_little_endian_eus"
+        },
+        {
+          "criteria": "cpe:2.3:o:redhat:enterprise_linux_server_aus:9.4:*:*:*:*:*:*:*",
+          "vendor": "redhat",
+          "product": "enterprise_linux_server_aus"
+        },
+        {
+          "criteria": "cpe:2.3:o:suse:linux_enterprise_micro:6.0:*:*:*:*:*:*:*",
+          "vendor": "suse",
+          "product": "linux_enterprise_micro"
+        },
+        {
+          "criteria": "cpe:2.3:o:debian:debian_linux:12.0:*:*:*:*:*:*:*",
+          "vendor": "debian",
+          "product": "debian_linux"
+        },
+        {
+          "criteria": "cpe:2.3:o:canonical:ubuntu_linux:22.04:*:*:*:lts:*:*:*",
+          "vendor": "canonical",
+          "product": "ubuntu_linux"
+        },
+        {
+          "criteria": "cpe:2.3:o:canonical:ubuntu_linux:22.10:*:*:*:-:*:*:*",
+          "vendor": "canonical",
+          "product": "ubuntu_linux"
+        },
+        {
+          "criteria": "cpe:2.3:o:canonical:ubuntu_linux:23.04:*:*:*:lts:*:*:*",
+          "vendor": "canonical",
+          "product": "ubuntu_linux"
+        },
+        {
+          "criteria": "cpe:2.3:o:amazon:amazon_linux:2023.0:*:*:*:*:*:*:*",
+          "vendor": "amazon",
+          "product": "amazon_linux"
+        },
+        {
+          "criteria": "cpe:2.3:a:netapp:active_iq_unified_manager:-:*:*:*:*:vmware_vsphere:*:*",
+          "vendor": "netapp",
+          "product": "active_iq_unified_manager"
+        },
+        {
+          "criteria": "cpe:2.3:a:netapp:e-series_santricity_os_controller:*:*:*:*:*:*:*:*",
+          "vendor": "netapp",
+          "product": "e-series_santricity_os_controller",
+          "version_start_including": "11.0.0",
+          "version_end_including": "11.70.2"
+        },
+        {
+          "criteria": "cpe:2.3:a:netapp:ontap:9:*:*:*:*:*:*:*",
+          "vendor": "netapp",
+          "product": "ontap"
+        },
+        {
+          "criteria": "cpe:2.3:a:netapp:ontap_select_deploy_administration_utility:-:*:*:*:*:*:*:*",
+          "vendor": "netapp",
+          "product": "ontap_select_deploy_administration_utility"
+        },
+        {
+          "criteria": "cpe:2.3:a:netapp:ontap_tools:9:*:*:*:*:vmware_vsphere:*:*",
+          "vendor": "netapp",
+          "product": "ontap_tools"
+        },
+        {
+          "criteria": "cpe:2.3:a:netapp:ontap_tools:10:*:*:*:*:vmware_vsphere:*:*",
+          "vendor": "netapp",
+          "product": "ontap_tools"
+        },
+        {
+          "criteria": "cpe:2.3:o:freebsd:freebsd:13.2:-:*:*:*:*:*:*",
+          "vendor": "freebsd",
+          "product": "freebsd"
+        },
+        {
+          "criteria": "cpe:2.3:o:freebsd:freebsd:13.2:p1:*:*:*:*:*:*",
+          "vendor": "freebsd",
+          "product": "freebsd"
+        },
+        {
+          "criteria": "cpe:2.3:o:freebsd:freebsd:13.2:p10:*:*:*:*:*:*",
+          "vendor": "freebsd",
+          "product": "freebsd"
+        },
+        {
+          "criteria": "cpe:2.3:o:freebsd:freebsd:13.2:p11:*:*:*:*:*:*",
+          "vendor": "freebsd",
+          "product": "freebsd"
+        },
+        {
+          "criteria": "cpe:2.3:o:freebsd:freebsd:13.2:p2:*:*:*:*:*:*",
+          "vendor": "freebsd",
+          "product": "freebsd"
+        },
+        {
+          "criteria": "cpe:2.3:o:freebsd:freebsd:13.2:p3:*:*:*:*:*:*",
+          "vendor": "freebsd",
+          "product": "freebsd"
+        },
+        {
+          "criteria": "cpe:2.3:o:freebsd:freebsd:13.2:p4:*:*:*:*:*:*",
+          "vendor": "freebsd",
+          "product": "freebsd"
+        },
+        {
+          "criteria": "cpe:2.3:o:freebsd:freebsd:13.2:p5:*:*:*:*:*:*",
+          "vendor": "freebsd",
+          "product": "freebsd"
+        },
+        {
+          "criteria": "cpe:2.3:o:freebsd:freebsd:13.2:p6:*:*:*:*:*:*",
+          "vendor": "freebsd",
+          "product": "freebsd"
+        },
+        {
+          "criteria": "cpe:2.3:o:freebsd:freebsd:13.2:p7:*:*:*:*:*:*",
+          "vendor": "freebsd",
+          "product": "freebsd"
+        },
+        {
+          "criteria": "cpe:2.3:o:freebsd:freebsd:13.2:p8:*:*:*:*:*:*",
+          "vendor": "freebsd",
+          "product": "freebsd"
+        },
+        {
+          "criteria": "cpe:2.3:o:freebsd:freebsd:13.2:p9:*:*:*:*:*:*",
+          "vendor": "freebsd",
+          "product": "freebsd"
+        },
+        {
+          "criteria": "cpe:2.3:o:freebsd:freebsd:13.3:-:*:*:*:*:*:*",
+          "vendor": "freebsd",
+          "product": "freebsd"
+        },
+        {
+          "criteria": "cpe:2.3:o:freebsd:freebsd:13.3:p1:*:*:*:*:*:*",
+          "vendor": "freebsd",
+          "product": "freebsd"
+        },
+        {
+          "criteria": "cpe:2.3:o:freebsd:freebsd:13.3:p2:*:*:*:*:*:*",
+          "vendor": "freebsd",
+          "product": "freebsd"
+        },
+        {
+          "criteria": "cpe:2.3:o:freebsd:freebsd:13.3:p3:*:*:*:*:*:*",
+          "vendor": "freebsd",
+          "product": "freebsd"
+        },
+        {
+          "criteria": "cpe:2.3:o:freebsd:freebsd:14.0:-:*:*:*:*:*:*",
+          "vendor": "freebsd",
+          "product": "freebsd"
+        },
+        {
+          "criteria": "cpe:2.3:o:freebsd:freebsd:14.0:beta5:*:*:*:*:*:*",
+          "vendor": "freebsd",
+          "product": "freebsd"
+        },
+        {
+          "criteria": "cpe:2.3:o:freebsd:freebsd:14.0:p1:*:*:*:*:*:*",
+          "vendor": "freebsd",
+          "product": "freebsd"
+        },
+        {
+          "criteria": "cpe:2.3:o:freebsd:freebsd:14.0:p2:*:*:*:*:*:*",
+          "vendor": "freebsd",
+          "product": "freebsd"
+        },
+        {
+          "criteria": "cpe:2.3:o:freebsd:freebsd:14.0:p3:*:*:*:*:*:*",
+          "vendor": "freebsd",
+          "product": "freebsd"
+        },
+        {
+          "criteria": "cpe:2.3:o:freebsd:freebsd:14.0:p4:*:*:*:*:*:*",
+          "vendor": "freebsd",
+          "product": "freebsd"
+        },
+        {
+          "criteria": "cpe:2.3:o:freebsd:freebsd:14.0:p5:*:*:*:*:*:*",
+          "vendor": "freebsd",
+          "product": "freebsd"
+        },
+        {
+          "criteria": "cpe:2.3:o:freebsd:freebsd:14.0:p6:*:*:*:*:*:*",
+          "vendor": "freebsd",
+          "product": "freebsd"
+        },
+        {
+          "criteria": "cpe:2.3:o:freebsd:freebsd:14.0:p7:*:*:*:*:*:*",
+          "vendor": "freebsd",
+          "product": "freebsd"
+        },
+        {
+          "criteria": "cpe:2.3:o:freebsd:freebsd:14.0:rc3:*:*:*:*:*:*",
+          "vendor": "freebsd",
+          "product": "freebsd"
+        },
+        {
+          "criteria": "cpe:2.3:o:freebsd:freebsd:14.0:rc4-p1:*:*:*:*:*:*",
+          "vendor": "freebsd",
+          "product": "freebsd"
+        },
+        {
+          "criteria": "cpe:2.3:o:freebsd:freebsd:14.1:-:*:*:*:*:*:*",
+          "vendor": "freebsd",
+          "product": "freebsd"
+        },
+        {
+          "criteria": "cpe:2.3:o:freebsd:freebsd:14.1:p1:*:*:*:*:*:*",
+          "vendor": "freebsd",
+          "product": "freebsd"
+        },
+        {
+          "criteria": "cpe:2.3:o:netbsd:netbsd:*:*:*:*:*:*:*:*",
+          "vendor": "netbsd",
+          "product": "netbsd",
+          "version_end_including": "10.0.0"
+        }
+      ],
+      "cna_affected": [
+        {
+          "source": "secalert@redhat.com",
+          "vendor": "",
+          "product": "",
+          "default_status": "unaffected",
+          "versions": [
+            {
+              "version": "8.5p1",
+              "less_than_or_equal": "9.7p1",
+              "status": "affected"
+            }
+          ]
+        },
+        {
+          "source": "secalert@redhat.com",
+          "vendor": "Red Hat",
+          "product": "Red Hat Enterprise Linux 9",
+          "default_status": "affected",
+          "versions": [
+            {
+              "version": "0:8.7p1-38.el9_4.1",
+              "less_than": "*",
+              "status": "unaffected"
+            }
+          ]
+        },
+        {
+          "source": "secalert@redhat.com",
+          "vendor": "Red Hat",
+          "product": "Red Hat Enterprise Linux 9",
+          "default_status": "affected",
+          "versions": [
+            {
+              "version": "0:8.7p1-38.el9_4.1",
+              "less_than": "*",
+              "status": "unaffected"
+            }
+          ]
+        },
+        {
+          "source": "secalert@redhat.com",
+          "vendor": "Red Hat",
+          "product": "Red Hat Enterprise Linux 9.0 Update Services for SAP Solutions",
+          "default_status": "affected",
+          "versions": [
+            {
+              "version": "0:8.7p1-12.el9_0.1",
+              "less_than": "*",
+              "status": "unaffected"
+            }
+          ]
+        },
+        {
+          "source": "secalert@redhat.com",
+          "vendor": "Red Hat",
+          "product": "Red Hat Enterprise Linux 9.2 Extended Update Support",
+          "default_status": "affected",
+          "versions": [
+            {
+              "version": "0:8.7p1-30.el9_2.4",
+              "less_than": "*",
+              "status": "unaffected"
+            }
+          ]
+        },
+        {
+          "source": "secalert@redhat.com",
+          "vendor": "Red Hat",
+          "product": "Red Hat OpenShift Container Platform 4.13",
+          "default_status": "affected",
+          "versions": [
+            {
+              "version": "413.92.202407091321-0",
+              "less_than": "*",
+              "status": "unaffected"
+            }
+          ]
+        },
+        {
+          "source": "secalert@redhat.com",
+          "vendor": "Red Hat",
+          "product": "Red Hat OpenShift Container Platform 4.14",
+          "default_status": "affected",
+          "versions": [
+            {
+              "version": "414.92.202407091253-0",
+              "less_than": "*",
+              "status": "unaffected"
+            }
+          ]
+        },
+        {
+          "source": "secalert@redhat.com",
+          "vendor": "Red Hat",
+          "product": "Red Hat OpenShift Container Platform 4.15",
+          "default_status": "affected",
+          "versions": [
+            {
+              "version": "415.92.202407091355-0",
+              "less_than": "*",
+              "status": "unaffected"
+            }
+          ]
+        },
+        {
+          "source": "secalert@redhat.com",
+          "vendor": "Red Hat",
+          "product": "Red Hat OpenShift Container Platform 4.16",
+          "default_status": "affected",
+          "versions": [
+            {
+              "version": "416.94.202407081958-0",
+              "less_than": "*",
+              "status": "unaffected"
+            }
+          ]
+        },
+        {
+          "source": "secalert@redhat.com",
+          "vendor": "Red Hat",
+          "product": "Red Hat Ceph Storage 5",
+          "default_status": "unaffected",
+          "versions": []
+        },
+        {
+          "source": "secalert@redhat.com",
+          "vendor": "Red Hat",
+          "product": "Red Hat Ceph Storage 6",
+          "default_status": "unaffected",
+          "versions": []
+        },
+        {
+          "source": "secalert@redhat.com",
+          "vendor": "Red Hat",
+          "product": "Red Hat Ceph Storage 7",
+          "default_status": "unaffected",
+          "versions": []
+        },
+        {
+          "source": "secalert@redhat.com",
+          "vendor": "Red Hat",
+          "product": "Red Hat Enterprise Linux 10",
+          "default_status": "unaffected",
+          "versions": []
+        },
+        {
+          "source": "secalert@redhat.com",
+          "vendor": "Red Hat",
+          "product": "Red Hat Enterprise Linux 6",
+          "default_status": "unaffected",
+          "versions": []
+        },
+        {
+          "source": "secalert@redhat.com",
+          "vendor": "Red Hat",
+          "product": "Red Hat Enterprise Linux 7",
+          "default_status": "unaffected",
+          "versions": []
+        },
+        {
+          "source": "secalert@redhat.com",
+          "vendor": "Red Hat",
+          "product": "Red Hat Enterprise Linux 8",
+          "default_status": "unaffected",
+          "versions": []
+        },
+        {
+          "source": "secalert@redhat.com",
+          "vendor": "Red Hat",
+          "product": "Red Hat OpenShift Container Platform 4",
+          "default_status": "affected",
+          "versions": []
+        },
+        {
+          "source": "0b142b55-0307-4c5a-b3c9-f314f3fb7c5e",
+          "vendor": "Siemens",
+          "product": "Industrial Edge Management OS (IEM-OS)",
+          "default_status": "unknown",
+          "versions": [
+            {
+              "version": "0",
+              "less_than": "*",
+              "status": "affected"
+            }
+          ]
+        },
+        {
+          "source": "0b142b55-0307-4c5a-b3c9-f314f3fb7c5e",
+          "vendor": "Siemens",
+          "product": "SIMATIC S7-1500 CPU 1518-4 PN/DP MFP",
+          "default_status": "unknown",
+          "versions": [
+            {
+              "version": "V3.1.5",
+              "less_than": "*",
+              "status": "affected"
+            }
+          ]
+        },
+        {
+          "source": "0b142b55-0307-4c5a-b3c9-f314f3fb7c5e",
+          "vendor": "Siemens",
+          "product": "SIMATIC S7-1500 CPU 1518-4 PN/DP MFP",
+          "default_status": "unknown",
+          "versions": [
+            {
+              "version": "V3.1.5",
+              "less_than": "*",
+              "status": "affected"
+            }
+          ]
+        },
+        {
+          "source": "0b142b55-0307-4c5a-b3c9-f314f3fb7c5e",
+          "vendor": "Siemens",
+          "product": "SIMATIC S7-1500 CPU 1518F-4 PN/DP MFP",
+          "default_status": "unknown",
+          "versions": [
+            {
+              "version": "V3.1.5",
+              "less_than": "*",
+              "status": "affected"
+            }
+          ]
+        },
+        {
+          "source": "0b142b55-0307-4c5a-b3c9-f314f3fb7c5e",
+          "vendor": "Siemens",
+          "product": "SIMATIC S7-1500 CPU 1518F-4 PN/DP MFP",
+          "default_status": "unknown",
+          "versions": [
+            {
+              "version": "V3.1.5",
+              "less_than": "*",
+              "status": "affected"
+            }
+          ]
+        },
+        {
+          "source": "0b142b55-0307-4c5a-b3c9-f314f3fb7c5e",
+          "vendor": "Siemens",
+          "product": "SINAMICS IIoT module",
+          "default_status": "unknown",
+          "versions": [
+            {
+              "version": "0",
+              "less_than": "V1.0 HF1",
+              "status": "affected"
+            }
+          ]
+        },
+        {
+          "source": "0b142b55-0307-4c5a-b3c9-f314f3fb7c5e",
+          "vendor": "Siemens",
+          "product": "SINEMA Remote Connect Server",
+          "default_status": "unknown",
+          "versions": [
+            {
+              "version": "0",
+              "less_than": "V3.2 SP2",
+              "status": "affected"
+            }
+          ]
+        },
+        {
+          "source": "0b142b55-0307-4c5a-b3c9-f314f3fb7c5e",
+          "vendor": "Siemens",
+          "product": "SINUMERIK ONE",
+          "default_status": "unknown",
+          "versions": [
+            {
+              "version": "0",
+              "less_than": "V6.24",
+              "status": "affected"
+            }
+          ]
+        },
+        {
+          "source": "0b142b55-0307-4c5a-b3c9-f314f3fb7c5e",
+          "vendor": "Siemens",
+          "product": "SIPLUS S7-1500 CPU 1518-4 PN/DP MFP",
+          "default_status": "unknown",
+          "versions": [
+            {
+              "version": "V3.1.5",
+              "less_than": "*",
+              "status": "affected"
+            }
+          ]
+        }
+      ],
+      "references": [
+        "https://access.redhat.com/errata/RHSA-2024:4312",
+        "https://access.redhat.com/errata/RHSA-2024:4340",
+        "https://access.redhat.com/errata/RHSA-2024:4389",
+        "https://access.redhat.com/errata/RHSA-2024:4469",
+        "https://access.redhat.com/errata/RHSA-2024:4474",
+        "https://access.redhat.com/errata/RHSA-2024:4479",
+        "https://access.redhat.com/errata/RHSA-2024:4484",
+        "https://access.redhat.com/security/cve/CVE-2024-6387",
+        "https://bugzilla.redhat.com/show_bug.cgi?id=2294604",
+        "https://santandersecurityresearch.github.io/blog/sshing_the_masses.html",
+        "https://www.openssh.com/txt/release-9.8",
+        "https://www.qualys.com/2024/07/01/cve-2024-6387/regresshion.txt",
+        "http://seclists.org/fulldisclosure/2024/Jul/18",
+        "http://seclists.org/fulldisclosure/2024/Jul/19",
+        "http://seclists.org/fulldisclosure/2024/Jul/20",
+        "http://www.openwall.com/lists/oss-security/2024/07/01/12",
+        "http://www.openwall.com/lists/oss-security/2024/07/01/13",
+        "http://www.openwall.com/lists/oss-security/2024/07/02/1",
+        "http://www.openwall.com/lists/oss-security/2024/07/03/1",
+        "http://www.openwall.com/lists/oss-security/2024/07/03/11",
+        "http://www.openwall.com/lists/oss-security/2024/07/03/2",
+        "http://www.openwall.com/lists/oss-security/2024/07/03/3",
+        "http://www.openwall.com/lists/oss-security/2024/07/03/4",
+        "http://www.openwall.com/lists/oss-security/2024/07/03/5",
+        "http://www.openwall.com/lists/oss-security/2024/07/04/1",
+        "http://www.openwall.com/lists/oss-security/2024/07/04/2",
+        "http://www.openwall.com/lists/oss-security/2024/07/08/2",
+        "http://www.openwall.com/lists/oss-security/2024/07/08/3",
+        "http://www.openwall.com/lists/oss-security/2024/07/09/2",
+        "http://www.openwall.com/lists/oss-security/2024/07/09/5",
+        "http://www.openwall.com/lists/oss-security/2024/07/10/1",
+        "http://www.openwall.com/lists/oss-security/2024/07/10/2",
+        "http://www.openwall.com/lists/oss-security/2024/07/10/3",
+        "http://www.openwall.com/lists/oss-security/2024/07/10/4",
+        "http://www.openwall.com/lists/oss-security/2024/07/10/6",
+        "http://www.openwall.com/lists/oss-security/2024/07/11/1",
+        "http://www.openwall.com/lists/oss-security/2024/07/11/3",
+        "http://www.openwall.com/lists/oss-security/2024/07/23/4",
+        "http://www.openwall.com/lists/oss-security/2024/07/23/6",
+        "http://www.openwall.com/lists/oss-security/2024/07/28/2",
+        "http://www.openwall.com/lists/oss-security/2024/07/28/3",
+        "https://access.redhat.com/errata/RHSA-2024:4312",
+        "https://access.redhat.com/errata/RHSA-2024:4340",
+        "https://access.redhat.com/errata/RHSA-2024:4389",
+        "https://access.redhat.com/errata/RHSA-2024:4469",
+        "https://access.redhat.com/errata/RHSA-2024:4474",
+        "https://access.redhat.com/errata/RHSA-2024:4479",
+        "https://access.redhat.com/errata/RHSA-2024:4484",
+        "https://access.redhat.com/security/cve/CVE-2024-6387",
+        "https://archlinux.org/news/the-sshd-service-needs-to-be-restarted-after-upgrading-to-openssh-98p1/",
+        "https://arstechnica.com/security/2024/07/regresshion-vulnerability-in-openssh-gives-attackers-root-on-linux/",
+        "https://blog.qualys.com/vulnerabilities-threat-research/2024/07/01/regresshion-remote-unauthenticated-code-execution-vulnerability-in-openssh-server",
+        "https://bugzilla.redhat.com/show_bug.cgi?id=2294604",
+        "https://explore.alas.aws.amazon.com/CVE-2024-6387.html",
+        "https://forum.vmssoftware.com/viewtopic.php?f=8&t=9132",
+        "https://ftp.netbsd.org/pub/NetBSD/security/advisories/NetBSD-SA2024-002.txt.asc",
+        "https://github.com/AlmaLinux/updates/issues/629",
+        "https://github.com/Azure/AKS/issues/4379",
+        "https://github.com/PowerShell/Win32-OpenSSH/discussions/2248",
+        "https://github.com/PowerShell/Win32-OpenSSH/issues/2249",
+        "https://github.com/microsoft/azurelinux/issues/9555",
+        "https://github.com/openela-main/openssh/commit/e1f438970e5a337a17070a637c1b9e19697cad09",
+        "https://github.com/oracle/oracle-linux/issues/149",
+        "https://github.com/rapier1/hpn-ssh/issues/87",
+        "https://github.com/zgzhang/cve-2024-6387-poc",
+        "https://lists.almalinux.org/archives/list/announce@lists.almalinux.org/thread/23BF5BMGFVEVUI2WNVAGMLKT557EU7VY/",
+        "https://lists.mindrot.org/pipermail/openssh-unix-announce/2024-July/000158.html",
+        "https://lists.mindrot.org/pipermail/openssh-unix-dev/2024-July/041431.html",
+        "https://news.ycombinator.com/item?id=40843778",
+        "https://packetstorm.news/files/id/190587/",
+        "https://psirt.global.sonicwall.com/vuln-detail/SNWLID-2024-0010",
+        "https://santandersecurityresearch.github.io/blog/sshing_the_masses.html",
+        "https://security-tracker.debian.org/tracker/CVE-2024-6387",
+        "https://security.netapp.com/advisory/ntap-20240701-0001/",
+        "https://sig-security.rocky.page/issues/CVE-2024-6387/",
+        "https://stackdiary.com/openssh-race-condition-in-sshd-allows-remote-code-execution/",
+        "https://support.apple.com/kb/HT214118",
+        "https://support.apple.com/kb/HT214119",
+        "https://support.apple.com/kb/HT214120",
+        "https://ubuntu.com/security/CVE-2024-6387",
+        "https://ubuntu.com/security/notices/USN-6859-1",
+        "https://www.akamai.com/blog/security-research/2024-openssh-vulnerability-regression-what-to-know-and-do",
+        "https://www.arista.com/en/support/advisories-notices/security-advisory/19904-security-advisory-0100",
+        "https://www.exploit-db.com/exploits/52269",
+        "https://www.freebsd.org/security/advisories/FreeBSD-SA-24:04.openssh.asc",
+        "https://www.openssh.com/txt/release-9.8",
+        "https://www.qualys.com/2024/07/01/cve-2024-6387/regresshion.txt",
+        "https://www.splunk.com/en_us/blog/security/cve-2024-6387-regresshion-vulnerability.html",
+        "https://www.suse.com/security/cve/CVE-2024-6387.html",
+        "https://www.theregister.com/2024/07/01/regresshion_openssh/",
+        "https://www.vicarius.io/vsociety/posts/regresshion-an-openssh-regression-error-cve-2024-6387",
+        "https://cert-portal.siemens.com/productcert/html/ssa-082556.html",
+        "https://cert-portal.siemens.com/productcert/html/ssa-446545.html"
+      ]
+    },
+    "unavailable_feeds": []
+  },
+  {
+    "finding": "f-3",
+    "cve": "CVE-2021-41773",
+    "description": "A flaw was found in a change made to path normalization in Apache HTTP Server 2.4.49. An attacker could use a path traversal attack to map URLs to files outside the directories configured by Alias-like directives. If files outside of these directories are not protected by the usual default configuration \"require all denied\", these requests can succeed. If CGI scripts are also enabled for these aliased pathes, this could allow for remote code execution. This issue is known to be exploited in the wild. This issue only affects Apache 2.4.49 and not earlier versions. The fix in Apache HTTP Server 2.4.50 was found to be incomplete, see CVE-2021-42013.",
+    "asset": {
+      "name": "web-01",
+      "kind": "server",
+      "criticality": "medium",
+      "exposure": "internet_facing",
+      "software": [
+        {
+          "role": "operating_system",
+          "name": "Debian",
+          "version": "11"
+        },
+        {
+          "role": "application",
+          "name": "Apache HTTP Server",
+          "version": "2.4.49"
+        }
+      ]
+    },
+    "component": {
+      "role": "application",
+      "name": "Apache HTTP Server",
+      "version": "2.4.49"
+    },
+    "score": {
+      "scoring_model": 1,
+      "value": 0.6958,
+      "alpha": 0.98,
+      "beta": 0.9999,
+      "gamma": 1,
+      "vulnerability": 0.994,
+      "criticality_multiplier": 0.7,
+      "exposure_multiplier": 1,
+      "data_gaps": []
+    },
+    "kev": {
+      "extension_type": "property-extension",
+      "date_added": "2021-11-03",
+      "due_date": "2021-11-17",
+      "required_action": "Apply updates per vendor instructions.",
+      "known_ransomware_campaign_use": "Known",
+      "vendor_project": "Apache",
+      "product": "HTTP Server",
+      "catalog_version": "2026.11.04",
+      "catalog_released": "2026-11-04T20:00:05Z"
+    },
+    "epss": {
+      "extension_type": "property-extension",
+      "probability": 0.99992,
+      "percentile": 0.99986,
+      "score_date": "2026-11-05"
+    },
+    "nvd": {
+      "extension_type": "property-extension",
+      "published": "2021-10-05T09:15:07Z",
+      "last_modified": "2026-06-17T04:08:53Z",
+      "vuln_status": "Analyzed",
+      "cvss": [
+        {
+          "version": "2.0",
+          "base_score": 4.3,
+          "vector": "AV:N/AC:M/Au:N/C:P/I:N/A:N",
+          "source": "nvd@nist.gov",
+          "type": "Primary"
+        },
+        {
+          "version": "3.1",
+          "base_score": 9.8,
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+          "source": "nvd@nist.gov",
+          "type": "Primary"
+        },
+        {
+          "version": "3.1",
+          "base_score": 7.5,
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N",
+          "source": "134c704f-9b21-4f2e-91b3-4a467353bcc0",
+          "type": "Secondary"
+        }
+      ],
+      "cwes": [
+        "CWE-22",
+        "CWE-22"
+      ],
+      "affected": [
+        {
+          "criteria": "cpe:2.3:a:apache:http_server:2.4.49:*:*:*:*:*:*:*",
+          "vendor": "apache",
+          "product": "http_server"
+        },
+        {
+          "criteria": "cpe:2.3:o:fedoraproject:fedora:34:*:*:*:*:*:*:*",
+          "vendor": "fedoraproject",
+          "product": "fedora"
+        },
+        {
+          "criteria": "cpe:2.3:o:fedoraproject:fedora:35:*:*:*:*:*:*:*",
+          "vendor": "fedoraproject",
+          "product": "fedora"
+        },
+        {
+          "criteria": "cpe:2.3:a:oracle:instantis_enterprisetrack:17.1:*:*:*:*:*:*:*",
+          "vendor": "oracle",
+          "product": "instantis_enterprisetrack"
+        },
+        {
+          "criteria": "cpe:2.3:a:oracle:instantis_enterprisetrack:17.2:*:*:*:*:*:*:*",
+          "vendor": "oracle",
+          "product": "instantis_enterprisetrack"
+        },
+        {
+          "criteria": "cpe:2.3:a:oracle:instantis_enterprisetrack:17.3:*:*:*:*:*:*:*",
+          "vendor": "oracle",
+          "product": "instantis_enterprisetrack"
+        },
+        {
+          "criteria": "cpe:2.3:a:netapp:cloud_backup:-:*:*:*:*:*:*:*",
+          "vendor": "netapp",
+          "product": "cloud_backup"
+        }
+      ],
+      "cna_affected": [
+        {
+          "source": "security@apache.org",
+          "vendor": "Apache Software Foundation",
+          "product": "Apache HTTP Server",
+          "default_status": "",
+          "versions": [
+            {
+              "version": "Apache HTTP Server 2.4 2.4.49",
+              "status": "affected"
+            }
+          ]
+        }
+      ],
+      "references": [
+        "http://packetstormsecurity.com/files/164418/Apache-HTTP-Server-2.4.49-Path-Traversal-Remote-Code-Execution.html",
+        "http://packetstormsecurity.com/files/164418/Apache-HTTP-Server-2.4.49-Path-Traversal.html",
+        "http://packetstormsecurity.com/files/164629/Apache-2.4.49-2.4.50-Traversal-Remote-Code-Execution.html",
+        "http://packetstormsecurity.com/files/164941/Apache-HTTP-Server-2.4.50-Remote-Code-Execution.html",
+        "http://www.openwall.com/lists/oss-security/2021/10/05/2",
+        "http://www.openwall.com/lists/oss-security/2021/10/07/1",
+        "http://www.openwall.com/lists/oss-security/2021/10/07/6",
+        "http://www.openwall.com/lists/oss-security/2021/10/08/1",
+        "http://www.openwall.com/lists/oss-security/2021/10/08/2",
+        "http://www.openwall.com/lists/oss-security/2021/10/08/3",
+        "http://www.openwall.com/lists/oss-security/2021/10/08/4",
+        "http://www.openwall.com/lists/oss-security/2021/10/08/5",
+        "http://www.openwall.com/lists/oss-security/2021/10/08/6",
+        "http://www.openwall.com/lists/oss-security/2021/10/09/1",
+        "http://www.openwall.com/lists/oss-security/2021/10/11/4",
+        "http://www.openwall.com/lists/oss-security/2021/10/15/3",
+        "http://www.openwall.com/lists/oss-security/2021/10/16/1",
+        "https://httpd.apache.org/security/vulnerabilities_24.html",
+        "https://lists.apache.org/thread.html/r17a4c6ce9aff662efd9459e9d1850ab4a611cb23392fc68264c72cb3%40%3Ccvs.httpd.apache.org%3E",
+        "https://lists.apache.org/thread.html/r6abf5f2ba6f1aa8b1030f95367aaf17660c4e4c78cb2338aee18982f%40%3Cusers.httpd.apache.org%3E",
+        "https://lists.apache.org/thread.html/r7c795cd45a3384d4d27e57618a215b0ed19cb6ca8eb070061ad5d837%40%3Cannounce.apache.org%3E",
+        "https://lists.apache.org/thread.html/r98d704ed4377ed889d40479db79ed1ee2f43b2ebdd79ce84b042df45%40%3Cannounce.apache.org%3E",
+        "https://lists.apache.org/thread.html/rb5b0e46f179f60b0c70204656bc52fcb558e961cb4d06a971e9e3efb%40%3Cusers.httpd.apache.org%3E",
+        "https://lists.fedoraproject.org/archives/list/package-announce%40lists.fedoraproject.org/message/RMIIEFINL6FUIOPD2A3M5XC6DH45Y3CC/",
+        "https://lists.fedoraproject.org/archives/list/package-announce%40lists.fedoraproject.org/message/WS5RVHOIIRECG65ZBTZY7IEJVWQSQPG3/",
+        "https://security.gentoo.org/glsa/202208-20",
+        "https://security.netapp.com/advisory/ntap-20211029-0009/",
+        "https://tools.cisco.com/security/center/content/CiscoSecurityAdvisory/cisco-sa-apache-httpd-pathtrv-LAzg68cZ",
+        "https://www.oracle.com/security-alerts/cpujan2022.html",
+        "http://packetstormsecurity.com/files/164418/Apache-HTTP-Server-2.4.49-Path-Traversal-Remote-Code-Execution.html",
+        "http://packetstormsecurity.com/files/164418/Apache-HTTP-Server-2.4.49-Path-Traversal.html",
+        "http://packetstormsecurity.com/files/164629/Apache-2.4.49-2.4.50-Traversal-Remote-Code-Execution.html",
+        "http://packetstormsecurity.com/files/164941/Apache-HTTP-Server-2.4.50-Remote-Code-Execution.html",
+        "http://www.openwall.com/lists/oss-security/2021/10/05/2",
+        "http://www.openwall.com/lists/oss-security/2021/10/07/1",
+        "http://www.openwall.com/lists/oss-security/2021/10/07/6",
+        "http://www.openwall.com/lists/oss-security/2021/10/08/1",
+        "http://www.openwall.com/lists/oss-security/2021/10/08/2",
+        "http://www.openwall.com/lists/oss-security/2021/10/08/3",
+        "http://www.openwall.com/lists/oss-security/2021/10/08/4",
+        "http://www.openwall.com/lists/oss-security/2021/10/08/5",
+        "http://www.openwall.com/lists/oss-security/2021/10/08/6",
+        "http://www.openwall.com/lists/oss-security/2021/10/09/1",
+        "http://www.openwall.com/lists/oss-security/2021/10/11/4",
+        "http://www.openwall.com/lists/oss-security/2021/10/15/3",
+        "http://www.openwall.com/lists/oss-security/2021/10/16/1",
+        "https://httpd.apache.org/security/vulnerabilities_24.html",
+        "https://lists.apache.org/thread.html/r17a4c6ce9aff662efd9459e9d1850ab4a611cb23392fc68264c72cb3%40%3Ccvs.httpd.apache.org%3E",
+        "https://lists.apache.org/thread.html/r6abf5f2ba6f1aa8b1030f95367aaf17660c4e4c78cb2338aee18982f%40%3Cusers.httpd.apache.org%3E",
+        "https://lists.apache.org/thread.html/r7c795cd45a3384d4d27e57618a215b0ed19cb6ca8eb070061ad5d837%40%3Cannounce.apache.org%3E",
+        "https://lists.apache.org/thread.html/r98d704ed4377ed889d40479db79ed1ee2f43b2ebdd79ce84b042df45%40%3Cannounce.apache.org%3E",
+        "https://lists.apache.org/thread.html/rb5b0e46f179f60b0c70204656bc52fcb558e961cb4d06a971e9e3efb%40%3Cusers.httpd.apache.org%3E",
+        "https://lists.fedoraproject.org/archives/list/package-announce%40lists.fedoraproject.org/message/RMIIEFINL6FUIOPD2A3M5XC6DH45Y3CC/",
+        "https://lists.fedoraproject.org/archives/list/package-announce%40lists.fedoraproject.org/message/WS5RVHOIIRECG65ZBTZY7IEJVWQSQPG3/",
+        "https://security.gentoo.org/glsa/202208-20",
+        "https://security.netapp.com/advisory/ntap-20211029-0009/",
+        "https://tools.cisco.com/security/center/content/CiscoSecurityAdvisory/cisco-sa-apache-httpd-pathtrv-LAzg68cZ",
+        "https://www.oracle.com/security-alerts/cpujan2022.html",
+        "https://www.cisa.gov/known-exploited-vulnerabilities-catalog?field_cve=CVE-2021-41773"
+      ]
+    },
+    "unavailable_feeds": []
+  },
+  {
+    "finding": "f-4",
+    "cve": "CVE-2021-42013",
+    "description": "It was found that the fix for CVE-2021-41773 in Apache HTTP Server 2.4.50 was insufficient. An attacker could use a path traversal attack to map URLs to files outside the directories configured by Alias-like directives. If files outside of these directories are not protected by the usual default configuration \"require all denied\", these requests can succeed. If CGI scripts are also enabled for these aliased pathes, this could allow for remote code execution. This issue only affects Apache 2.4.49 and Apache 2.4.50 and not earlier versions.",
+    "asset": {
+      "name": "web-01",
+      "kind": "server",
+      "criticality": "medium",
+      "exposure": "internet_facing",
+      "software": [
+        {
+          "role": "operating_system",
+          "name": "Debian",
+          "version": "11"
+        },
+        {
+          "role": "application",
+          "name": "Apache HTTP Server",
+          "version": "2.4.49"
+        }
+      ]
+    },
+    "component": {
+      "role": "application",
+      "name": "Apache HTTP Server",
+      "version": "2.4.49"
+    },
+    "score": {
+      "scoring_model": 1,
+      "value": 0.6957,
+      "alpha": 0.98,
+      "beta": 0.9996,
+      "gamma": 1,
+      "vulnerability": 0.9939,
+      "criticality_multiplier": 0.7,
+      "exposure_multiplier": 1,
+      "data_gaps": []
+    },
+    "kev": {
+      "extension_type": "property-extension",
+      "date_added": "2021-11-03",
+      "due_date": "2021-11-17",
+      "required_action": "Apply updates per vendor instructions.",
+      "known_ransomware_campaign_use": "Known",
+      "vendor_project": "Apache",
+      "product": "HTTP Server",
+      "catalog_version": "2026.11.04",
+      "catalog_released": "2026-11-04T20:00:05Z"
+    },
+    "epss": {
+      "extension_type": "property-extension",
+      "probability": 0.99964,
+      "percentile": 0.99976,
+      "score_date": "2026-11-05"
+    },
+    "nvd": {
+      "extension_type": "property-extension",
+      "published": "2021-10-07T16:15:09Z",
+      "last_modified": "2026-06-17T04:09:09Z",
+      "vuln_status": "Analyzed",
+      "cvss": [
+        {
+          "version": "2.0",
+          "base_score": 7.5,
+          "vector": "AV:N/AC:L/Au:N/C:P/I:P/A:P",
+          "source": "nvd@nist.gov",
+          "type": "Primary"
+        },
+        {
+          "version": "3.1",
+          "base_score": 9.8,
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+          "source": "nvd@nist.gov",
+          "type": "Primary"
+        },
+        {
+          "version": "3.1",
+          "base_score": 9.8,
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+          "source": "134c704f-9b21-4f2e-91b3-4a467353bcc0",
+          "type": "Secondary"
+        }
+      ],
+      "cwes": [
+        "CWE-22",
+        "CWE-22",
+        "NVD-CWE-Other"
+      ],
+      "affected": [
+        {
+          "criteria": "cpe:2.3:a:apache:http_server:2.4.49:*:*:*:*:*:*:*",
+          "vendor": "apache",
+          "product": "http_server"
+        },
+        {
+          "criteria": "cpe:2.3:a:apache:http_server:2.4.50:*:*:*:*:*:*:*",
+          "vendor": "apache",
+          "product": "http_server"
+        },
+        {
+          "criteria": "cpe:2.3:o:fedoraproject:fedora:34:*:*:*:*:*:*:*",
+          "vendor": "fedoraproject",
+          "product": "fedora"
+        },
+        {
+          "criteria": "cpe:2.3:o:fedoraproject:fedora:35:*:*:*:*:*:*:*",
+          "vendor": "fedoraproject",
+          "product": "fedora"
+        },
+        {
+          "criteria": "cpe:2.3:a:oracle:instantis_enterprisetrack:17.1:*:*:*:*:*:*:*",
+          "vendor": "oracle",
+          "product": "instantis_enterprisetrack"
+        },
+        {
+          "criteria": "cpe:2.3:a:oracle:instantis_enterprisetrack:17.2:*:*:*:*:*:*:*",
+          "vendor": "oracle",
+          "product": "instantis_enterprisetrack"
+        },
+        {
+          "criteria": "cpe:2.3:a:oracle:instantis_enterprisetrack:17.3:*:*:*:*:*:*:*",
+          "vendor": "oracle",
+          "product": "instantis_enterprisetrack"
+        },
+        {
+          "criteria": "cpe:2.3:a:oracle:jd_edwards_enterpriseone_tools:*:*:*:*:*:*:*:*",
+          "vendor": "oracle",
+          "product": "jd_edwards_enterpriseone_tools",
+          "version_end_excluding": "9.2.6.0"
+        },
+        {
+          "criteria": "cpe:2.3:a:oracle:secure_backup:*:*:*:*:*:*:*:*",
+          "vendor": "oracle",
+          "product": "secure_backup",
+          "version_end_excluding": "18.1.0.1.0"
+        },
+        {
+          "criteria": "cpe:2.3:a:netapp:cloud_backup:-:*:*:*:*:*:*:*",
+          "vendor": "netapp",
+          "product": "cloud_backup"
+        }
+      ],
+      "cna_affected": [
+        {
+          "source": "security@apache.org",
+          "vendor": "Apache Software Foundation",
+          "product": "Apache HTTP Server",
+          "default_status": "",
+          "versions": [
+            {
+              "version": "Apache HTTP Server 2.4.49",
+              "status": "affected"
+            },
+            {
+              "version": "Apache HTTP Server 2.4.50",
+              "status": "affected"
+            }
+          ]
+        }
+      ],
+      "references": [
+        "http://jvn.jp/en/jp/JVN51106450/index.html",
+        "http://packetstormsecurity.com/files/164501/Apache-HTTP-Server-2.4.50-Path-Traversal-Code-Execution.html",
+        "http://packetstormsecurity.com/files/164609/Apache-HTTP-Server-2.4.50-Remote-Code-Execution.html",
+        "http://packetstormsecurity.com/files/164629/Apache-2.4.49-2.4.50-Traversal-Remote-Code-Execution.html",
+        "http://packetstormsecurity.com/files/164941/Apache-HTTP-Server-2.4.50-Remote-Code-Execution.html",
+        "http://packetstormsecurity.com/files/165089/Apache-HTTP-Server-2.4.50-CVE-2021-42013-Exploitation.html",
+        "http://packetstormsecurity.com/files/167397/Apache-2.4.50-Remote-Code-Execution.html",
+        "http://www.openwall.com/lists/oss-security/2021/10/07/6",
+        "http://www.openwall.com/lists/oss-security/2021/10/08/1",
+        "http://www.openwall.com/lists/oss-security/2021/10/08/2",
+        "http://www.openwall.com/lists/oss-security/2021/10/08/3",
+        "http://www.openwall.com/lists/oss-security/2021/10/08/4",
+        "http://www.openwall.com/lists/oss-security/2021/10/08/5",
+        "http://www.openwall.com/lists/oss-security/2021/10/08/6",
+        "http://www.openwall.com/lists/oss-security/2021/10/09/1",
+        "http://www.openwall.com/lists/oss-security/2021/10/11/4",
+        "http://www.openwall.com/lists/oss-security/2021/10/15/3",
+        "http://www.openwall.com/lists/oss-security/2021/10/16/1",
+        "https://httpd.apache.org/security/vulnerabilities_24.html",
+        "https://lists.apache.org/thread.html/r17a4c6ce9aff662efd9459e9d1850ab4a611cb23392fc68264c72cb3%40%3Ccvs.httpd.apache.org%3E",
+        "https://lists.apache.org/thread.html/r7c795cd45a3384d4d27e57618a215b0ed19cb6ca8eb070061ad5d837%40%3Cannounce.apache.org%3E",
+        "https://lists.apache.org/thread.html/rb5b0e46f179f60b0c70204656bc52fcb558e961cb4d06a971e9e3efb%40%3Cusers.httpd.apache.org%3E",
+        "https://lists.fedoraproject.org/archives/list/package-announce%40lists.fedoraproject.org/message/RMIIEFINL6FUIOPD2A3M5XC6DH45Y3CC/",
+        "https://lists.fedoraproject.org/archives/list/package-announce%40lists.fedoraproject.org/message/WS5RVHOIIRECG65ZBTZY7IEJVWQSQPG3/",
+        "https://security.gentoo.org/glsa/202208-20",
+        "https://security.netapp.com/advisory/ntap-20211029-0009/",
+        "https://tools.cisco.com/security/center/content/CiscoSecurityAdvisory/cisco-sa-apache-httpd-pathtrv-LAzg68cZ",
+        "https://www.oracle.com/security-alerts/cpuapr2022.html",
+        "https://www.oracle.com/security-alerts/cpujan2022.html",
+        "https://www.povilaika.com/apache-2-4-50-exploit/",
+        "http://jvn.jp/en/jp/JVN51106450/index.html",
+        "http://packetstormsecurity.com/files/164501/Apache-HTTP-Server-2.4.50-Path-Traversal-Code-Execution.html",
+        "http://packetstormsecurity.com/files/164609/Apache-HTTP-Server-2.4.50-Remote-Code-Execution.html",
+        "http://packetstormsecurity.com/files/164629/Apache-2.4.49-2.4.50-Traversal-Remote-Code-Execution.html",
+        "http://packetstormsecurity.com/files/164941/Apache-HTTP-Server-2.4.50-Remote-Code-Execution.html",
+        "http://packetstormsecurity.com/files/165089/Apache-HTTP-Server-2.4.50-CVE-2021-42013-Exploitation.html",
+        "http://packetstormsecurity.com/files/167397/Apache-2.4.50-Remote-Code-Execution.html",
+        "http://www.openwall.com/lists/oss-security/2021/10/07/6",
+        "http://www.openwall.com/lists/oss-security/2021/10/08/1",
+        "http://www.openwall.com/lists/oss-security/2021/10/08/2",
+        "http://www.openwall.com/lists/oss-security/2021/10/08/3",
+        "http://www.openwall.com/lists/oss-security/2021/10/08/4",
+        "http://www.openwall.com/lists/oss-security/2021/10/08/5",
+        "http://www.openwall.com/lists/oss-security/2021/10/08/6",
+        "http://www.openwall.com/lists/oss-security/2021/10/09/1",
+        "http://www.openwall.com/lists/oss-security/2021/10/11/4",
+        "http://www.openwall.com/lists/oss-security/2021/10/15/3",
+        "http://www.openwall.com/lists/oss-security/2021/10/16/1",
+        "https://httpd.apache.org/security/vulnerabilities_24.html",
+        "https://lists.apache.org/thread.html/r17a4c6ce9aff662efd9459e9d1850ab4a611cb23392fc68264c72cb3%40%3Ccvs.httpd.apache.org%3E",
+        "https://lists.apache.org/thread.html/r7c795cd45a3384d4d27e57618a215b0ed19cb6ca8eb070061ad5d837%40%3Cannounce.apache.org%3E",
+        "https://lists.apache.org/thread.html/rb5b0e46f179f60b0c70204656bc52fcb558e961cb4d06a971e9e3efb%40%3Cusers.httpd.apache.org%3E",
+        "https://lists.fedoraproject.org/archives/list/package-announce%40lists.fedoraproject.org/message/RMIIEFINL6FUIOPD2A3M5XC6DH45Y3CC/",
+        "https://lists.fedoraproject.org/archives/list/package-announce%40lists.fedoraproject.org/message/WS5RVHOIIRECG65ZBTZY7IEJVWQSQPG3/",
+        "https://security.gentoo.org/glsa/202208-20",
+        "https://security.netapp.com/advisory/ntap-20211029-0009/",
+        "https://tools.cisco.com/security/center/content/CiscoSecurityAdvisory/cisco-sa-apache-httpd-pathtrv-LAzg68cZ",
+        "https://www.oracle.com/security-alerts/cpuapr2022.html",
+        "https://www.oracle.com/security-alerts/cpujan2022.html",
+        "https://www.povilaika.com/apache-2-4-50-exploit/",
+        "https://www.cisa.gov/known-exploited-vulnerabilities-catalog?field_cve=CVE-2021-42013"
+      ]
+    },
+    "unavailable_feeds": []
+  },
+  {
+    "finding": "f-5",
+    "cve": "CVE-2024-23897",
+    "description": "Jenkins 2.441 and earlier, LTS 2.426.2 and earlier does not disable a feature of its CLI command parser that replaces an '@' character followed by a file path in an argument with the file's contents, allowing unauthenticated attackers to read arbitrary files on the Jenkins controller file system.",
+    "asset": {
+      "name": "lab-01",
+      "kind": "virtual_machine",
+      "criticality": "low",
+      "exposure": "internal",
+      "software": [
+        {
+          "role": "application",
+          "name": "Jenkins",
+          "version": "2.441"
+        }
+      ]
+    },
+    "component": {
+      "role": "application",
+      "name": "Jenkins",
+      "version": "2.441"
+    },
+    "score": {
+      "scoring_model": 1,
+      "value": 0.2386,
+      "alpha": 0.98,
+      "beta": 1,
+      "gamma": 1,
+      "vulnerability": 0.994,
+      "criticality_multiplier": 0.4,
+      "exposure_multiplier": 0.6,
+      "data_gaps": []
+    },
+    "kev": {
+      "extension_type": "property-extension",
+      "date_added": "2024-08-19",
+      "due_date": "2024-09-09",
+      "required_action": "Apply mitigations per vendor instructions or discontinue use of the product if mitigations are unavailable.",
+      "known_ransomware_campaign_use": "Known",
+      "vendor_project": "Jenkins",
+      "product": "Jenkins Command Line Interface (CLI)",
+      "catalog_version": "2026.11.04",
+      "catalog_released": "2026-11-04T20:00:05Z"
+    },
+    "epss": {
+      "extension_type": "property-extension",
+      "probability": 0.99999,
+      "percentile": 0.99995,
+      "score_date": "2026-11-05"
+    },
+    "nvd": {
+      "extension_type": "property-extension",
+      "published": "2024-01-24T18:15:09Z",
+      "last_modified": "2026-06-17T07:13:49Z",
+      "vuln_status": "Analyzed",
+      "cvss": [
+        {
+          "version": "3.1",
+          "base_score": 9.8,
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+          "source": "nvd@nist.gov",
+          "type": "Primary"
+        },
+        {
+          "version": "3.1",
+          "base_score": 9.8,
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+          "source": "134c704f-9b21-4f2e-91b3-4a467353bcc0",
+          "type": "Secondary"
+        }
+      ],
+      "cwes": [
+        "CWE-22",
+        "CWE-27"
+      ],
+      "affected": [
+        {
+          "criteria": "cpe:2.3:a:jenkins:jenkins:*:*:*:*:lts:*:*:*",
+          "vendor": "jenkins",
+          "product": "jenkins",
+          "version_end_excluding": "2.426.3"
+        },
+        {
+          "criteria": "cpe:2.3:a:jenkins:jenkins:*:*:*:*:-:*:*:*",
+          "vendor": "jenkins",
+          "product": "jenkins",
+          "version_end_excluding": "2.442"
+        }
+      ],
+      "cna_affected": [
+        {
+          "source": "jenkinsci-cert@googlegroups.com",
+          "vendor": "Jenkins Project",
+          "product": "Jenkins",
+          "default_status": "affected",
+          "versions": [
+            {
+              "version": "0",
+              "less_than": "1.606",
+              "status": "unaffected"
+            },
+            {
+              "version": "2.442",
+              "less_than": "*",
+              "status": "unaffected"
+            },
+            {
+              "version": "2.426.3",
+              "less_than": "2.426.*",
+              "status": "unaffected"
+            },
+            {
+              "version": "2.440.1",
+              "less_than": "2.440.*",
+              "status": "unaffected"
+            }
+          ]
+        },
+        {
+          "source": "134c704f-9b21-4f2e-91b3-4a467353bcc0",
+          "vendor": "jenkins",
+          "product": "jenkins",
+          "default_status": "affected",
+          "versions": [
+            {
+              "version": "0",
+              "less_than": "1.606",
+              "status": "unaffected"
+            },
+            {
+              "version": "2.442",
+              "less_than": "*",
+              "status": "unaffected"
+            },
+            {
+              "version": "2.426.3",
+              "less_than": "2.427",
+              "status": "unaffected"
+            },
+            {
+              "version": "2.440.1",
+              "less_than": "2.441",
+              "status": "unaffected"
+            }
+          ]
+        },
+        {
+          "source": "134c704f-9b21-4f2e-91b3-4a467353bcc0",
+          "vendor": "jenkins",
+          "product": "jenkins",
+          "default_status": "affected",
+          "versions": [
+            {
+              "version": "0",
+              "less_than": "1.606",
+              "status": "unaffected"
+            },
+            {
+              "version": "2.442",
+              "less_than": "*",
+              "status": "unaffected"
+            },
+            {
+              "version": "2.426.3",
+              "less_than": "2.427",
+              "status": "unaffected"
+            },
+            {
+              "version": "2.440.1",
+              "less_than": "2.441",
+              "status": "unaffected"
+            }
+          ]
+        },
+        {
+          "source": "134c704f-9b21-4f2e-91b3-4a467353bcc0",
+          "vendor": "jenkins",
+          "product": "jenkins",
+          "default_status": "affected",
+          "versions": [
+            {
+              "version": "0",
+              "less_than": "1.606",
+              "status": "unaffected"
+            },
+            {
+              "version": "2.442",
+              "less_than": "*",
+              "status": "unaffected"
+            },
+            {
+              "version": "2.426.3",
+              "less_than": "2.427",
+              "status": "unaffected"
+            },
+            {
+              "version": "2.440.1",
+              "less_than": "2.441",
+              "status": "unaffected"
+            }
+          ]
+        },
+        {
+          "source": "134c704f-9b21-4f2e-91b3-4a467353bcc0",
+          "vendor": "jenkins",
+          "product": "jenkins",
+          "default_status": "affected",
+          "versions": [
+            {
+              "version": "0",
+              "less_than": "1.606",
+              "status": "unaffected"
+            },
+            {
+              "version": "2.442",
+              "less_than": "*",
+              "status": "unaffected"
+            },
+            {
+              "version": "2.426.3",
+              "less_than": "2.427",
+              "status": "unaffected"
+            },
+            {
+              "version": "2.440.1",
+              "less_than": "2.441",
+              "status": "unaffected"
+            }
+          ]
+        }
+      ],
+      "references": [
+        "http://packetstormsecurity.com/files/176839/Jenkins-2.441-LTS-2.426.3-CVE-2024-23897-Scanner.html",
+        "http://packetstormsecurity.com/files/176840/Jenkins-2.441-LTS-2.426.3-Arbitrary-File-Read.html",
+        "http://www.openwall.com/lists/oss-security/2024/01/24/6",
+        "https://www.jenkins.io/security/advisory/2024-01-24/#SECURITY-3314",
+        "https://www.sonarsource.com/blog/excessive-expansion-uncovering-critical-security-vulnerabilities-in-jenkins/",
+        "http://packetstormsecurity.com/files/176839/Jenkins-2.441-LTS-2.426.3-CVE-2024-23897-Scanner.html",
+        "http://packetstormsecurity.com/files/176840/Jenkins-2.441-LTS-2.426.3-Arbitrary-File-Read.html",
+        "http://www.openwall.com/lists/oss-security/2024/01/24/6",
+        "https://www.jenkins.io/security/advisory/2024-01-24/#SECURITY-3314",
+        "https://www.sonarsource.com/blog/excessive-expansion-uncovering-critical-security-vulnerabilities-in-jenkins/",
+        "https://www.vicarius.io/vsociety/posts/the-anatomy-of-a-jenkins-vulnerability-cve-2024-23897-revealed-1",
+        "https://www.cisa.gov/known-exploited-vulnerabilities-catalog?field_cve=CVE-2024-23897"
+      ]
+    },
+    "unavailable_feeds": []
+  }
+]

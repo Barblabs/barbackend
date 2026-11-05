@@ -120,6 +120,48 @@ _Avoid_: Public/private, external, DMZ
 How important an Asset is to the Customer's business: High, Medium, Low, or Unknown. It is only imported, never declared.
 _Avoid_: Priority, severity, business criticity
 
+### Agents
+
+**Agent**:
+A model-driven role of barbattack, named for what it does rather than for the model it runs on. It orders, explains and advises: it never outputs a number, changes a Score or closes a Finding.
+_Avoid_: Bot, AI, assistant
+
+**Prioritizer**:
+The Agent that decides in what order a Customer's open Findings should be attended, weighing each Score with what its Asset means to the business, and says why.
+_Avoid_: JEV, triage agent, ranking agent
+
+**Luna**:
+The Agent that writes the Action Plan of a Finding. Not OpenAI's model of the same name.
+_Avoid_: Advisor agent
+
+**Analista**:
+The feedback Agent: it talks with a Customer's Users about their Prioritizations and Action Plans and records what they say.
+_Avoid_: Chatbot, feedback bot
+
+**Crew**:
+The Prioritizer and Luna: the Agents that read Dossiers.
+_Avoid_: Team, pipeline
+
+**Dossier**:
+All that an Agent knows about a Finding: its Asset, its Software Component, its Vulnerability as the Feeds describe it and its Score, as the Findings pipeline gives them. An Agent's output may rely on nothing outside it.
+_Avoid_: Context, expediente, prompt data
+
+**Prioritization**:
+The order the Prioritizer gave a Customer's open Findings at one moment, as Priority Groups, with the Dossiers it read. It is kept as history: the newest is the one to follow.
+_Avoid_: Ranking, triage list
+
+**Priority Group**:
+Findings of a Prioritization to attend at the same time, such as those one update fixes together. The first group is attended first.
+_Avoid_: Tier, wave, bucket
+
+**Action Plan**:
+Luna's output: the steps to remediate a Finding on its Asset, what mitigates it meanwhile and how to confirm the fix.
+_Avoid_: Recommendation, remediation plan
+
+**Feedback**:
+What a User says about a Finding of a Prioritization: that its Vulnerability applies, does not apply or was remediated, or that it should be attended earlier or later. It changes no Score and no order.
+_Avoid_: Label, correction, comment
+
 ### People
 
 **User**:
