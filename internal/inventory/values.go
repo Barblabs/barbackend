@@ -207,8 +207,24 @@ func ParseCriticality(code string) (Criticality, error) {
 // or empty for Unknown.
 func (e Exposure) Code() string { return exposureCodes[e] }
 
+// ParseExposure is the inverse of Exposure.Code. Unknown has no code.
+func ParseExposure(code string) (Exposure, error) {
+	if e, ok := parseCode(exposureCodes, code); ok {
+		return e, nil
+	}
+	return 0, fmt.Errorf("%w: %q", ErrInvalidExposure, code)
+}
+
 // Code is the stable lowercase snake_case name clients use for the role.
 func (r SoftwareRole) Code() string { return softwareRoleCodes[r] }
+
+// ParseSoftwareRole is the inverse of SoftwareRole.Code.
+func ParseSoftwareRole(code string) (SoftwareRole, error) {
+	if r, ok := parseCode(softwareRoleCodes, code); ok {
+		return r, nil
+	}
+	return 0, fmt.Errorf("%w: role %q", ErrInvalidSoftware, code)
+}
 
 func parseCode[T comparable](codes map[T]string, code string) (T, bool) {
 	for v, c := range codes {
