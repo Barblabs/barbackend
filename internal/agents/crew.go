@@ -1,6 +1,7 @@
 // Package agents holds the use cases of barbattack's Agents: the Prioritizer
-// orders a Customer's open Findings, Luna writes the Action Plan of one, and
-// the Analista talks with a Customer's Users about them (ADR 0016).
+// orders a Customer's open Findings, Luna writes the Action Plan of one, the
+// Analista talks with a Customer's Users about them (ADR 0016), and the
+// Drafter drafts a Customer's Business Context from a document (ADR 0017).
 package agents
 
 import (
@@ -26,6 +27,7 @@ const (
 	defaultPrioritizerModel = "claude-haiku-5-5"
 	defaultLunaModel        = "claude-haiku-5-5"
 	defaultAnalistaModel    = "claude-opus-5-5"
+	defaultDrafterModel     = "claude-opus-5-5"
 
 	// MaxFindings bounds a Prioritization: the Prioritizer reads every Finding
 	// in one request, to weigh them against each other.
@@ -34,6 +36,7 @@ const (
 	maxAttempts        = 2
 	prioritizerTimeout = 5 * time.Minute
 	lunaTimeout        = 2 * time.Minute
+	drafterTimeout     = 3 * time.Minute
 )
 
 var (
@@ -46,19 +49,20 @@ var (
 
 // Models names the model each Agent runs on.
 type Models struct {
-	Prioritizer, Luna, Analista string
+	Prioritizer, Luna, Analista, Drafter string
 }
 
 // DefaultModels are the models the Agents run on unless told otherwise.
 func DefaultModels() Models {
-	return Models{Prioritizer: defaultPrioritizerModel, Luna: defaultLunaModel, Analista: defaultAnalistaModel}
+	return Models{Prioritizer: defaultPrioritizerModel, Luna: defaultLunaModel, Analista: defaultAnalistaModel, Drafter: defaultDrafterModel}
 }
 
 // ModelsFrom takes each Agent's model from getenv's PRIORITIZER_MODEL,
-// LUNA_MODEL and ANALISTA_MODEL, or from DefaultModels when blank.
+// LUNA_MODEL, ANALISTA_MODEL and DRAFTER_MODEL, or from DefaultModels when
+// blank.
 func ModelsFrom(getenv func(string) string) Models {
 	models := DefaultModels()
-	for name, model := range map[string]*string{"PRIORITIZER_MODEL": &models.Prioritizer, "LUNA_MODEL": &models.Luna, "ANALISTA_MODEL": &models.Analista} {
+	for name, model := range map[string]*string{"PRIORITIZER_MODEL": &models.Prioritizer, "LUNA_MODEL": &models.Luna, "ANALISTA_MODEL": &models.Analista, "DRAFTER_MODEL": &models.Drafter} {
 		if v := strings.TrimSpace(getenv(name)); v != "" {
 			*model = v
 		}
@@ -66,8 +70,9 @@ func ModelsFrom(getenv func(string) string) Models {
 	return models
 }
 
-// Crew is the Prioritizer and Luna. It reads no Feed and touches no database:
-// all it knows of a Finding is the Dossier it is given.
+// Crew is the Prioritizer, Luna and the Drafter. It reads no Feed and touches
+// no database: all it knows of a Finding is the Dossier it is given, and of a
+// Customer's business the Document it is given.
 type Crew struct {
 	llm    *claude.Client
 	models Models
@@ -232,6 +237,7 @@ type agent[T any] struct {
 	system  string
 	schema  map[string]any
 	timeout time.Duration
+	pdfs    [][]byte
 	verify  func(T) []string
 }
 
@@ -239,7 +245,7 @@ func (a agent[T]) run(ctx context.Context, llm *claude.Client, prompt string) Ru
 	ctx, cancel := context.WithTimeout(ctx, a.timeout)
 	defer cancel()
 	out := Run[T]{Model: a.model, PromptID: promptID(a.system)}
-	request := claude.Request{Model: a.model, System: a.system, Prompt: prompt, Schema: a.schema}
+	request := claude.Request{Model: a.model, System: a.system, Prompt: prompt, PDFs: a.pdfs, Schema: a.schema}
 	for range maxAttempts {
 		raw, err := llm.Structured(ctx, request)
 		if err != nil {

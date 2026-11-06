@@ -3,6 +3,7 @@ package claude
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -49,6 +50,8 @@ type Request struct {
 	Model  string
 	System string
 	Prompt string
+	// PDFs are PDF documents the model reads, in order, before Prompt.
+	PDFs [][]byte
 	// Schema is the JSON Schema of the answer, which the API enforces.
 	Schema map[string]any
 }
@@ -60,7 +63,7 @@ func (c *Client) Structured(ctx context.Context, r Request) ([]byte, error) {
 		Model:     r.Model,
 		MaxTokens: maxTokens,
 		System:    []anthropic.TextBlockParam{{Text: r.System}},
-		Messages:  []anthropic.MessageParam{anthropic.NewUserMessage(anthropic.NewTextBlock(r.Prompt))},
+		Messages:  []anthropic.MessageParam{anthropic.NewUserMessage(r.content()...)},
 		OutputConfig: anthropic.OutputConfigParam{
 			Effort: anthropic.OutputConfigEffortMedium,
 			Format: anthropic.JSONOutputFormatParam{Schema: r.Schema},
@@ -79,6 +82,15 @@ func (c *Client) Structured(ctx context.Context, r Request) ([]byte, error) {
 		}
 	}
 	return []byte(text.String()), nil
+}
+
+// The API reads a document best placed before the text about it.
+func (r Request) content() []anthropic.ContentBlockParamUnion {
+	blocks := make([]anthropic.ContentBlockParamUnion, 0, len(r.PDFs)+1)
+	for _, pdf := range r.PDFs {
+		blocks = append(blocks, anthropic.NewDocumentBlock(anthropic.Base64PDFSourceParam{Data: base64.StdEncoding.EncodeToString(pdf)}))
+	}
+	return append(blocks, anthropic.NewTextBlock(r.Prompt))
 }
 
 // Tool is a function a model may call during Converse.
