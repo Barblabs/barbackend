@@ -17,8 +17,8 @@ var (
 	// ErrNotPlatformAdmin is a User of a Customer asking to manage Customers.
 	ErrNotPlatformAdmin = errors.New("only a platform admin manages customers")
 	// ErrNotCustomerAdmin is a Viewer or a Platform Admin asking to manage the
-	// Users of a Customer.
-	ErrNotCustomerAdmin = errors.New("only a customer admin manages users")
+	// Users of a Customer or to edit its Business Context.
+	ErrNotCustomerAdmin = errors.New("only a customer admin can do this")
 	// ErrLastCustomerAdmin is a change that would leave a Customer without an
 	// active Customer Admin.
 	ErrLastCustomerAdmin = errors.New("a customer keeps at least one active customer admin")
@@ -205,6 +205,15 @@ func (u User) ManageCustomers() error {
 // ManageUsers returns the Customer whose Users u manages. It fails with
 // ErrNotCustomerAdmin for anyone but a Customer Admin.
 func (u User) ManageUsers() (CustomerID, error) {
+	if u.role != CustomerAdmin {
+		return CustomerID{}, ErrNotCustomerAdmin
+	}
+	return u.customer, nil
+}
+
+// EditBusinessContext returns the Customer whose Business Context u edits. It
+// fails with ErrNotCustomerAdmin for anyone but a Customer Admin.
+func (u User) EditBusinessContext() (CustomerID, error) {
 	if u.role != CustomerAdmin {
 		return CustomerID{}, ErrNotCustomerAdmin
 	}
