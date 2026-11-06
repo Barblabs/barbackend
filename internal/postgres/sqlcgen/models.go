@@ -59,6 +59,15 @@ type AssetOwner struct {
 	Email      string
 }
 
+type BusinessContext struct {
+	CustomerID uuid.UUID
+	Version    int32
+	Schema     string
+	Content    []byte
+	SavedBy    uuid.UUID
+	SavedAt    time.Time
+}
+
 type CmdbSource struct {
 	ID             uuid.UUID
 	CustomerID     uuid.UUID
