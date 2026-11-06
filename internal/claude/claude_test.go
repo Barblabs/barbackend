@@ -47,6 +47,29 @@ func TestStructuredSendsTheSchemaAndReturnsTheAnswer(t *testing.T) {
 	}
 }
 
+func TestStructuredSendsThePDFsBeforeThePrompt(t *testing.T) {
+	c, srv := newClient(t)
+	srv.Queue(claudetest.Text(`{}`))
+
+	if _, err := c.Structured(context.Background(), claude.Request{Model: "m", Prompt: "data", PDFs: [][]byte{[]byte("%PDF-1.7"), []byte("%PDF-2.0")}}); err != nil {
+		t.Fatal(err)
+	}
+	content := srv.Requests()[0]["messages"].([]any)[0].(map[string]any)["content"].([]any)
+	if len(content) != 3 {
+		t.Fatalf("content = %v, want two documents and a text", content)
+	}
+	for i, want := range []string{"JVBERi0xLjc=", "JVBERi0yLjA="} {
+		document := content[i].(map[string]any)
+		source, _ := document["source"].(map[string]any)
+		if document["type"] != "document" || source["media_type"] != "application/pdf" || source["data"] != want {
+			t.Errorf("document %d = %v, want the PDF in base64", i, document)
+		}
+	}
+	if text := content[2].(map[string]any); text["type"] != "text" || text["text"] != "data" {
+		t.Errorf("text = %v, want the prompt", text)
+	}
+}
+
 func TestStructuredFailures(t *testing.T) {
 	tests := []struct {
 		name  string

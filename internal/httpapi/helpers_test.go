@@ -17,6 +17,7 @@ import (
 	"barbackend/internal/agents"
 	"barbackend/internal/assessment"
 	"barbackend/internal/assets"
+	"barbackend/internal/businesscontext"
 	"barbackend/internal/claude"
 	"barbackend/internal/claude/claudetest"
 	"barbackend/internal/cmdb"
@@ -44,6 +45,8 @@ var operations = []struct{ method, path string }{
 	{http.MethodPost, "/cmdb/source/sync"},
 	{http.MethodGet, "/assets"},
 	{http.MethodGet, "/prioritizations"},
+	{http.MethodGet, "/business-context"},
+	{http.MethodGet, "/business-context/brief"},
 }
 
 // platformOperations are those only a Platform Admin may call.
@@ -61,6 +64,13 @@ var customerAdminOperations = []struct{ method, path string }{
 	{http.MethodPost, "/users"},
 	{http.MethodPatch, "/users/" + uuid.Nil.String()},
 	{http.MethodPost, "/users/" + uuid.Nil.String() + "/disable"},
+}
+
+// businessContextEdits are those only a Customer Admin may call on the
+// Business Context.
+var businessContextEdits = []struct{ method, path string }{
+	{http.MethodPut, "/business-context"},
+	{http.MethodPost, "/business-context/draft"},
 }
 
 // everyRoleOperations are those every User may call, a Platform Admin included.
@@ -97,7 +107,10 @@ func newEnv(t *testing.T) env {
 	admin := &fakeAdmin{}
 	llm := claudetest.New(t)
 	agentService := agents.NewService(db, agents.NewCrew(claude.New(llm.URL), agents.DefaultModels()))
-	router := httpapi.New(httpapi.Config{Agents: agentService, Assets: assets.New(db), CMDB: svc, Users: users.New(db, pool.Verifier(t), admin), AllowedOrigins: []string{allowedOrigin}})
+	router := httpapi.New(httpapi.Config{
+		Agents: agentService, Assets: assets.New(db), BusinessContext: businesscontext.New(db), CMDB: svc,
+		Users: users.New(db, pool.Verifier(t), admin), AllowedOrigins: []string{allowedOrigin},
+	})
 	e := env{db: db, conn: pgtest.Conn(t, url), pool: pool, provider: p, admin: admin, cmdb: svc, llm: llm, agents: agentService, router: router}
 	e.customer = e.newCustomer(t)
 	e.token = e.signIn(t, e.newUser(t, tenancy.Viewer, e.customer))

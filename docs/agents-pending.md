@@ -1,18 +1,17 @@
 # What the Agents still lack
 
-The Prioritizer, Luna and the Analista work as ADR 0016 describes, but only on what they are handed today, and none has answered with a real model yet. This is what is missing, most important first. Each item is ready to become an issue.
+The Prioritizer, Luna and the Analista work as ADR 0016 describes, and the Drafter as ADR 0017 does, but only on what they are handed today, and none has answered with a real model yet. This is what is missing, most important first. Each item is ready to become an issue.
 
 ## 1. Business context in the Prioritizer's criterion
 
 The Prioritizer orders a Customer's open Findings by weighing each Score with what the Finding's Asset means to the business. Today all it knows of that is the Asset itself: its Criticality, its Exposure, its kind, its name and the role of its Software Components. What a Customer knows and barbattack does not store never reaches it: that an Asset runs payments or payroll, holds personal or card data, serves customers, falls under a regulation, or matters most at month's end. So two Assets with the same Criticality and Exposure weigh the same, even when one is the payments server. Until this exists, the only way a User can correct the order is Feedback (`should_be_earlier`, `should_be_later`), which changes nothing the Prioritizer reads.
 
-- **Decide what business context is**: what a Customer can say about an Asset, and maybe about itself (its industry, its critical services), as a closed vocabulary or free text, and who enters it: a Customer Admin in the portal, the CMDB Source, or both. Free text from a Customer reaches a model, so the Dossier carries it as data, like Feed text (ADR 0010).
-- **Store and serve it** with the Asset, as a Declaration or as an imported field (ADR 0002).
-- **Hand it to the Prioritizer**: add it to the Dossier and its Brief, tell the Prioritizer how to weigh it, and have the verifier check that a reason citing it cites what the Customer said.
+- ~~**Decide what business context is**~~ and ~~**store and serve it**~~: done by ADR 0017. A Customer Admin states the Customer's Business Context in the dashboard, or has the Drafter draft it from a document, and each Critical Service names the Assets that run it. `Tx.BusinessContext` reads the newest version and `Context.Brief` renders it.
+- **Hand it to the Prioritizer**: put the Brief, or the `business_context/1` JSON, in its user message as data beside the Findings, record its version on the Prioritization, tell the Prioritizer how to weigh it (an Asset that runs a Critical Service and that service's impact and maximum tolerable downtime, the data and regulations it falls under, the Customer's Risk Appetite and constraints), and have the verifier check that a reason citing it cites what the Customer said.
 - **Use Feedback**: decide whether `should_be_earlier` and `should_be_later` on a Finding become context for the next Prioritization of the same Asset.
 - **Decide whether the Score weighs any of it**, which would be a new Scoring Model (ADR 0009), or only the Prioritizer does.
 
-Done when an ADR decides the above, a Customer can record the context of an Asset, it reaches that Asset's Dossiers, the Prioritizer's prompt and verifier use it with tests, and GLOSSARY.md defines the term.
+Done when the Prioritizer's prompt and verifier use the Business Context with tests, and a Prioritization names the version it read.
 
 ## 2. The Findings pipeline hands the Agents its Findings
 

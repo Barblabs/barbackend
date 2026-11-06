@@ -120,6 +120,20 @@ _Avoid_: Public/private, external, DMZ
 How important an Asset is to the Customer's business: High, Medium, Low, or Unknown. It is only imported, never declared.
 _Avoid_: Priority, severity, business criticity
 
+### Business
+
+**Business Context**:
+What a Customer tells barbattack about its business, for the Agents to weigh Findings and threats with: what it does, its sectors, size and revenue, where it operates, its Critical Services, the data it holds, the regulations it follows, its domains, brands, technologies and third parties, its Risk Appetite and the risks that worry it. A Customer Admin edits it and every User of the Customer reads it. Each save is a new version that is never changed. A field the Customer has not stated is a gap, never a value (ADR 0017).
+_Avoid_: Company profile, business profile, organization info, contexto empresarial
+
+**Critical Service**:
+A business service a Customer cannot afford to lose, such as online payments or payroll, part of its Business Context, with how badly losing it hurts, how long it can be down, and the names of the Assets that run it.
+_Avoid_: Crown jewel, critical process, key system
+
+**Risk Appetite**:
+How much risk a Customer as a whole is willing to take, as its leadership sets it. How much a single Critical Service tolerates is its impact and maximum tolerable downtime, not the Risk Appetite.
+_Avoid_: Risk tolerance (that is per Critical Service), risk profile
+
 ### Agents
 
 **Agent**:
@@ -138,8 +152,12 @@ _Avoid_: Advisor agent
 The feedback Agent: it talks with a Customer's Users about their Prioritizations and Action Plans and records what they say.
 _Avoid_: Chatbot, feedback bot
 
+**Drafter**:
+The Agent that drafts a Customer's Business Context from the documents a Customer Admin gives it, read together. Its draft is never saved until a Customer Admin reviews and saves it.
+_Avoid_: Importer, extractor, autofill
+
 **Crew**:
-The Prioritizer and Luna: the Agents that read Dossiers.
+The Agents that answer in one call, checked against what they were given: the Prioritizer and Luna, which read Dossiers, and the Drafter.
 _Avoid_: Team, pipeline
 
 **Dossier**:

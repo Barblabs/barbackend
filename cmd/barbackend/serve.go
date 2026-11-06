@@ -11,6 +11,7 @@ import (
 
 	"barbackend/internal/agents"
 	"barbackend/internal/assets"
+	"barbackend/internal/businesscontext"
 	"barbackend/internal/cmdb"
 	"barbackend/internal/httpapi"
 	"barbackend/internal/ingest"
@@ -54,11 +55,12 @@ func serve(ctx context.Context, _ []string) error {
 
 	return withDB(ctx, func(db *postgres.DB) error {
 		return listen(ctx, feedsDone, httpapi.New(httpapi.Config{
-			Agents:         agents.NewService(db, newCrew()),
-			Assets:         assets.New(db),
-			CMDB:           cmdb.New(db, providers(), key, ctx, syncTimeout),
-			Users:          users.New(db, verifier, admin),
-			AllowedOrigins: allowedOrigins(),
+			Agents:          agents.NewService(db, newCrew()),
+			Assets:          assets.New(db),
+			BusinessContext: businesscontext.New(db),
+			CMDB:            cmdb.New(db, providers(), key, ctx, syncTimeout),
+			Users:           users.New(db, verifier, admin),
+			AllowedOrigins:  allowedOrigins(),
 		}))
 	})
 }
