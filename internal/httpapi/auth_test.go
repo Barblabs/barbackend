@@ -76,7 +76,7 @@ func TestUnauthenticatedRequestsAreRejected(t *testing.T) {
 func TestEveryOperationRequiresAToken(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
-	for _, op := range slices.Concat(operations, platformOperations, customerAdminOperations, everyRoleOperations) {
+	for _, op := range slices.Concat(operations, platformOperations, customerAdminOperations, businessContextEdits, everyRoleOperations) {
 		rec := e.send(httptest.NewRequest(op.method, op.path, loginBody()))
 
 		if rec.Code != http.StatusUnauthorized {
@@ -91,7 +91,7 @@ func TestUserOfADeactivatedCustomerIsToldWhy(t *testing.T) {
 	deactivated := e.newCustomer(t)
 	admin := "Bearer " + e.signIn(t, e.newUser(t, tenancy.CustomerAdmin, deactivated))
 	deactivate(t, e, deactivated)
-	for _, op := range slices.Concat(operations, platformOperations, customerAdminOperations, everyRoleOperations) {
+	for _, op := range slices.Concat(operations, platformOperations, customerAdminOperations, businessContextEdits, everyRoleOperations) {
 		req := httptest.NewRequest(op.method, op.path, loginBody())
 		req.Header.Set("Authorization", admin)
 

@@ -8,6 +8,7 @@ import (
 
 	"barbackend/internal/agents"
 	"barbackend/internal/assets"
+	"barbackend/internal/business"
 	"barbackend/internal/cmdb"
 	"barbackend/internal/inventory"
 	"barbackend/internal/tenancy"
@@ -51,6 +52,8 @@ const (
 	agentRefused           = "agent_refused"
 	agentRejected          = "agent_rejected"
 	agentUnavailable       = "agent_unavailable"
+	invalidDocument        = "invalid_document"
+	businessContextStale   = "business_context_stale"
 )
 
 func apiError(err error) *codedError {
@@ -74,7 +77,7 @@ func apiError(err error) *codedError {
 	case errors.Is(err, tenancy.ErrNotPlatformAdmin):
 		return &codedError{status: http.StatusForbidden, Code: forbidden, Message: "only a platform admin can manage customers"}
 	case errors.Is(err, tenancy.ErrNotCustomerAdmin):
-		return &codedError{status: http.StatusForbidden, Code: forbidden, Message: "only a customer admin can manage users"}
+		return &codedError{status: http.StatusForbidden, Code: forbidden, Message: "only a customer admin can do this"}
 	case errors.Is(err, tenancy.ErrLastCustomerAdmin):
 		return &codedError{status: http.StatusConflict, Code: lastCustomerAdmin, Message: "a customer keeps at least one active customer admin"}
 	case errors.Is(err, tenancy.ErrCustomerDeactivated):
@@ -93,6 +96,10 @@ func apiError(err error) *codedError {
 		return &codedError{status: http.StatusUnprocessableEntity, Code: string(failure.Code), Message: failure.Message}
 	case errors.Is(err, cmdb.ErrInvalidLogin):
 		return &codedError{status: http.StatusBadRequest, Code: invalidLogin, Message: err.Error()}
+	case errors.Is(err, business.ErrInvalidContext):
+		return &codedError{status: http.StatusBadRequest, Code: invalidRequest, Message: err.Error()}
+	case errors.Is(err, business.ErrStale):
+		return &codedError{status: http.StatusConflict, Code: businessContextStale, Message: business.ErrStale.Error()}
 	case errors.Is(err, assets.ErrInvalidQuery):
 		return &codedError{status: http.StatusBadRequest, Code: invalidRequest, Message: err.Error()}
 	case errors.Is(err, inventory.ErrNotConnected):
@@ -110,6 +117,8 @@ func agentError(err error) *codedError {
 	switch {
 	case errors.Is(err, agents.ErrEmptyMessage), errors.Is(err, agents.ErrInvalidFeedback), errors.Is(err, agents.ErrInvalidLimit):
 		return &codedError{status: http.StatusBadRequest, Code: invalidRequest, Message: err.Error()}
+	case errors.Is(err, agents.ErrInvalidDocument):
+		return &codedError{status: http.StatusBadRequest, Code: invalidDocument, Message: err.Error()}
 	case errors.Is(err, agents.ErrConversationFull):
 		return &codedError{status: http.StatusConflict, Code: conversationFull, Message: agents.ErrConversationFull.Error()}
 	case errors.Is(err, agents.ErrPrioritizationNotFound):

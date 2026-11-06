@@ -25,7 +25,7 @@ func TestOpenAPIListsEveryRoute(t *testing.T) {
 		{http.MethodPost, "/analista/conversations"},
 		{http.MethodPost, "/analista/conversations/{id}/messages"},
 	}
-	for _, r := range slices.Concat(operations, everyRoleOperations, templated) {
+	for _, r := range slices.Concat(operations, businessContextEdits, everyRoleOperations, templated) {
 		if op, ok := spec.Paths[r.path][strings.ToLower(r.method)]; !ok || op.OperationID == "" {
 			t.Errorf("spec lacks %s %s with an operationId", r.method, r.path)
 		}
