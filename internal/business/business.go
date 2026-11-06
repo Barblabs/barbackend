@@ -322,8 +322,8 @@ var domainName = regexp.MustCompile(`^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)
 // since a Customer's domain is what lookalikes and leaks are matched to.
 func (c *checker) canonicalDomain(path, entry string) (string, bool) {
 	d := strings.ToLower(entry)
-	for _, scheme := range []string{"https://", "http://"} {
-		d = strings.TrimPrefix(d, scheme)
+	if _, host, ok := strings.Cut(d, "://"); ok {
+		d = host
 	}
 	d, _, _ = strings.Cut(d, "/")
 	d = strings.TrimPrefix(strings.TrimSuffix(d, "."), "www.")

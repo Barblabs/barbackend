@@ -76,10 +76,10 @@ func TestNewNormalizes(t *testing.T) {
 		{"drops repeated codes", func(f *business.Fields) { f.Risk.Concerns = []business.Concern{"fraud", "fraud"} }, func(f business.Fields) bool {
 			return slices.Equal(f.Risk.Concerns, []business.Concern{"fraud"})
 		}},
-		{"keeps the host of a domain, lowercased and without www", func(f *business.Fields) {
-			f.Footprint.Domains = []string{"https://WWW.Example.mx/contacto", "example.mx.", "pagos.example.mx"}
+		{"keeps the host of a URL of any scheme, lowercased and without www", func(f *business.Fields) {
+			f.Footprint.Domains = []string{"https://WWW.Example.mx/contacto", "example.mx.", "pagos.example.mx", "ftp://files.example.mx"}
 		}, func(f business.Fields) bool {
-			return slices.Equal(f.Footprint.Domains, []string{"example.mx", "pagos.example.mx"})
+			return slices.Equal(f.Footprint.Domains, []string{"example.mx", "pagos.example.mx", "files.example.mx"})
 		}},
 		{"upper-cases country codes", func(f *business.Fields) {
 			f.Geography = business.Geography{Headquarters: " mx", Countries: []string{"mx", "co"}}
