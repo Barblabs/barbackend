@@ -69,6 +69,35 @@ linters:
               desc: scoring is pure and does no I/O (ADR 0009)
             - pkg: github.com/jackc/pgx
               desc: scoring is pure and does no I/O (ADR 0009)
+        business:
+          list-mode: lax
+          files:
+            - "**/internal/business/**"
+          allow:
+            - barbackend/internal/business
+          deny:
+            - pkg: barbackend/internal/businesscontext
+              desc: business is a pure domain; the businesscontext use case imports it, not the reverse (ADR 0017)
+            - pkg: barbackend/internal
+              desc: business is a pure domain and imports no other layer (ADR 0017)
+            - pkg: net/http
+              desc: business is a pure domain and does no I/O (ADR 0017)
+            - pkg: database/sql
+              desc: business is a pure domain and does no I/O (ADR 0017)
+            - pkg: github.com/jackc/pgx
+              desc: business is a pure domain and does no I/O (ADR 0017)
+        businesscontext:
+          list-mode: lax
+          files:
+            - "**/internal/businesscontext/**"
+          allow:
+            - barbackend/internal/businesscontext
+            - barbackend/internal/business
+            - barbackend/internal/postgres
+            - barbackend/internal/tenancy
+          deny:
+            - pkg: barbackend/internal
+              desc: the businesscontext use case calls only business, postgres and tenancy (ADR 0017)
         cmdb-provider:
           list-mode: lax
           files:
@@ -113,12 +142,15 @@ linters:
           allow:
             - barbackend/internal/agents
             - barbackend/internal/assessment
+            - barbackend/internal/business
             - barbackend/internal/claude
             - barbackend/internal/inventory
             - barbackend/internal/postgres
             - barbackend/internal/stixext
             - barbackend/internal/tenancy
           deny:
+            - pkg: barbackend/internal/businesscontext
+              desc: the agents use case reads the Business Context through postgres, never through another use case (ADR 0008)
             - pkg: barbackend/internal
               desc: the agents use case calls the domain, postgres and the Claude adapter, and reads no Feed (ADR 0016)
         stixext:
@@ -205,10 +237,13 @@ linters:
             - "**/internal/postgres/**"
           allow:
             - barbackend/internal/assessment
+            - barbackend/internal/business
             - barbackend/internal/inventory
             - barbackend/internal/postgres
             - barbackend/internal/tenancy
           deny:
+            - pkg: barbackend/internal/businesscontext
+              desc: persistence depends only on the domain; the businesscontext use case calls it, not the reverse (ADR 0008)
             - pkg: barbackend/internal
               desc: persistence depends only on the domain; use cases call it, not the reverse (ADR 0008)
         # Handlers reach persistence and adapters only through use cases, so
@@ -223,8 +258,10 @@ linters:
             - barbackend/internal/httpapi
             - barbackend/internal/inventory
             - barbackend/internal/tenancy
+            - barbackend/internal/business
             - barbackend/internal/agents
             - barbackend/internal/assets
+            - barbackend/internal/businesscontext
             - barbackend/internal/cmdb
             - barbackend/internal/users
           deny:
