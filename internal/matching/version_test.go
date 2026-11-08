@@ -17,7 +17,7 @@ func mustParse(t *testing.T, s string) matching.Version {
 }
 
 func TestParseVersionRejectsUnusableText(t *testing.T) {
-	for _, s := range []string{"", "   ", "latest", "*", "-", "v", "abc", "1..2", "1.", "1.0-", "2.0-beta9-"} {
+	for _, s := range []string{"", "   ", "latest", "*", "-", "v", "abc", "1.2(3", "1.2)3", "1.2(3))", "1.2((3))", "1.(2)", "1.2()", "(1.2)", "1..2", "1.", "1.0-", "2.0-beta9-"} {
 		t.Run(s, func(t *testing.T) {
 			if _, err := matching.ParseVersion(s); !errors.Is(err, matching.ErrUnparsedVersion) {
 				t.Fatalf("ParseVersion(%q) error = %v, want ErrUnparsedVersion", s, err)
@@ -50,6 +50,11 @@ func TestVersionCompare(t *testing.T) {
 		{"v1.18.0", "1.18.0", 0},
 		{"1:1.18.0-6ubuntu14.4", "1.18.0", 0},
 		{"99999999999999999999.1", "99999999999999999999.0", 1},
+		{"15.2(7)e", "15.2.7.e", 0},
+		{"15.2(7)E", "15.2(7)e", 0},
+		{"15.2(7)e", "15.2(8)", -1},
+		{"15.2(7)E", "15.2(7)E3", -1},
+		{"12.2(55)SE", "15.0(2)SE11", -1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.a+" vs "+tt.b, func(t *testing.T) {
