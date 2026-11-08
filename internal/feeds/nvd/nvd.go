@@ -224,6 +224,8 @@ func affected(configurations []configuration) []stixext.Affected {
 					Criteria:              m.Criteria,
 					Vendor:                c.vendor,
 					Product:               c.product,
+					Version:               c.version,
+					Update:                c.update,
 					VersionStartIncluding: m.VersionStartIncluding,
 					VersionStartExcluding: m.VersionStartExcluding,
 					VersionEndIncluding:   m.VersionEndIncluding,
