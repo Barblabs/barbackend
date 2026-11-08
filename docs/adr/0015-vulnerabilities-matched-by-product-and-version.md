@@ -10,7 +10,7 @@ In security a missed Vulnerability costs more than one reviewed in vain. So the 
 
 ## Rules
 
-1. **Product.** Only a Software Component with a Product is evaluated. It matches an `affected` entry when its Product's vendor and name equal the entry's `vendor` and `product` CPE tokens exactly. An Unidentified Component is never matched; it is reported as such, not silently skipped.
+1. **Product.** Only a Software Component with a Product is evaluated. It matches an `affected` entry when its Product's vendor and name equal the entry's `vendor` and `product` CPE tokens, ignoring case and surrounding spaces, since a CMDB may write `Apache` where NVD writes `apache`. An Unidentified Component is never matched; it is reported as such, not silently skipped.
 2. **Version form.** An `affected` entry states versions in exactly one of four ways, read from its `criteria` CPE (fields 6 and 7, version and update) and its range bounds. Of the 647 entries in the sample below, none had both an exact version and a range.
 
    | `criteria` version | Range bounds | Meaning | Rule |
