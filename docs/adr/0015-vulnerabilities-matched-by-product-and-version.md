@@ -20,11 +20,12 @@ In security a missed Vulnerability costs more than one reviewed in vain. So the 
    | `*` | none | every version | match |
    | `-` | none | the Product has no versions | match |
 
-   An update field other than `*` or `-` is part of the exact version: `2.0` with update `beta9` is `2.0-beta9`. `nvd/1` keeps the exact version only inside `criteria`, so `matching` parses it from there until the NVD adapter stores it as a field.
+   An update field other than `*` or `-` is part of the exact version: `2.0` with update `beta9` is `2.0-beta9`. The NVD adapter stores both as the `version` and `update` fields of each `affected` entry, a minor version of `nvd/1` (ADR 0010), so `matching` reads them as fields instead of parsing `criteria`.
 3. **Version comparison.** Versions are split into numeric and alphabetic segments and compared segment by segment; numbers compare as numbers, so `1.9` < `1.10`, and missing trailing segments count as zero, so `1.18` = `1.18.0`. Letters glued to a number are part of the version and compare after it: `1.0.1f` < `1.0.1g`, `17.9.4` < `17.9.4a`, `1.8.31p2` < `1.8.32`. A leading `v` and a Debian epoch are ignored: `v1.18.0` and `1:1.18.0` read as `1.18.0`. A label after a hyphen that names a pre-release (`alpha`, `beta`, `rc`, `pre`, followed by digits, optionally after a dot) sorts before the release: `2.0-beta9` < `2.0`, and `beta.2` = `beta2`. Any other text after a hyphen is a packaging revision (`1.0.1f-1ubuntu2.2`, `1.20.1-1.el8`): the upstream part before it is compared, and a match is flagged `distro_backport`, since the distribution may have patched it without changing the upstream version.
 4. **Doubt.** When the version, or the part of it needed to decide, cannot be read or compared (empty, `latest`, a number and letters at the same position as in `1.0.1f` against `1.0.1.2`, `1.9.5p1` against update `patch1`), the entry matches and is flagged `version_unparsed`. An exact version that is only the leading part of the component's version (`20.04` of `20.04.6`) also matches with `version_unparsed`, because NVD often names only a release line.
 5. **Vulnerability status.** A Vulnerability whose `vuln_status` is `Rejected` never matches. Any other status (`Analyzed`, `Modified`, `Awaiting Analysis`...) is evaluated; one without `affected` entries matches nothing yet, and is evaluated again when NVD modifies it and it reaches the 24-hour window (ADR 0011).
-6. **One result per component and Vulnerability.** A Vulnerability may have several `affected` entries for the same Product (Log4Shell has seven for `apache:log4j`). The component gets one result: a match if any entry matches. An entry that matches without flags wins over one that matches with flags, and is the one kept as evidence.
+6. **Configurations are lists.** NVD can join Products with AND (Spring4Shell affects `vmware:spring_framework` only when running on `oracle:jdk` 9 or later). Every vulnerable entry of a configuration is matched on its own, as if the configuration were a plain list of entries, and the condition is not checked. Missing a vulnerable component because its condition could not be verified would be a silent miss.
+7. **One result per component and Vulnerability.** A Vulnerability may have several `affected` entries for the same Product (Log4Shell has seven for `apache:log4j`). The component gets one result: a match if any entry matches. An entry that matches without flags wins over one that matches with flags, and is the one kept as evidence.
 
 ## Match Flags
 
@@ -36,6 +37,14 @@ Match Flags are a closed set, stored as a catalog table keyed by Go constants (A
 | 2 | `distro_backport` | Only the upstream version was compared; a packaging revision may already include the fix |
 
 A flagged match is still a Finding: it is opened, scored and alerted like any other, and shows why it is uncertain. Like the Data Gaps of a Score (ADR 0009), a flag records doubt instead of hiding it.
+
+## Which Vulnerabilities are matched
+
+Only Vulnerabilities received from the Feeds after barbattack starts reading them are matched: a CVE NVD publishes or modifies within the 24-hour window (ADR 0011). There is no backfill. An old CVE that NVD does not modify again is never matched, even if it affects a Customer's Assets: the 2021 CVE in a still-installed nginx is out of scope, by decision of the team. For the same reason, an Asset added later is matched only against the Vulnerabilities received after it is synced.
+
+## Scores follow their Vulnerability
+
+KEV and EPSS objects carry no `affected` entries, so they never open a Finding. When one arrives for a CVE that already has Findings, those Findings are rescored with it (ADR 0009); one for a CVE with no Finding is ignored. When NVD modifies a CVE, it is matched again and its Findings are rescored with the new CVSS.
 
 ## What a match becomes
 
@@ -72,7 +81,7 @@ Real `affected` entries from NVD, as the tests will use them:
 
 Each Vulnerability can describe its Products in its own way. These cases are known, are handled today by the rules above (a flagged match at worst), and can each be refined later with its own example:
 
-- **Conditional configurations.** NVD can say a Product is vulnerable only when running with another (Spring4Shell needs JDK 9 or later; firmware is tied to its hardware). `nvd/1` flattens these AND configurations and loses the condition (ADR 0010), so they match unconditionally. Once the NVD adapter keeps what an entry requires, a `conditional` flag, or a check against the Asset's other components, can be added.
+- **Conditional configurations.** Rule 6 matches AND configurations as lists, so a firmware tied to its hardware, or Spring4Shell without JDK 9, still matches. Once the NVD adapter keeps what an entry requires, a `conditional` flag, or a check against the Asset's other components, can be added.
 - **Update naming.** Vendors and CMDBs write updates differently (`1.9.5p1` against `patch1`, `sp1`, `r2`). They are flagged `version_unparsed` rather than mapped.
 - **Version inside the product name.** Windows names releases as Products (`windows_server_2012` with version `r2`, `windows_server_1903`). This belongs to Product identification, not to matching.
 - **CPE part.** The `a`/`o`/`h` field (application, operating system, hardware) is not compared with the component's role; vendor and product already identify the Product.
@@ -82,6 +91,8 @@ Each Vulnerability can describe its Products in its own way. These cases are kno
 ## Considered Options
 
 - **Drop uncertain matches**: rejected; a missed Vulnerability is silent, while a flagged one can be reviewed.
+- **Backfill old CVEs**: rejected for this project; matching the whole NVD history against every Asset is out of its scope.
+- **Check AND conditions against the Asset's other components**: deferred; Software Components rarely list the runtime a condition names, so it would turn real matches into misses.
 - **Compare only the range bounds**: rejected; 415 of the 647 sample entries name an exact version and have no bounds, so they would all read as "every version".
 - **Treat any text after the version as a distribution revision**: rejected; `1.0.1f`, `17.9.4a` and `1.8.31p2` are upstream versions.
 - **A boolean "uncertain" on the Finding**: rejected; it cannot say what is uncertain.
@@ -90,6 +101,7 @@ Each Vulnerability can describe its Products in its own way. These cases are kno
 
 ## Consequences
 
-- Matching needs Products. Today the iTop adapter fills only the name and version of a Software Component, so every component is an Unidentified Component until Product identification exists (ADR 0010, "How a Product is keyed").
-- Vulnerabilities are stored only when they produce a Finding, instead of one row per STIX object as ADR 0010's "Storage" section intended. A Vulnerability that matched nothing when it arrived is not kept, so old CVEs and Assets added later need their own way to reach the filter; that is decided with the Feed owners.
-- The NVD adapter could store each entry's exact version and update as fields of `nvd/1`, a minor version of the extension (ADR 0010); `matching` would then stop parsing `criteria`.
+- Matching needs Products. The iTop adapter fills the Product of an Application from its linked Software (ADR 0002), but as free text (`Apache`/`Apache HTTP Server` where NVD has `apache`/`http_server`), so it matches no CPE until Products are normalized (ADR 0010, "How a Product is keyed").
+- Vulnerabilities are stored only when they open a Finding, instead of one row per STIX object as ADR 0010's "Storage" section intended. A Vulnerability that matched nothing when it arrived is not kept, and is never matched again unless NVD modifies it.
+- The NVD adapter stores each entry's exact `version` and `update`, a minor version of `nvd/1`.
+- EPSS publishes a score for every CVE each day, but only the few with Findings are rescored.

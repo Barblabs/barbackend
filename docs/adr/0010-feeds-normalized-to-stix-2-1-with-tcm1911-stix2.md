@@ -142,6 +142,8 @@ When a bundle is parsed, the library returns any extension it does not know as a
 
 The schema is not decided by this ADR and comes with the first Feed's migration. The intended shape is one row per STIX object ID, holding its type, `modified` and the object as `jsonb`. Each adapter updates only its own extension key, in one statement, so two Feeds writing the same `vulnerability` at once cannot lose each other's data. Columns that filters need often (the CVE ID, the affected `vendor`/`product` pairs) may be extracted next to the `jsonb` when the filters need them.
 
+ADR 0015 replaces this shape for Vulnerabilities: Feed objects are not stored on receipt. A Vulnerability is kept only when it opens a Finding, and KEV and EPSS objects only rescore the Findings of their CVE.
+
 ## Open questions
 
 - **How a Product is keyed**: filters match `nvd/1.affected` `vendor`/`product` against `software_components.product_vendor`/`product_name`. Today those columns hold free text (`Canonical`/`Ubuntu`, `f5`/`nginx`). For matching to work, a Product must be keyed by the CPE 2.3 vendor and product tokens (`canonical`/`ubuntu_linux`). This has to be agreed with whoever owns Product identification before the filters are built. Products imported from a CMDB Source (ADR 0002) are free text as well: iTop gives `Apache`/`Apache HTTP Server` where NVD has `apache`/`http_server`. Until Products are normalized, such a Product matches no CPE, so its Software Component can look "not affected" when barbattack could not actually check it.
