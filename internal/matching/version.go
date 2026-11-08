@@ -72,6 +72,25 @@ func (v Version) Compare(w Version) (order int, comparable bool) {
 // "1ubuntu2.2" in "1.0.1f-1ubuntu2.2".
 func (v Version) HasRevision() bool { return v.revision != "" }
 
+// isPrefixOf reports whether v, a release, is the leading part of w, as NVD
+// names the release line 20.04 for 20.04.6.
+func (v Version) isPrefixOf(w Version) bool {
+	if v.pre != release || len(v.upstream) >= len(w.upstream) {
+		return false
+	}
+	for i, s := range v.upstream {
+		if s != w.upstream[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func isPreRelease(s string) bool {
+	_, ok := parsePreRelease(s)
+	return ok
+}
+
 func trimPrefixes(s string) string {
 	if epoch, rest, found := strings.Cut(s, ":"); found && allDigits(epoch) {
 		s = rest
