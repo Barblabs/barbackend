@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-	"strings"
 	"time"
 
 	"barbackend/internal/feeds"
@@ -216,15 +215,15 @@ func affected(configurations []configuration) []stixext.Affected {
 				if !m.Vulnerable {
 					continue
 				}
-				vendor, product, ok := cpeVendorProduct(m.Criteria)
+				c, ok := parseCPE(m.Criteria)
 				if !ok {
 					log.Printf("nvd: skipping CPE %q: not CPE 2.3", m.Criteria)
 					continue
 				}
 				out = append(out, stixext.Affected{
 					Criteria:              m.Criteria,
-					Vendor:                vendor,
-					Product:               product,
+					Vendor:                c.vendor,
+					Product:               c.product,
 					VersionStartIncluding: m.VersionStartIncluding,
 					VersionStartExcluding: m.VersionStartExcluding,
 					VersionEndIncluding:   m.VersionEndIncluding,
@@ -248,14 +247,6 @@ func cnaAffected(sources []affectedSource) []stixext.CNAAffected {
 		}
 	}
 	return out
-}
-
-func cpeVendorProduct(criteria string) (string, string, bool) {
-	parts := strings.Split(criteria, ":")
-	if len(parts) < 5 || parts[0] != "cpe" || parts[1] != "2.3" {
-		return "", "", false
-	}
-	return parts[3], parts[4], true
 }
 
 func english(values []langString) string {
