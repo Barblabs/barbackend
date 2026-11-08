@@ -17,7 +17,7 @@ func mustParse(t *testing.T, s string) matching.Version {
 }
 
 func TestParseVersionRejectsUnusableText(t *testing.T) {
-	for _, s := range []string{"", "   ", "latest", "*", "-", "v", "abc", "1.2(3)", "1..2", "1.", "1.0-", "2.0-beta9-"} {
+	for _, s := range []string{"", "   ", "latest", "*", "-", "v", "abc", "1..2", "1.", "1.0-", "2.0-beta9-"} {
 		t.Run(s, func(t *testing.T) {
 			if _, err := matching.ParseVersion(s); !errors.Is(err, matching.ErrUnparsedVersion) {
 				t.Fatalf("ParseVersion(%q) error = %v, want ErrUnparsedVersion", s, err)

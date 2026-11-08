@@ -82,11 +82,15 @@ func trimPrefixes(s string) string {
 	return s
 }
 
+// segments splits s at dots, underscores and parentheses. Parentheses must
+// enclose one group between letters or digits, as Cisco writes 15.2(7)e, which
+// reads as 15.2.7.e.
 func segments(s string) ([]segment, bool) {
 	if s == "" || !isDigit(s[0]) {
 		return nil, false
 	}
 	var segs []segment
+	open := false
 	for i := 0; i < len(s); {
 		switch c := s[i]; {
 		case isDigit(c):
@@ -97,13 +101,19 @@ func segments(s string) ([]segment, bool) {
 			j := runEnd(s, i, isLetter)
 			segs = append(segs, segment{text: strings.ToLower(s[i:j])})
 			i = j
-		case isSeparator(c) && i+1 < len(s) && !isSeparator(s[i+1]):
+		case isSeparator(c) && i+1 < len(s) && isAlphanumeric(s[i+1]):
+			i++
+		case c == '(' && !open && isAlphanumeric(s[i-1]) && i+1 < len(s) && isAlphanumeric(s[i+1]):
+			open = true
+			i++
+		case c == ')' && open && (i+1 == len(s) || isAlphanumeric(s[i+1])):
+			open = false
 			i++
 		default:
 			return nil, false
 		}
 	}
-	return segs, true
+	return segs, !open
 }
 
 func parsePreRelease(s string) (preRelease, bool) {
@@ -169,6 +179,7 @@ func allDigits(s string) bool {
 	return s != "" && runEnd(s, 0, isDigit) == len(s)
 }
 
-func isDigit(c byte) bool     { return '0' <= c && c <= '9' }
-func isLetter(c byte) bool    { return 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' }
-func isSeparator(c byte) bool { return c == '.' || c == '_' }
+func isDigit(c byte) bool        { return '0' <= c && c <= '9' }
+func isLetter(c byte) bool       { return 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' }
+func isSeparator(c byte) bool    { return c == '.' || c == '_' }
+func isAlphanumeric(c byte) bool { return isDigit(c) || isLetter(c) }
