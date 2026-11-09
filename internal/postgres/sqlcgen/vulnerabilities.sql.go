@@ -29,6 +29,35 @@ func (q *Queries) GetVulnerability(ctx context.Context, cveID string) (GetVulner
 	return i, err
 }
 
+const listStoredVulnerabilityIDs = `-- name: ListStoredVulnerabilityIDs :many
+SELECT cve_id
+FROM vulnerabilities
+WHERE cve_id = ANY($1::text[])
+ORDER BY cve_id
+`
+
+// Which of the CVEs are stored, so a Feed with an entry for every CVE (EPSS
+// has some 300,000) asks once per batch instead of once per entry.
+func (q *Queries) ListStoredVulnerabilityIDs(ctx context.Context, cveIds []string) ([]string, error) {
+	rows, err := q.db.Query(ctx, listStoredVulnerabilityIDs, cveIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var cve_id string
+		if err := rows.Scan(&cve_id); err != nil {
+			return nil, err
+		}
+		items = append(items, cve_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listVulnerabilitiesAffecting = `-- name: ListVulnerabilitiesAffecting :many
 SELECT v.cve_id, v.object, v.modified_at
 FROM vulnerabilities v

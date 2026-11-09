@@ -46,6 +46,20 @@ func (t *Tx) SetVulnerabilityExtension(ctx context.Context, cve, definitionID st
 	return n > 0, nil
 }
 
+// StoredCVEs is which of cves are stored, in order. A Feed with an entry for
+// every CVE asks it once per batch, so it touches only the CVEs a Finding
+// cares about.
+func (t *Tx) StoredCVEs(ctx context.Context, cves []string) ([]string, error) {
+	if len(cves) == 0 {
+		return nil, nil
+	}
+	stored, err := t.q.ListStoredVulnerabilityIDs(ctx, cves)
+	if err != nil {
+		return nil, fmt.Errorf("list which of %d cves are stored: %w", len(cves), err)
+	}
+	return stored, nil
+}
+
 // Vulnerability fails with ErrNotFound when the CVE is not stored.
 func (t *Tx) Vulnerability(ctx context.Context, cve string) (StoredVulnerability, error) {
 	row, err := t.q.GetVulnerability(ctx, cve)

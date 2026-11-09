@@ -22,6 +22,14 @@ SET object = jsonb_set(
         ARRAY['extensions', @extension_id::text], @extension::jsonb)
 WHERE cve_id = @cve_id;
 
+-- Which of the CVEs are stored, so a Feed with an entry for every CVE (EPSS
+-- has some 300,000) asks once per batch instead of once per entry.
+-- name: ListStoredVulnerabilityIDs :many
+SELECT cve_id
+FROM vulnerabilities
+WHERE cve_id = ANY(@cve_ids::text[])
+ORDER BY cve_id;
+
 -- name: GetVulnerability :one
 SELECT cve_id, object, modified_at
 FROM vulnerabilities
