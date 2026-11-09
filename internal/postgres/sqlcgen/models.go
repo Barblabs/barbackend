@@ -112,6 +112,11 @@ type FeedbackVerdict struct {
 	Name string
 }
 
+type MatchFlag struct {
+	ID   int16
+	Name string
+}
+
 type Prioritization struct {
 	ID           uuid.UUID
 	CustomerID   uuid.UUID
