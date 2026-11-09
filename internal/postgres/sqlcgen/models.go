@@ -138,6 +138,19 @@ type FindingMatchFlag struct {
 	FlagID    int16
 }
 
+type FindingScore struct {
+	FindingID             uuid.UUID
+	ScoredAt              time.Time
+	Model                 int16
+	Value                 float64
+	Alpha                 float64
+	Beta                  float64
+	Gamma                 float64
+	Vulnerability         float64
+	CriticalityMultiplier float64
+	ExposureMultiplier    float64
+}
+
 type MatchFlag struct {
 	ID   int16
 	Name string
