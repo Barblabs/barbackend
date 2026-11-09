@@ -151,6 +151,12 @@ type FindingScore struct {
 	ExposureMultiplier    float64
 }
 
+type FindingScoreDataGap struct {
+	FindingID uuid.UUID
+	ScoredAt  time.Time
+	GapID     int16
+}
+
 type MatchFlag struct {
 	ID   int16
 	Name string
