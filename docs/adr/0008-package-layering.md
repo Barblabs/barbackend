@@ -14,6 +14,7 @@ internal/
       <provider>/      adapters                    -> cmdb/provider, inventory, own subpackages
   agents/              use case on the Agents      -> assessment, business, claude, inventory, postgres, tenancy
   businesscontext/     use cases on the Business Context -> business, postgres, tenancy
+  findings/            use case turning Feeds and Syncs into Findings -> finding, inventory, matching, postgres, scoring, stixext
   ingest/              use case polling Feeds      -> feeds, stixext
   feeds/               Feed seam                   -> stixext
     httpx/             shared HTTP client setup    -> nothing internal

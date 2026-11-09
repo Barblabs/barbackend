@@ -267,6 +267,21 @@ linters:
           deny:
             - pkg: barbackend/internal
               desc: the areas use case calls only inventory, postgres and tenancy (ADR 0008)
+        findings:
+          list-mode: lax
+          files:
+            - "**/internal/findings/**"
+          allow:
+            - barbackend/internal/finding
+            - barbackend/internal/findings
+            - barbackend/internal/inventory
+            - barbackend/internal/matching
+            - barbackend/internal/postgres
+            - barbackend/internal/scoring
+            - barbackend/internal/stixext
+          deny:
+            - pkg: barbackend/internal
+              desc: the findings use case calls only finding, inventory, matching, postgres, scoring and stixext (ADR 0008, ADR 0019)
         users:
           list-mode: lax
           files:
