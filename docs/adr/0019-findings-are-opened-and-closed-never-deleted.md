@@ -131,6 +131,17 @@ A use-case package, `internal/findings` (ADR 0008), calls `matching`, `scoring` 
 
 Matching a new Asset against stored Vulnerabilities does not bring back old CVEs (ADR 0015): barbattack never fetches a CVE it was not sent, it only reuses those that already opened a Finding for some Asset.
 
+### How the use case runs
+
+`findings.Service` has one function per event: `HandleNVD`, `HandleKEV` and `HandleEPSS` have the shape of `ingest.Feed.Handle` and receive each pull in batches of up to 1,000 objects, and `AfterSync` takes the CMDB Source a Sync committed. `serve` wires them: it hands the `nvd`, `kev` and `epss` Feeds to the Findings, and has the `cmdb` use case call `AfterSync` through `cmdb.Service.OnSynced`, so `cmdb` never imports `findings`. `feed pull` hands them to nothing and needs no database.
+
+- **One Vulnerability, one transaction.** A failure is logged and the rest of the batch still runs, since a `Handle` that returns an error stops its Feed's whole pull. Only a cancelled context stops a batch.
+- **No Feed data is kept in memory.** A KEV or EPSS entry for a CVE that is not stored is ignored, so a Vulnerability first matched between two pulls is scored without its KEV listing and EPSS until the next pull sets them and rescores it: at most an hour for KEV and a day for EPSS. Until then its Score carries `epss_pending`, and its KEV factor is 0. A cache of the last catalog was considered and left out to keep nothing that no Finding needs.
+- **EPSS asks once per batch.** It has an entry for every CVE, so each batch first asks which of its CVEs are stored (`StoredCVEs`) and touches only those.
+- **A stale KEV catalog.** The Service remembers only when KEV last arrived. A Score is `kev_stale` when no KEV catalog arrived since the server started, or the last one is older than two KEV pull intervals.
+- **The whole CMDB Source after a Sync.** `AfterSync` matches every Active Asset of the source, not only the ones that changed; a Sync already reads the whole CMDB. A Vulnerability that fails leaves its Findings as they were, rather than closing them as no longer matched. A failing `AfterSync` is logged, and the Sync stays succeeded.
+- **What a Score reads.** `finding.ScoreInputs` reads a stored Vulnerability's CVSS (the newest version of NVD's Primary metrics, else of the numbering authority's Secondary ones), EPSS and KEV listing, as ADR 0009 says.
+
 ## Considered Options
 
 - **No `vulnerabilities` table, the CVSS copied into each Finding**: rejected; every Feed would have to update every Finding of a CVE, and a Sync could not match a new Asset against what was already received.
@@ -142,6 +153,6 @@ Matching a new Asset against stored Vulnerabilities does not bring back old CVEs
 
 ## Consequences
 
-- The Agents' tables (ADR 0016) can reference `findings.id` once Findings are stored; until then their `finding_id` is the text id `agent finding` builds.
+- The Agents' tables (ADR 0016) can reference `findings.id` once Findings are stored; until then their `finding_id` is the text id `agent finding` builds. `assessment.NewDossier` computes a Score from the live Feeds as a stand-in for this pipeline; once the Agents read the Findings, they can read the Score stored here instead, so the Score a Customer sees and the one an Agent explains are the same.
 - A Finding is as current as its last event: a component upgraded in the CMDB is seen at the next Sync, not before.
 - Rescoring follows the Feeds: an open Finding is rescored when its Vulnerability's CVSS, EPSS or KEV changes, which for EPSS is daily.
