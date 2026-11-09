@@ -1,0 +1,127 @@
+---
+status: proposed
+---
+
+# A Finding is one row per Asset, Product and Vulnerability, opened and closed but never deleted
+
+The asset filter decides whether a Vulnerability affects a Software Component (ADR 0015) and the Scoring Model scores the result (ADR 0009). This ADR decides how a match is stored as a Finding, how a Finding changes over time, and which events change it.
+
+## A Finding over time
+
+On 1 March NVD publishes CVE-2021-23017, which affects `f5:nginx` from 0.6.18 up to but not including 1.20.1. The payments server runs nginx 1.18.0:
+
+| Date | Event | The Finding (payments server, `f5:nginx`, CVE-2021-23017) |
+|---|---|---|
+| 1 March | The CVE arrives and matches | opened, version 1.18.0, scored |
+| 2 March | EPSS rises | rescored; a new Score is stored |
+| 5 March | nginx is upgraded to 1.19.0, still vulnerable | same Finding, version 1.19.0 |
+| 9 March | nginx is upgraded to 1.20.1 | closed, `no_longer_affected` |
+| 20 March | nginx is rolled back to 1.18.0 | the same Finding is reopened, with its Score history |
+
+## Tables
+
+```mermaid
+erDiagram
+    customers ||--o{ cmdb_sources : has
+    cmdb_sources ||--o{ assets : syncs
+    assets ||--o{ software_components : runs
+    assets ||--o{ findings : "is affected by"
+    vulnerabilities ||--o{ findings : "is found as"
+    finding_close_reasons |o--o{ findings : "closes"
+    findings ||--o{ finding_match_flags : "is uncertain by"
+    match_flags ||--o{ finding_match_flags : names
+    findings ||--o{ finding_scores : "is scored as"
+    finding_scores ||--o{ finding_score_data_gaps : "is estimated by"
+    score_data_gaps ||--o{ finding_score_data_gaps : names
+
+    vulnerabilities {
+        text cve_id PK
+        jsonb object "STIX vulnerability with nvd/1, epss/1, kev/1"
+        timestamptz modified_at
+    }
+    findings {
+        uuid id PK
+        uuid cmdb_source_id FK
+        text record_id FK
+        text product_vendor "lower case"
+        text product_name "lower case"
+        text cve_id FK
+        text component_name
+        text component_version
+        jsonb evidence "the matched nvd/1 affected entry"
+        timestamptz first_opened_at
+        timestamptz opened_at
+        timestamptz closed_at "null while open"
+        smallint close_reason_id FK
+    }
+    finding_match_flags {
+        uuid finding_id PK
+        smallint flag_id PK
+    }
+    finding_scores {
+        uuid finding_id PK
+        timestamptz scored_at PK
+        smallint model
+        float8 value
+        float8 alpha
+        float8 beta
+        float8 gamma
+        float8 vulnerability
+        float8 criticality_multiplier
+        float8 exposure_multiplier
+    }
+    finding_score_data_gaps {
+        uuid finding_id PK
+        timestamptz scored_at PK
+        smallint gap_id PK
+    }
+```
+
+- **`vulnerabilities`** keeps only the Vulnerabilities that opened at least one Finding (ADR 0015), one row per CVE shared by every Customer, as the STIX object with its extensions. A Finding is rescored when EPSS or KEV changes, and that needs the CVSS of its Vulnerability, so the Vulnerability is kept with it. Each Feed updates only its own extension key (ADR 0010); a KEV or EPSS object for a CVE that is not stored is ignored.
+- **`findings`** is unique on `(cmdb_source_id, record_id, product_vendor, product_name, cve_id)`: the Asset, the Product and the Vulnerability. The Product is stored in lower case, since Products match ignoring case (ADR 0015). The Customer is the Asset's, through its CMDB Source. `id` is a UUID that never changes, so the Agents' `finding_id` (ADR 0016) can reference it.
+- **`component_name` and `component_version`** are copied from the matched Software Component and updated whenever it is matched again. Software Components are rewritten on every Sync and have no identity, so a Finding cannot point at one. `evidence` is the matched `affected` entry, CPE `criteria` included, so a person can see why it matched.
+- **Open or closed** is `closed_at`: null while open. There is no separate boolean that could disagree with it. `first_opened_at` never changes; `opened_at` is when the current open period began.
+- **Match Flags** (ADR 0015) are one row each in `finding_match_flags`; none means a certain match. Uncertain ("dudoso") is derived as having at least one, never stored. They are replaced every time the Finding is matched again.
+- **`finding_scores`** is the Score history of ADR 0009: the Scoring Model, the value and every factor, with its Data Gaps in `finding_score_data_gaps`. A new Score is stored only when its model, value or Data Gaps differ from the latest one, so a daily EPSS feed that changes nothing adds no row.
+
+`match_flags`, `finding_close_reasons` and `score_data_gaps` are catalog tables keyed by Go constants (ADR 0006): the Match Flags of `matching`, the Data Gaps of `scoring`, and these close reasons:
+
+| id | name | When |
+|---|---|---|
+| 1 | `no_longer_affected` | the component's version no longer matches, because it changed or because NVD changed the Vulnerability's entries |
+| 2 | `component_removed` | the Asset no longer has a Software Component with that Product |
+| 3 | `asset_inactive` | the Asset became Inactive (ADR 0005) |
+| 4 | `vulnerability_rejected` | NVD rejected the CVE |
+
+A closed Finding that matches again is reopened: `closed_at` and its reason are cleared and `opened_at` is set. Closed Findings are not rescored (ADR 0009).
+
+## One Finding for a Product installed twice
+
+An Asset can have two Software Components with the same Product, such as two installations of Vault at 1.16.1 and 1.17.0. They share the Finding's key, so they are one Finding. It stays open while any of them matches, and shows the component whose match is most certain, as `Match` already prefers an entry without flags (ADR 0015); between equally certain components, the first in the Asset's order.
+
+## What changes a Finding
+
+A use-case package, `internal/findings` (ADR 0008), calls `matching`, `scoring` and `postgres`:
+
+| Event | What happens |
+|---|---|
+| NVD publishes or modifies a CVE | It is matched against the Software Components of every Active Asset with one of its Products. A match stores the Vulnerability and opens, reopens or updates the Finding, and scores it. Its open Findings that no longer match are closed, and all of them when it is `Rejected`. |
+| KEV or EPSS has an object for a stored CVE | Its extension is updated and the open Findings of that CVE are rescored. |
+| A Sync of a CMDB Source finishes | Every Active Asset it touched is matched again against the stored Vulnerabilities: Findings that no longer match are closed, those that match are updated and rescored (its Criticality may have changed), and new matches are opened, so an Asset synced for the first time is matched against every Vulnerability already stored. The Findings of Assets that became Inactive are closed. |
+
+Matching a new Asset against stored Vulnerabilities does not bring back old CVEs (ADR 0015): barbattack never fetches a CVE it was not sent, it only reuses those that already opened a Finding for some Asset.
+
+## Considered Options
+
+- **No `vulnerabilities` table, the CVSS copied into each Finding**: rejected; every Feed would have to update every Finding of a CVE, and a Sync could not match a new Asset against what was already received.
+- **An `open` boolean next to `closed_at`**: rejected; two fields saying the same thing can disagree.
+- **A Finding referencing its Software Component**: rejected; components are rewritten on every Sync.
+- **One Finding per installation**: rejected; the key agreed for Findings is the Asset, the Product and the Vulnerability, and one problem on one Asset is one thing to fix.
+- **A Score stored on every rescoring**: rejected; a daily EPSS feed would add a row per open Finding per day, most of them identical.
+- **Matching after a Sync only against Vulnerabilities that arrive later**: rejected; the Sync must re-match stored Vulnerabilities anyway to close Findings, and a new Asset would stay unmatched against a Vulnerability barbattack already has.
+
+## Consequences
+
+- The Agents' tables (ADR 0016) can reference `findings.id` once Findings are stored; until then their `finding_id` is the text id `agent finding` builds.
+- A Finding is as current as its last event: a component upgraded in the CMDB is seen at the next Sync, not before.
+- Rescoring follows the Feeds: an open Finding is rescored when its Vulnerability's CVSS, EPSS or KEV changes, which for EPSS is daily.
