@@ -133,6 +133,11 @@ type FindingCloseReason struct {
 	Name string
 }
 
+type FindingMatchFlag struct {
+	FindingID uuid.UUID
+	FlagID    int16
+}
+
 type MatchFlag struct {
 	ID   int16
 	Name string
