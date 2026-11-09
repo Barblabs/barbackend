@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"testing"
 	"time"
 
@@ -110,6 +111,21 @@ func TestSetVulnerabilityExtensionIgnoresAnUnstoredCVE(t *testing.T) {
 	db := pgtest.NewDB(t)
 	if setExtension(t, db, "CVE-2099-0001", epssKey, `{"probability":0.1}`) {
 		t.Error("extension set on a CVE that is not stored")
+	}
+}
+
+func TestStoredCVEsNamesOnlyTheStoredOnes(t *testing.T) {
+	t.Parallel()
+	db := pgtest.NewDB(t)
+	storeVulnerability(t, db, "CVE-2021-23017", time.Now(), vulnerabilityObject("CVE-2021-23017", "Analyzed", `[]`))
+	storeVulnerability(t, db, "CVE-2024-3094", time.Now(), vulnerabilityObject("CVE-2024-3094", "Analyzed", `[]`))
+	var stored []string
+	inTx(t, db, func(tx *postgres.Tx) (err error) {
+		stored, err = tx.StoredCVEs(context.Background(), []string{"CVE-2099-0001", "CVE-2024-3094", "CVE-2021-23017"})
+		return err
+	})
+	if !slices.Equal(stored, []string{"CVE-2021-23017", "CVE-2024-3094"}) {
+		t.Errorf("stored = %v, want the two stored CVEs in order", stored)
 	}
 }
 
