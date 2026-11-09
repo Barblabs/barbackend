@@ -3,13 +3,17 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"slices"
 
 	"barbackend/internal/finding"
 	"barbackend/internal/inventory"
 	"barbackend/internal/matching"
 	"barbackend/internal/postgres/sqlcgen"
+	"barbackend/internal/scoring"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 // Candidate is a Software Component of an Active Asset that can be matched,
@@ -190,6 +194,78 @@ func (t *Tx) OpenFindingsOfAssets(ctx context.Context, assets []inventory.Source
 		out[i] = openFinding(sqlcgen.ListOpenFindingsOfVulnerabilityRow(row))
 	}
 	return out, nil
+}
+
+// SaveScoreIfChanged stores s as the Finding's newest Score unless its latest
+// Score has the same Scoring Model, value and Data Gaps (ADR 0019). It
+// reports whether it stored one.
+func (t *Tx) SaveScoreIfChanged(ctx context.Context, id finding.ID, s scoring.Score) (bool, error) {
+	latest, err := t.q.LatestFindingScore(ctx, uuid.UUID(id))
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+	case err != nil:
+		return false, fmt.Errorf("latest score of finding %s: %w", id, err)
+	case sameScore(latest, s):
+		return false, nil
+	}
+	scoredAt, err := t.q.InsertFindingScore(ctx, sqlcgen.InsertFindingScoreParams{
+		FindingID:             uuid.UUID(id),
+		Model:                 int16(s.Model),
+		Value:                 s.Value,
+		Alpha:                 s.Factors.Alpha,
+		Beta:                  s.Factors.Beta,
+		Gamma:                 s.Factors.Gamma,
+		Vulnerability:         s.Factors.Vulnerability,
+		CriticalityMultiplier: s.Factors.CriticalityMultiplier,
+		ExposureMultiplier:    s.Factors.ExposureMultiplier,
+	})
+	if err != nil {
+		return false, fmt.Errorf("insert score of finding %s: %w", id, err)
+	}
+	if len(s.Gaps) == 0 {
+		return true, nil
+	}
+	gaps := make([]sqlcgen.InsertFindingScoreDataGapsParams, len(s.Gaps))
+	for i, g := range s.Gaps {
+		gaps[i] = sqlcgen.InsertFindingScoreDataGapsParams{FindingID: uuid.UUID(id), ScoredAt: scoredAt, GapID: int16(g)}
+	}
+	if _, err := t.q.InsertFindingScoreDataGaps(ctx, gaps); err != nil {
+		return false, fmt.Errorf("insert data gaps of finding %s: %w", id, err)
+	}
+	return true, nil
+}
+
+// LatestScore is the Finding's newest Score. It fails with ErrNotFound when
+// the Finding was never scored.
+func (t *Tx) LatestScore(ctx context.Context, id finding.ID) (scoring.Score, error) {
+	row, err := t.q.LatestFindingScore(ctx, uuid.UUID(id))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return scoring.Score{}, fmt.Errorf("score of finding %s: %w", id, ErrNotFound)
+	}
+	if err != nil {
+		return scoring.Score{}, fmt.Errorf("latest score of finding %s: %w", id, err)
+	}
+	var gaps []scoring.DataGap
+	for _, g := range row.Gaps {
+		gaps = append(gaps, scoring.DataGap(g))
+	}
+	return scoring.Score{
+		Model: scoring.ModelVersion(row.Model),
+		Value: row.Value,
+		Factors: scoring.Factors{
+			Alpha: row.Alpha, Beta: row.Beta, Gamma: row.Gamma, Vulnerability: row.Vulnerability,
+			CriticalityMultiplier: row.CriticalityMultiplier, ExposureMultiplier: row.ExposureMultiplier,
+		},
+		Gaps: gaps,
+	}, nil
+}
+
+func sameScore(latest sqlcgen.LatestFindingScoreRow, s scoring.Score) bool {
+	gaps := make([]int16, len(s.Gaps))
+	for i, g := range s.Gaps {
+		gaps[i] = int16(g)
+	}
+	return latest.Model == int16(s.Model) && latest.Value == s.Value && slices.Equal(latest.Gaps, gaps)
 }
 
 func candidate(row sqlcgen.ListActiveComponentsWithProductsRow) Candidate {
