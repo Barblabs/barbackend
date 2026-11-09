@@ -1,4 +1,4 @@
-package matching
+package finding
 
 import "fmt"
 

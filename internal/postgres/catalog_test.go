@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"barbackend/internal/assessment"
+	"barbackend/internal/finding"
 	"barbackend/internal/inventory"
 	"barbackend/internal/matching"
 	"barbackend/internal/postgres/pgtest"
@@ -26,7 +27,7 @@ func TestCatalogsMatchDomainConstants(t *testing.T) {
 		"user_roles":            names(tenancy.PlatformAdmin, tenancy.CustomerAdmin, tenancy.Viewer),
 		"feedback_verdicts":     names(assessment.VerdictApplies, assessment.VerdictDoesNotApply, assessment.VerdictRemediated, assessment.VerdictShouldBeEarlier, assessment.VerdictShouldBeLater),
 		"match_flags":           names(matching.VersionUnparsed, matching.DistroBackport),
-		"finding_close_reasons": names(matching.NoLongerAffected, matching.ComponentRemoved, matching.AssetInactive, matching.VulnerabilityRejected),
+		"finding_close_reasons": names(finding.NoLongerAffected, finding.ComponentRemoved, finding.AssetInactive, finding.VulnerabilityRejected),
 		"score_data_gaps":       names(scoring.CVSSEstimated, scoring.EPSSPending, scoring.KEVStale, scoring.CriticalityUnknown, scoring.ExposureUndeclared),
 	}
 	ctx := context.Background()

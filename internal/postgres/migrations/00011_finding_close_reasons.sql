@@ -1,6 +1,6 @@
 -- +goose Up
 
--- Why a Finding was closed (ADR 0019), keyed by matching.CloseReason.
+-- Why a Finding was closed (ADR 0019), keyed by finding.CloseReason.
 CREATE TABLE finding_close_reasons (
     id   smallint PRIMARY KEY,
     name text NOT NULL UNIQUE
