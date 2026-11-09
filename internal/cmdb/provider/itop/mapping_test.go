@@ -133,7 +133,7 @@ func TestSnapshotMapsRecords(t *testing.T) {
 			},
 		},
 		{
-			name: "applications identified by their Software, and one with a blank vendor kept unidentified",
+			name: "applications named after their instances and identified by their Software, and one with a blank vendor kept unidentified",
 			ci: mapped("Server", func(c *ci) {
 				c.Instances = []instance{{Class: "DBServer", Name: "db", SoftwareID: "2"}, {Class: "OtherSoftware", Name: "portal", SoftwareID: "7"}}
 			}),
@@ -145,10 +145,10 @@ func TestSnapshotMapsRecords(t *testing.T) {
 				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server, Hardware: hpe,
 				Software: append(redHat(),
 					inventory.SoftwareComponent{
-						Role: inventory.Application, Name: "Oracle DB engine", Version: "19c",
+						Role: inventory.Application, Name: "db", Version: "19c",
 						Product: inventory.Product{Vendor: "Oracle", Name: "Oracle DB engine"},
 					},
-					inventory.SoftwareComponent{Role: inventory.Application, Name: "Internal portal", Version: "3.1"},
+					inventory.SoftwareComponent{Role: inventory.Application, Name: "portal", Version: "3.1"},
 				),
 				Criticality: inventory.CriticalityLow,
 			},
