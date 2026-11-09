@@ -21,7 +21,7 @@ internal/
   claude/              Anthropic adapter           -> nothing internal
   cognito/             Cognito adapter             -> tenancy
   encryption/          sealing credentials         -> nothing internal
-  postgres/            all persistence             -> assessment, business, inventory, tenancy
+  postgres/            all persistence             -> assessment, business, inventory, matching, scoring, tenancy
   matching/            pure domain                 -> inventory, stixext
   assessment/          pure domain                 -> inventory, scoring, stixext
   business/            pure domain                 -> nothing internal

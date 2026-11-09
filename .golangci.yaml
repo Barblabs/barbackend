@@ -268,7 +268,9 @@ linters:
             - barbackend/internal/assessment
             - barbackend/internal/business
             - barbackend/internal/inventory
+            - barbackend/internal/matching
             - barbackend/internal/postgres
+            - barbackend/internal/scoring
             - barbackend/internal/tenancy
           deny:
             - pkg: barbackend/internal/businesscontext
