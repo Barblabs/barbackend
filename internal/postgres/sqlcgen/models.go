@@ -142,6 +142,11 @@ type PrioritizationFeedback struct {
 	CreatedAt        time.Time
 }
 
+type ScoreDataGap struct {
+	ID   int16
+	Name string
+}
+
 type SoftwareComponent struct {
 	CmdbSourceID  uuid.UUID
 	RecordID      string
