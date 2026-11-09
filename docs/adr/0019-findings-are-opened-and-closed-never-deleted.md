@@ -84,7 +84,7 @@ erDiagram
 - **Match Flags** (ADR 0015) are one row each in `finding_match_flags`; none means a certain match. Uncertain ("dudoso") is derived as having at least one, never stored. They are replaced every time the Finding is matched again.
 - **`finding_scores`** is the Score history of ADR 0009: the Scoring Model, the value and every factor, with its Data Gaps in `finding_score_data_gaps`. A new Score is stored only when its model, value or Data Gaps differ from the latest one, so a daily EPSS feed that changes nothing adds no row.
 
-`match_flags`, `finding_close_reasons` and `score_data_gaps` are catalog tables keyed by Go constants (ADR 0006): the Match Flags of `matching`, the Data Gaps of `scoring`, and these close reasons:
+`match_flags`, `finding_close_reasons` and `score_data_gaps` are catalog tables keyed by Go constants (ADR 0006): the Match Flags of `matching`, the Data Gaps of `scoring`, and these close reasons of `finding`:
 
 | id | name | When |
 |---|---|---|
@@ -94,6 +94,26 @@ erDiagram
 | 4 | `vulnerability_rejected` | NVD rejected the CVE |
 
 A closed Finding that matches again is reopened: `closed_at` and its reason are cleared and `opened_at` is set. Closed Findings are not rescored (ADR 0009).
+
+## How it is stored
+
+The pure domain package `internal/finding` holds what `postgres` stores: a Finding's `ID`, its `Key` (built by `NewKey`, which lower-cases the Product and checks the CVE ID), the `Match` that `NewMatch` makes of a `matching.Result`, the `Outcome` of saving it and the `CloseReason`s. `postgres` writes it through these methods of `Tx`, one query each unless said otherwise (`internal/postgres/queries/vulnerabilities.sql` and `findings.sql`):
+
+| Method | What it does |
+|---|---|
+| `StoreVulnerability` | inserts a Vulnerability, or replaces its NVD data while keeping the extensions other Feeds set; an older `modified_at` never replaces a newer one |
+| `SetVulnerabilityExtension` | sets one extension (`kev/1`, `epss/1`) of a stored Vulnerability, and reports false when the CVE is not stored |
+| `Vulnerability`, `VulnerabilitiesAffecting` | read a stored Vulnerability, or those whose `nvd/1` entries name one of some Products, ignoring case |
+| `ComponentsWithProducts`, `ComponentsOfAssets` | read the Software Components of Active Assets that can be matched, with the Criticality and Exposure that scoring needs |
+| `SaveMatch` | opens, updates or reopens the Finding of a `Match` in one statement and replaces its Match Flags, in one transaction; it returns the Finding's `ID` and the `Outcome` |
+| `CloseFinding`, `CloseFindingsOfInactiveAssets` | close one open Finding, or the open Findings of a CMDB Source's Inactive Assets |
+| `OpenFindingsOfVulnerability`, `OpenFindingsOfAssets` | read the open Findings to rescore or to match again |
+| `MatchFlags` | read the Match Flags of a Finding |
+| `SaveScoreIfChanged`, `LatestScore` | store a Score unless the latest has the same Scoring Model, value and Data Gaps; read the latest |
+
+- **One statement opens, updates or reopens.** `SaveMatch` is an `INSERT ... ON CONFLICT DO UPDATE` on the Finding's key, so two matches of the same Finding at once cannot both insert it. What the Finding was before (absent, open or closed) is read in the same statement, so the `Outcome` needs no second query.
+- **Times come from Postgres.** `first_opened_at`, `opened_at` and `closed_at` are the transaction's time, so `first_opened_at <= opened_at <= closed_at` holds whatever the application's clock says. A Score's `scored_at` is the statement's own time, so two Scores of one Finding in one transaction never share it.
+- **Products are compared in lower case in SQL as well**, on both the Finding and the Software Component, since components keep the Product as the CMDB wrote it (ADR 0018).
 
 ## One Finding for a Product installed twice
 
