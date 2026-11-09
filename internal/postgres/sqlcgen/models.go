@@ -112,6 +112,11 @@ type FeedbackVerdict struct {
 	Name string
 }
 
+type FindingCloseReason struct {
+	ID   int16
+	Name string
+}
+
 type MatchFlag struct {
 	ID   int16
 	Name string
