@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"barbackend/internal/cmdb/provider"
@@ -55,12 +56,22 @@ type Service struct {
 	key         encryption.Key
 	lifetime    context.Context
 	syncTimeout time.Duration
+	afterSync   func(context.Context, inventory.CMDBSourceID) error
 }
 
 // New runs every Sync under lifetime, which ends when the server shuts down,
 // and bounds it by syncTimeout.
 func New(db *postgres.DB, providers provider.Providers, key encryption.Key, lifetime context.Context, syncTimeout time.Duration) *Service {
 	return &Service{db: db, providers: providers, key: key, lifetime: lifetime, syncTimeout: syncTimeout}
+}
+
+// OnSynced has every Sync that commits call fn with its CMDB Source, within
+// the Sync's limits, such as for the Findings to match its Assets again
+// (ADR 0019). The Sync has already succeeded: fn's error is logged, never
+// turned into a failed Sync Run. It is meant to be set once, before the
+// Service is used.
+func (s *Service) OnSynced(fn func(context.Context, inventory.CMDBSourceID) error) {
+	s.afterSync = fn
 }
 
 // detach keeps a Sync running when its caller goes away, such as a client
@@ -302,6 +313,11 @@ func (s *Service) syncConnected(ctx context.Context, customer tenancy.CustomerID
 		return inventory.SyncRun{}, err
 	case err != nil:
 		return inventory.SyncRun{}, s.recordFailure(ctx, stored.Source.ID(), started, err)
+	}
+	if s.afterSync != nil {
+		if err := s.afterSync(ctx, stored.Source.ID()); err != nil {
+			log.Printf("cmdb: after sync of %s: %v", stored.Source.ID(), err)
+		}
 	}
 	return run, nil
 }
