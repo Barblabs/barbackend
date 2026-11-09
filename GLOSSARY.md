@@ -97,8 +97,12 @@ _Avoid_: Vuln, flaw, bug
 ### Risk
 
 **Finding**:
-The fact that one Vulnerability affects one Software Component of one Asset. It is open until it is remediated or no longer applies, and only open Findings are scored.
+The fact that one Vulnerability affects one Product installed on one Asset. It is open until it is remediated or no longer applies, then closed with a reason, and reopened if it applies again; it is never deleted. Only open Findings are scored.
 _Avoid_: Hallazgo, issue, vulnerability instance, alert
+
+**Match Flag**:
+A reason a Finding's match is uncertain, such as a version that could not be compared. A Finding with no Match Flags is a certain match; one with any is still a Finding.
+_Avoid_: Dudoso, warning, uncertain boolean
 
 **Score**:
 A deterministic number from 0 to 1 that ranks how urgently a Finding should be remediated, computed from its Vulnerability's CVSS base score, EPSS probability and presence in the CISA KEV catalog, and its Asset's Criticality and Exposure.
