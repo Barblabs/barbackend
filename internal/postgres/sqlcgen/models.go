@@ -112,6 +112,22 @@ type FeedbackVerdict struct {
 	Name string
 }
 
+type Finding struct {
+	ID               uuid.UUID
+	CmdbSourceID     uuid.UUID
+	RecordID         string
+	ProductVendor    string
+	ProductName      string
+	CveID            string
+	ComponentName    string
+	ComponentVersion string
+	Evidence         []byte
+	FirstOpenedAt    time.Time
+	OpenedAt         time.Time
+	ClosedAt         *time.Time
+	CloseReasonID    *int16
+}
+
 type FindingCloseReason struct {
 	ID   int16
 	Name string
