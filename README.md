@@ -100,6 +100,12 @@ The Prioritizer, Luna (Advisor), the Analista (feedback) and the Drafter (Busine
 ./barbackend agent ask --as <email> --conversation <id> "el de lab-01 debería ir antes, ahí corre la nómina"
 ```
 
+## Findings
+
+`serve` turns Feeds and Syncs into Findings, one per Asset, Product and CVE (`docs/adr/0019-findings-are-opened-and-closed-never-deleted.md`). Each NVD pull matches its CVEs against the Software Components of every Active Asset (`docs/adr/0015-vulnerabilities-matched-by-product-and-version.md`); a match stores the CVE and opens, updates or reopens its Finding, scored with Scoring Model 1 (`docs/adr/0009-findings-scored-by-versioned-two-layer-model.md`). KEV and EPSS pulls rescore the open Findings of the CVEs already stored, and ignore every other CVE. After each successful Sync, the CMDB Source's Assets are matched again against the stored CVEs: Findings that no longer match are closed with a reason, and new Assets get theirs. `feed pull` only counts what each Feed returns and stores nothing.
+
+Only Software Components with a Product match, written as NVD's CPE vendor and product tokens in the CMDB (`docs/adr/0018-software-components-take-their-product-from-the-cmdb-in-cpe-terms.md`): in iTop, the Software linked to each SoftwareInstance.
+
 ## CMDB Sources
 
 A CMDB Source is connected and synced through the HTTP API above. Its credentials are stored encrypted with `CREDENTIALS_KEY`. Keep that key safe: credentials stored with a lost key cannot be recovered, and their sources must be connected again. `serve` refuses to start without it, and a Sync with another key fails and is recorded as a failed Sync Run.
