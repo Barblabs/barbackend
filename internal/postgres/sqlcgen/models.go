@@ -182,3 +182,10 @@ type UserRole struct {
 	ID   int16
 	Name string
 }
+
+type Vulnerability struct {
+	CveID      string
+	Object     []byte
+	ModifiedAt time.Time
+	StoredAt   time.Time
+}
