@@ -106,10 +106,11 @@ linters:
             - barbackend/internal/finding
             - barbackend/internal/inventory
             - barbackend/internal/matching
+            - barbackend/internal/scoring
             - barbackend/internal/stixext
           deny:
             - pkg: barbackend/internal
-              desc: finding is a pure domain package that imports only inventory, matching and stixext (ADR 0008, ADR 0019)
+              desc: finding is a pure domain package that imports only inventory, matching, scoring and stixext (ADR 0008, ADR 0019)
             - pkg: net/http
               desc: finding is pure and does no I/O (ADR 0008)
             - pkg: database/sql

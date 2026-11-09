@@ -22,7 +22,7 @@ internal/
   cognito/             Cognito adapter             -> tenancy
   encryption/          sealing credentials         -> nothing internal
   postgres/            all persistence             -> assessment, business, finding, inventory, matching, scoring, tenancy
-  finding/             pure domain                 -> inventory, matching, stixext
+  finding/             pure domain                 -> inventory, matching, scoring, stixext
   matching/            pure domain                 -> inventory, stixext
   assessment/          pure domain                 -> inventory, scoring, stixext
   business/            pure domain                 -> nothing internal
