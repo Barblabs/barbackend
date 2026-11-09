@@ -57,16 +57,13 @@ func (t *Tx) ComponentsWithProducts(ctx context.Context, products []inventory.Pr
 	return out, nil
 }
 
-// ComponentsOfAssets is the Software Components of those of assets that are
-// Active. It is what a Sync matches against the stored Vulnerabilities.
-func (t *Tx) ComponentsOfAssets(ctx context.Context, assets []inventory.SourceReference) ([]Candidate, error) {
-	if len(assets) == 0 {
-		return nil, nil
-	}
-	sources, records := assetKeys(assets)
-	rows, err := t.q.ListActiveComponentsOfAssets(ctx, sqlcgen.ListActiveComponentsOfAssetsParams{SourceIds: sources, RecordIds: records})
+// ComponentsOfSource is the Software Components of the CMDB Source's Active
+// Assets. It is what a Sync matches against the stored Vulnerabilities
+// (ADR 0019).
+func (t *Tx) ComponentsOfSource(ctx context.Context, source inventory.CMDBSourceID) ([]Candidate, error) {
+	rows, err := t.q.ListActiveComponentsOfSource(ctx, uuid.UUID(source))
 	if err != nil {
-		return nil, fmt.Errorf("list components of %d assets: %w", len(assets), err)
+		return nil, fmt.Errorf("list components of source %s: %w", source, err)
 	}
 	out := make([]Candidate, len(rows))
 	for i, row := range rows {
@@ -178,16 +175,12 @@ func (t *Tx) OpenFindingsOfVulnerability(ctx context.Context, cve string) ([]Ope
 	return out, nil
 }
 
-// OpenFindingsOfAssets is the open Findings of assets, which a Sync closes
-// when they no longer match.
-func (t *Tx) OpenFindingsOfAssets(ctx context.Context, assets []inventory.SourceReference) ([]OpenFinding, error) {
-	if len(assets) == 0 {
-		return nil, nil
-	}
-	sources, records := assetKeys(assets)
-	rows, err := t.q.ListOpenFindingsOfAssets(ctx, sqlcgen.ListOpenFindingsOfAssetsParams{SourceIds: sources, RecordIds: records})
+// OpenFindingsOfSource is the open Findings of the CMDB Source's Assets,
+// which a Sync closes when they no longer match.
+func (t *Tx) OpenFindingsOfSource(ctx context.Context, source inventory.CMDBSourceID) ([]OpenFinding, error) {
+	rows, err := t.q.ListOpenFindingsOfSource(ctx, uuid.UUID(source))
 	if err != nil {
-		return nil, fmt.Errorf("list open findings of %d assets: %w", len(assets), err)
+		return nil, fmt.Errorf("list open findings of source %s: %w", source, err)
 	}
 	out := make([]OpenFinding, len(rows))
 	for i, row := range rows {
@@ -295,13 +288,4 @@ func openFinding(row sqlcgen.ListOpenFindingsOfVulnerabilityRow) OpenFinding {
 		Criticality:      inventory.Criticality(valueOrZero(row.CriticalityID)),
 		Exposure:         inventory.Exposure(valueOrZero(row.DeclaredExposureID)),
 	}
-}
-
-// assetKeys splits assets into parallel arrays of their keys.
-func assetKeys(assets []inventory.SourceReference) (sources []uuid.UUID, records []string) {
-	sources, records = make([]uuid.UUID, len(assets)), make([]string, len(assets))
-	for i, a := range assets {
-		sources[i], records[i] = uuid.UUID(a.Source), a.RecordID
-	}
-	return sources, records
 }

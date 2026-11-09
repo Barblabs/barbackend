@@ -162,26 +162,16 @@ func (q *Queries) LatestFindingScore(ctx context.Context, findingID uuid.UUID) (
 	return i, err
 }
 
-const listActiveComponentsOfAssets = `-- name: ListActiveComponentsOfAssets :many
+const listActiveComponentsOfSource = `-- name: ListActiveComponentsOfSource :many
 SELECT c.cmdb_source_id, c.record_id, c.position, c.role_id, c.name, c.version,
        c.product_vendor, c.product_name, a.criticality_id, a.declared_exposure_id
 FROM software_components c
 JOIN assets a USING (cmdb_source_id, record_id)
-WHERE a.inactive_since IS NULL
-  AND (c.cmdb_source_id, c.record_id) IN (
-      SELECT s.id, r.id
-      FROM unnest($1::uuid[]) WITH ORDINALITY AS s (id, n)
-      JOIN unnest($2::text[]) WITH ORDINALITY AS r (id, n) USING (n)
-  )
+WHERE a.inactive_since IS NULL AND c.cmdb_source_id = $1
 ORDER BY c.cmdb_source_id, c.record_id, c.position
 `
 
-type ListActiveComponentsOfAssetsParams struct {
-	SourceIds []uuid.UUID
-	RecordIds []string
-}
-
-type ListActiveComponentsOfAssetsRow struct {
+type ListActiveComponentsOfSourceRow struct {
 	CmdbSourceID       uuid.UUID
 	RecordID           string
 	Position           int16
@@ -194,18 +184,17 @@ type ListActiveComponentsOfAssetsRow struct {
 	DeclaredExposureID *int16
 }
 
-// The Software Components of the Assets that are Active, with what scoring
-// needs of their Asset. The two arrays are parallel: element i of each names
-// one Asset.
-func (q *Queries) ListActiveComponentsOfAssets(ctx context.Context, arg ListActiveComponentsOfAssetsParams) ([]ListActiveComponentsOfAssetsRow, error) {
-	rows, err := q.db.Query(ctx, listActiveComponentsOfAssets, arg.SourceIds, arg.RecordIds)
+// The Software Components of a CMDB Source's Active Assets, with what scoring
+// needs of their Asset.
+func (q *Queries) ListActiveComponentsOfSource(ctx context.Context, cmdbSourceID uuid.UUID) ([]ListActiveComponentsOfSourceRow, error) {
+	rows, err := q.db.Query(ctx, listActiveComponentsOfSource, cmdbSourceID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListActiveComponentsOfAssetsRow
+	var items []ListActiveComponentsOfSourceRow
 	for rows.Next() {
-		var i ListActiveComponentsOfAssetsRow
+		var i ListActiveComponentsOfSourceRow
 		if err := rows.Scan(
 			&i.CmdbSourceID,
 			&i.RecordID,
@@ -322,26 +311,16 @@ func (q *Queries) ListFindingMatchFlags(ctx context.Context, findingID uuid.UUID
 	return items, nil
 }
 
-const listOpenFindingsOfAssets = `-- name: ListOpenFindingsOfAssets :many
+const listOpenFindingsOfSource = `-- name: ListOpenFindingsOfSource :many
 SELECT f.id, f.cmdb_source_id, f.record_id, f.product_vendor, f.product_name, f.cve_id,
        f.component_name, f.component_version, a.criticality_id, a.declared_exposure_id
 FROM findings f
 JOIN assets a USING (cmdb_source_id, record_id)
-WHERE f.closed_at IS NULL
-  AND (f.cmdb_source_id, f.record_id) IN (
-      SELECT s.id, r.id
-      FROM unnest($1::uuid[]) WITH ORDINALITY AS s (id, n)
-      JOIN unnest($2::text[]) WITH ORDINALITY AS r (id, n) USING (n)
-  )
+WHERE f.closed_at IS NULL AND f.cmdb_source_id = $1
 ORDER BY f.cmdb_source_id, f.record_id, f.product_vendor, f.product_name, f.cve_id
 `
 
-type ListOpenFindingsOfAssetsParams struct {
-	SourceIds []uuid.UUID
-	RecordIds []string
-}
-
-type ListOpenFindingsOfAssetsRow struct {
+type ListOpenFindingsOfSourceRow struct {
 	ID                 uuid.UUID
 	CmdbSourceID       uuid.UUID
 	RecordID           string
@@ -354,17 +333,17 @@ type ListOpenFindingsOfAssetsRow struct {
 	DeclaredExposureID *int16
 }
 
-// The open Findings of the Assets, with what scoring needs of their Asset. The
-// two arrays are parallel: element i of each names one Asset.
-func (q *Queries) ListOpenFindingsOfAssets(ctx context.Context, arg ListOpenFindingsOfAssetsParams) ([]ListOpenFindingsOfAssetsRow, error) {
-	rows, err := q.db.Query(ctx, listOpenFindingsOfAssets, arg.SourceIds, arg.RecordIds)
+// The open Findings of a CMDB Source's Assets, with what scoring needs of
+// their Asset.
+func (q *Queries) ListOpenFindingsOfSource(ctx context.Context, cmdbSourceID uuid.UUID) ([]ListOpenFindingsOfSourceRow, error) {
+	rows, err := q.db.Query(ctx, listOpenFindingsOfSource, cmdbSourceID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListOpenFindingsOfAssetsRow
+	var items []ListOpenFindingsOfSourceRow
 	for rows.Next() {
-		var i ListOpenFindingsOfAssetsRow
+		var i ListOpenFindingsOfSourceRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.CmdbSourceID,

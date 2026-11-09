@@ -15,20 +15,14 @@ WHERE a.inactive_since IS NULL
   )
 ORDER BY c.cmdb_source_id, c.record_id, c.position;
 
--- The Software Components of the Assets that are Active, with what scoring
--- needs of their Asset. The two arrays are parallel: element i of each names
--- one Asset.
--- name: ListActiveComponentsOfAssets :many
+-- The Software Components of a CMDB Source's Active Assets, with what scoring
+-- needs of their Asset.
+-- name: ListActiveComponentsOfSource :many
 SELECT c.cmdb_source_id, c.record_id, c.position, c.role_id, c.name, c.version,
        c.product_vendor, c.product_name, a.criticality_id, a.declared_exposure_id
 FROM software_components c
 JOIN assets a USING (cmdb_source_id, record_id)
-WHERE a.inactive_since IS NULL
-  AND (c.cmdb_source_id, c.record_id) IN (
-      SELECT s.id, r.id
-      FROM unnest(@source_ids::uuid[]) WITH ORDINALITY AS s (id, n)
-      JOIN unnest(@record_ids::text[]) WITH ORDINALITY AS r (id, n) USING (n)
-  )
+WHERE a.inactive_since IS NULL AND c.cmdb_source_id = @cmdb_source_id
 ORDER BY c.cmdb_source_id, c.record_id, c.position;
 
 -- Opens, updates or reopens the Finding of one match in one statement, so two
@@ -86,19 +80,14 @@ JOIN assets a USING (cmdb_source_id, record_id)
 WHERE f.cve_id = @cve_id AND f.closed_at IS NULL
 ORDER BY f.cmdb_source_id, f.record_id, f.product_vendor, f.product_name;
 
--- The open Findings of the Assets, with what scoring needs of their Asset. The
--- two arrays are parallel: element i of each names one Asset.
--- name: ListOpenFindingsOfAssets :many
+-- The open Findings of a CMDB Source's Assets, with what scoring needs of
+-- their Asset.
+-- name: ListOpenFindingsOfSource :many
 SELECT f.id, f.cmdb_source_id, f.record_id, f.product_vendor, f.product_name, f.cve_id,
        f.component_name, f.component_version, a.criticality_id, a.declared_exposure_id
 FROM findings f
 JOIN assets a USING (cmdb_source_id, record_id)
-WHERE f.closed_at IS NULL
-  AND (f.cmdb_source_id, f.record_id) IN (
-      SELECT s.id, r.id
-      FROM unnest(@source_ids::uuid[]) WITH ORDINALITY AS s (id, n)
-      JOIN unnest(@record_ids::text[]) WITH ORDINALITY AS r (id, n) USING (n)
-  )
+WHERE f.closed_at IS NULL AND f.cmdb_source_id = @cmdb_source_id
 ORDER BY f.cmdb_source_id, f.record_id, f.product_vendor, f.product_name, f.cve_id;
 
 -- name: DeleteFindingMatchFlags :exec

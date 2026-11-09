@@ -117,12 +117,13 @@ func TestComponentsWithProductsReadsActiveAssetsIgnoringCase(t *testing.T) {
 	}
 }
 
-func TestComponentsOfAssetsReadsEveryComponentOfActiveAssets(t *testing.T) {
+func TestComponentsOfSourceReadsEveryComponentOfItsActiveAssets(t *testing.T) {
 	t.Parallel()
 	w := newFindingWorld(t)
+	syncRecords(t, w.db, w.source, w.paymentsRecord(t))
 	var got []postgres.Candidate
 	inTx(t, w.db, func(tx *postgres.Tx) (err error) {
-		got, err = tx.ComponentsOfAssets(context.Background(), []inventory.SourceReference{w.payments})
+		got, err = tx.ComponentsOfSource(context.Background(), w.source)
 		return err
 	})
 	var names []string
@@ -130,7 +131,7 @@ func TestComponentsOfAssetsReadsEveryComponentOfActiveAssets(t *testing.T) {
 		names = append(names, c.Component.Name)
 	}
 	if !slices.Equal(names, []string{nginx.Name, vault.Name, bash.Name}) {
-		t.Errorf("components = %v, want payments' three in order", names)
+		t.Errorf("components = %v, want payments' three in order and none of the Inactive lab", names)
 	}
 }
 
@@ -213,7 +214,7 @@ func TestCloseFindingsOfInactiveAssetsClosesOnlyThose(t *testing.T) {
 	}
 }
 
-func TestOpenFindingsOfAssetsReadsOnlyTheirOpenFindings(t *testing.T) {
+func TestOpenFindingsOfSourceReadsOnlyItsOpenFindings(t *testing.T) {
 	t.Parallel()
 	w := newFindingWorld(t)
 	saveMatch(t, w.db, match(t, w.payments, "1.18.0"))
@@ -225,7 +226,7 @@ func TestOpenFindingsOfAssetsReadsOnlyTheirOpenFindings(t *testing.T) {
 
 	var got []postgres.OpenFinding
 	inTx(t, w.db, func(tx *postgres.Tx) (err error) {
-		got, err = tx.OpenFindingsOfAssets(context.Background(), []inventory.SourceReference{w.payments, w.lab})
+		got, err = tx.OpenFindingsOfSource(context.Background(), w.source)
 		return err
 	})
 	if len(got) != 1 || got[0].Key.Asset != w.payments || got[0].Key.CVE != "CVE-2021-23017" {
