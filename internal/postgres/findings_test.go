@@ -11,6 +11,7 @@ import (
 	"barbackend/internal/matching"
 	"barbackend/internal/postgres"
 	"barbackend/internal/postgres/pgtest"
+	"barbackend/internal/scoring"
 	"barbackend/internal/stixext"
 )
 
@@ -230,4 +231,41 @@ func TestOpenFindingsOfAssetsReadsOnlyTheirOpenFindings(t *testing.T) {
 	if len(got) != 1 || got[0].Key.Asset != w.payments || got[0].Key.CVE != "CVE-2021-23017" {
 		t.Errorf("open findings = %+v, want payments' only", got)
 	}
+}
+
+func TestSaveScoreIfChangedStoresOnlyAChangedScore(t *testing.T) {
+	t.Parallel()
+	w := newFindingWorld(t)
+	id, _ := saveMatch(t, w.db, match(t, w.payments, "1.18.0"))
+	score := scoring.Score{
+		Model: 1, Value: 0.308,
+		Factors: scoring.Factors{Alpha: 0.81, Beta: 0.9, Gamma: 0, Vulnerability: 0.513, CriticalityMultiplier: 1, ExposureMultiplier: 0.6},
+	}
+	withGap := score
+	withGap.Gaps = []scoring.DataGap{scoring.ExposureUndeclared}
+
+	for i, step := range []struct {
+		score  scoring.Score
+		stored bool
+	}{
+		{score, true},
+		{score, false},
+		{withGap, true},
+		{withGap, false},
+	} {
+		inTx(t, w.db, func(tx *postgres.Tx) error {
+			stored, err := tx.SaveScoreIfChanged(context.Background(), id, step.score)
+			if stored != step.stored {
+				t.Errorf("save %d stored = %t, want %t", i+1, stored, step.stored)
+			}
+			return err
+		})
+	}
+	inTx(t, w.db, func(tx *postgres.Tx) error {
+		latest, err := tx.LatestScore(context.Background(), id)
+		if latest.Value != 0.308 || !slices.Equal(latest.Gaps, withGap.Gaps) || latest.Factors != withGap.Factors {
+			t.Errorf("latest score = %+v, want %+v", latest, withGap)
+		}
+		return err
+	})
 }
