@@ -14,9 +14,11 @@ import (
 	"barbackend/internal/assets"
 	"barbackend/internal/businesscontext"
 	"barbackend/internal/cmdb"
+	"barbackend/internal/findings"
 	"barbackend/internal/httpapi"
 	"barbackend/internal/ingest"
 	"barbackend/internal/postgres"
+	"barbackend/internal/scoring"
 	"barbackend/internal/users"
 )
 
@@ -44,23 +46,25 @@ func serve(ctx context.Context, _ []string) error {
 		return err
 	}
 
-	svc, err := ingest.New(registeredFeeds()...)
-	if err != nil {
-		return err
-	}
-	feedsDone := make(chan struct{})
-	go func() {
-		defer close(feedsDone)
-		svc.Run(ctx)
-	}()
-
 	return withDB(ctx, func(db *postgres.DB) error {
+		found := findings.New(db, scoring.Model1, kevMaxAge)
+		svc, err := ingest.New(handledBy(found, registeredFeeds())...)
+		if err != nil {
+			return err
+		}
+		feedsDone := make(chan struct{})
+		go func() {
+			defer close(feedsDone)
+			svc.Run(ctx)
+		}()
+		sources := cmdb.New(db, providers(), key, ctx, syncTimeout)
+		sources.OnSynced(found.AfterSync)
 		return listen(ctx, feedsDone, httpapi.New(httpapi.Config{
 			Agents:          agents.NewService(db, newCrew()),
 			Areas:           areas.New(db),
 			Assets:          assets.New(db),
 			BusinessContext: businesscontext.New(db),
-			CMDB:            cmdb.New(db, providers(), key, ctx, syncTimeout),
+			CMDB:            sources,
 			Users:           users.New(db, verifier, admin),
 			AllowedOrigins:  allowedOrigins(),
 		}))
