@@ -29,9 +29,21 @@ func (h assetHandler) register(api huma.API) {
 type assetQuery struct {
 	Limit       pageSize        `query:"limit" doc:"Page size"`
 	Cursor      string          `query:"cursor" doc:"next_cursor of the previous page"`
-	Active      string          `query:"active" enum:"true,false,all" default:"true"`
+	Active      activeFilter    `query:"active" enum:"true,false,all" default:"true"`
 	Kind        assetKindCode   `query:"kind" doc:"Asset Kind code"`
 	Criticality criticalityCode `query:"criticality" doc:"Criticality code"`
+}
+
+type activeFilter string
+
+func (f activeFilter) keep() *bool {
+	switch f {
+	case "true":
+		return ptr(true)
+	case "false":
+		return ptr(false)
+	}
+	return nil
 }
 
 type pageSize int
@@ -53,13 +65,7 @@ func (criticalityCode) Schema(huma.Registry) *huma.Schema {
 }
 
 func (in assetQuery) query() (assets.Query, error) {
-	q := assets.Query{Limit: int(in.Limit), Cursor: in.Cursor}
-	switch in.Active {
-	case "true":
-		q.Active = ptr(true)
-	case "false":
-		q.Active = ptr(false)
-	}
+	q := assets.Query{Limit: int(in.Limit), Cursor: in.Cursor, Active: in.Active.keep()}
 	if in.Kind != "" {
 		kind, err := inventory.ParseAssetKind(string(in.Kind))
 		if err != nil {

@@ -34,7 +34,7 @@ func (h areaHandler) register(api huma.API) {
 }
 
 type areaQuery struct {
-	Active string `query:"active" enum:"true,false,all" default:"true"`
+	Active activeFilter `query:"active" enum:"true,false,all" default:"true"`
 }
 
 type areaListResponse struct {
@@ -62,14 +62,7 @@ type setAreaOwnerInput struct {
 }
 
 func (h areaHandler) list(ctx context.Context, caller tenancy.User, in *areaQuery) (*body[areaListResponse], error) {
-	var active *bool
-	switch in.Active {
-	case "true":
-		active = ptr(true)
-	case "false":
-		active = ptr(false)
-	}
-	stored, err := h.areas.List(ctx, caller, active)
+	stored, err := h.areas.List(ctx, caller, in.Active.keep())
 	if err != nil {
 		return nil, err
 	}
