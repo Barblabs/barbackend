@@ -94,6 +94,10 @@ _Avoid_: Source (that is a CMDB Source), provider, integration
 A publicly disclosed weakness in a Product, identified by its CVE ID. On its own it says nothing about a Customer's environment.
 _Avoid_: Vuln, flaw, bug
 
+**Advisory**:
+A notice a Feed publishes about one or more Vulnerabilities, such as an AWS Security Bulletin. It is kept only when it names a stored Vulnerability, and is linked to that Vulnerability by CVE, so every Finding of the Vulnerability shows it (ADR 0022).
+_Avoid_: Threat (ATT&CK techniques are threats too), bulletin, alert
+
 ### Risk
 
 **Finding**:
