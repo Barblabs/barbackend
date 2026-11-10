@@ -277,8 +277,8 @@ func TestReconcileAreas(t *testing.T) {
 				t.Errorf("outcome = %+v, want %+v", got, tt.want)
 			}
 			for _, a := range all {
-				if p, ok := tt.areas[a.Ref().RecordID]; ok && a.Imported().Name() != p.Name {
-					t.Errorf("area %s has name %q, want the snapshot's %q", a.Ref().RecordID, a.Imported().Name(), p.Name)
+				if p, ok := tt.areas[a.Ref().RecordID]; ok && a.Name() != p.Name {
+					t.Errorf("area %s has name %q, want the snapshot's %q", a.Ref().RecordID, a.Name(), p.Name)
 				}
 			}
 			for _, a := range existing {
@@ -342,7 +342,7 @@ func TestReconcileAreaErrorsChangeNothing(t *testing.T) {
 		return inventory.Record{RecordID: id, Imported: mustImported(t, with(validParams(), func(p *inventory.ImportedAssetParams) { p.Area = area }))}
 	}
 	otherSource := inventory.CMDBSourceID(uuid.New())
-	otherArea, err := inventory.RestoreArea(inventory.SourceReference{Source: otherSource, RecordID: "1"}, mustImportedArea(t, "IT", false), inventory.AreaState{Active: true})
+	otherArea, err := inventory.RestoreArea(inventory.SourceReference{Source: otherSource, RecordID: "1"}, "IT", inventory.AreaState{Active: true})
 	if err != nil {
 		t.Fatal(err)
 	}

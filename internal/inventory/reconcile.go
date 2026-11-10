@@ -159,8 +159,6 @@ func validateSnapshot(s Snapshot) (map[string]bool, error) {
 		case rec.Imported.isZero():
 			return nil, fmt.Errorf("record %q: %w", rec.RecordID, ErrZeroImportedAsset)
 		}
-		// A provider bug naming an Area it did not read must fail the Sync,
-		// not store an Asset whose Area does not exist.
 		if area, ok := rec.Imported.Area(); ok && !areas[area] {
 			return nil, fmt.Errorf("%w: record %q names unknown area %q", ErrInvalidSnapshot, rec.RecordID, area)
 		}
@@ -185,8 +183,6 @@ func validateAreas(areas []AreaRecord) (map[string]bool, error) {
 	return seen, nil
 }
 
-// reconcileAreas never reads an owner from the Snapshot: only a Customer Admin
-// states it, so a Sync keeps it.
 func (r *Reconciliation) reconcileAreas(source CMDBSourceID, stored map[string]*Area, existing []*Area, snapshot []AreaRecord) {
 	present := make(map[string]bool, len(snapshot))
 	for _, rec := range snapshot {
@@ -194,16 +190,16 @@ func (r *Reconciliation) reconcileAreas(source CMDBSourceID, stored map[string]*
 		a, ok := stored[rec.RecordID]
 		if !ok {
 			r.areas.Created = append(r.areas.Created, &Area{
-				ref:      SourceReference{Source: source, RecordID: rec.RecordID},
-				imported: rec.Imported,
-				active:   !rec.Imported.Inactive(),
+				ref:    SourceReference{Source: source, RecordID: rec.RecordID},
+				name:   rec.Imported.Name(),
+				active: !rec.Imported.Inactive(),
 			})
 			continue
 		}
-		if a.imported.Name() != rec.Imported.Name() {
+		if a.name != rec.Imported.Name() {
+			a.name = rec.Imported.Name()
 			r.areas.Renamed = append(r.areas.Renamed, a)
 		}
-		a.imported = rec.Imported
 		r.setAreaActive(a, !rec.Imported.Inactive())
 	}
 	for _, a := range existing {

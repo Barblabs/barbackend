@@ -8,21 +8,20 @@ import (
 )
 
 func TestRestoreArea(t *testing.T) {
-	imported := mustImportedArea(t, "IT Department", false)
 	tests := []struct {
 		name     string
 		ref      inventory.SourceReference
-		imported inventory.ImportedArea
+		areaName string
 		want     error
 	}{
-		{"valid", inventory.SourceReference{Source: sourceID, RecordID: "1"}, imported, nil},
-		{"zero source", inventory.SourceReference{RecordID: "1"}, imported, inventory.ErrInvalidSourceReference},
-		{"whitespace record id", inventory.SourceReference{Source: sourceID, RecordID: " "}, imported, inventory.ErrInvalidSourceReference},
-		{"zero imported area", inventory.SourceReference{Source: sourceID, RecordID: "1"}, inventory.ImportedArea{}, inventory.ErrZeroImportedArea},
+		{"valid", inventory.SourceReference{Source: sourceID, RecordID: "1"}, "IT Department", nil},
+		{"zero source", inventory.SourceReference{RecordID: "1"}, "IT Department", inventory.ErrInvalidSourceReference},
+		{"whitespace record id", inventory.SourceReference{Source: sourceID, RecordID: " "}, "IT Department", inventory.ErrInvalidSourceReference},
+		{"whitespace name", inventory.SourceReference{Source: sourceID, RecordID: "1"}, " \t", inventory.ErrEmptyName},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			a, err := inventory.RestoreArea(tt.ref, tt.imported, inventory.AreaState{Active: true})
+			a, err := inventory.RestoreArea(tt.ref, tt.areaName, inventory.AreaState{Active: true})
 			if !errors.Is(err, tt.want) {
 				t.Fatalf("err = %v, want %v", err, tt.want)
 			}

@@ -33,10 +33,10 @@ func (a ImportedArea) Inactive() bool { return a.inactive }
 // by the CMDB Source it was imported from. Its owner is stated by a Customer
 // Admin, never imported, so a Sync keeps it.
 type Area struct {
-	ref      SourceReference
-	imported ImportedArea
-	active   bool
-	owner    OwnerEmail
+	ref    SourceReference
+	name   string
+	active bool
+	owner  OwnerEmail
 }
 
 // AreaState is what barbattack itself holds about an Area. A zero owner means
@@ -46,19 +46,19 @@ type AreaState struct {
 	Owner  OwnerEmail
 }
 
-func RestoreArea(ref SourceReference, imported ImportedArea, state AreaState) (*Area, error) {
+func RestoreArea(ref SourceReference, name string, state AreaState) (*Area, error) {
 	if err := ref.validate(); err != nil {
 		return nil, err
 	}
-	if imported.isZero() {
-		return nil, ErrZeroImportedArea
+	if blank(name) {
+		return nil, ErrEmptyName
 	}
-	return &Area{ref: ref, imported: imported, active: state.Active, owner: state.Owner}, nil
+	return &Area{ref: ref, name: name, active: state.Active, owner: state.Owner}, nil
 }
 
 func (a *Area) Ref() SourceReference { return a.ref }
 
-func (a *Area) Imported() ImportedArea { return a.imported }
+func (a *Area) Name() string { return a.name }
 
 func (a *Area) Active() bool { return a.active }
 

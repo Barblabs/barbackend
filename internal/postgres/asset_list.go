@@ -80,33 +80,11 @@ func (t *Tx) ListAssets(ctx context.Context, q AssetListQuery) (AssetPage, error
 	}
 	page.Assets = make([]StoredAsset, len(rows))
 	for i, row := range rows {
-		if page.Assets[i], err = restoreAsset(assetColumns(row), software); err != nil {
+		if page.Assets[i], err = restoreAsset(sqlcgen.ListAssetsRow(row), software); err != nil {
 			return AssetPage{}, err
-		}
-		if row.AreaID != nil {
-			page.Assets[i].Area = &AreaSummary{ID: *row.AreaID, Name: valueOrZero(row.AreaName)}
 		}
 	}
 	return page, nil
-}
-
-func assetColumns(row sqlcgen.ListCustomerAssetsRow) sqlcgen.ListAssetsRow {
-	return sqlcgen.ListAssetsRow{
-		CmdbSourceID:       row.CmdbSourceID,
-		RecordID:           row.RecordID,
-		Name:               row.Name,
-		Description:        row.Description,
-		KindID:             row.KindID,
-		HardwareVendor:     row.HardwareVendor,
-		HardwareModel:      row.HardwareModel,
-		CriticalityID:      row.CriticalityID,
-		ImportedOwner:      row.ImportedOwner,
-		DeclaredOwner:      row.DeclaredOwner,
-		DeclaredExposureID: row.DeclaredExposureID,
-		AreaRecordID:       row.AreaRecordID,
-		Retired:            row.Retired,
-		InactiveSince:      row.InactiveSince,
-	}
 }
 
 func (t *Tx) softwareOf(ctx context.Context, rows []sqlcgen.ListCustomerAssetsRow) (map[inventory.SourceReference][]inventory.SoftwareComponent, error) {
