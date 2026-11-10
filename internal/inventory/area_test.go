@@ -39,13 +39,8 @@ func TestAreaOwner(t *testing.T) {
 	if got, ok := a.Owner(); !ok || got != owner {
 		t.Fatalf("Owner() = %v, %v; want %v, true", got, ok, owner)
 	}
-	other := mustOwner(t, "other@example.com")
-	a.SetOwner(other)
-	if got, ok := a.Owner(); !ok || got != other {
-		t.Errorf("Owner() after SetOwner = %v, %v; want %v, true", got, ok, other)
-	}
-	a.SetOwner(inventory.OwnerEmail{})
-	if got, ok := a.Owner(); ok {
-		t.Errorf("Owner() after clearing = %v, true; want none", got)
+	unowned := restoreArea(t, "2", "Finance", inventory.AreaState{Active: true})
+	if got, ok := unowned.Owner(); ok {
+		t.Errorf("Owner() with no owner = %v, true; want none", got)
 	}
 }

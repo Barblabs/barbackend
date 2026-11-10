@@ -68,6 +68,3 @@ func (a *Area) Owner() (OwnerEmail, bool) {
 	}
 	return a.owner, true
 }
-
-// SetOwner with the zero OwnerEmail clears the owner.
-func (a *Area) SetOwner(o OwnerEmail) { a.owner = o }
