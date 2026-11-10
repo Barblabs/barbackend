@@ -19,6 +19,15 @@ type ActionPlan struct {
 	CreatedAt        time.Time
 }
 
+type Advisory struct {
+	ID          string
+	Feed        string
+	PublishedAt time.Time
+	Object      []byte
+	ModifiedAt  time.Time
+	StoredAt    time.Time
+}
+
 type AnalistaConversation struct {
 	ID             uuid.UUID
 	CustomerID     uuid.UUID
@@ -244,4 +253,10 @@ type Vulnerability struct {
 	Object     []byte
 	ModifiedAt time.Time
 	StoredAt   time.Time
+}
+
+type VulnerabilityAdvisory struct {
+	CveID      string
+	AdvisoryID string
+	LinkedAt   time.Time
 }
