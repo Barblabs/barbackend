@@ -25,23 +25,13 @@ const (
 )
 
 func snapshot(cis []ci, orgs []organization, lk lookups) inventory.Snapshot {
-	var s inventory.Snapshot
-	areas := map[string]bool{}
-	for _, org := range orgs {
-		imported, err := inventory.NewImportedArea(inventory.ImportedAreaParams{
-			Name:     org.Name,
-			Inactive: org.Status == inactiveAreaStatus,
-		})
-		// An Organization the domain rejects is left out, so its CIs are
-		// skipped below instead of failing the whole Sync.
-		if err != nil {
-			continue
-		}
-		areas[org.Key] = true
-		s.Areas = append(s.Areas, inventory.AreaRecord{RecordID: org.Key, Imported: imported})
+	s := inventory.Snapshot{Areas: readableAreas(orgs)}
+	readable := make(map[string]bool, len(s.Areas))
+	for _, a := range s.Areas {
+		readable[a.RecordID] = true
 	}
 	for _, c := range cis {
-		imported, err := importedAsset(c, areas, lk)
+		imported, err := importedAsset(c, readable, lk)
 		if err != nil {
 			s.Skipped = append(s.Skipped, inventory.SkippedRecord{RecordID: c.Key, Reason: err.Error()})
 			continue
@@ -51,10 +41,23 @@ func snapshot(cis []ci, orgs []organization, lk lookups) inventory.Snapshot {
 	return s
 }
 
-// importedAsset fails for a ci whose Organization is not among the Areas, so
-// it is skipped rather than imported without its Area (ADR 0007).
-func importedAsset(c ci, areas map[string]bool, lk lookups) (inventory.ImportedAsset, error) {
-	if !areas[c.OrgID] {
+func readableAreas(orgs []organization) []inventory.AreaRecord {
+	var areas []inventory.AreaRecord
+	for _, org := range orgs {
+		imported, err := inventory.NewImportedArea(inventory.ImportedAreaParams{
+			Name:     org.Name,
+			Inactive: org.Status == inactiveAreaStatus,
+		})
+		if err != nil {
+			continue
+		}
+		areas = append(areas, inventory.AreaRecord{RecordID: org.Key, Imported: imported})
+	}
+	return areas
+}
+
+func importedAsset(c ci, readableAreas map[string]bool, lk lookups) (inventory.ImportedAsset, error) {
+	if !readableAreas[c.OrgID] {
 		return inventory.ImportedAsset{}, fmt.Errorf("organization %s is not readable", c.OrgID)
 	}
 	kind, ok := kinds[c.Class]

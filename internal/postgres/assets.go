@@ -61,7 +61,6 @@ func (t *sourceTx) save(ctx context.Context, r inventory.Reconciliation) error {
 	if err != nil {
 		return err
 	}
-	// Before the Assets, since they reference their Areas.
 	if err := t.saveAreas(ctx, r.Areas()); err != nil {
 		return err
 	}

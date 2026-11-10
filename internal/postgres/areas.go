@@ -96,7 +96,6 @@ func restoreArea(ref inventory.SourceReference, name string, email *string, inac
 	return inventory.RestoreArea(ref, name, inventory.AreaState{Active: inactiveSince == nil, Owner: owner})
 }
 
-// saveAreas never writes owner_email: only a Customer Admin states it.
 func (t *sourceTx) saveAreas(ctx context.Context, changes inventory.AreaChanges) error {
 	if err := t.insertAreas(ctx, changes.Created); err != nil {
 		return err

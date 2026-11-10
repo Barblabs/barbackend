@@ -67,9 +67,6 @@ func fetch(ctx context.Context, c *rest.Client) ([]ci, []organization, lookups, 
 	return cis, orgs, lk, nil
 }
 
-// fetchOrganizations reads every Organization, not only those a ci
-// references, because the Snapshot's Areas must be complete: an Area left
-// out would be deactivated.
 func fetchOrganizations(ctx context.Context, c *rest.Client) ([]organization, error) {
 	objects, err := c.Get(ctx, rest.Query{Class: "Organization", Fields: organizationFields})
 	if err != nil {

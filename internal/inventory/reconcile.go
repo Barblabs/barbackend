@@ -159,8 +159,6 @@ func validateSnapshot(s Snapshot) (map[string]bool, error) {
 		case rec.Imported.isZero():
 			return nil, fmt.Errorf("record %q: %w", rec.RecordID, ErrZeroImportedAsset)
 		}
-		// A provider bug naming an Area it did not read must fail the Sync,
-		// not store an Asset whose Area does not exist.
 		if area, ok := rec.Imported.Area(); ok && !areas[area] {
 			return nil, fmt.Errorf("%w: record %q names unknown area %q", ErrInvalidSnapshot, rec.RecordID, area)
 		}
@@ -185,8 +183,6 @@ func validateAreas(areas []AreaRecord) (map[string]bool, error) {
 	return seen, nil
 }
 
-// reconcileAreas never reads an owner from the Snapshot: only a Customer Admin
-// states it, so a Sync keeps it.
 func (r *Reconciliation) reconcileAreas(source CMDBSourceID, stored map[string]*Area, existing []*Area, snapshot []AreaRecord) {
 	present := make(map[string]bool, len(snapshot))
 	for _, rec := range snapshot {
