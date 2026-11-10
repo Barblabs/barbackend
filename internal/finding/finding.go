@@ -14,10 +14,10 @@ import (
 )
 
 var (
-	ErrInvalidCVE     = errors.New("invalid CVE ID")
-	ErrNoProduct      = errors.New("finding needs a product")
-	ErrInvalidAsset   = errors.New("finding needs an asset")
-	ErrNotAMatch      = errors.New("result is not a match")
+	ErrInvalidCVE   = errors.New("invalid CVE ID")
+	ErrNoProduct    = errors.New("finding needs a product")
+	ErrInvalidAsset = errors.New("finding needs an asset")
+	ErrNotAMatch    = errors.New("result is not a match")
 )
 
 // ID identifies a Finding for good: it never changes, even when the Finding
