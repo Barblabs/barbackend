@@ -90,8 +90,8 @@ func (e env) newCustomer(t *testing.T, assetName string) tenancy.User {
 		t.Fatal(err)
 	}
 	snapshot := inventory.Snapshot{Records: []inventory.Record{{RecordID: "1", Imported: imported}}}
-	_, err = e.db.CommitSync(ctx, source.ID(), time.Now(), func(existing []*inventory.Asset) (inventory.Reconciliation, error) {
-		return inventory.Reconcile(source.ID(), inventory.Stored{Assets: existing}, snapshot)
+	_, err = e.db.CommitSync(ctx, source.ID(), time.Now(), func(existing inventory.Stored) (inventory.Reconciliation, error) {
+		return inventory.Reconcile(source.ID(), existing, snapshot)
 	})
 	if err != nil {
 		t.Fatal(err)

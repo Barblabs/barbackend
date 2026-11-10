@@ -293,10 +293,10 @@ func (e env) holdSyncLock(t *testing.T, src inventory.CMDBSourceID) (release fun
 	t.Helper()
 	locked, unlock, done := make(chan struct{}), make(chan struct{}), make(chan error)
 	go func() {
-		_, err := e.db.CommitSync(context.Background(), src, time.Now(), func(existing []*inventory.Asset) (inventory.Reconciliation, error) {
+		_, err := e.db.CommitSync(context.Background(), src, time.Now(), func(existing inventory.Stored) (inventory.Reconciliation, error) {
 			close(locked)
 			<-unlock
-			return inventory.Reconcile(src, inventory.Stored{Assets: existing}, inventory.Snapshot{})
+			return inventory.Reconcile(src, existing, inventory.Snapshot{})
 		})
 		done <- err
 	}()

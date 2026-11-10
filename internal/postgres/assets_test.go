@@ -156,7 +156,7 @@ func TestDeactivationKeepsFirstInactiveTime(t *testing.T) {
 	}
 
 	stale := restore(t, src.ID(), "1", retired, true)
-	commitSync(t, db, src.ID(), func([]*inventory.Asset) (inventory.Reconciliation, error) {
+	commitSync(t, db, src.ID(), func(inventory.Stored) (inventory.Reconciliation, error) {
 		return inventory.Reconcile(src.ID(), inventory.Stored{Assets: []*inventory.Asset{stale}}, inventory.Snapshot{})
 	})
 	if again := inactiveSince(); again == nil || !again.Equal(*first) {
@@ -204,7 +204,7 @@ func TestSaveOfMissingAssetFails(t *testing.T) {
 			}
 
 			ghost := restore(t, src.ID(), "missing", active, tt.active)
-			_, err := db.CommitSync(context.Background(), src.ID(), time.Now(), func([]*inventory.Asset) (inventory.Reconciliation, error) {
+			_, err := db.CommitSync(context.Background(), src.ID(), time.Now(), func(inventory.Stored) (inventory.Reconciliation, error) {
 				return inventory.Reconcile(src.ID(), inventory.Stored{Assets: []*inventory.Asset{ghost}}, s)
 			})
 			if !errors.Is(err, postgres.ErrNotFound) {
@@ -268,7 +268,7 @@ func TestCommitSyncFailsWhileLocked(t *testing.T) {
 	locked, release := make(chan struct{}), make(chan struct{})
 	done := make(chan error)
 	go func() {
-		_, err := db.CommitSync(context.Background(), src.ID(), time.Now(), func(existing []*inventory.Asset) (inventory.Reconciliation, error) {
+		_, err := db.CommitSync(context.Background(), src.ID(), time.Now(), func(existing inventory.Stored) (inventory.Reconciliation, error) {
 			close(locked)
 			<-release
 			return reconcile(existing)
@@ -296,7 +296,7 @@ func TestCommitSyncOfAnotherSourceFails(t *testing.T) {
 	locked := newSource(t, db, newCustomer(t, db))
 	other := newSource(t, db, newCustomer(t, db))
 
-	_, err := db.CommitSync(context.Background(), locked.ID(), time.Now(), func([]*inventory.Asset) (inventory.Reconciliation, error) {
+	_, err := db.CommitSync(context.Background(), locked.ID(), time.Now(), func(inventory.Stored) (inventory.Reconciliation, error) {
 		return inventory.Reconcile(other.ID(), inventory.Stored{}, inventory.Snapshot{Records: []inventory.Record{record(t, "1", fullParams(t))}})
 	})
 

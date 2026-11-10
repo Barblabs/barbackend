@@ -18,6 +18,18 @@ type sourceTx struct {
 	source inventory.CMDBSourceID
 }
 
+func (t *sourceTx) stored(ctx context.Context) (inventory.Stored, error) {
+	assets, err := t.assets(ctx)
+	if err != nil {
+		return inventory.Stored{}, err
+	}
+	areas, err := t.areas(ctx)
+	if err != nil {
+		return inventory.Stored{}, err
+	}
+	return inventory.Stored{Assets: assets, Areas: areas}, nil
+}
+
 func (t *sourceTx) assets(ctx context.Context) ([]*inventory.Asset, error) {
 	source := uuid.UUID(t.source)
 	rows, err := t.q.ListAssets(ctx, source)
@@ -47,6 +59,10 @@ func (t *sourceTx) save(ctx context.Context, r inventory.Reconciliation) error {
 	created, updated := r.Created(), r.Updated()
 	owners, err := t.upsertOwners(ctx, slices.Concat(created, updated))
 	if err != nil {
+		return err
+	}
+	// Before the Assets, since they reference their Areas.
+	if err := t.saveAreas(ctx, r.Areas()); err != nil {
 		return err
 	}
 	if err := t.insertCreated(ctx, created, owners); err != nil {
@@ -101,16 +117,13 @@ func (t *sourceTx) insertCreated(ctx context.Context, created []*inventory.Asset
 	if len(created) == 0 {
 		return nil
 	}
-	var inactiveSince *time.Time
+	anyInactive := false
 	for _, a := range created {
-		if !a.Active() {
-			now, err := t.q.TransactionTime(ctx)
-			if err != nil {
-				return fmt.Errorf("read transaction time: %w", err)
-			}
-			inactiveSince = &now
-			break
-		}
+		anyInactive = anyInactive || !a.Active()
+	}
+	inactiveSince, err := t.inactiveSince(ctx, anyInactive)
+	if err != nil {
+		return err
 	}
 	rows := make([]sqlcgen.InsertAssetsParams, len(created))
 	for i, a := range created {
@@ -125,6 +138,7 @@ func (t *sourceTx) insertCreated(ctx context.Context, created []*inventory.Asset
 			HardwareModel:   imported.HardwareModel,
 			CriticalityID:   imported.CriticalityID,
 			ImportedOwnerID: imported.ImportedOwnerID,
+			AreaRecordID:    imported.AreaRecordID,
 			Retired:         imported.Retired,
 		}
 		if !a.Active() {
@@ -198,13 +212,13 @@ func (t *sourceTx) updateActive(ctx context.Context, deactivated, reactivated []
 	source := uuid.UUID(t.source)
 	if len(deactivated) > 0 {
 		n, err := t.q.DeactivateAssets(ctx, sqlcgen.DeactivateAssetsParams{CmdbSourceID: source, RecordIds: recordIDs(deactivated)})
-		if err := t.allUpdated("deactivate", len(deactivated), n, err); err != nil {
+		if err := t.allUpdated("deactivate assets", len(deactivated), n, err); err != nil {
 			return err
 		}
 	}
 	if len(reactivated) > 0 {
 		n, err := t.q.ReactivateAssets(ctx, sqlcgen.ReactivateAssetsParams{CmdbSourceID: source, RecordIds: recordIDs(reactivated)})
-		if err := t.allUpdated("reactivate", len(reactivated), n, err); err != nil {
+		if err := t.allUpdated("reactivate assets", len(reactivated), n, err); err != nil {
 			return err
 		}
 	}
@@ -213,18 +227,22 @@ func (t *sourceTx) updateActive(ctx context.Context, deactivated, reactivated []
 
 func (t *sourceTx) allUpdated(action string, want int, updated int64, err error) error {
 	if err != nil {
-		return fmt.Errorf("%s assets of %s: %w", action, t.source, err)
+		return fmt.Errorf("%s of %s: %w", action, t.source, err)
 	}
 	if missing := int64(want) - updated; missing > 0 {
-		return fmt.Errorf("%s assets of %s: %d of %d: %w", action, t.source, missing, want, ErrNotFound)
+		return fmt.Errorf("%s of %s: %d of %d: %w", action, t.source, missing, want, ErrNotFound)
 	}
 	return nil
 }
 
-func recordIDs(assets []*inventory.Asset) []string {
-	ids := make([]string, len(assets))
-	for i, a := range assets {
-		ids[i] = a.Ref().RecordID
+type sourceRecord interface {
+	Ref() inventory.SourceReference
+}
+
+func recordIDs[T sourceRecord](items []T) []string {
+	ids := make([]string, len(items))
+	for i, item := range items {
+		ids[i] = item.Ref().RecordID
 	}
 	return ids
 }
@@ -243,6 +261,9 @@ func importedColumns(source inventory.CMDBSourceID, a *inventory.Asset, owners o
 	}
 	if hw, ok := imported.Hardware(); ok {
 		p.HardwareVendor, p.HardwareModel = &hw.Vendor, &hw.Model
+	}
+	if area, ok := imported.Area(); ok {
+		p.AreaRecordID = &area
 	}
 	return p
 }
@@ -280,6 +301,7 @@ func restoreAssetValues(ref inventory.SourceReference, row sqlcgen.ListAssetsRow
 		Software:    software,
 		Criticality: inventory.Criticality(valueOrZero(row.CriticalityID)),
 		Owner:       importedOwner,
+		Area:        valueOrZero(row.AreaRecordID),
 		Retired:     row.Retired,
 	})
 	if err != nil {

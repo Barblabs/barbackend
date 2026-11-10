@@ -69,6 +69,44 @@ func TestSync(t *testing.T) {
 	}
 }
 
+func TestSyncStoresAreas(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	customer, src := e.connect(t)
+	area := func(name string) inventory.AreaRecord {
+		imported, err := inventory.NewImportedArea(inventory.ImportedAreaParams{Name: name})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return inventory.AreaRecord{RecordID: "1", Imported: imported}
+	}
+	inArea, err := inventory.NewImportedAsset(inventory.ImportedAssetParams{Name: "vm-a", Kind: inventory.VirtualMachine, Area: "1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	records := []inventory.Record{{RecordID: "a", Imported: inArea}}
+	e.provider.Snapshot = inventory.Snapshot{Areas: []inventory.AreaRecord{area("IT")}, Records: records}
+
+	if _, err := e.cmdb.SyncConnected(context.Background(), viewerOf(customer)); err != nil {
+		t.Fatal(err)
+	}
+	e.provider.Snapshot = inventory.Snapshot{Areas: []inventory.AreaRecord{area("IT Department")}, Records: records}
+	run, err := e.cmdb.SyncConnected(context.Background(), viewerOf(customer))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if run.Counts() != (inventory.SyncCounts{}) {
+		t.Errorf("counts after renaming an Area = %+v, want none: a Sync Run counts Assets only", run.Counts())
+	}
+	got := e.rows(t, `SELECT a.record_id, ar.name FROM assets a
+		JOIN customer_areas ar ON (ar.cmdb_source_id, ar.record_id) = (a.cmdb_source_id, a.area_record_id)
+		WHERE a.cmdb_source_id = $1`, uuid.UUID(src))
+	if want := [][]string{{"a", "IT Department"}}; !reflect.DeepEqual(got, want) {
+		t.Errorf("assets and their areas = %v, want %v", got, want)
+	}
+}
+
 func TestFailedSyncChangesNoAsset(t *testing.T) {
 	errUnreachable := errors.New("cmdb unreachable")
 	tests := []struct {

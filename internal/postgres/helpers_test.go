@@ -55,8 +55,13 @@ var errReadOnly = errors.New("read only")
 
 func assets(t *testing.T, db *postgres.DB, src inventory.CMDBSourceID) []*inventory.Asset {
 	t.Helper()
-	var got []*inventory.Asset
-	_, err := db.CommitSync(context.Background(), src, time.Now(), func(existing []*inventory.Asset) (inventory.Reconciliation, error) {
+	return stored(t, db, src).Assets
+}
+
+func stored(t *testing.T, db *postgres.DB, src inventory.CMDBSourceID) inventory.Stored {
+	t.Helper()
+	var got inventory.Stored
+	_, err := db.CommitSync(context.Background(), src, time.Now(), func(existing inventory.Stored) (inventory.Reconciliation, error) {
 		got = existing
 		return inventory.Reconciliation{}, errReadOnly
 	})
@@ -66,13 +71,13 @@ func assets(t *testing.T, db *postgres.DB, src inventory.CMDBSourceID) []*invent
 	return got
 }
 
-func reconcileWith(src inventory.CMDBSourceID, s inventory.Snapshot) func([]*inventory.Asset) (inventory.Reconciliation, error) {
-	return func(existing []*inventory.Asset) (inventory.Reconciliation, error) {
-		return inventory.Reconcile(src, inventory.Stored{Assets: existing}, s)
+func reconcileWith(src inventory.CMDBSourceID, s inventory.Snapshot) func(inventory.Stored) (inventory.Reconciliation, error) {
+	return func(existing inventory.Stored) (inventory.Reconciliation, error) {
+		return inventory.Reconcile(src, existing, s)
 	}
 }
 
-func commitSync(t *testing.T, db *postgres.DB, src inventory.CMDBSourceID, reconcile func([]*inventory.Asset) (inventory.Reconciliation, error)) inventory.SyncRun {
+func commitSync(t *testing.T, db *postgres.DB, src inventory.CMDBSourceID, reconcile func(inventory.Stored) (inventory.Reconciliation, error)) inventory.SyncRun {
 	t.Helper()
 	run, err := db.CommitSync(context.Background(), src, time.Now(), reconcile)
 	if err != nil {
@@ -83,9 +88,14 @@ func commitSync(t *testing.T, db *postgres.DB, src inventory.CMDBSourceID, recon
 
 func syncRecords(t *testing.T, db *postgres.DB, src inventory.CMDBSourceID, records ...inventory.Record) inventory.Reconciliation {
 	t.Helper()
+	return syncSnapshot(t, db, src, inventory.Snapshot{Records: records})
+}
+
+func syncSnapshot(t *testing.T, db *postgres.DB, src inventory.CMDBSourceID, s inventory.Snapshot) inventory.Reconciliation {
+	t.Helper()
 	var r inventory.Reconciliation
-	reconcile := reconcileWith(src, inventory.Snapshot{Records: records})
-	commitSync(t, db, src, func(existing []*inventory.Asset) (inventory.Reconciliation, error) {
+	reconcile := reconcileWith(src, s)
+	commitSync(t, db, src, func(existing inventory.Stored) (inventory.Reconciliation, error) {
 		var err error
 		r, err = reconcile(existing)
 		return r, err
