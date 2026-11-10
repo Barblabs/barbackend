@@ -51,7 +51,7 @@ func mustImportedArea(t *testing.T, name string, inactive bool) inventory.Import
 
 func restoreArea(t *testing.T, id, name string, state inventory.AreaState) *inventory.Area {
 	t.Helper()
-	a, err := inventory.RestoreArea(inventory.SourceReference{Source: sourceID, RecordID: id}, mustImportedArea(t, name, false), state)
+	a, err := inventory.RestoreArea(inventory.SourceReference{Source: sourceID, RecordID: id}, name, state)
 	if err != nil {
 		t.Fatal(err)
 	}

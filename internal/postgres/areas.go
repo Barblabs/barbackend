@@ -92,14 +92,7 @@ func restoreArea(ref inventory.SourceReference, name string, email *string, inac
 	if err != nil {
 		return nil, err
 	}
-	active := inactiveSince == nil
-	// The source's own status is not stored: Reconcile only folds it into
-	// Active and replaces it on every Sync, so the stored state stands in.
-	imported, err := inventory.NewImportedArea(inventory.ImportedAreaParams{Name: name, Inactive: !active})
-	if err != nil {
-		return nil, err
-	}
-	return inventory.RestoreArea(ref, imported, inventory.AreaState{Active: active, Owner: owner})
+	return inventory.RestoreArea(ref, name, inventory.AreaState{Active: inactiveSince == nil, Owner: owner})
 }
 
 // saveAreas never writes owner_email: only a Customer Admin states it.
@@ -143,7 +136,7 @@ func (t *sourceTx) insertAreas(ctx context.Context, created []*inventory.Area) e
 		rows[i] = sqlcgen.InsertAreasParams{
 			CmdbSourceID: uuid.UUID(t.source),
 			RecordID:     a.Ref().RecordID,
-			Name:         a.Imported().Name(),
+			Name:         a.Name(),
 		}
 		if !a.Active() {
 			rows[i].InactiveSince = inactiveSince
@@ -164,7 +157,7 @@ func (t *sourceTx) renameAreas(ctx context.Context, renamed []*inventory.Area) e
 		rows[i] = sqlcgen.RenameAreasParams{
 			CmdbSourceID: uuid.UUID(t.source),
 			RecordID:     a.Ref().RecordID,
-			Name:         a.Imported().Name(),
+			Name:         a.Name(),
 		}
 	}
 	var err error

@@ -63,9 +63,9 @@ func TestSyncKeepsAreaOwner(t *testing.T) {
 			t.Fatalf("%s: areas = %+v, want one", step, got)
 		}
 		owner, ok := got[0].Owner()
-		if got[0].Imported().Name() != name || got[0].Active() != active || !ok || owner != mustOwner(t, "owner@example.com") {
+		if got[0].Name() != name || got[0].Active() != active || !ok || owner != mustOwner(t, "owner@example.com") {
 			t.Errorf("%s: area = %q active %v owner %v, want %q active %v owner@example.com",
-				step, got[0].Imported().Name(), got[0].Active(), owner, name, active)
+				step, got[0].Name(), got[0].Active(), owner, name, active)
 		}
 	}
 
@@ -164,7 +164,7 @@ func TestSaveOfMissingAreaFails(t *testing.T) {
 			db := pgtest.NewDB(t)
 			src := newSource(t, db, newCustomer(t, db))
 			ref := inventory.SourceReference{Source: src.ID(), RecordID: "missing"}
-			ghost, err := inventory.RestoreArea(ref, areaRecord(t, "missing", "IT", false).Imported, inventory.AreaState{Active: tt.active})
+			ghost, err := inventory.RestoreArea(ref, "IT", inventory.AreaState{Active: tt.active})
 			if err != nil {
 				t.Fatal(err)
 			}

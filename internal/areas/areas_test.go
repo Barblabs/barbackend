@@ -119,7 +119,7 @@ func user(t *testing.T, role tenancy.Role, customer tenancy.CustomerID) tenancy.
 func names(stored []areas.StoredArea) string {
 	var got []string
 	for _, a := range stored {
-		got = append(got, a.Area.Imported().Name())
+		got = append(got, a.Area.Name())
 	}
 	return fmt.Sprint(got)
 }
@@ -218,8 +218,8 @@ func TestSetOwnerStatesTheCanonicalEmailAndASyncKeepsIt(t *testing.T) {
 	if ownerOf(set) != "ana@example.com" {
 		t.Errorf("owner after setting = %s, want ana@example.com", ownerOf(set))
 	}
-	if got := e.only(t, customer); got.Area.Imported().Name() != "Information Technology" || ownerOf(got) != "ana@example.com" {
-		t.Errorf("area after a renaming Sync = %s owned by %s, want the new name and the owner kept", got.Area.Imported().Name(), ownerOf(got))
+	if got := e.only(t, customer); got.Area.Name() != "Information Technology" || ownerOf(got) != "ana@example.com" {
+		t.Errorf("area after a renaming Sync = %s owned by %s, want the new name and the owner kept", got.Area.Name(), ownerOf(got))
 	}
 }
 

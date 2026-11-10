@@ -86,7 +86,7 @@ func newAreaResponse(stored areas.StoredArea) areaResponse {
 		ID:            stored.ID,
 		SourceID:      a.Ref().Source.String(),
 		RecordID:      a.Ref().RecordID,
-		Name:          a.Imported().Name(),
+		Name:          a.Name(),
 		Active:        a.Active(),
 		InactiveSince: stored.InactiveSince,
 	}

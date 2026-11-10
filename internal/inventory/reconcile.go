@@ -194,16 +194,16 @@ func (r *Reconciliation) reconcileAreas(source CMDBSourceID, stored map[string]*
 		a, ok := stored[rec.RecordID]
 		if !ok {
 			r.areas.Created = append(r.areas.Created, &Area{
-				ref:      SourceReference{Source: source, RecordID: rec.RecordID},
-				imported: rec.Imported,
-				active:   !rec.Imported.Inactive(),
+				ref:    SourceReference{Source: source, RecordID: rec.RecordID},
+				name:   rec.Imported.Name(),
+				active: !rec.Imported.Inactive(),
 			})
 			continue
 		}
-		if a.imported.Name() != rec.Imported.Name() {
+		if a.name != rec.Imported.Name() {
+			a.name = rec.Imported.Name()
 			r.areas.Renamed = append(r.areas.Renamed, a)
 		}
-		a.imported = rec.Imported
 		r.setAreaActive(a, !rec.Imported.Inactive())
 	}
 	for _, a := range existing {
