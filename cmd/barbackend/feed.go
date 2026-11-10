@@ -9,6 +9,7 @@ import (
 	"os"
 	"time"
 
+	"barbackend/internal/advisories"
 	"barbackend/internal/feeds/attack"
 	"barbackend/internal/feeds/aws"
 	"barbackend/internal/feeds/epss"
@@ -72,12 +73,14 @@ func pullFeeds(ctx context.Context, out io.Writer, feeds []ingest.Feed, name str
 }
 
 // handledBy has NVD, KEV and EPSS hand what they pull to the Findings
-// (ADR 0020). feed pull runs without them, so it needs no database.
-func handledBy(f *findings.Service, feeds []ingest.Feed) []ingest.Feed {
+// (ADR 0020), and AWS hand its bulletins to the Advisories (ADR 0022). feed
+// pull runs without them, so it needs no database.
+func handledBy(f *findings.Service, a *advisories.Service, feeds []ingest.Feed) []ingest.Feed {
 	handlers := map[string]func(context.Context, []stix2.STIXObject) error{
 		"nvd":  f.HandleNVD,
 		"kev":  f.HandleKEV,
 		"epss": f.HandleEPSS,
+		"aws":  a.HandleAWS,
 	}
 	out := make([]ingest.Feed, len(feeds))
 	for i, feed := range feeds {

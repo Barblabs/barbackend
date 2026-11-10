@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"barbackend/internal/advisories"
 	"barbackend/internal/agents"
 	"barbackend/internal/areas"
 	"barbackend/internal/assets"
@@ -48,7 +49,7 @@ func serve(ctx context.Context, _ []string) error {
 
 	return withDB(ctx, func(db *postgres.DB) error {
 		found := findings.New(db, scoring.Model1, kevMaxAge)
-		svc, err := ingest.New(handledBy(found, registeredFeeds())...)
+		svc, err := ingest.New(handledBy(found, advisories.New(db), registeredFeeds())...)
 		if err != nil {
 			return err
 		}
