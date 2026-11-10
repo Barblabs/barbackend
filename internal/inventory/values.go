@@ -9,7 +9,7 @@ import (
 var (
 	ErrInvalidSourceReference   = errors.New("invalid source reference")
 	ErrInvalidKind              = errors.New("invalid asset kind")
-	ErrEmptyName                = errors.New("asset name is required")
+	ErrEmptyName                = errors.New("name is required")
 	ErrHardwareOnVirtual        = errors.New("virtual machine cannot have hardware")
 	ErrInvalidSoftware          = errors.New("invalid software component")
 	ErrMultipleOperatingSystems = errors.New("asset has more than one operating system")
@@ -22,6 +22,16 @@ var (
 type SourceReference struct {
 	Source   CMDBSourceID
 	RecordID string
+}
+
+func (r SourceReference) validate() error {
+	if r.Source == (CMDBSourceID{}) {
+		return fmt.Errorf("%w: zero source", ErrInvalidSourceReference)
+	}
+	if blank(r.RecordID) {
+		return fmt.Errorf("%w: empty record id", ErrInvalidSourceReference)
+	}
+	return nil
 }
 
 type AssetKind int
