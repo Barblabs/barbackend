@@ -316,7 +316,7 @@ func (s *Service) sync(ctx context.Context, stored postgres.StoredCMDBSource, st
 	if err != nil {
 		return inventory.SyncRun{}, fmt.Errorf("snapshot of %s: %w", src.ID(), err)
 	}
-	return s.db.CommitSync(ctx, src.ID(), started, func(existing []*inventory.Asset) (inventory.Reconciliation, error) {
+	return s.db.CommitSync(ctx, src.ID(), started, func(existing inventory.Stored) (inventory.Reconciliation, error) {
 		return inventory.Reconcile(src.ID(), existing, snapshot)
 	})
 }

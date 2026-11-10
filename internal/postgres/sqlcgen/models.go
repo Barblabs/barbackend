@@ -46,6 +46,7 @@ type Asset struct {
 	CreatedAt          time.Time
 	ImportedChangedAt  time.Time
 	InactiveSince      *time.Time
+	AreaRecordID       *string
 }
 
 type AssetKind struct {
@@ -88,6 +89,17 @@ type Customer struct {
 	Name          string
 	CreatedAt     time.Time
 	DeactivatedAt *time.Time
+}
+
+type CustomerArea struct {
+	ID                int64
+	CmdbSourceID      uuid.UUID
+	RecordID          string
+	Name              string
+	OwnerEmail        *string
+	CreatedAt         time.Time
+	ImportedChangedAt time.Time
+	InactiveSince     *time.Time
 }
 
 type Exposure struct {

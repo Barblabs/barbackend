@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"barbackend/internal/agents"
+	"barbackend/internal/areas"
 	"barbackend/internal/assessment"
 	"barbackend/internal/assets"
 	"barbackend/internal/businesscontext"
@@ -44,6 +45,7 @@ var operations = []struct{ method, path string }{
 	{http.MethodPost, "/cmdb/source/test"},
 	{http.MethodPost, "/cmdb/source/sync"},
 	{http.MethodGet, "/assets"},
+	{http.MethodGet, "/areas"},
 	{http.MethodGet, "/prioritizations"},
 	{http.MethodGet, "/business-context"},
 	{http.MethodGet, "/business-context/brief"},
@@ -64,6 +66,7 @@ var customerAdminOperations = []struct{ method, path string }{
 	{http.MethodPost, "/users"},
 	{http.MethodPatch, "/users/" + uuid.Nil.String()},
 	{http.MethodPost, "/users/" + uuid.Nil.String() + "/disable"},
+	{http.MethodPut, "/areas/0/owner"},
 }
 
 // businessContextEdits are those only a Customer Admin may call on the
@@ -108,7 +111,7 @@ func newEnv(t *testing.T) env {
 	llm := claudetest.New(t)
 	agentService := agents.NewService(db, agents.NewCrew(claude.New(llm.URL), agents.DefaultModels()))
 	router := httpapi.New(httpapi.Config{
-		Agents: agentService, Assets: assets.New(db), BusinessContext: businesscontext.New(db), CMDB: svc,
+		Agents: agentService, Areas: areas.New(db), Assets: assets.New(db), BusinessContext: businesscontext.New(db), CMDB: svc,
 		Users: users.New(db, pool.Verifier(t), admin), AllowedOrigins: []string{allowedOrigin},
 	})
 	e := env{db: db, conn: pgtest.Conn(t, url), pool: pool, provider: p, admin: admin, cmdb: svc, llm: llm, agents: agentService, router: router}
@@ -289,11 +292,33 @@ func record(t *testing.T, id, name string) inventory.Record {
 	return inventory.Record{RecordID: id, Imported: imported}
 }
 
+func areaRecord(t *testing.T, id, name string) inventory.AreaRecord {
+	t.Helper()
+	imported, err := inventory.NewImportedArea(inventory.ImportedAreaParams{Name: name})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return inventory.AreaRecord{RecordID: id, Imported: imported}
+}
+
+// areaID is the id of the env Customer's Area with recordID.
+func (e env) areaID(t *testing.T, recordID string) int64 {
+	t.Helper()
+	var id int64
+	err := e.conn.QueryRow(context.Background(), `
+		SELECT a.id FROM customer_areas a JOIN cmdb_sources s ON s.id = a.cmdb_source_id
+		WHERE s.customer_id = $1 AND a.record_id = $2`, [16]byte(e.customer), recordID).Scan(&id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
 func (e env) holdSyncLock(t *testing.T, src inventory.CMDBSourceID) (release func()) {
 	t.Helper()
 	locked, unlock, done := make(chan struct{}), make(chan struct{}), make(chan error)
 	go func() {
-		_, err := e.db.CommitSync(context.Background(), src, time.Now(), func(existing []*inventory.Asset) (inventory.Reconciliation, error) {
+		_, err := e.db.CommitSync(context.Background(), src, time.Now(), func(existing inventory.Stored) (inventory.Reconciliation, error) {
 			close(locked)
 			<-unlock
 			return inventory.Reconcile(src, existing, inventory.Snapshot{})

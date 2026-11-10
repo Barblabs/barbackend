@@ -204,3 +204,27 @@ func TestSoftwareComponentIdentified(t *testing.T) {
 		})
 	}
 }
+
+func TestNewImportedArea(t *testing.T) {
+	tests := []struct {
+		name string
+		p    inventory.ImportedAreaParams
+		want error
+	}{
+		{"valid", inventory.ImportedAreaParams{Name: "IT Department"}, nil},
+		{"valid inactive", inventory.ImportedAreaParams{Name: "IT Department", Inactive: true}, nil},
+		{"empty name", inventory.ImportedAreaParams{}, inventory.ErrEmptyName},
+		{"whitespace name", inventory.ImportedAreaParams{Name: " \t\n"}, inventory.ErrEmptyName},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a, err := inventory.NewImportedArea(tt.p)
+			if !errors.Is(err, tt.want) {
+				t.Fatalf("err = %v, want %v", err, tt.want)
+			}
+			if err == nil && (a.Name() != tt.p.Name || a.Inactive() != tt.p.Inactive) {
+				t.Errorf("got %q inactive=%v, want %q inactive=%v", a.Name(), a.Inactive(), tt.p.Name, tt.p.Inactive)
+			}
+		})
+	}
+}

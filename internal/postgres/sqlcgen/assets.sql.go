@@ -97,6 +97,7 @@ type InsertAssetsParams struct {
 	HardwareModel   *string
 	CriticalityID   *int16
 	ImportedOwnerID *int64
+	AreaRecordID    *string
 	Retired         bool
 	InactiveSince   *time.Time
 }
@@ -116,7 +117,7 @@ const listAssets = `-- name: ListAssets :many
 SELECT a.cmdb_source_id, a.record_id, a.name, a.description, a.kind_id,
        a.hardware_vendor, a.hardware_model, a.criticality_id,
        imported_owner.email AS imported_owner, declared_owner.email AS declared_owner,
-       a.declared_exposure_id, a.retired, a.inactive_since
+       a.declared_exposure_id, a.area_record_id, a.retired, a.inactive_since
 FROM assets a
 LEFT JOIN asset_owners imported_owner ON imported_owner.id = a.imported_owner_id
 LEFT JOIN asset_owners declared_owner ON declared_owner.id = a.declared_owner_id
@@ -136,6 +137,7 @@ type ListAssetsRow struct {
 	ImportedOwner      *string
 	DeclaredOwner      *string
 	DeclaredExposureID *int16
+	AreaRecordID       *string
 	Retired            bool
 	InactiveSince      *time.Time
 }
@@ -161,6 +163,7 @@ func (q *Queries) ListAssets(ctx context.Context, cmdbSourceID uuid.UUID) ([]Lis
 			&i.ImportedOwner,
 			&i.DeclaredOwner,
 			&i.DeclaredExposureID,
+			&i.AreaRecordID,
 			&i.Retired,
 			&i.InactiveSince,
 		); err != nil {
@@ -178,11 +181,13 @@ const listCustomerAssets = `-- name: ListCustomerAssets :many
 SELECT a.cmdb_source_id, a.record_id, a.name, a.description, a.kind_id,
        a.hardware_vendor, a.hardware_model, a.criticality_id,
        imported_owner.email AS imported_owner, declared_owner.email AS declared_owner,
-       a.declared_exposure_id, a.retired, a.inactive_since
+       a.declared_exposure_id, a.area_record_id, a.retired, a.inactive_since,
+       area.id AS area_id, area.name AS area_name
 FROM assets a
 JOIN cmdb_sources s ON s.id = a.cmdb_source_id
 LEFT JOIN asset_owners imported_owner ON imported_owner.id = a.imported_owner_id
 LEFT JOIN asset_owners declared_owner ON declared_owner.id = a.declared_owner_id
+LEFT JOIN customer_areas area ON area.cmdb_source_id = a.cmdb_source_id AND area.record_id = a.area_record_id
 WHERE s.customer_id = $1
   AND ($2::boolean IS NULL OR (a.inactive_since IS NULL) = $2::boolean)
   AND ($3::smallint IS NULL OR a.kind_id = $3::smallint)
@@ -217,8 +222,11 @@ type ListCustomerAssetsRow struct {
 	ImportedOwner      *string
 	DeclaredOwner      *string
 	DeclaredExposureID *int16
+	AreaRecordID       *string
 	Retired            bool
 	InactiveSince      *time.Time
+	AreaID             *int64
+	AreaName           *string
 }
 
 // The keyset condition and the ORDER BY both use (name, cmdb_source_id,
@@ -253,8 +261,11 @@ func (q *Queries) ListCustomerAssets(ctx context.Context, arg ListCustomerAssets
 			&i.ImportedOwner,
 			&i.DeclaredOwner,
 			&i.DeclaredExposureID,
+			&i.AreaRecordID,
 			&i.Retired,
 			&i.InactiveSince,
+			&i.AreaID,
+			&i.AreaName,
 		); err != nil {
 			return nil, err
 		}

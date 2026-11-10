@@ -219,6 +219,18 @@ linters:
           deny:
             - pkg: barbackend/internal
               desc: the assets use case calls only inventory, postgres and tenancy (ADR 0008)
+        areas:
+          list-mode: lax
+          files:
+            - "**/internal/areas/**"
+          allow:
+            - barbackend/internal/areas
+            - barbackend/internal/inventory
+            - barbackend/internal/postgres
+            - barbackend/internal/tenancy
+          deny:
+            - pkg: barbackend/internal
+              desc: the areas use case calls only inventory, postgres and tenancy (ADR 0008)
         users:
           list-mode: lax
           files:
@@ -260,6 +272,7 @@ linters:
             - barbackend/internal/tenancy
             - barbackend/internal/business
             - barbackend/internal/agents
+            - barbackend/internal/areas
             - barbackend/internal/assets
             - barbackend/internal/businesscontext
             - barbackend/internal/cmdb

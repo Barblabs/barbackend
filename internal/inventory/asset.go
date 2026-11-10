@@ -14,11 +14,8 @@ type Asset struct {
 }
 
 func NewAsset(ref SourceReference, imported ImportedAsset) (*Asset, error) {
-	if ref.Source == (CMDBSourceID{}) {
-		return nil, fmt.Errorf("%w: zero source", ErrInvalidSourceReference)
-	}
-	if blank(ref.RecordID) {
-		return nil, fmt.Errorf("%w: empty record id", ErrInvalidSourceReference)
+	if err := ref.validate(); err != nil {
+		return nil, err
 	}
 	if imported.isZero() {
 		return nil, ErrZeroImportedAsset

@@ -11,12 +11,24 @@ import (
 func mapped(class string, change func(*ci)) ci {
 	c := ci{
 		Key: "7", Class: class, Name: "Server1", Description: "  Billing database\n", Status: "production",
-		Criticality: ptr("low"), Brand: "HPE", Model: "DL380", OSFamily: "Red Hat", OSVersion: "9",
+		Criticality: ptr("low"), Brand: "HPE", Model: "DL380", OSFamily: "Red Hat", OSVersion: "9", OrgID: "3",
 	}
 	if change != nil {
 		change(&c)
 	}
 	return c
+}
+
+// demo is the Organization every mapped ci belongs to.
+var demo = []organization{{Key: "3", Name: "Demo", Status: "active"}}
+
+func demoArea(t *testing.T) inventory.AreaRecord {
+	t.Helper()
+	imported, err := inventory.NewImportedArea(inventory.ImportedAreaParams{Name: "Demo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return inventory.AreaRecord{RecordID: "3", Imported: imported}
 }
 
 func redHat() []inventory.SoftwareComponent {
@@ -168,12 +180,16 @@ func TestSnapshotMapsRecords(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			tt.want.Area = "3"
 			imported, err := inventory.NewImportedAsset(tt.want)
 			if err != nil {
 				t.Fatal(err)
 			}
-			want := inventory.Snapshot{Records: []inventory.Record{{RecordID: "7", Imported: imported}}}
-			if got := snapshot([]ci{tt.ci}, tt.lk); !reflect.DeepEqual(got, want) {
+			want := inventory.Snapshot{
+				Areas:   []inventory.AreaRecord{demoArea(t)},
+				Records: []inventory.Record{{RecordID: "7", Imported: imported}},
+			}
+			if got := snapshot([]ci{tt.ci}, demo, tt.lk); !reflect.DeepEqual(got, want) {
 				t.Errorf("snapshot:\n got %+v\nwant %+v", got, want)
 			}
 		})
@@ -188,10 +204,11 @@ func TestSnapshotSkipsRecords(t *testing.T) {
 	}{
 		{"unknown criticality", mapped("Server", func(c *ci) { c.Criticality = ptr("critical") }), `business_criticity "critical"`},
 		{"rejected by the domain", mapped("Server", func(c *ci) { c.Name = " " }), inventory.ErrEmptyName.Error()},
+		{"organization not read", mapped("Server", func(c *ci) { c.OrgID = "9" }), "organization 9 is not readable"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := snapshot([]ci{tt.ci}, lookups{})
+			got := snapshot([]ci{tt.ci}, demo, lookups{})
 			if len(got.Records) != 0 || len(got.Skipped) != 1 {
 				t.Fatalf("snapshot = %+v, want one Skipped Record", got)
 			}
@@ -205,8 +222,44 @@ func TestSnapshotSkipsRecords(t *testing.T) {
 func TestSnapshotKeepsMappingAfterASkippedRecord(t *testing.T) {
 	skipped := mapped("Server", func(c *ci) { c.Key, c.Name = "1", "" })
 	kept := mapped("Server", func(c *ci) { c.Key = "2" })
-	got := snapshot([]ci{skipped, kept}, lookups{})
+	got := snapshot([]ci{skipped, kept}, demo, lookups{})
 	if len(got.Skipped) != 1 || got.Skipped[0].RecordID != "1" || len(got.Records) != 1 || got.Records[0].RecordID != "2" {
 		t.Errorf("snapshot = %+v, want record 1 skipped and record 2 kept", got)
+	}
+}
+
+func TestSnapshotMapsOrganizationsToAreas(t *testing.T) {
+	orgs := []organization{
+		{Key: "1", Name: "My Company", Status: "active"},
+		{Key: "2", Name: "Old Branch", Status: "inactive"},
+	}
+	got := snapshot(nil, orgs, lookups{})
+	var want []inventory.AreaRecord
+	for _, p := range []struct {
+		id string
+		inventory.ImportedAreaParams
+	}{
+		{"1", inventory.ImportedAreaParams{Name: "My Company"}},
+		{"2", inventory.ImportedAreaParams{Name: "Old Branch", Inactive: true}},
+	} {
+		imported, err := inventory.NewImportedArea(p.ImportedAreaParams)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want = append(want, inventory.AreaRecord{RecordID: p.id, Imported: imported})
+	}
+	if !reflect.DeepEqual(got.Areas, want) {
+		t.Errorf("areas:\n got %+v\nwant %+v", got.Areas, want)
+	}
+}
+
+func TestSnapshotSkipsTheCIsOfAnOrganizationTheDomainRejects(t *testing.T) {
+	orgs := []organization{{Key: "3", Name: " ", Status: "active"}}
+	got := snapshot([]ci{mapped("Server", nil)}, orgs, lookups{})
+	if len(got.Areas) != 0 || len(got.Records) != 0 || len(got.Skipped) != 1 {
+		t.Fatalf("snapshot = %+v, want no Areas and one Skipped Record", got)
+	}
+	if reason := got.Skipped[0].Reason; !strings.Contains(reason, "organization 3 is not readable") {
+		t.Errorf("reason = %q", reason)
 	}
 }

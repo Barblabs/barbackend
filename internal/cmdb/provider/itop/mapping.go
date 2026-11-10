@@ -19,12 +19,29 @@ var criticalities = map[string]inventory.Criticality{
 	"low":    inventory.CriticalityLow,
 }
 
-const retiredStatus = "obsolete"
+const (
+	retiredStatus      = "obsolete"
+	inactiveAreaStatus = "inactive"
+)
 
-func snapshot(cis []ci, lk lookups) inventory.Snapshot {
+func snapshot(cis []ci, orgs []organization, lk lookups) inventory.Snapshot {
 	var s inventory.Snapshot
+	areas := map[string]bool{}
+	for _, org := range orgs {
+		imported, err := inventory.NewImportedArea(inventory.ImportedAreaParams{
+			Name:     org.Name,
+			Inactive: org.Status == inactiveAreaStatus,
+		})
+		// An Organization the domain rejects is left out, so its CIs are
+		// skipped below instead of failing the whole Sync.
+		if err != nil {
+			continue
+		}
+		areas[org.Key] = true
+		s.Areas = append(s.Areas, inventory.AreaRecord{RecordID: org.Key, Imported: imported})
+	}
 	for _, c := range cis {
-		imported, err := importedAsset(c, lk)
+		imported, err := importedAsset(c, areas, lk)
 		if err != nil {
 			s.Skipped = append(s.Skipped, inventory.SkippedRecord{RecordID: c.Key, Reason: err.Error()})
 			continue
@@ -34,7 +51,12 @@ func snapshot(cis []ci, lk lookups) inventory.Snapshot {
 	return s
 }
 
-func importedAsset(c ci, lk lookups) (inventory.ImportedAsset, error) {
+// importedAsset fails for a ci whose Organization is not among the Areas, so
+// it is skipped rather than imported without its Area (ADR 0007).
+func importedAsset(c ci, areas map[string]bool, lk lookups) (inventory.ImportedAsset, error) {
+	if !areas[c.OrgID] {
+		return inventory.ImportedAsset{}, fmt.Errorf("organization %s is not readable", c.OrgID)
+	}
 	kind, ok := kinds[c.Class]
 	if !ok {
 		return inventory.ImportedAsset{}, fmt.Errorf("class %s is not imported", c.Class)
@@ -56,6 +78,7 @@ func importedAsset(c ci, lk lookups) (inventory.ImportedAsset, error) {
 		Software:    components,
 		Criticality: crit,
 		Owner:       owner(c, lk),
+		Area:        c.OrgID,
 		Retired:     c.Status == retiredStatus,
 	})
 }

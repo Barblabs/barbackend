@@ -28,8 +28,10 @@ var ciClasses = []struct {
 }
 
 func ciFields(classFields ...string) []string {
-	return append([]string{"name", "description", "status", "business_criticity", "contacts_list", "softwares_list"}, classFields...)
+	return append([]string{"name", "description", "status", "business_criticity", "contacts_list", "softwares_list", "org_id"}, classFields...)
 }
+
+var organizationFields = []string{"name", "status"}
 
 var instanceClasses = map[string]bool{
 	"DBServer":      true,
@@ -39,26 +41,50 @@ var instanceClasses = map[string]bool{
 	"OtherSoftware": true,
 }
 
-func fetch(ctx context.Context, c *rest.Client) ([]ci, lookups, error) {
+func fetch(ctx context.Context, c *rest.Client) ([]ci, []organization, lookups, error) {
 	var cis []ci
 	for _, class := range ciClasses {
 		objects, err := c.Get(ctx, rest.Query{Class: class.name, Fields: class.fields})
 		if err != nil {
-			return nil, lookups{}, err
+			return nil, nil, lookups{}, err
 		}
 		for _, o := range objects {
 			c, err := decodeCI(o, class.fields)
 			if err != nil {
-				return nil, lookups{}, err
+				return nil, nil, lookups{}, err
 			}
 			cis = append(cis, c)
 		}
 	}
+	orgs, err := fetchOrganizations(ctx, c)
+	if err != nil {
+		return nil, nil, lookups{}, err
+	}
 	lk, err := fetchLookups(ctx, c, cis)
 	if err != nil {
-		return nil, lookups{}, err
+		return nil, nil, lookups{}, err
 	}
-	return cis, lk, nil
+	return cis, orgs, lk, nil
+}
+
+// fetchOrganizations reads every Organization, not only those a ci
+// references, because the Snapshot's Areas must be complete: an Area left
+// out would be deactivated.
+func fetchOrganizations(ctx context.Context, c *rest.Client) ([]organization, error) {
+	objects, err := c.Get(ctx, rest.Query{Class: "Organization", Fields: organizationFields})
+	if err != nil {
+		return nil, err
+	}
+	orgs := make([]organization, 0, len(objects))
+	for _, o := range objects {
+		var org organization
+		if err := decode(o, organizationFields, &org); err != nil {
+			return nil, err
+		}
+		org.Key = o.Key
+		orgs = append(orgs, org)
+	}
+	return orgs, nil
 }
 
 func decodeCI(o rest.Object, fields []string) (ci, error) {

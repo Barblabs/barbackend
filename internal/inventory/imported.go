@@ -13,7 +13,9 @@ type ImportedAssetParams struct {
 	Software    []SoftwareComponent
 	Criticality Criticality
 	Owner       OwnerEmail
-	Retired     bool
+	// Area is the RecordID of an AreaRecord in the same Snapshot, or "" for none.
+	Area    string
+	Retired bool
 }
 
 type ImportedAsset struct {
@@ -24,6 +26,7 @@ type ImportedAsset struct {
 	software    []SoftwareComponent
 	criticality Criticality
 	owner       OwnerEmail
+	area        string
 	retired     bool
 }
 
@@ -57,6 +60,7 @@ func NewImportedAsset(p ImportedAssetParams) (ImportedAsset, error) {
 		software:    software,
 		criticality: p.Criticality,
 		owner:       p.Owner,
+		area:        p.Area,
 		retired:     p.Retired,
 	}, nil
 }
@@ -95,6 +99,7 @@ func (a ImportedAsset) equal(b ImportedAsset) bool {
 		a.hardware == b.hardware &&
 		a.criticality == b.criticality &&
 		a.owner == b.owner &&
+		a.area == b.area &&
 		a.retired == b.retired &&
 		sameComponents(a.software, b.software)
 }
@@ -145,6 +150,9 @@ func (a ImportedAsset) Owner() (OwnerEmail, bool) {
 	}
 	return a.owner, true
 }
+
+// Area returns the RecordID of the Asset's Area.
+func (a ImportedAsset) Area() (string, bool) { return a.area, a.area != "" }
 
 // Retired does not affect Asset.Active; the sync decides when a retired Asset
 // becomes inactive (ADR 0005).

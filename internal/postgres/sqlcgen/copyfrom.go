@@ -9,6 +9,41 @@ import (
 	"context"
 )
 
+// iteratorForInsertAreas implements pgx.CopyFromSource.
+type iteratorForInsertAreas struct {
+	rows                 []InsertAreasParams
+	skippedFirstNextCall bool
+}
+
+func (r *iteratorForInsertAreas) Next() bool {
+	if len(r.rows) == 0 {
+		return false
+	}
+	if !r.skippedFirstNextCall {
+		r.skippedFirstNextCall = true
+		return true
+	}
+	r.rows = r.rows[1:]
+	return len(r.rows) > 0
+}
+
+func (r iteratorForInsertAreas) Values() ([]interface{}, error) {
+	return []interface{}{
+		r.rows[0].CmdbSourceID,
+		r.rows[0].RecordID,
+		r.rows[0].Name,
+		r.rows[0].InactiveSince,
+	}, nil
+}
+
+func (r iteratorForInsertAreas) Err() error {
+	return nil
+}
+
+func (q *Queries) InsertAreas(ctx context.Context, arg []InsertAreasParams) (int64, error) {
+	return q.db.CopyFrom(ctx, []string{"customer_areas"}, []string{"cmdb_source_id", "record_id", "name", "inactive_since"}, &iteratorForInsertAreas{rows: arg})
+}
+
 // iteratorForInsertAssets implements pgx.CopyFromSource.
 type iteratorForInsertAssets struct {
 	rows                 []InsertAssetsParams
@@ -38,6 +73,7 @@ func (r iteratorForInsertAssets) Values() ([]interface{}, error) {
 		r.rows[0].HardwareModel,
 		r.rows[0].CriticalityID,
 		r.rows[0].ImportedOwnerID,
+		r.rows[0].AreaRecordID,
 		r.rows[0].Retired,
 		r.rows[0].InactiveSince,
 	}, nil
@@ -48,7 +84,7 @@ func (r iteratorForInsertAssets) Err() error {
 }
 
 func (q *Queries) InsertAssets(ctx context.Context, arg []InsertAssetsParams) (int64, error) {
-	return q.db.CopyFrom(ctx, []string{"assets"}, []string{"cmdb_source_id", "record_id", "name", "description", "kind_id", "hardware_vendor", "hardware_model", "criticality_id", "imported_owner_id", "retired", "inactive_since"}, &iteratorForInsertAssets{rows: arg})
+	return q.db.CopyFrom(ctx, []string{"assets"}, []string{"cmdb_source_id", "record_id", "name", "description", "kind_id", "hardware_vendor", "hardware_model", "criticality_id", "imported_owner_id", "area_record_id", "retired", "inactive_since"}, &iteratorForInsertAssets{rows: arg})
 }
 
 // iteratorForInsertSoftwareComponents implements pgx.CopyFromSource.
