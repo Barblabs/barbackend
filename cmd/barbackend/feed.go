@@ -14,7 +14,9 @@ import (
 	"barbackend/internal/feeds/epss"
 	"barbackend/internal/feeds/kev"
 	"barbackend/internal/feeds/nvd"
+	"barbackend/internal/findings"
 	"barbackend/internal/ingest"
+	"github.com/TcM1911/stix2"
 )
 
 const feedSynopsis = "pull [--feed <name>]"
@@ -25,6 +27,9 @@ const (
 	attackInterval = 12 * time.Hour
 	awsInterval    = 6 * time.Hour
 	epssInterval   = 24 * time.Hour
+	// kevMaxAge is how old the KEV catalog may be before a Score marks it
+	// stale (ADR 0009): two missed pulls.
+	kevMaxAge = 2 * kevInterval
 )
 
 func feed(ctx context.Context, args []string) error {
@@ -64,6 +69,22 @@ func pullFeeds(ctx context.Context, out io.Writer, feeds []ingest.Feed, name str
 		return errors.New("one or more feeds failed")
 	}
 	return nil
+}
+
+// handledBy has NVD, KEV and EPSS hand what they pull to the Findings
+// (ADR 0020). feed pull runs without them, so it needs no database.
+func handledBy(f *findings.Service, feeds []ingest.Feed) []ingest.Feed {
+	handlers := map[string]func(context.Context, []stix2.STIXObject) error{
+		"nvd":  f.HandleNVD,
+		"kev":  f.HandleKEV,
+		"epss": f.HandleEPSS,
+	}
+	out := make([]ingest.Feed, len(feeds))
+	for i, feed := range feeds {
+		feed.Handle = handlers[feed.Name]
+		out[i] = feed
+	}
+	return out
 }
 
 func registeredFeeds() []ingest.Feed {

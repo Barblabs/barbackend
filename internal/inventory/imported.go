@@ -12,6 +12,7 @@ type ImportedAssetParams struct {
 	Hardware    Hardware
 	Software    []SoftwareComponent
 	Criticality Criticality
+	Exposure    Exposure
 	Owner       OwnerEmail
 	// Area is the RecordID of an AreaRecord in the same Snapshot, or "" for none.
 	Area    string
@@ -25,6 +26,7 @@ type ImportedAsset struct {
 	hardware    Hardware
 	software    []SoftwareComponent
 	criticality Criticality
+	exposure    Exposure
 	owner       OwnerEmail
 	area        string
 	retired     bool
@@ -47,6 +49,9 @@ func NewImportedAsset(p ImportedAssetParams) (ImportedAsset, error) {
 	if !p.Criticality.valid() {
 		return ImportedAsset{}, fmt.Errorf("%w: %d", ErrInvalidCriticality, int(p.Criticality))
 	}
+	if !p.Exposure.valid() {
+		return ImportedAsset{}, fmt.Errorf("%w: %d", ErrInvalidExposure, int(p.Exposure))
+	}
 	software, err := newSoftware(p.Software)
 	if err != nil {
 		return ImportedAsset{}, err
@@ -59,6 +64,7 @@ func NewImportedAsset(p ImportedAssetParams) (ImportedAsset, error) {
 		hardware:    hardware,
 		software:    software,
 		criticality: p.Criticality,
+		exposure:    p.Exposure,
 		owner:       p.Owner,
 		area:        p.Area,
 		retired:     p.Retired,
@@ -98,6 +104,7 @@ func (a ImportedAsset) equal(b ImportedAsset) bool {
 		a.kind == b.kind &&
 		a.hardware == b.hardware &&
 		a.criticality == b.criticality &&
+		a.exposure == b.exposure &&
 		a.owner == b.owner &&
 		a.area == b.area &&
 		a.retired == b.retired &&
@@ -143,6 +150,9 @@ func (a ImportedAsset) OperatingSystem() (SoftwareComponent, bool) {
 }
 
 func (a ImportedAsset) Criticality() Criticality { return a.criticality }
+
+// Exposure is Unknown when the CMDB Source does not give it (ADR 0021).
+func (a ImportedAsset) Exposure() Exposure { return a.exposure }
 
 func (a ImportedAsset) Owner() (OwnerEmail, bool) {
 	if a.owner.isZero() {

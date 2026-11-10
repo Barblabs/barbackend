@@ -121,6 +121,44 @@ func TestAssetExposure(t *testing.T) {
 	}
 }
 
+func TestAssetExposureFallsBackToImported(t *testing.T) {
+	tests := []struct {
+		name     string
+		imported inventory.Exposure
+		declare  inventory.Exposure
+		clear    bool
+		want     inventory.Exposure
+		wantDecl inventory.Exposure
+	}{
+		{"none", inventory.ExposureUnknown, inventory.ExposureUnknown, false, inventory.ExposureUnknown, inventory.ExposureUnknown},
+		{"imported only", inventory.Internal, inventory.ExposureUnknown, false, inventory.Internal, inventory.ExposureUnknown},
+		{"declared only", inventory.ExposureUnknown, inventory.InternetFacing, false, inventory.InternetFacing, inventory.InternetFacing},
+		{"declared wins", inventory.Internal, inventory.InternetFacing, false, inventory.InternetFacing, inventory.InternetFacing},
+		{"clearing falls back to imported", inventory.Internal, inventory.InternetFacing, true, inventory.Internal, inventory.ExposureUnknown},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := validParams()
+			p.Exposure = tt.imported
+			a := newAsset(t, p)
+			if tt.declare != inventory.ExposureUnknown {
+				if err := a.DeclareExposure(tt.declare); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if tt.clear {
+				a.ClearExposureDeclaration()
+			}
+			if got := a.Exposure(); got != tt.want {
+				t.Errorf("Exposure() = %v, want %v", got, tt.want)
+			}
+			if got := a.DeclaredExposure(); got != tt.wantDecl {
+				t.Errorf("DeclaredExposure() = %v, want %v", got, tt.wantDecl)
+			}
+		})
+	}
+}
+
 func TestAssetRejectedExposureKeepsPrevious(t *testing.T) {
 	a := newAsset(t, validParams())
 	if err := a.DeclareExposure(inventory.Internal); err != nil {

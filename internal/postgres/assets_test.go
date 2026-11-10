@@ -25,6 +25,7 @@ func fullParams(t *testing.T) inventory.ImportedAssetParams {
 			{Role: inventory.Application, Name: "custom agent"},
 		},
 		Criticality: inventory.CriticalityHigh,
+		Exposure:    inventory.InternetFacing,
 		Owner:       mustOwner(t, "owner@example.com"),
 		Retired:     true,
 	}

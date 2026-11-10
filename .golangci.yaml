@@ -98,6 +98,42 @@ linters:
           deny:
             - pkg: barbackend/internal
               desc: the businesscontext use case calls only business, postgres and tenancy (ADR 0017)
+        finding:
+          list-mode: lax
+          files:
+            - "**/internal/finding/**"
+          allow:
+            - barbackend/internal/finding
+            - barbackend/internal/inventory
+            - barbackend/internal/matching
+            - barbackend/internal/scoring
+            - barbackend/internal/stixext
+          deny:
+            - pkg: barbackend/internal
+              desc: finding is a pure domain package that imports only inventory, matching, scoring and stixext (ADR 0008, ADR 0020)
+            - pkg: net/http
+              desc: finding is pure and does no I/O (ADR 0008)
+            - pkg: database/sql
+              desc: finding is pure and does no I/O (ADR 0008)
+            - pkg: github.com/jackc/pgx
+              desc: finding is pure and does no I/O (ADR 0008)
+        matching:
+          list-mode: lax
+          files:
+            - "**/internal/matching/**"
+          allow:
+            - barbackend/internal/inventory
+            - barbackend/internal/matching
+            - barbackend/internal/stixext
+          deny:
+            - pkg: barbackend/internal
+              desc: matching is a pure domain package that imports only inventory and stixext (ADR 0008, ADR 0010)
+            - pkg: net/http
+              desc: matching is pure and does no I/O (ADR 0008)
+            - pkg: database/sql
+              desc: matching is pure and does no I/O (ADR 0008)
+            - pkg: github.com/jackc/pgx
+              desc: matching is pure and does no I/O (ADR 0008)
         cmdb-provider:
           list-mode: lax
           files:
@@ -231,6 +267,21 @@ linters:
           deny:
             - pkg: barbackend/internal
               desc: the areas use case calls only inventory, postgres and tenancy (ADR 0008)
+        findings:
+          list-mode: lax
+          files:
+            - "**/internal/findings/**"
+          allow:
+            - barbackend/internal/finding
+            - barbackend/internal/findings
+            - barbackend/internal/inventory
+            - barbackend/internal/matching
+            - barbackend/internal/postgres
+            - barbackend/internal/scoring
+            - barbackend/internal/stixext
+          deny:
+            - pkg: barbackend/internal
+              desc: the findings use case calls only finding, inventory, matching, postgres, scoring and stixext (ADR 0008, ADR 0020)
         users:
           list-mode: lax
           files:
@@ -250,8 +301,11 @@ linters:
           allow:
             - barbackend/internal/assessment
             - barbackend/internal/business
+            - barbackend/internal/finding
             - barbackend/internal/inventory
+            - barbackend/internal/matching
             - barbackend/internal/postgres
+            - barbackend/internal/scoring
             - barbackend/internal/tenancy
           deny:
             - pkg: barbackend/internal/businesscontext

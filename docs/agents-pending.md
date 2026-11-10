@@ -15,12 +15,27 @@ Done when the Prioritizer's prompt and verifier use the Business Context with te
 
 ## 2. The Findings pipeline hands the Agents its Findings
 
-Until the pipeline exists, a Prioritization is made from a file: `agent finding` builds a Dossier from the live Feeds, `agent prioritize` stores the Prioritization of a list of them, and a Finding is an id nothing references.
+The Findings pipeline now stores its Findings and their Scores (ADR 0020), but the Agents do not read them yet: a Prioritization is still made from a file, where `agent finding` builds a Dossier from the live Feeds, `agent prioritize` stores the Prioritization of a list of them, and a Finding is an id nothing references.
 
-- **The pipeline calls `agents.Service.Prioritize(ctx, customer, dossiers)`** with the Customer's open Findings, each built with `assessment.NewDossier` from the Feed records and the Score it already has. A Prioritization holds at most 100 Findings: decide what happens above that.
+**The Score is the pipeline's.** A Dossier carries the latest stored Score of its Finding, never one computed for it (ADR 0009, ADR 0016). The Score that `assessment.NewDossier` computes is not used once this is done.
+
+What the pipeline already gives, in `internal/postgres` (`findings.go`, `vulnerabilities.go`):
+
+| Dossier field | Where it comes from |
+|---|---|
+| `finding` | `findings.id`, a UUID that never changes, even when the Finding is closed and reopened |
+| `cve`, `description`, `kev`, `epss`, `nvd` | `Tx.Vulnerability(cve)`: the stored STIX object, with the `nvd/1`, `kev/1` and `epss/1` extensions the Feeds set |
+| `asset`, `component` | the Finding's Asset, by `cmdb_source_id` and `record_id`, and its `component_name` and `component_version` |
+| `score` | `Tx.LatestScore(id)`: the Scoring Model, value, every factor and the Data Gaps, by the same names a Dossier uses |
+
+What is left to do:
+
+- **Read a Customer's open Findings**: a query for the open Findings (`closed_at IS NULL`) of every CMDB Source of a Customer, with what the table above names, in one round trip rather than one query per Finding.
+- **Build a Dossier from a stored Finding**: a constructor in `assessment` that takes the stored Score as it is, instead of `NewDossier` computing one. `UnavailableFeeds` follows from the Score's Data Gaps: `kev_stale` means KEV could not be read.
+- **The pipeline calls `agents.Service.Prioritize(ctx, customer, dossiers)`** with those Dossiers. A Prioritization holds at most 100 Findings: decide what happens above that, for example the 100 highest Scores.
 - **Decide when it runs**: after each pipeline run, only when the open Findings changed, or on a schedule. Each run is one model request.
-- **Reference stored Findings**: `action_plans.finding_id` and `prioritization_feedback.finding_id` become foreign keys to Findings, in a new migration.
-- **Remove the stand-in**: `agent finding` and its Feed lookups leave `cmd`, or move to a use case if still useful.
+- **Store each Finding's place in a Prioritization**: a `prioritization_findings` table, `(prioritization_id, finding_id)` with `finding_id` a foreign key to `findings (id)`, holding the Finding's Priority Group position and its rank by Score alone (`Prioritization.GroupOf`, `ScoreRanks`). The dashboard then asks in SQL which group a Finding is in, or how many Findings of group 1 are closed, without reading `content`. `action_plans` and `prioritization_feedback` reference it by a composite foreign key, which replaces their unreferenced `finding_id` text and the jsonb containment of item 5. The order itself never goes in `findings`: it is a recommendation of one moment, while a Finding and its Score are facts kept as history.
+- **Remove the stand-in**: `agent finding`, `assessment.NewDossier`'s scoring and their Feed lookups leave, or move to a use case if still useful.
 - The dashboard shows a Prioritization from `GET /prioritizations/{id}` and renders all Agent text as plain text. Slack (#96) can send its order and reasons.
 
 ## 3. A run against Anthropic's API, and an evaluation
@@ -41,7 +56,7 @@ Every Prioritization, Action Plan and Analista turn is a paid model request, and
 The review of the Agents found structural changes that were left out to keep the change reviewable:
 
 - **`Run.Status`**: only verified runs are stored, so `Crew.Prioritize` and `Crew.Plan` can return `(Run[T], error)`, with `ErrRefused`, `ErrRejected` (wrapping the violations) or `ErrUnavailable`, and `Run.Output` can stop being a pointer. That removes `Status`, `failure()` and every nil check, and splits stored content from the read model that carries Plans and Feedback.
-- **One home for "a Finding is in a Prioritization"**: a `prioritization_findings` table with composite foreign keys from `action_plans` and `prioritization_feedback`, instead of the jsonb containment in `PrioritizationHolds`, which ties SQL to the JSON shape of `agents.Prioritization`.
+- **One home for "a Finding is in a Prioritization"**: the `prioritization_findings` table of item 2, instead of the jsonb containment in `PrioritizationHolds`, which ties SQL to the JSON shape of `agents.Prioritization`.
 - **Rename `internal/assessment`**, which is no longer a domain term (for example to `internal/dossier`), updating ADR 0008, ADR 0016 and depguard.
 - **`Crew` holds the Analista's client and model**: move them to `Service`, since the Crew is the Prioritizer and Luna.
 - **`agent finding` keeps use-case logic in `cmd`**, which ADR 0008 keeps to wiring, and reads the three Feeds one after another.

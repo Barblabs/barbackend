@@ -109,6 +109,54 @@ func TestSnapshotMapsRecords(t *testing.T) {
 			},
 		},
 		{
+			name: "exposed location is internet facing",
+			ci:   mapped("Server", func(c *ci) { c.Location = "exposed" }),
+			want: inventory.ImportedAssetParams{
+				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server,
+				Hardware: hpe, Software: redHat(), Criticality: inventory.CriticalityLow, Exposure: inventory.InternetFacing,
+			},
+		},
+		{
+			name: "not exposed location is internal",
+			ci:   mapped("Server", func(c *ci) { c.Location = "not exposed" }),
+			want: inventory.ImportedAssetParams{
+				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server,
+				Hardware: hpe, Software: redHat(), Criticality: inventory.CriticalityLow, Exposure: inventory.Internal,
+			},
+		},
+		{
+			name: "location is matched ignoring case and spaces",
+			ci:   mapped("Server", func(c *ci) { c.Location = " Not Exposed " }),
+			want: inventory.ImportedAssetParams{
+				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server,
+				Hardware: hpe, Software: redHat(), Criticality: inventory.CriticalityLow, Exposure: inventory.Internal,
+			},
+		},
+		{
+			name: "blank location is unknown exposure",
+			ci:   mapped("Server", func(c *ci) { c.Location = "" }),
+			want: inventory.ImportedAssetParams{
+				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server,
+				Hardware: hpe, Software: redHat(), Criticality: inventory.CriticalityLow, Exposure: inventory.ExposureUnknown,
+			},
+		},
+		{
+			name: "other location is unknown exposure",
+			ci:   mapped("Server", func(c *ci) { c.Location = "Guadalajara" }),
+			want: inventory.ImportedAssetParams{
+				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server,
+				Hardware: hpe, Software: redHat(), Criticality: inventory.CriticalityLow, Exposure: inventory.ExposureUnknown,
+			},
+		},
+		{
+			name: "pc takes exposure from its location",
+			ci:   mapped("PC", func(c *ci) { c.Location = "exposed" }),
+			want: inventory.ImportedAssetParams{
+				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Workstation,
+				Hardware: hpe, Software: redHat(), Criticality: inventory.CriticalityLow, Exposure: inventory.InternetFacing,
+			},
+		},
+		{
 			name: "hardware with only a vendor",
 			ci:   mapped("Server", func(c *ci) { c.Model = "" }),
 			want: inventory.ImportedAssetParams{
@@ -133,7 +181,7 @@ func TestSnapshotMapsRecords(t *testing.T) {
 			},
 		},
 		{
-			name: "applications identified by their Software, and one with a blank vendor kept unidentified",
+			name: "applications named after their instances and identified by their Software, and one with a blank vendor kept unidentified",
 			ci: mapped("Server", func(c *ci) {
 				c.Instances = []instance{{Class: "DBServer", Name: "db", SoftwareID: "2"}, {Class: "OtherSoftware", Name: "portal", SoftwareID: "7"}}
 			}),
@@ -145,10 +193,10 @@ func TestSnapshotMapsRecords(t *testing.T) {
 				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server, Hardware: hpe,
 				Software: append(redHat(),
 					inventory.SoftwareComponent{
-						Role: inventory.Application, Name: "Oracle DB engine", Version: "19c",
+						Role: inventory.Application, Name: "db", Version: "19c",
 						Product: inventory.Product{Vendor: "Oracle", Name: "Oracle DB engine"},
 					},
-					inventory.SoftwareComponent{Role: inventory.Application, Name: "Internal portal", Version: "3.1"},
+					inventory.SoftwareComponent{Role: inventory.Application, Name: "portal", Version: "3.1"},
 				),
 				Criticality: inventory.CriticalityLow,
 			},

@@ -124,7 +124,7 @@ func TestFetchSeededInstance(t *testing.T) {
 	want := []ci{
 		{
 			Key: "3", Class: "Server", Name: "Server3", Status: "production", Criticality: ptr("low"),
-			Brand: "HPE", Model: "DL380", OSFamily: "vCenter Server", OSVersion: "2022",
+			Brand: "HPE", Model: "DL380", OSFamily: "vCenter Server", OSVersion: "2022", Location: "exposed",
 			Contacts:  []contact{{ID: "18", Class: "Person"}, {ID: "53", Class: "Team"}},
 			Instances: []instance{{Class: "Middleware", Name: "RabbitMQ", SoftwareID: "3"}},
 			OrgID:     "6",
@@ -138,7 +138,7 @@ func TestFetchSeededInstance(t *testing.T) {
 		},
 		{
 			Key: "33", Class: "PC", Name: "PC-MIXED", Status: "production",
-			Brand: "Lenovo", Model: "ThinkPad T14", OSFamily: "Ubuntu", OSVersion: "22.04 LTS",
+			Brand: "Lenovo", Model: "ThinkPad T14", OSFamily: "Ubuntu", OSVersion: "22.04 LTS", Location: "not exposed",
 			Contacts:  []contact{{ID: "55", Class: "Person"}},
 			Instances: []instance{},
 			OrgID:     "6",
@@ -152,7 +152,7 @@ func TestFetchSeededInstance(t *testing.T) {
 		},
 		{
 			Key: "40", Class: "NetworkDevice", Name: "Router2", Status: "production", Criticality: ptr("high"),
-			Brand: "Cisco", Model: "Cisco 6500", IOSVersionID: "90",
+			Brand: "Cisco", Model: "Cisco 6500", IOSVersionID: "90", Location: " Exposed ",
 			Contacts:  []contact{{ID: "46", Class: "Person"}},
 			Instances: []instance{},
 			OrgID:     "6",

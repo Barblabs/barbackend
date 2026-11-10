@@ -47,6 +47,7 @@ type Asset struct {
 	ImportedChangedAt  time.Time
 	InactiveSince      *time.Time
 	AreaRecordID       *string
+	ImportedExposureID *int16
 }
 
 type AssetKind struct {
@@ -112,6 +113,56 @@ type FeedbackVerdict struct {
 	Name string
 }
 
+type Finding struct {
+	ID               uuid.UUID
+	CmdbSourceID     uuid.UUID
+	RecordID         string
+	ProductVendor    string
+	ProductName      string
+	CveID            string
+	ComponentName    string
+	ComponentVersion string
+	Evidence         []byte
+	FirstOpenedAt    time.Time
+	OpenedAt         time.Time
+	ClosedAt         *time.Time
+	CloseReasonID    *int16
+}
+
+type FindingCloseReason struct {
+	ID   int16
+	Name string
+}
+
+type FindingMatchFlag struct {
+	FindingID uuid.UUID
+	FlagID    int16
+}
+
+type FindingScore struct {
+	FindingID             uuid.UUID
+	ScoredAt              time.Time
+	Model                 int16
+	Value                 float64
+	Alpha                 float64
+	Beta                  float64
+	Gamma                 float64
+	Vulnerability         float64
+	CriticalityMultiplier float64
+	ExposureMultiplier    float64
+}
+
+type FindingScoreDataGap struct {
+	FindingID uuid.UUID
+	ScoredAt  time.Time
+	GapID     int16
+}
+
+type MatchFlag struct {
+	ID   int16
+	Name string
+}
+
 type Prioritization struct {
 	ID           uuid.UUID
 	CustomerID   uuid.UUID
@@ -130,6 +181,11 @@ type PrioritizationFeedback struct {
 	Note             string
 	ViaAnalista      bool
 	CreatedAt        time.Time
+}
+
+type ScoreDataGap struct {
+	ID   int16
+	Name string
 }
 
 type SoftwareComponent struct {
@@ -181,4 +237,11 @@ type User struct {
 type UserRole struct {
 	ID   int16
 	Name string
+}
+
+type Vulnerability struct {
+	CveID      string
+	Object     []byte
+	ModifiedAt time.Time
+	StoredAt   time.Time
 }

@@ -17,6 +17,7 @@ type ci struct {
 	OSFamily     string     `json:"osfamily_name"`
 	OSVersion    string     `json:"osversion_name"`
 	IOSVersionID string     `json:"iosversion_id"`
+	Location     string     `json:"location_name"`
 	Contacts     []contact  `json:"contacts_list"`
 	Instances    []instance `json:"softwares_list"`
 	OrgID        string     `json:"org_id"`

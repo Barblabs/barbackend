@@ -79,7 +79,7 @@ The `extension-definition` objects are created once in `stixext` with `stix2.New
 | `vuln_status` | string | NVD status as given (`Analyzed`, `Awaiting Analysis`, `Rejected`...) |
 | `cvss` | list | Every CVSS metric NVD returns: `{version, base_score, vector, source, type}`, with `type` `Primary` or `Secondary`. Keep all of them. Choosing one is scoring's job (ADR 0009), not normalization's. |
 | `cwes` | list of string | `CWE-79`, ... |
-| `affected` | list | One entry per CPE match with `vulnerable: true`: `{criteria, vendor, product, version_start_including, version_start_excluding, version_end_including, version_end_excluding}`. `vendor` and `product` are the CPE 2.3 tokens split out of `criteria`. Absent bounds are omitted. |
+| `affected` | list | One entry per CPE match with `vulnerable: true`: `{criteria, vendor, product, version, update, version_start_including, version_start_excluding, version_end_including, version_end_excluding}`. `vendor`, `product`, `version` and `update` are the CPE 2.3 fields split out of `criteria`, unescaped (`15.2\(7\)e` is `15.2(7)e`); `version` is exact, `*` for any or `-` for none (ADR 0015). Absent bounds are omitted. `version` and `update` were added in a minor version, so entries stored before have neither. |
 | `cna_affected` | list, optional | What the CVE's numbering authority lists, as NVD relays it: `{source, vendor, product, default_status, versions: [{version, less_than, less_than_or_equal, status}]}`. A CVE NVD did not analyze has no CPE matches, only this (ADR 0016). |
 
 The CVE's English description goes in the SDO's `description`. NVD's reference URLs go in `external_references`, after the required `{"source_name": "cve", "external_id": "CVE-..."}` entry, which must always come first.
@@ -141,6 +141,8 @@ When a bundle is parsed, the library returns any extension it does not know as a
 ## Storage
 
 The schema is not decided by this ADR and comes with the first Feed's migration. The intended shape is one row per STIX object ID, holding its type, `modified` and the object as `jsonb`. Each adapter updates only its own extension key, in one statement, so two Feeds writing the same `vulnerability` at once cannot lose each other's data. Columns that filters need often (the CVE ID, the affected `vendor`/`product` pairs) may be extracted next to the `jsonb` when the filters need them.
+
+ADR 0015 replaces this shape for Vulnerabilities: Feed objects are not stored on receipt. A Vulnerability is kept only when it opens a Finding, and KEV and EPSS objects only rescore the Findings of their CVE.
 
 ## Open questions
 

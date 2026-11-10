@@ -72,6 +72,7 @@ func (r iteratorForInsertAssets) Values() ([]interface{}, error) {
 		r.rows[0].HardwareVendor,
 		r.rows[0].HardwareModel,
 		r.rows[0].CriticalityID,
+		r.rows[0].ImportedExposureID,
 		r.rows[0].ImportedOwnerID,
 		r.rows[0].AreaRecordID,
 		r.rows[0].Retired,
@@ -84,7 +85,74 @@ func (r iteratorForInsertAssets) Err() error {
 }
 
 func (q *Queries) InsertAssets(ctx context.Context, arg []InsertAssetsParams) (int64, error) {
-	return q.db.CopyFrom(ctx, []string{"assets"}, []string{"cmdb_source_id", "record_id", "name", "description", "kind_id", "hardware_vendor", "hardware_model", "criticality_id", "imported_owner_id", "area_record_id", "retired", "inactive_since"}, &iteratorForInsertAssets{rows: arg})
+	return q.db.CopyFrom(ctx, []string{"assets"}, []string{"cmdb_source_id", "record_id", "name", "description", "kind_id", "hardware_vendor", "hardware_model", "criticality_id", "imported_exposure_id", "imported_owner_id", "area_record_id", "retired", "inactive_since"}, &iteratorForInsertAssets{rows: arg})
+}
+
+// iteratorForInsertFindingMatchFlags implements pgx.CopyFromSource.
+type iteratorForInsertFindingMatchFlags struct {
+	rows                 []InsertFindingMatchFlagsParams
+	skippedFirstNextCall bool
+}
+
+func (r *iteratorForInsertFindingMatchFlags) Next() bool {
+	if len(r.rows) == 0 {
+		return false
+	}
+	if !r.skippedFirstNextCall {
+		r.skippedFirstNextCall = true
+		return true
+	}
+	r.rows = r.rows[1:]
+	return len(r.rows) > 0
+}
+
+func (r iteratorForInsertFindingMatchFlags) Values() ([]interface{}, error) {
+	return []interface{}{
+		r.rows[0].FindingID,
+		r.rows[0].FlagID,
+	}, nil
+}
+
+func (r iteratorForInsertFindingMatchFlags) Err() error {
+	return nil
+}
+
+func (q *Queries) InsertFindingMatchFlags(ctx context.Context, arg []InsertFindingMatchFlagsParams) (int64, error) {
+	return q.db.CopyFrom(ctx, []string{"finding_match_flags"}, []string{"finding_id", "flag_id"}, &iteratorForInsertFindingMatchFlags{rows: arg})
+}
+
+// iteratorForInsertFindingScoreDataGaps implements pgx.CopyFromSource.
+type iteratorForInsertFindingScoreDataGaps struct {
+	rows                 []InsertFindingScoreDataGapsParams
+	skippedFirstNextCall bool
+}
+
+func (r *iteratorForInsertFindingScoreDataGaps) Next() bool {
+	if len(r.rows) == 0 {
+		return false
+	}
+	if !r.skippedFirstNextCall {
+		r.skippedFirstNextCall = true
+		return true
+	}
+	r.rows = r.rows[1:]
+	return len(r.rows) > 0
+}
+
+func (r iteratorForInsertFindingScoreDataGaps) Values() ([]interface{}, error) {
+	return []interface{}{
+		r.rows[0].FindingID,
+		r.rows[0].ScoredAt,
+		r.rows[0].GapID,
+	}, nil
+}
+
+func (r iteratorForInsertFindingScoreDataGaps) Err() error {
+	return nil
+}
+
+func (q *Queries) InsertFindingScoreDataGaps(ctx context.Context, arg []InsertFindingScoreDataGapsParams) (int64, error) {
+	return q.db.CopyFrom(ctx, []string{"finding_score_data_gaps"}, []string{"finding_id", "scored_at", "gap_id"}, &iteratorForInsertFindingScoreDataGaps{rows: arg})
 }
 
 // iteratorForInsertSoftwareComponents implements pgx.CopyFromSource.

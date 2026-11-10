@@ -67,6 +67,9 @@ func TestNewImportedAsset(t *testing.T) {
 		{"criticality high", func(p *inventory.ImportedAssetParams) { p.Criticality = inventory.CriticalityHigh }, nil},
 		{"criticality out of range", func(p *inventory.ImportedAssetParams) { p.Criticality = 42 }, inventory.ErrInvalidCriticality},
 		{"negative criticality", func(p *inventory.ImportedAssetParams) { p.Criticality = -1 }, inventory.ErrInvalidCriticality},
+		{"exposure internal", func(p *inventory.ImportedAssetParams) { p.Exposure = inventory.Internal }, nil},
+		{"exposure out of range", func(p *inventory.ImportedAssetParams) { p.Exposure = 42 }, inventory.ErrInvalidExposure},
+		{"negative exposure", func(p *inventory.ImportedAssetParams) { p.Exposure = -1 }, inventory.ErrInvalidExposure},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -86,7 +89,7 @@ func TestImportedAssetGetters(t *testing.T) {
 		Name: "n", Description: "d", Kind: inventory.Server,
 		Hardware:    inventory.Hardware{Vendor: "Dell", Model: "R740"},
 		Software:    []inventory.SoftwareComponent{{Role: inventory.OperatingSystem, Name: "Ubuntu", Version: "22.04"}},
-		Criticality: inventory.CriticalityLow, Owner: owner, Retired: true,
+		Criticality: inventory.CriticalityLow, Exposure: inventory.InternetFacing, Owner: owner, Retired: true,
 	}
 	a := mustImported(t, p)
 	if got := a.Name(); got != "n" {
@@ -106,6 +109,9 @@ func TestImportedAssetGetters(t *testing.T) {
 	}
 	if got := a.Criticality(); got != inventory.CriticalityLow {
 		t.Errorf("Criticality() = %v, want %v", got, inventory.CriticalityLow)
+	}
+	if got := a.Exposure(); got != inventory.InternetFacing {
+		t.Errorf("Exposure() = %v, want %v", got, inventory.InternetFacing)
 	}
 	if got, ok := a.Owner(); !ok || got != owner {
 		t.Errorf("Owner() = %v, %v; want %v, true", got, ok, owner)

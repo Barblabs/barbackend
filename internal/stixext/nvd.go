@@ -25,11 +25,16 @@ type CVSS struct {
 	Type      string  `json:"type"`
 }
 
-// Affected is one vulnerable CPE match of a Vulnerability.
+// Affected is one vulnerable CPE match of a Vulnerability. Version and Update
+// are the version and update fields of Criteria: an exact version, "*" for any
+// (bounded by the range, if any) or "-" for none. Entries stored before they
+// were added have neither.
 type Affected struct {
 	Criteria              string `json:"criteria"`
 	Vendor                string `json:"vendor"`
 	Product               string `json:"product"`
+	Version               string `json:"version,omitempty"`
+	Update                string `json:"update,omitempty"`
 	VersionStartIncluding string `json:"version_start_including,omitempty"`
 	VersionStartExcluding string `json:"version_start_excluding,omitempty"`
 	VersionEndIncluding   string `json:"version_end_including,omitempty"`
