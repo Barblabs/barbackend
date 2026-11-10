@@ -179,3 +179,17 @@ func TestSaveOfMissingAreaFails(t *testing.T) {
 		})
 	}
 }
+
+func TestDisconnectDeactivatesAreas(t *testing.T) {
+	t.Parallel()
+	db, conn := newDBWithConn(t)
+	customer := newCustomer(t, db)
+	src := newSource(t, db, customer)
+	syncSnapshot(t, db, src.ID(), inventory.Snapshot{Areas: []inventory.AreaRecord{areaRecord(t, "1", "IT", false)}})
+
+	inTx(t, db, func(tx *postgres.Tx) error { return tx.DisconnectCMDBSource(context.Background(), customer) })
+
+	if n := queryInt(t, conn, "SELECT count(*) FROM customer_areas WHERE inactive_since IS NULL"); n != 0 {
+		t.Errorf("active areas after disconnect = %d, want 0", n)
+	}
+}
