@@ -68,7 +68,7 @@ func assets(t *testing.T, db *postgres.DB, src inventory.CMDBSourceID) []*invent
 
 func reconcileWith(src inventory.CMDBSourceID, s inventory.Snapshot) func([]*inventory.Asset) (inventory.Reconciliation, error) {
 	return func(existing []*inventory.Asset) (inventory.Reconciliation, error) {
-		return inventory.Reconcile(src, existing, s)
+		return inventory.Reconcile(src, inventory.Stored{Assets: existing}, s)
 	}
 }
 
