@@ -12,6 +12,12 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+// AreaSummary names an Area where it is shown beside something else.
+type AreaSummary struct {
+	ID   int64
+	Name string
+}
+
 func (t *sourceTx) areas(ctx context.Context) ([]*inventory.Area, error) {
 	rows, err := t.q.ListAreas(ctx, uuid.UUID(t.source))
 	if err != nil {

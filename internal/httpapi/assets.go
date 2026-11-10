@@ -94,6 +94,7 @@ type assetResponse struct {
 	Criticality   *string            `json:"criticality"`
 	Exposure      *string            `json:"exposure"`
 	Owner         *ownerResponse     `json:"owner"`
+	Area          *areaRefResponse   `json:"area"`
 	Retired       bool               `json:"retired"`
 	Active        bool               `json:"active"`
 	InactiveSince *time.Time         `json:"inactive_since"`
@@ -119,6 +120,11 @@ type productResponse struct {
 type ownerResponse struct {
 	Email  string `json:"email"`
 	Source string `json:"source"`
+}
+
+type areaRefResponse struct {
+	ID   int64  `json:"id" doc:"The Area's id, as in GET /areas"`
+	Name string `json:"name"`
 }
 
 func (h assetHandler) list(ctx context.Context, caller tenancy.User, in *assetQuery) (*body[assetListResponse], error) {
@@ -168,6 +174,9 @@ func newAssetResponse(stored assets.StoredAsset) assetResponse {
 		if sc.Identified() {
 			resp.Software[i].Product = &productResponse{Vendor: sc.Product.Vendor, Name: sc.Product.Name}
 		}
+	}
+	if area := stored.Area; area != nil {
+		resp.Area = &areaRefResponse{ID: area.ID, Name: area.Name}
 	}
 	if owner, ok := a.Owner(); ok {
 		resp.Owner = &ownerResponse{Email: owner.String(), Source: "imported"}

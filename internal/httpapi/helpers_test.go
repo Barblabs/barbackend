@@ -289,6 +289,28 @@ func record(t *testing.T, id, name string) inventory.Record {
 	return inventory.Record{RecordID: id, Imported: imported}
 }
 
+func areaRecord(t *testing.T, id, name string) inventory.AreaRecord {
+	t.Helper()
+	imported, err := inventory.NewImportedArea(inventory.ImportedAreaParams{Name: name})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return inventory.AreaRecord{RecordID: id, Imported: imported}
+}
+
+// areaID is the id of the env Customer's Area with recordID.
+func (e env) areaID(t *testing.T, recordID string) int64 {
+	t.Helper()
+	var id int64
+	err := e.conn.QueryRow(context.Background(), `
+		SELECT a.id FROM customer_areas a JOIN cmdb_sources s ON s.id = a.cmdb_source_id
+		WHERE s.customer_id = $1 AND a.record_id = $2`, [16]byte(e.customer), recordID).Scan(&id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
 func (e env) holdSyncLock(t *testing.T, src inventory.CMDBSourceID) (release func()) {
 	t.Helper()
 	locked, unlock, done := make(chan struct{}), make(chan struct{}), make(chan error)

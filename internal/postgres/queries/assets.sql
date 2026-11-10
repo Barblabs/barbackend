@@ -81,11 +81,13 @@ WHERE cmdb_source_id = @cmdb_source_id;
 SELECT a.cmdb_source_id, a.record_id, a.name, a.description, a.kind_id,
        a.hardware_vendor, a.hardware_model, a.criticality_id,
        imported_owner.email AS imported_owner, declared_owner.email AS declared_owner,
-       a.declared_exposure_id, a.area_record_id, a.retired, a.inactive_since
+       a.declared_exposure_id, a.area_record_id, a.retired, a.inactive_since,
+       area.id AS area_id, area.name AS area_name
 FROM assets a
 JOIN cmdb_sources s ON s.id = a.cmdb_source_id
 LEFT JOIN asset_owners imported_owner ON imported_owner.id = a.imported_owner_id
 LEFT JOIN asset_owners declared_owner ON declared_owner.id = a.declared_owner_id
+LEFT JOIN customer_areas area ON area.cmdb_source_id = a.cmdb_source_id AND area.record_id = a.area_record_id
 WHERE s.customer_id = @customer_id
   AND (sqlc.narg(active)::boolean IS NULL OR (a.inactive_since IS NULL) = sqlc.narg(active)::boolean)
   AND (sqlc.narg(kind_id)::smallint IS NULL OR a.kind_id = sqlc.narg(kind_id)::smallint)
