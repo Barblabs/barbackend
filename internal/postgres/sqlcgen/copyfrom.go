@@ -72,6 +72,7 @@ func (r iteratorForInsertAssets) Values() ([]interface{}, error) {
 		r.rows[0].HardwareVendor,
 		r.rows[0].HardwareModel,
 		r.rows[0].CriticalityID,
+		r.rows[0].ImportedExposureID,
 		r.rows[0].ImportedOwnerID,
 		r.rows[0].AreaRecordID,
 		r.rows[0].Retired,
@@ -84,7 +85,7 @@ func (r iteratorForInsertAssets) Err() error {
 }
 
 func (q *Queries) InsertAssets(ctx context.Context, arg []InsertAssetsParams) (int64, error) {
-	return q.db.CopyFrom(ctx, []string{"assets"}, []string{"cmdb_source_id", "record_id", "name", "description", "kind_id", "hardware_vendor", "hardware_model", "criticality_id", "imported_owner_id", "area_record_id", "retired", "inactive_since"}, &iteratorForInsertAssets{rows: arg})
+	return q.db.CopyFrom(ctx, []string{"assets"}, []string{"cmdb_source_id", "record_id", "name", "description", "kind_id", "hardware_vendor", "hardware_model", "criticality_id", "imported_exposure_id", "imported_owner_id", "area_record_id", "retired", "inactive_since"}, &iteratorForInsertAssets{rows: arg})
 }
 
 // iteratorForInsertFindingMatchFlags implements pgx.CopyFromSource.

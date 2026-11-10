@@ -124,17 +124,18 @@ func (t *sourceTx) insertCreated(ctx context.Context, created []*inventory.Asset
 	for i, a := range created {
 		imported := importedColumns(t.source, a, owners)
 		rows[i] = sqlcgen.InsertAssetsParams{
-			CmdbSourceID:    imported.CmdbSourceID,
-			RecordID:        imported.RecordID,
-			Name:            imported.Name,
-			Description:     imported.Description,
-			KindID:          imported.KindID,
-			HardwareVendor:  imported.HardwareVendor,
-			HardwareModel:   imported.HardwareModel,
-			CriticalityID:   imported.CriticalityID,
-			ImportedOwnerID: imported.ImportedOwnerID,
-			AreaRecordID:    imported.AreaRecordID,
-			Retired:         imported.Retired,
+			CmdbSourceID:       imported.CmdbSourceID,
+			RecordID:           imported.RecordID,
+			Name:               imported.Name,
+			Description:        imported.Description,
+			KindID:             imported.KindID,
+			HardwareVendor:     imported.HardwareVendor,
+			HardwareModel:      imported.HardwareModel,
+			CriticalityID:      imported.CriticalityID,
+			ImportedExposureID: imported.ImportedExposureID,
+			ImportedOwnerID:    imported.ImportedOwnerID,
+			AreaRecordID:       imported.AreaRecordID,
+			Retired:            imported.Retired,
 		}
 		if !a.Active() {
 			rows[i].InactiveSince = inactiveSince
@@ -245,14 +246,15 @@ func recordIDs[T sourceRecord](items []T) []string {
 func importedColumns(source inventory.CMDBSourceID, a *inventory.Asset, owners ownerIDs) sqlcgen.UpdateAssetImportedParams {
 	imported := a.Imported()
 	p := sqlcgen.UpdateAssetImportedParams{
-		CmdbSourceID:    uuid.UUID(source),
-		RecordID:        a.Ref().RecordID,
-		Name:            imported.Name(),
-		Description:     imported.Description(),
-		KindID:          int16(imported.Kind()),
-		CriticalityID:   nullableID(imported.Criticality(), inventory.CriticalityUnknown),
-		ImportedOwnerID: owners.ref(imported.Owner()),
-		Retired:         imported.Retired(),
+		CmdbSourceID:       uuid.UUID(source),
+		RecordID:           a.Ref().RecordID,
+		Name:               imported.Name(),
+		Description:        imported.Description(),
+		KindID:             int16(imported.Kind()),
+		CriticalityID:      nullableID(imported.Criticality(), inventory.CriticalityUnknown),
+		ImportedExposureID: nullableID(imported.Exposure(), inventory.ExposureUnknown),
+		ImportedOwnerID:    owners.ref(imported.Owner()),
+		Retired:            imported.Retired(),
 	}
 	if hw, ok := imported.Hardware(); ok {
 		p.HardwareVendor, p.HardwareModel = &hw.Vendor, &hw.Model
@@ -301,6 +303,7 @@ func restoreAssetValues(ref inventory.SourceReference, row sqlcgen.ListAssetsRow
 		Hardware:    inventory.Hardware{Vendor: valueOrZero(row.HardwareVendor), Model: valueOrZero(row.HardwareModel)},
 		Software:    software,
 		Criticality: inventory.Criticality(valueOrZero(row.CriticalityID)),
+		Exposure:    inventory.Exposure(valueOrZero(row.ImportedExposureID)),
 		Owner:       importedOwner,
 		Area:        valueOrZero(row.AreaRecordID),
 		Retired:     row.Retired,

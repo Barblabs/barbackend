@@ -88,18 +88,19 @@ func (q *Queries) DeleteSoftwareComponents(ctx context.Context, arg DeleteSoftwa
 }
 
 type InsertAssetsParams struct {
-	CmdbSourceID    uuid.UUID
-	RecordID        string
-	Name            string
-	Description     string
-	KindID          int16
-	HardwareVendor  *string
-	HardwareModel   *string
-	CriticalityID   *int16
-	ImportedOwnerID *int64
-	AreaRecordID    *string
-	Retired         bool
-	InactiveSince   *time.Time
+	CmdbSourceID       uuid.UUID
+	RecordID           string
+	Name               string
+	Description        string
+	KindID             int16
+	HardwareVendor     *string
+	HardwareModel      *string
+	CriticalityID      *int16
+	ImportedExposureID *int16
+	ImportedOwnerID    *int64
+	AreaRecordID       *string
+	Retired            bool
+	InactiveSince      *time.Time
 }
 
 type InsertSoftwareComponentsParams struct {
@@ -117,7 +118,7 @@ const listAssets = `-- name: ListAssets :many
 SELECT a.cmdb_source_id, a.record_id, a.name, a.description, a.kind_id,
        a.hardware_vendor, a.hardware_model, a.criticality_id,
        imported_owner.email AS imported_owner, declared_owner.email AS declared_owner,
-       a.declared_exposure_id, a.area_record_id, a.retired, a.inactive_since,
+       a.imported_exposure_id, a.declared_exposure_id, a.area_record_id, a.retired, a.inactive_since,
        area.id AS area_id, area.name AS area_name
 FROM assets a
 LEFT JOIN asset_owners imported_owner ON imported_owner.id = a.imported_owner_id
@@ -138,6 +139,7 @@ type ListAssetsRow struct {
 	CriticalityID      *int16
 	ImportedOwner      *string
 	DeclaredOwner      *string
+	ImportedExposureID *int16
 	DeclaredExposureID *int16
 	AreaRecordID       *string
 	Retired            bool
@@ -166,6 +168,7 @@ func (q *Queries) ListAssets(ctx context.Context, cmdbSourceID uuid.UUID) ([]Lis
 			&i.CriticalityID,
 			&i.ImportedOwner,
 			&i.DeclaredOwner,
+			&i.ImportedExposureID,
 			&i.DeclaredExposureID,
 			&i.AreaRecordID,
 			&i.Retired,
@@ -187,7 +190,7 @@ const listCustomerAssets = `-- name: ListCustomerAssets :many
 SELECT a.cmdb_source_id, a.record_id, a.name, a.description, a.kind_id,
        a.hardware_vendor, a.hardware_model, a.criticality_id,
        imported_owner.email AS imported_owner, declared_owner.email AS declared_owner,
-       a.declared_exposure_id, a.area_record_id, a.retired, a.inactive_since,
+       a.imported_exposure_id, a.declared_exposure_id, a.area_record_id, a.retired, a.inactive_since,
        area.id AS area_id, area.name AS area_name
 FROM assets a
 JOIN cmdb_sources s ON s.id = a.cmdb_source_id
@@ -227,6 +230,7 @@ type ListCustomerAssetsRow struct {
 	CriticalityID      *int16
 	ImportedOwner      *string
 	DeclaredOwner      *string
+	ImportedExposureID *int16
 	DeclaredExposureID *int16
 	AreaRecordID       *string
 	Retired            bool
@@ -266,6 +270,7 @@ func (q *Queries) ListCustomerAssets(ctx context.Context, arg ListCustomerAssets
 			&i.CriticalityID,
 			&i.ImportedOwner,
 			&i.DeclaredOwner,
+			&i.ImportedExposureID,
 			&i.DeclaredExposureID,
 			&i.AreaRecordID,
 			&i.Retired,

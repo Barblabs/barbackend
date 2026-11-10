@@ -4,7 +4,8 @@
 -- in lower case.
 -- name: ListActiveComponentsWithProducts :many
 SELECT c.cmdb_source_id, c.record_id, c.position, c.role_id, c.name, c.version,
-       c.product_vendor, c.product_name, a.criticality_id, a.declared_exposure_id
+       c.product_vendor, c.product_name, a.criticality_id,
+       coalesce(a.declared_exposure_id, a.imported_exposure_id) AS exposure_id
 FROM software_components c
 JOIN assets a USING (cmdb_source_id, record_id)
 WHERE a.inactive_since IS NULL
@@ -19,7 +20,8 @@ ORDER BY c.cmdb_source_id, c.record_id, c.position;
 -- needs of their Asset.
 -- name: ListActiveComponentsOfSource :many
 SELECT c.cmdb_source_id, c.record_id, c.position, c.role_id, c.name, c.version,
-       c.product_vendor, c.product_name, a.criticality_id, a.declared_exposure_id
+       c.product_vendor, c.product_name, a.criticality_id,
+       coalesce(a.declared_exposure_id, a.imported_exposure_id) AS exposure_id
 FROM software_components c
 JOIN assets a USING (cmdb_source_id, record_id)
 WHERE a.inactive_since IS NULL AND c.cmdb_source_id = @cmdb_source_id
@@ -74,7 +76,8 @@ WHERE a.cmdb_source_id = f.cmdb_source_id AND a.record_id = f.record_id
 -- The open Findings of one Vulnerability, with what scoring needs of their Asset.
 -- name: ListOpenFindingsOfVulnerability :many
 SELECT f.id, f.cmdb_source_id, f.record_id, f.product_vendor, f.product_name, f.cve_id,
-       f.component_name, f.component_version, a.criticality_id, a.declared_exposure_id
+       f.component_name, f.component_version, a.criticality_id,
+       coalesce(a.declared_exposure_id, a.imported_exposure_id) AS exposure_id
 FROM findings f
 JOIN assets a USING (cmdb_source_id, record_id)
 WHERE f.cve_id = @cve_id AND f.closed_at IS NULL
@@ -84,7 +87,8 @@ ORDER BY f.cmdb_source_id, f.record_id, f.product_vendor, f.product_name;
 -- their Asset.
 -- name: ListOpenFindingsOfSource :many
 SELECT f.id, f.cmdb_source_id, f.record_id, f.product_vendor, f.product_name, f.cve_id,
-       f.component_name, f.component_version, a.criticality_id, a.declared_exposure_id
+       f.component_name, f.component_version, a.criticality_id,
+       coalesce(a.declared_exposure_id, a.imported_exposure_id) AS exposure_id
 FROM findings f
 JOIN assets a USING (cmdb_source_id, record_id)
 WHERE f.closed_at IS NULL AND f.cmdb_source_id = @cmdb_source_id

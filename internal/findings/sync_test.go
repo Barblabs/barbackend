@@ -2,6 +2,7 @@ package findings_test
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"barbackend/internal/inventory"
@@ -30,6 +31,50 @@ func TestAfterSyncMatchesANewAssetAgainstStoredVulnerabilities(t *testing.T) {
 	}
 	if _, _, _, scores := w.latestScore(t, f.id); scores != 1 {
 		t.Errorf("web-02 scores = %d, want it scored", scores)
+	}
+}
+
+// exposedTo is the record with that imported Exposure, as a Location in the
+// CMDB gives it (ADR 0020).
+func exposedTo(t *testing.T, r inventory.Record, e inventory.Exposure) inventory.Record {
+	t.Helper()
+	p := inventory.ImportedAssetParams{
+		Name: r.Imported.Name(), Kind: r.Imported.Kind(), Software: r.Imported.Software(),
+		Criticality: r.Imported.Criticality(), Exposure: e,
+	}
+	imported, err := inventory.NewImportedAsset(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return inventory.Record{RecordID: r.RecordID, Imported: imported}
+}
+
+func TestAfterSyncRescoresWhenTheExposureChanges(t *testing.T) {
+	t.Parallel()
+	w, f := matchedPayments(t)
+	payments := server(t, "payments", inventory.CriticalityHigh, app("Nginx", "f5", "nginx", "1.18.0"))
+	multiplier := func() (m float64, scores int) {
+		t.Helper()
+		if err := w.conn.QueryRow(context.Background(), `
+			SELECT exposure_multiplier, (SELECT count(*) FROM finding_scores WHERE finding_id = $1)
+			FROM finding_scores WHERE finding_id = $1 ORDER BY scored_at DESC LIMIT 1`, f.id).Scan(&m, &scores); err != nil {
+			t.Fatal(err)
+		}
+		return m, scores
+	}
+
+	w.afterSync(t, exposedTo(t, payments, inventory.Internal))
+	if m, scores := multiplier(); m != 0.6 || scores != 2 {
+		t.Errorf("after the CMDB made it Internal: multiplier %v in %d scores, want 0.6 in a second score", m, scores)
+	}
+	if _, _, gaps, _ := w.latestScore(t, f.id); slices.Contains(gaps, "exposure_undeclared") {
+		t.Errorf("gaps = %v, want no exposure_undeclared once the CMDB gives the Exposure", gaps)
+	}
+
+	w.exec(t, `UPDATE assets SET declared_exposure_id = $1 WHERE record_id = 'payments'`, int16(inventory.InternetFacing))
+	w.afterSync(t, exposedTo(t, payments, inventory.Internal))
+	if m, scores := multiplier(); m != 1 || scores != 3 {
+		t.Errorf("after declaring it Internet-facing: multiplier %v in %d scores, want the Declaration's 1 in a third score", m, scores)
 	}
 }
 

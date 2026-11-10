@@ -82,11 +82,12 @@ SET name = $1,
     hardware_vendor = $4,
     hardware_model = $5,
     criticality_id = $6,
-    imported_owner_id = $7,
-    area_record_id = $8,
-    retired = $9,
+    imported_exposure_id = $7,
+    imported_owner_id = $8,
+    area_record_id = $9,
+    retired = $10,
     imported_changed_at = now()
-WHERE cmdb_source_id = $10 AND record_id = $11
+WHERE cmdb_source_id = $11 AND record_id = $12
 RETURNING record_id
 `
 
@@ -97,17 +98,18 @@ type UpdateAssetImportedBatchResults struct {
 }
 
 type UpdateAssetImportedParams struct {
-	Name            string
-	Description     string
-	KindID          int16
-	HardwareVendor  *string
-	HardwareModel   *string
-	CriticalityID   *int16
-	ImportedOwnerID *int64
-	AreaRecordID    *string
-	Retired         bool
-	CmdbSourceID    uuid.UUID
-	RecordID        string
+	Name               string
+	Description        string
+	KindID             int16
+	HardwareVendor     *string
+	HardwareModel      *string
+	CriticalityID      *int16
+	ImportedExposureID *int16
+	ImportedOwnerID    *int64
+	AreaRecordID       *string
+	Retired            bool
+	CmdbSourceID       uuid.UUID
+	RecordID           string
 }
 
 func (q *Queries) UpdateAssetImported(ctx context.Context, arg []UpdateAssetImportedParams) *UpdateAssetImportedBatchResults {
@@ -120,6 +122,7 @@ func (q *Queries) UpdateAssetImported(ctx context.Context, arg []UpdateAssetImpo
 			a.HardwareVendor,
 			a.HardwareModel,
 			a.CriticalityID,
+			a.ImportedExposureID,
 			a.ImportedOwnerID,
 			a.AreaRecordID,
 			a.Retired,

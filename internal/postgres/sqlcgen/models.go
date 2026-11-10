@@ -47,6 +47,7 @@ type Asset struct {
 	ImportedChangedAt  time.Time
 	InactiveSince      *time.Time
 	AreaRecordID       *string
+	ImportedExposureID *int16
 }
 
 type AssetKind struct {

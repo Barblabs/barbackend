@@ -272,7 +272,7 @@ func candidate(row sqlcgen.ListActiveComponentsWithProductsRow) Candidate {
 			Product: inventory.Product{Vendor: valueOrZero(row.ProductVendor), Name: valueOrZero(row.ProductName)},
 		},
 		Criticality: inventory.Criticality(valueOrZero(row.CriticalityID)),
-		Exposure:    inventory.Exposure(valueOrZero(row.DeclaredExposureID)),
+		Exposure:    inventory.Exposure(valueOrZero(row.ExposureID)),
 	}
 }
 
@@ -286,6 +286,6 @@ func openFinding(row sqlcgen.ListOpenFindingsOfVulnerabilityRow) OpenFinding {
 		ComponentName:    row.ComponentName,
 		ComponentVersion: row.ComponentVersion,
 		Criticality:      inventory.Criticality(valueOrZero(row.CriticalityID)),
-		Exposure:         inventory.Exposure(valueOrZero(row.DeclaredExposureID)),
+		Exposure:         inventory.Exposure(valueOrZero(row.ExposureID)),
 	}
 }
