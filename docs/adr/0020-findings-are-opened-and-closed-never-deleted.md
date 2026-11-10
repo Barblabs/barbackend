@@ -107,7 +107,7 @@ The pure domain package `internal/finding` holds what `postgres` stores: a Findi
 | `ComponentsWithProducts`, `ComponentsOfAssets` | read the Software Components of Active Assets that can be matched, with the Criticality and Exposure that scoring needs |
 | `SaveMatch` | opens, updates or reopens the Finding of a `Match` in one statement and replaces its Match Flags, in one transaction; it returns the Finding's `ID` and the `Outcome` |
 | `CloseFinding`, `CloseFindingsOfInactiveAssets` | close one open Finding, or the open Findings of a CMDB Source's Inactive Assets |
-| `OpenFindingsOfVulnerability`, `OpenFindingsOfAssets` | read the open Findings to rescore or to match again |
+| `OpenFindingsOfVulnerability`, `OpenFindingsOfSource` | read the open Findings to rescore or to match again |
 | `MatchFlags` | read the Match Flags of a Finding |
 | `SaveScoreIfChanged`, `LatestScore` | store a Score unless the latest has the same Scoring Model, value and Data Gaps; read the latest |
 
@@ -153,6 +153,6 @@ Matching a new Asset against stored Vulnerabilities does not bring back old CVEs
 
 ## Consequences
 
-- The Agents' tables (ADR 0016) can reference `findings.id` once Findings are stored; until then their `finding_id` is the text id `agent finding` builds. `assessment.NewDossier` computes a Score from the live Feeds as a stand-in for this pipeline; once the Agents read the Findings, they can read the Score stored here instead, so the Score a Customer sees and the one an Agent explains are the same.
+- The Agents' tables (ADR 0016) can reference `findings.id` once Findings are stored; until then their `finding_id` is the text id `agent finding` builds. `assessment.NewDossier` computes a Score from the live Feeds as a stand-in for this pipeline; once the Agents read the Findings, they read the Score stored here and nothing else (ADR 0009, ADR 0016), so the Score a Customer sees and the one an Agent explains are the same.
 - A Finding is as current as its last event: a component upgraded in the CMDB is seen at the next Sync, not before.
 - Rescoring follows the Feeds: an open Finding is rescored when its Vulnerability's CVSS, EPSS or KEV changes, which for EPSS is daily.
