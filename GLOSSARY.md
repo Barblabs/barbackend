@@ -29,15 +29,19 @@ The CMDB Source a Customer currently syncs its Assets from. A Customer has at mo
 _Avoid_: Active connection, current integration
 
 **Disconnected CMDB Source**:
-A CMDB Source that is no longer synced. It is never deleted, its Assets become Inactive Assets, and connecting the same CMDB again creates a new CMDB Source.
+A CMDB Source that is no longer synced. It is never deleted, its Assets become Inactive Assets and its Areas Inactive, and connecting the same CMDB again creates a new CMDB Source.
 _Avoid_: Deleted source, removed source, inactive source
 
 **Asset**:
 A host-level thing in a Customer's environment that barbattack monitors for threats: a server, virtual machine, workstation or network device. It mirrors exactly one record in one CMDB Source, and is an operational configuration item, never a financial or procurement record.
 _Avoid_: CI, configuration item, device, host, machine
 
+**Area**:
+A part of a Customer's organization, such as a department or a subsidiary, that Assets belong to, imported from a CMDB Source; iTop calls it an Organization. Areas are flat, and an Area that its CMDB Source marks inactive or no longer contains becomes Inactive, never deleted.
+_Avoid_: Organization, department, business unit, org
+
 **Source Reference**:
-The identity of the record an Asset was imported from, made of its CMDB Source and the provider's own identifier for that record.
+The identity of the record an Asset or an Area was imported from, made of its CMDB Source and the provider's own identifier for that record.
 _Avoid_: External ID, foreign key
 
 **Asset Kind**:
@@ -65,7 +69,7 @@ An Asset that barbattack has stopped monitoring, normally because its CMDB Sourc
 _Avoid_: Deleted, obsolete, retired, archived
 
 **Sync**:
-Bringing the Assets of one CMDB Source in line with a complete snapshot of its records: creating, updating, deactivating and reactivating Assets.
+Bringing the Assets and Areas of one CMDB Source in line with a complete snapshot of its records: creating, updating, deactivating and reactivating them.
 _Avoid_: Import job, refresh, poll, crawl
 
 **Sync Run**:
@@ -201,6 +205,10 @@ _Avoid_: Member, regular user, analyst
 **Asset Owner**:
 A person, identified by email, who is responsible for one or more Assets and receives alerts about them on Slack. It is imported from the CMDB Source or set by a Declaration. An Asset Owner is not a User.
 _Avoid_: User, contact, assignee, responsible, manager
+
+**Area Owner**:
+The person, identified by email, whom barbattack reaches about an Area. Only a Customer Admin states it, never a CMDB Source; it is not an Asset Owner and need not be a User.
+_Avoid_: Asset Owner, area contact, area manager
 
 **Security Team**:
 The Customer's cybersecurity team, which receives every alert about the Customer's Assets, whether or not the Asset has an Asset Owner.
