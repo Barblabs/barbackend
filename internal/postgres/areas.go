@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"barbackend/internal/inventory"
@@ -123,11 +124,7 @@ func (t *sourceTx) insertAreas(ctx context.Context, created []*inventory.Area) e
 	if len(created) == 0 {
 		return nil
 	}
-	anyInactive := false
-	for _, a := range created {
-		anyInactive = anyInactive || !a.Active()
-	}
-	inactiveSince, err := t.inactiveSince(ctx, anyInactive)
+	inactiveSince, err := createdInactiveSince(ctx, t, created)
 	if err != nil {
 		return err
 	}
@@ -175,11 +172,11 @@ func (t *sourceTx) renameAreas(ctx context.Context, renamed []*inventory.Area) e
 	return err
 }
 
-// inactiveSince is the transaction time, the same time the column defaults
-// and now() use, read only when some row is created Inactive. COPY cannot call
-// now() itself.
-func (t *sourceTx) inactiveSince(ctx context.Context, needed bool) (*time.Time, error) {
-	if !needed {
+// createdInactiveSince is the transaction time, the same time the column
+// defaults and now() use, read only when some row is created Inactive. COPY
+// cannot call now() itself.
+func createdInactiveSince[T interface{ Active() bool }](ctx context.Context, t *sourceTx, created []T) (*time.Time, error) {
+	if !slices.ContainsFunc(created, func(c T) bool { return !c.Active() }) {
 		return nil, nil
 	}
 	now, err := t.q.TransactionTime(ctx)

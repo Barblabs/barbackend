@@ -117,11 +117,7 @@ func (t *sourceTx) insertCreated(ctx context.Context, created []*inventory.Asset
 	if len(created) == 0 {
 		return nil
 	}
-	anyInactive := false
-	for _, a := range created {
-		anyInactive = anyInactive || !a.Active()
-	}
-	inactiveSince, err := t.inactiveSince(ctx, anyInactive)
+	inactiveSince, err := createdInactiveSince(ctx, t, created)
 	if err != nil {
 		return err
 	}
