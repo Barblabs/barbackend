@@ -2,6 +2,7 @@ package itop
 
 import (
 	"fmt"
+	"strings"
 
 	"barbackend/internal/inventory"
 )
@@ -17,6 +18,13 @@ var criticalities = map[string]inventory.Criticality{
 	"high":   inventory.CriticalityHigh,
 	"medium": inventory.CriticalityMedium,
 	"low":    inventory.CriticalityLow,
+}
+
+// exposures maps the Locations a Customer keeps in iTop to record Exposure
+// (ADR 0020). Any other Location is Unknown.
+var exposures = map[string]inventory.Exposure{
+	"exposed":     inventory.InternetFacing,
+	"not exposed": inventory.Internal,
 }
 
 const (
@@ -80,6 +88,7 @@ func importedAsset(c ci, readableAreas map[string]bool, lk lookups) (inventory.I
 		Hardware:    hardware(c, kind),
 		Software:    components,
 		Criticality: crit,
+		Exposure:    exposures[strings.ToLower(strings.TrimSpace(c.Location))],
 		Owner:       owner(c, lk),
 		Area:        c.OrgID,
 		Retired:     c.Status == retiredStatus,

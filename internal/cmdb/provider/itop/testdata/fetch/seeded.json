@@ -30,7 +30,7 @@
     "message": "Found: 0",
     "objects": null
   },
-  "{\"operation\":\"core/get\",\"class\":\"NetworkDevice\",\"key\":\"SELECT NetworkDevice WHERE id \\u003e 0 AND id \\u003c= 500\",\"output_fields\":\"name,description,status,business_criticity,contacts_list,softwares_list,org_id,brand_name,model_name,iosversion_id\",\"limit\":501,\"page\":1}": {
+  "{\"operation\":\"core/get\",\"class\":\"NetworkDevice\",\"key\":\"SELECT NetworkDevice WHERE id \\u003e 0 AND id \\u003c= 500\",\"output_fields\":\"name,description,status,business_criticity,contacts_list,softwares_list,org_id,brand_name,model_name,iosversion_id,location_name\",\"limit\":501,\"page\":1}": {
     "code": 0,
     "message": "Found: 4",
     "objects": {
@@ -49,7 +49,8 @@
           "org_id": "6",
           "brand_name": "HPE",
           "model_name": "Procurve 2450",
-          "iosversion_id": "91"
+          "iosversion_id": "91",
+          "location_name": ""
         }
       },
       "NetworkDevice::5": {
@@ -67,7 +68,8 @@
           "org_id": "6",
           "brand_name": "Cisco",
           "model_name": "Procurve 2450",
-          "iosversion_id": "0"
+          "iosversion_id": "0",
+          "location_name": ""
         }
       },
       "NetworkDevice::40": {
@@ -84,7 +86,7 @@
             {
               "contact_id": "46",
               "contact_name": "Hugo",
-              "friendlyname": "Hugo \/ Router2",
+              "friendlyname": "Hugo / Router2",
               "contact_id_friendlyname": "Victor Hugo",
               "contact_id_finalclass_recall": "Person",
               "contact_id_obsolescence_flag": ""
@@ -94,7 +96,8 @@
           "org_id": "6",
           "brand_name": "Cisco",
           "model_name": "Cisco 6500",
-          "iosversion_id": "90"
+          "iosversion_id": "90",
+          "location_name": " Exposed "
         }
       },
       "NetworkDevice::6": {
@@ -112,7 +115,8 @@
           "org_id": "6",
           "brand_name": "HPE",
           "model_name": "Procurve 2450",
-          "iosversion_id": "0"
+          "iosversion_id": "0",
+          "location_name": ""
         }
       }
     }
@@ -182,7 +186,7 @@
         "class": "Organization",
         "key": "1",
         "fields": {
-          "name": "My Company\/Department",
+          "name": "My Company/Department",
           "status": "active"
         }
       },
@@ -203,7 +207,7 @@
     "message": "Found: 0",
     "objects": null
   },
-  "{\"operation\":\"core/get\",\"class\":\"PC\",\"key\":\"SELECT PC WHERE id \\u003e 0 AND id \\u003c= 500\",\"output_fields\":\"name,description,status,business_criticity,contacts_list,softwares_list,org_id,brand_name,model_name,osfamily_name,osversion_name\",\"limit\":501,\"page\":1}": {
+  "{\"operation\":\"core/get\",\"class\":\"PC\",\"key\":\"SELECT PC WHERE id \\u003e 0 AND id \\u003c= 500\",\"output_fields\":\"name,description,status,business_criticity,contacts_list,softwares_list,org_id,brand_name,model_name,osfamily_name,osversion_name,location_name\",\"limit\":501,\"page\":1}": {
     "code": 0,
     "message": "Found: 4",
     "objects": {
@@ -221,7 +225,7 @@
             {
               "contact_id": "5",
               "contact_name": "Milliat",
-              "friendlyname": "Milliat \/ PC-ALICE",
+              "friendlyname": "Milliat / PC-ALICE",
               "contact_id_friendlyname": "Alice Milliat",
               "contact_id_finalclass_recall": "Person",
               "contact_id_obsolescence_flag": ""
@@ -266,7 +270,8 @@
           "brand_name": "Dell",
           "model_name": "OptiPlex 7010",
           "osfamily_name": "Windows",
-          "osversion_name": "11"
+          "osversion_name": "11",
+          "location_name": ""
         }
       },
       "PC::47": {
@@ -283,7 +288,7 @@
             {
               "contact_id": "51",
               "contact_name": "Helpdesk",
-              "friendlyname": "Helpdesk \/ PC-BOB",
+              "friendlyname": "Helpdesk / PC-BOB",
               "contact_id_friendlyname": "Helpdesk",
               "contact_id_finalclass_recall": "Team",
               "contact_id_obsolescence_flag": ""
@@ -291,7 +296,7 @@
             {
               "contact_id": "11",
               "contact_name": "Parker",
-              "friendlyname": "Parker \/ PC-BOB",
+              "friendlyname": "Parker / PC-BOB",
               "contact_id_friendlyname": "Charlie Parker",
               "contact_id_finalclass_recall": "Person",
               "contact_id_obsolescence_flag": ""
@@ -369,7 +374,8 @@
           "brand_name": "Lenovo",
           "model_name": "ThinkPad T14",
           "osfamily_name": "Windows",
-          "osversion_name": "11"
+          "osversion_name": "11",
+          "location_name": ""
         }
       },
       "PC::33": {
@@ -386,7 +392,7 @@
             {
               "contact_id": "55",
               "contact_name": "Mixedcase",
-              "friendlyname": "Mixedcase \/ PC-MIXED",
+              "friendlyname": "Mixedcase / PC-MIXED",
               "contact_id_friendlyname": "Test Mixedcase",
               "contact_id_finalclass_recall": "Person",
               "contact_id_obsolescence_flag": ""
@@ -397,7 +403,8 @@
           "brand_name": "Lenovo",
           "model_name": "ThinkPad T14",
           "osfamily_name": "Ubuntu",
-          "osversion_name": "22.04 LTS"
+          "osversion_name": "22.04 LTS",
+          "location_name": "not exposed"
         }
       },
       "PC::34": {
@@ -414,7 +421,7 @@
             {
               "contact_id": "54",
               "contact_name": "Noemail",
-              "friendlyname": "Noemail \/ PC-OLD",
+              "friendlyname": "Noemail / PC-OLD",
               "contact_id_friendlyname": "Test Noemail",
               "contact_id_finalclass_recall": "Person",
               "contact_id_obsolescence_flag": ""
@@ -425,7 +432,8 @@
           "brand_name": "",
           "model_name": "",
           "osfamily_name": "Windows",
-          "osversion_name": "10"
+          "osversion_name": "10",
+          "location_name": ""
         }
       }
     }
@@ -518,7 +526,7 @@
     "message": "Found: 0",
     "objects": null
   },
-  "{\"operation\":\"core/get\",\"class\":\"Server\",\"key\":\"SELECT Server WHERE id \\u003e 0 AND id \\u003c= 500\",\"output_fields\":\"name,description,status,business_criticity,contacts_list,softwares_list,org_id,brand_name,model_name,osfamily_name,osversion_name\",\"limit\":501,\"page\":1}": {
+  "{\"operation\":\"core/get\",\"class\":\"Server\",\"key\":\"SELECT Server WHERE id \\u003e 0 AND id \\u003c= 500\",\"output_fields\":\"name,description,status,business_criticity,contacts_list,softwares_list,org_id,brand_name,model_name,osfamily_name,osversion_name,location_name\",\"limit\":501,\"page\":1}": {
     "code": 0,
     "message": "Found: 6",
     "objects": {
@@ -536,7 +544,7 @@
             {
               "contact_id": "46",
               "contact_name": "Hugo",
-              "friendlyname": "Hugo \/ Server1",
+              "friendlyname": "Hugo / Server1",
               "contact_id_friendlyname": "Victor Hugo",
               "contact_id_finalclass_recall": "Person",
               "contact_id_obsolescence_flag": ""
@@ -544,7 +552,7 @@
             {
               "contact_id": "8",
               "contact_name": "Vian",
-              "friendlyname": "Vian \/ Server1",
+              "friendlyname": "Vian / Server1",
               "contact_id_friendlyname": "Boris Vian",
               "contact_id_finalclass_recall": "Person",
               "contact_id_obsolescence_flag": ""
@@ -555,7 +563,8 @@
           "brand_name": "HPE",
           "model_name": "DL380",
           "osfamily_name": "vCenter Server",
-          "osversion_name": "2022"
+          "osversion_name": "2022",
+          "location_name": ""
         }
       },
       "Server::2": {
@@ -608,7 +617,8 @@
           "brand_name": "",
           "model_name": "",
           "osfamily_name": "",
-          "osversion_name": ""
+          "osversion_name": "",
+          "location_name": ""
         }
       },
       "Server::3": {
@@ -625,7 +635,7 @@
             {
               "contact_id": "18",
               "contact_name": "Sand",
-              "friendlyname": "Sand \/ Server3",
+              "friendlyname": "Sand / Server3",
               "contact_id_friendlyname": "George Sand",
               "contact_id_finalclass_recall": "Person",
               "contact_id_obsolescence_flag": ""
@@ -633,7 +643,7 @@
             {
               "contact_id": "53",
               "contact_name": "System \u0026 application support",
-              "friendlyname": "System \u0026 application support \/ Server3",
+              "friendlyname": "System \u0026 application support / Server3",
               "contact_id_friendlyname": "System \u0026 application support",
               "contact_id_finalclass_recall": "Team",
               "contact_id_obsolescence_flag": ""
@@ -678,7 +688,8 @@
           "brand_name": "HPE",
           "model_name": "DL380",
           "osfamily_name": "vCenter Server",
-          "osversion_name": "2022"
+          "osversion_name": "2022",
+          "location_name": "exposed"
         }
       },
       "Server::4": {
@@ -731,7 +742,8 @@
           "brand_name": "HPE",
           "model_name": "DL380",
           "osfamily_name": "vCenter Server",
-          "osversion_name": "2022"
+          "osversion_name": "2022",
+          "location_name": ""
         }
       },
       "Server::35": {
@@ -748,7 +760,7 @@
             {
               "contact_id": "8",
               "contact_name": "Vian",
-              "friendlyname": "Vian \/ Server5",
+              "friendlyname": "Vian / Server5",
               "contact_id_friendlyname": "Boris Vian",
               "contact_id_finalclass_recall": "Person",
               "contact_id_obsolescence_flag": ""
@@ -793,7 +805,8 @@
           "brand_name": "Dell",
           "model_name": "PowerEdge R740",
           "osfamily_name": "Red Hat",
-          "osversion_name": "9"
+          "osversion_name": "9",
+          "location_name": ""
         }
       },
       "Server::41": {
@@ -810,7 +823,7 @@
             {
               "contact_id": "6",
               "contact_name": "Gavalda",
-              "friendlyname": "Gavalda \/ Server6",
+              "friendlyname": "Gavalda / Server6",
               "contact_id_friendlyname": "Anna Gavalda",
               "contact_id_finalclass_recall": "Person",
               "contact_id_obsolescence_flag": ""
@@ -855,7 +868,8 @@
           "brand_name": "Dell",
           "model_name": "PowerEdge R740",
           "osfamily_name": "Windows server",
-          "osversion_name": "2022"
+          "osversion_name": "2022",
+          "location_name": ""
         }
       }
     }
@@ -971,7 +985,7 @@
             {
               "contact_id": "52",
               "contact_name": "Network support",
-              "friendlyname": "Network support \/ VM1",
+              "friendlyname": "Network support / VM1",
               "contact_id_friendlyname": "Network support",
               "contact_id_finalclass_recall": "Team",
               "contact_id_obsolescence_flag": ""
@@ -991,7 +1005,7 @@
                 {
                   "applicationsolution_id": "13",
                   "applicationsolution_name": "itop",
-                  "friendlyname": "itop \/ Apache",
+                  "friendlyname": "itop / Apache",
                   "applicationsolution_id_friendlyname": "itop",
                   "applicationsolution_id_obsolescence_flag": ""
                 }
