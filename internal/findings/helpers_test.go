@@ -67,7 +67,7 @@ func app(name, vendor, product, version string) inventory.SoftwareComponent {
 // sync makes the source's Assets exactly records, as a Sync of its CMDB does.
 func (w world) sync(t *testing.T, records ...inventory.Record) {
 	t.Helper()
-	if _, err := w.db.CommitSync(context.Background(), w.source, time.Now(), func(existing []*inventory.Asset) (inventory.Reconciliation, error) {
+	if _, err := w.db.CommitSync(context.Background(), w.source, time.Now(), func(existing inventory.Stored) (inventory.Reconciliation, error) {
 		return inventory.Reconcile(w.source, existing, inventory.Snapshot{Records: records})
 	}); err != nil {
 		t.Fatal(err)
