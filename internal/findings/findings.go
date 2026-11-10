@@ -1,4 +1,4 @@
-// Package findings turns Feeds and Syncs into Findings (ADR 0019). It matches
+// Package findings turns Feeds and Syncs into Findings (ADR 0020). It matches
 // Vulnerabilities against Software Components with matching, scores the
 // matches with scoring and stores them with postgres. Its Handle functions
 // have the shape of ingest.Feed.Handle, and AfterSync runs after a Sync.
@@ -24,7 +24,7 @@ const rejected = "Rejected"
 
 // Service reacts to Feeds and Syncs. It keeps no Feed data in memory: a
 // Vulnerability first matched between two KEV or EPSS pulls is scored without
-// them until the next pull sets them (ADR 0019). It only remembers when KEV
+// them until the next pull sets them (ADR 0020). It only remembers when KEV
 // last arrived, to tell a missing listing from a stale catalog.
 type Service struct {
 	db        *postgres.DB

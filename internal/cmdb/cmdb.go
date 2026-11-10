@@ -67,7 +67,7 @@ func New(db *postgres.DB, providers provider.Providers, key encryption.Key, life
 
 // OnSynced has every Sync that commits call fn with its CMDB Source, within
 // the Sync's limits, such as for the Findings to match its Assets again
-// (ADR 0019). The Sync has already succeeded: fn's error is logged, never
+// (ADR 0020). The Sync has already succeeded: fn's error is logged, never
 // turned into a failed Sync Run. It is meant to be set once, before the
 // Service is used.
 func (s *Service) OnSynced(fn func(context.Context, inventory.CMDBSourceID) error) {

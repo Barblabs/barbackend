@@ -13,7 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// StoredVulnerability is a Vulnerability that opened a Finding (ADR 0019):
+// StoredVulnerability is a Vulnerability that opened a Finding (ADR 0020):
 // its STIX object is opaque here, and its use case decodes it.
 type StoredVulnerability struct {
 	CVE      string
@@ -74,7 +74,7 @@ func (t *Tx) Vulnerability(ctx context.Context, cve string) (StoredVulnerability
 
 // VulnerabilitiesAffecting is the stored Vulnerabilities whose nvd/1 affected
 // entries, under the extension of that definition id, name one of products,
-// ignoring case. It is what a Sync matches its Assets against (ADR 0019).
+// ignoring case. It is what a Sync matches its Assets against (ADR 0020).
 func (t *Tx) VulnerabilitiesAffecting(ctx context.Context, nvdDefinitionID string, products []inventory.Product) ([]StoredVulnerability, error) {
 	if len(products) == 0 {
 		return nil, nil

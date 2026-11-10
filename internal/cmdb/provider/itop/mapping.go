@@ -21,7 +21,7 @@ var criticalities = map[string]inventory.Criticality{
 }
 
 // exposures maps the Locations a Customer keeps in iTop to record Exposure
-// (ADR 0020). Any other Location is Unknown.
+// (ADR 0021). Any other Location is Unknown.
 var exposures = map[string]inventory.Exposure{
 	"exposed":     inventory.InternetFacing,
 	"not exposed": inventory.Internal,

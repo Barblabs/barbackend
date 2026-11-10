@@ -72,7 +72,7 @@ func pullFeeds(ctx context.Context, out io.Writer, feeds []ingest.Feed, name str
 }
 
 // handledBy has NVD, KEV and EPSS hand what they pull to the Findings
-// (ADR 0019). feed pull runs without them, so it needs no database.
+// (ADR 0020). feed pull runs without them, so it needs no database.
 func handledBy(f *findings.Service, feeds []ingest.Feed) []ingest.Feed {
 	handlers := map[string]func(context.Context, []stix2.STIXObject) error{
 		"nvd":  f.HandleNVD,

@@ -113,7 +113,7 @@ The pure domain package `internal/finding` holds what `postgres` stores: a Findi
 
 - **One statement opens, updates or reopens.** `SaveMatch` is an `INSERT ... ON CONFLICT DO UPDATE` on the Finding's key, so two matches of the same Finding at once cannot both insert it. What the Finding was before (absent, open or closed) is read in the same statement, so the `Outcome` needs no second query.
 - **Times come from Postgres.** `first_opened_at`, `opened_at` and `closed_at` are the transaction's time, so `first_opened_at <= opened_at <= closed_at` holds whatever the application's clock says. A Score's `scored_at` is the statement's own time, so two Scores of one Finding in one transaction never share it.
-- **Products are compared in lower case in SQL as well**, on both the Finding and the Software Component, since components keep the Product as the CMDB wrote it (ADR 0018).
+- **Products are compared in lower case in SQL as well**, on both the Finding and the Software Component, since components keep the Product as the CMDB wrote it (ADR 0019).
 
 ## One Finding for a Product installed twice
 

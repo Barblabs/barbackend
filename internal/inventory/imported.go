@@ -151,7 +151,7 @@ func (a ImportedAsset) OperatingSystem() (SoftwareComponent, bool) {
 
 func (a ImportedAsset) Criticality() Criticality { return a.criticality }
 
-// Exposure is Unknown when the CMDB Source does not give it (ADR 0020).
+// Exposure is Unknown when the CMDB Source does not give it (ADR 0021).
 func (a ImportedAsset) Exposure() Exposure { return a.exposure }
 
 func (a ImportedAsset) Owner() (OwnerEmail, bool) {

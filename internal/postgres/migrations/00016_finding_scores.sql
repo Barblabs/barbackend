@@ -2,7 +2,7 @@
 
 -- The Score history of a Finding (ADR 0009): its Scoring Model, its value and
 -- every factor. A new row is stored only when the model, the value or the Data
--- Gaps differ from the latest one (ADR 0019).
+-- Gaps differ from the latest one (ADR 0020).
 CREATE TABLE finding_scores (
     finding_id             uuid NOT NULL REFERENCES findings (id),
     scored_at              timestamptz NOT NULL,

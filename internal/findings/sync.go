@@ -19,7 +19,7 @@ type productOn struct {
 
 // AfterSync matches every Active Asset of the CMDB Source again against the
 // stored Vulnerabilities that name its Products, once a Sync of it committed
-// (ADR 0019). The Findings of its Inactive Assets are closed as
+// (ADR 0020). The Findings of its Inactive Assets are closed as
 // asset_inactive. A match opens, updates or reopens its Finding and rescores
 // it, so a new Asset is matched against every Vulnerability already stored.
 // An open Finding that no longer matches is closed: component_removed when

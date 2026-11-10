@@ -17,7 +17,7 @@ var errNotACVE = errors.New("not a CVE")
 
 // HandleNVD matches each Vulnerability NVD published or modified against the
 // Software Components of every Active Asset with one of its Products
-// (ADR 0019). A match stores the Vulnerability and opens, updates or reopens
+// (ADR 0020). A match stores the Vulnerability and opens, updates or reopens
 // its Finding, which is scored. Open Findings of the CVE that no longer match
 // are closed, and all of them when NVD rejected it. Each Vulnerability is one
 // transaction; a failure is logged and the rest of the batch still runs.

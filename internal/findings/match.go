@@ -18,7 +18,7 @@ type candidateMatch struct {
 // bestMatches matches the Vulnerability cve, described by n, against every
 // candidate, and keeps one Match per Finding: an Asset with a Product
 // installed twice gets the most certain match, and between equally certain
-// ones the first in the Asset's order (ADR 0019). Candidates come ordered by
+// ones the first in the Asset's order (ADR 0020). Candidates come ordered by
 // Asset and position.
 func bestMatches(candidates []postgres.Candidate, cve string, n stixext.NVD) []candidateMatch {
 	var out []candidateMatch

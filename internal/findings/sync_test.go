@@ -35,7 +35,7 @@ func TestAfterSyncMatchesANewAssetAgainstStoredVulnerabilities(t *testing.T) {
 }
 
 // exposedTo is the record with that imported Exposure, as a Location in the
-// CMDB gives it (ADR 0020).
+// CMDB gives it (ADR 0021).
 func exposedTo(t *testing.T, r inventory.Record, e inventory.Exposure) inventory.Record {
 	t.Helper()
 	p := inventory.ImportedAssetParams{

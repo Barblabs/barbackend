@@ -19,7 +19,7 @@ import (
 // Candidate is a Software Component of an Active Asset that can be matched,
 // with what scoring needs of its Asset. Position is the component's place in
 // its Asset, which breaks ties between two installations of one Product
-// (ADR 0019).
+// (ADR 0020).
 type Candidate struct {
 	Asset       inventory.SourceReference
 	Position    int
@@ -40,7 +40,7 @@ type OpenFinding struct {
 
 // ComponentsWithProducts is the Software Components of every Active Asset, of
 // every Customer, that have one of products, ignoring case. It is what a new
-// Vulnerability is matched against (ADR 0019).
+// Vulnerability is matched against (ADR 0020).
 func (t *Tx) ComponentsWithProducts(ctx context.Context, products []inventory.Product) ([]Candidate, error) {
 	if len(products) == 0 {
 		return nil, nil
@@ -59,7 +59,7 @@ func (t *Tx) ComponentsWithProducts(ctx context.Context, products []inventory.Pr
 
 // ComponentsOfSource is the Software Components of the CMDB Source's Active
 // Assets. It is what a Sync matches against the stored Vulnerabilities
-// (ADR 0019).
+// (ADR 0020).
 func (t *Tx) ComponentsOfSource(ctx context.Context, source inventory.CMDBSourceID) ([]Candidate, error) {
 	rows, err := t.q.ListActiveComponentsOfSource(ctx, uuid.UUID(source))
 	if err != nil {
@@ -190,7 +190,7 @@ func (t *Tx) OpenFindingsOfSource(ctx context.Context, source inventory.CMDBSour
 }
 
 // SaveScoreIfChanged stores s as the Finding's newest Score unless its latest
-// Score has the same Scoring Model, value and Data Gaps (ADR 0019). It
+// Score has the same Scoring Model, value and Data Gaps (ADR 0020). It
 // reports whether it stored one.
 func (t *Tx) SaveScoreIfChanged(ctx context.Context, id finding.ID, s scoring.Score) (bool, error) {
 	latest, err := t.q.LatestFindingScore(ctx, uuid.UUID(id))

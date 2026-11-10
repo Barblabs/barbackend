@@ -7,4 +7,4 @@ An Asset mirrors exactly one record in one CMDB Source. We do not merge records 
 ## Consequences
 
 - Adding a provider means writing a mapping, never changing the Asset model.
-- Exposure is declared by barbattack users because no provider reliably records it (iTop has no such field; ServiceNow's `internet_facing` is not populated automatically). Superseded by ADR 0020: Exposure is now imported from the iTop Location and can be declared over it.
+- Exposure is declared by barbattack users because no provider reliably records it (iTop has no such field; ServiceNow's `internet_facing` is not populated automatically). Superseded by ADR 0021: Exposure is now imported from the iTop Location and can be declared over it.

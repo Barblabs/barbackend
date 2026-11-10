@@ -1,5 +1,5 @@
 // Package finding is the domain of Findings: what identifies one, what a match
-// makes of it and why it is closed (ADR 0019). It does no I/O.
+// makes of it and why it is closed (ADR 0020). It does no I/O.
 package finding
 
 import (

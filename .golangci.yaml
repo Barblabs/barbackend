@@ -110,7 +110,7 @@ linters:
             - barbackend/internal/stixext
           deny:
             - pkg: barbackend/internal
-              desc: finding is a pure domain package that imports only inventory, matching, scoring and stixext (ADR 0008, ADR 0019)
+              desc: finding is a pure domain package that imports only inventory, matching, scoring and stixext (ADR 0008, ADR 0020)
             - pkg: net/http
               desc: finding is pure and does no I/O (ADR 0008)
             - pkg: database/sql
@@ -281,7 +281,7 @@ linters:
             - barbackend/internal/stixext
           deny:
             - pkg: barbackend/internal
-              desc: the findings use case calls only finding, inventory, matching, postgres, scoring and stixext (ADR 0008, ADR 0019)
+              desc: the findings use case calls only finding, inventory, matching, postgres, scoring and stixext (ADR 0008, ADR 0020)
         users:
           list-mode: lax
           files:

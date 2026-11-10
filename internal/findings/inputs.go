@@ -12,7 +12,7 @@ import (
 
 // HandleKEV sets the KEV listing of every stored Vulnerability the catalog
 // lists and rescores its open Findings. A CVE no Finding cares about is
-// ignored, not kept (ADR 0019). The catalog counts as received before the
+// ignored, not kept (ADR 0020). The catalog counts as received before the
 // rescoring, so the Scores it makes are not stale.
 func (s *Service) HandleKEV(ctx context.Context, batch []stix2.STIXObject) error {
 	s.kevReceived()

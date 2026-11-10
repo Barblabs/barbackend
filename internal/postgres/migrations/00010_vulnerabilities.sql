@@ -1,7 +1,7 @@
 -- +goose Up
 
 -- Only the Vulnerabilities that opened at least one Finding are stored
--- (ADR 0015, ADR 0019), one row per CVE shared by every Customer. object is
+-- (ADR 0015, ADR 0020), one row per CVE shared by every Customer. object is
 -- the STIX vulnerability with its nvd/1, epss/1 and kev/1 extensions; each
 -- Feed updates only its own extension key (ADR 0010).
 CREATE TABLE vulnerabilities (

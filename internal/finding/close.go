@@ -3,7 +3,7 @@ package finding
 import "fmt"
 
 // CloseReason says why a Finding was closed: its match no longer holds
-// (ADR 0019).
+// (ADR 0020).
 type CloseReason int
 
 // Stored as catalog ids (ADR 0006): never renumber.

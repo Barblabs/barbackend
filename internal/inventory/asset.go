@@ -64,7 +64,7 @@ func (a *Asset) DeclaredOwner() (OwnerEmail, bool) {
 }
 
 // Exposure is the declared Exposure, or the imported one when none is
-// declared (ADR 0020).
+// declared (ADR 0021).
 func (a *Asset) Exposure() Exposure {
 	if a.declaredExposure != ExposureUnknown {
 		return a.declaredExposure

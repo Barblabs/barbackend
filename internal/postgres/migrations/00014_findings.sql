@@ -1,6 +1,6 @@
 -- +goose Up
 
--- One Finding per Asset, Product and Vulnerability (ADR 0019): opened, closed
+-- One Finding per Asset, Product and Vulnerability (ADR 0020): opened, closed
 -- and reopened, never deleted. The Product is stored in lower case, as
 -- Products match ignoring case (ADR 0015). component_name and
 -- component_version are copied from the matched Software Component, which has

@@ -22,7 +22,7 @@ The names are compared after trimming and lowercasing. An unknown Location name 
 
 ## When a Score changes
 
-A Location changed in iTop reaches the Scores at the next Sync. `AfterSync` (ADR 0019) matches every Active Asset again and rescores each match, and a new Score is stored only when it differs from the latest one, so moving a server from `not exposed` to `exposed` stores one new Score per open Finding, with the exposure multiplier going from 0.6 to 1.0. There is no scheduled Sync: one runs when the CMDB Source is connected and when a User asks for it.
+A Location changed in iTop reaches the Scores at the next Sync. `AfterSync` (ADR 0020) matches every Active Asset again and rescores each match, and a new Score is stored only when it differs from the latest one, so moving a server from `not exposed` to `exposed` stores one new Score per open Finding, with the exposure multiplier going from 0.6 to 1.0. There is no scheduled Sync: one runs when the CMDB Source is connected and when a User asks for it.
 
 A Declaration does not rescore by itself; its Findings are rescored at the next Sync or KEV or EPSS pull. This gap predates this ADR.
 

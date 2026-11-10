@@ -23,7 +23,7 @@ var ciClasses = []struct {
 }{
 	{"Server", ciFields("brand_name", "model_name", "osfamily_name", "osversion_name", "location_name")},
 	// A VirtualMachine has no Location in iTop, so its Exposure is Unknown
-	// (ADR 0020).
+	// (ADR 0021).
 	{"VirtualMachine", ciFields("osfamily_name", "osversion_name")},
 	{"PC", ciFields("brand_name", "model_name", "osfamily_name", "osversion_name", "location_name")},
 	{"NetworkDevice", ciFields("brand_name", "model_name", "iosversion_id", "location_name")},

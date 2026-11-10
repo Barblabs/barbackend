@@ -40,7 +40,7 @@ A flagged match is still a Finding: it is opened, scored and alerted like any ot
 
 ## Which Vulnerabilities are matched
 
-Only Vulnerabilities received from the Feeds after barbattack starts reading them are matched: a CVE NVD publishes or modifies within the 24-hour window (ADR 0011). There is no backfill. An old CVE that NVD does not modify again is never matched, even if it affects a Customer's Assets: the 2021 CVE in a still-installed nginx is out of scope, by decision of the team. An Asset added later is matched against the Vulnerabilities barbattack already stored, because they opened a Finding for another Asset, and against those received after it is synced (ADR 0019).
+Only Vulnerabilities received from the Feeds after barbattack starts reading them are matched: a CVE NVD publishes or modifies within the 24-hour window (ADR 0011). There is no backfill. An old CVE that NVD does not modify again is never matched, even if it affects a Customer's Assets: the 2021 CVE in a still-installed nginx is out of scope, by decision of the team. An Asset added later is matched against the Vulnerabilities barbattack already stored, because they opened a Finding for another Asset, and against those received after it is synced (ADR 0020).
 
 ## Scores follow their Vulnerability
 
@@ -50,7 +50,7 @@ KEV and EPSS objects carry no `affected` entries, so they never open a Finding. 
 
 A match opens a Finding for (Asset, Product, Vulnerability). The component's version is an attribute of the Finding, updated on every Sync, not part of its identity: patching nginx from 1.18.0 to 1.19.0, still vulnerable, keeps the same Finding and its Score history, and patching it to 1.20.1 closes it. Software Components have no identity of their own and are rewritten on every Sync, so a Finding cannot point at a component row.
 
-A Finding is never deleted. It is closed, with its reason, when its match no longer holds: the version leaves the range, the component disappears, its Asset becomes Inactive or the Vulnerability is rejected. If the same (Asset, Product, Vulnerability) matches again, the same Finding is reopened. Only Active Assets are matched. How Findings are stored, closed and rescored is ADR 0019.
+A Finding is never deleted. It is closed, with its reason, when its match no longer holds: the version leaves the range, the component disappears, its Asset becomes Inactive or the Vulnerability is rejected. If the same (Asset, Product, Vulnerability) matches again, the same Finding is reopened. Only Active Assets are matched. How Findings are stored, closed and rescored is ADR 0020.
 
 ## Examples
 
@@ -102,6 +102,6 @@ Each Vulnerability can describe its Products in its own way. These cases are kno
 ## Consequences
 
 - Matching needs Products. The iTop adapter fills the Product of an Application from its linked Software (ADR 0002), but as free text (`Apache`/`Apache HTTP Server` where NVD has `apache`/`http_server`), so it matches no CPE until Products are normalized (ADR 0010, "How a Product is keyed").
-- Vulnerabilities are stored only when they open a Finding, instead of one row per STIX object as ADR 0010's "Storage" section intended. A Vulnerability that matched nothing when it arrived is not kept, and is never matched again unless NVD modifies it; one that is kept is matched against every Asset synced after it (ADR 0019).
+- Vulnerabilities are stored only when they open a Finding, instead of one row per STIX object as ADR 0010's "Storage" section intended. A Vulnerability that matched nothing when it arrived is not kept, and is never matched again unless NVD modifies it; one that is kept is matched against every Asset synced after it (ADR 0020).
 - The NVD adapter stores each entry's exact `version` and `update`, a minor version of `nvd/1`.
 - EPSS publishes a score for every CVE each day, but only the few with Findings are rescored.

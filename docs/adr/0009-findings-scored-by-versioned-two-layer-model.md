@@ -37,5 +37,5 @@ CVSS is taken from the first source that has it: the NVD Primary score, then the
 ## Consequences
 
 - Exposure is only declared (ADR 0004), and Declarations are not implemented yet, so today every Score has `exposure_undeclared` and an exposure multiplier of 1.0.
-- Open Findings are rescored daily, because KEV and EPSS change, and each Score is kept as history; a new Score is stored only when its Scoring Model, value or Data Gaps differ from the latest one (ADR 0019). Closed Findings are not rescored.
+- Open Findings are rescored daily, because KEV and EPSS change, and each Score is kept as history; a new Score is stored only when its Scoring Model, value or Data Gaps differ from the latest one (ADR 0020). Closed Findings are not rescored.
 - The Asset Owner and the Security Team are only alerted when a Finding changes Score Band or its Vulnerability enters the KEV catalog, not on every rescoring. Band thresholds are not decided yet.
