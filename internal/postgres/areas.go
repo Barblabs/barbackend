@@ -8,6 +8,7 @@ import (
 
 	"barbackend/internal/inventory"
 	"barbackend/internal/postgres/sqlcgen"
+	"barbackend/internal/tenancy"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -18,6 +19,35 @@ type AreaSummary struct {
 	Name string
 }
 
+// StoredArea is an Area with what only the database records about it.
+type StoredArea struct {
+	// ID identifies the Area across CMDB Sources, for the HTTP API.
+	ID   int64
+	Area *inventory.Area
+	// InactiveSince is when the Area became Inactive, nil while it is Active.
+	InactiveSince *time.Time
+}
+
+// ListAreas reads the Customer's Areas across all its CMDB Sources,
+// Disconnected ones included, sorted by name, then id. Active keeps only
+// Active Areas when true and only Inactive ones when false; nil keeps both.
+func (t *Tx) ListAreas(ctx context.Context, customer tenancy.CustomerID, active *bool) ([]StoredArea, error) {
+	rows, err := t.q.ListCustomerAreas(ctx, sqlcgen.ListCustomerAreasParams{CustomerID: uuid.UUID(customer), Active: active})
+	if err != nil {
+		return nil, fmt.Errorf("list areas of customer %s: %w", customer, err)
+	}
+	areas := make([]StoredArea, len(rows))
+	for i, row := range rows {
+		ref := inventory.SourceReference{Source: inventory.CMDBSourceID(row.CmdbSourceID), RecordID: row.RecordID}
+		a, err := restoreArea(ref, row.Name, row.OwnerEmail, row.InactiveSince)
+		if err != nil {
+			return nil, fmt.Errorf("restore area %v: %w", ref, err)
+		}
+		areas[i] = StoredArea{ID: row.ID, Area: a, InactiveSince: row.InactiveSince}
+	}
+	return areas, nil
+}
+
 func (t *sourceTx) areas(ctx context.Context) ([]*inventory.Area, error) {
 	rows, err := t.q.ListAreas(ctx, uuid.UUID(t.source))
 	if err != nil {
@@ -26,22 +56,22 @@ func (t *sourceTx) areas(ctx context.Context) ([]*inventory.Area, error) {
 	areas := make([]*inventory.Area, len(rows))
 	for i, row := range rows {
 		ref := inventory.SourceReference{Source: t.source, RecordID: row.RecordID}
-		if areas[i], err = restoreArea(ref, row); err != nil {
+		if areas[i], err = restoreArea(ref, row.Name, row.OwnerEmail, row.InactiveSince); err != nil {
 			return nil, fmt.Errorf("restore area %v: %w", ref, err)
 		}
 	}
 	return areas, nil
 }
 
-func restoreArea(ref inventory.SourceReference, row sqlcgen.ListAreasRow) (*inventory.Area, error) {
-	owner, err := ownerEmail(row.OwnerEmail)
+func restoreArea(ref inventory.SourceReference, name string, email *string, inactiveSince *time.Time) (*inventory.Area, error) {
+	owner, err := ownerEmail(email)
 	if err != nil {
 		return nil, err
 	}
-	active := row.InactiveSince == nil
+	active := inactiveSince == nil
 	// The source's own status is not stored: Reconcile only folds it into
 	// Active and replaces it on every Sync, so the stored state stands in.
-	imported, err := inventory.NewImportedArea(inventory.ImportedAreaParams{Name: row.Name, Inactive: !active})
+	imported, err := inventory.NewImportedArea(inventory.ImportedAreaParams{Name: name, Inactive: !active})
 	if err != nil {
 		return nil, err
 	}

@@ -29,3 +29,11 @@ WHERE cmdb_source_id = @cmdb_source_id AND record_id = ANY(@record_ids::text[]);
 UPDATE customer_areas
 SET inactive_since = coalesce(inactive_since, now())
 WHERE cmdb_source_id = @cmdb_source_id;
+
+-- name: ListCustomerAreas :many
+SELECT a.id, a.cmdb_source_id, a.record_id, a.name, a.owner_email, a.inactive_since
+FROM customer_areas a
+JOIN cmdb_sources s ON s.id = a.cmdb_source_id
+WHERE s.customer_id = @customer_id
+  AND (sqlc.narg(active)::boolean IS NULL OR (a.inactive_since IS NULL) = sqlc.narg(active)::boolean)
+ORDER BY a.name, a.id;

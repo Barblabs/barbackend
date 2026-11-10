@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"barbackend/internal/agents"
+	"barbackend/internal/areas"
 	"barbackend/internal/assessment"
 	"barbackend/internal/assets"
 	"barbackend/internal/businesscontext"
@@ -44,6 +45,7 @@ var operations = []struct{ method, path string }{
 	{http.MethodPost, "/cmdb/source/test"},
 	{http.MethodPost, "/cmdb/source/sync"},
 	{http.MethodGet, "/assets"},
+	{http.MethodGet, "/areas"},
 	{http.MethodGet, "/prioritizations"},
 	{http.MethodGet, "/business-context"},
 	{http.MethodGet, "/business-context/brief"},
@@ -108,7 +110,7 @@ func newEnv(t *testing.T) env {
 	llm := claudetest.New(t)
 	agentService := agents.NewService(db, agents.NewCrew(claude.New(llm.URL), agents.DefaultModels()))
 	router := httpapi.New(httpapi.Config{
-		Agents: agentService, Assets: assets.New(db), BusinessContext: businesscontext.New(db), CMDB: svc,
+		Agents: agentService, Areas: areas.New(db), Assets: assets.New(db), BusinessContext: businesscontext.New(db), CMDB: svc,
 		Users: users.New(db, pool.Verifier(t), admin), AllowedOrigins: []string{allowedOrigin},
 	})
 	e := env{db: db, conn: pgtest.Conn(t, url), pool: pool, provider: p, admin: admin, cmdb: svc, llm: llm, agents: agentService, router: router}

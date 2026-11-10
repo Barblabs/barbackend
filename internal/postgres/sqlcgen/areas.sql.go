@@ -88,6 +88,56 @@ func (q *Queries) ListAreas(ctx context.Context, cmdbSourceID uuid.UUID) ([]List
 	return items, nil
 }
 
+const listCustomerAreas = `-- name: ListCustomerAreas :many
+SELECT a.id, a.cmdb_source_id, a.record_id, a.name, a.owner_email, a.inactive_since
+FROM customer_areas a
+JOIN cmdb_sources s ON s.id = a.cmdb_source_id
+WHERE s.customer_id = $1
+  AND ($2::boolean IS NULL OR (a.inactive_since IS NULL) = $2::boolean)
+ORDER BY a.name, a.id
+`
+
+type ListCustomerAreasParams struct {
+	CustomerID uuid.UUID
+	Active     *bool
+}
+
+type ListCustomerAreasRow struct {
+	ID            int64
+	CmdbSourceID  uuid.UUID
+	RecordID      string
+	Name          string
+	OwnerEmail    *string
+	InactiveSince *time.Time
+}
+
+func (q *Queries) ListCustomerAreas(ctx context.Context, arg ListCustomerAreasParams) ([]ListCustomerAreasRow, error) {
+	rows, err := q.db.Query(ctx, listCustomerAreas, arg.CustomerID, arg.Active)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCustomerAreasRow
+	for rows.Next() {
+		var i ListCustomerAreasRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.CmdbSourceID,
+			&i.RecordID,
+			&i.Name,
+			&i.OwnerEmail,
+			&i.InactiveSince,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const reactivateAreas = `-- name: ReactivateAreas :execrows
 UPDATE customer_areas
 SET inactive_since = NULL
