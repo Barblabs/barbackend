@@ -23,6 +23,14 @@ func (h areaHandler) register(api huma.API) {
 		Description: "Lists every Area imported from the Customer's CMDB Sources, sorted by name. An Area is what iTop calls an Organization. The list is not paged.",
 		Errors:      []int{http.StatusBadRequest},
 	}, h.list)
+	register(api, huma.Operation{
+		OperationID: "set-area-owner",
+		Method:      http.MethodPut,
+		Path:        "/areas/{id}/owner",
+		Summary:     "State whom to reach about an Area",
+		Description: "Only a Customer Admin states it. A null email clears it. A Sync never changes it, not even when it renames the Area.",
+		Errors:      []int{http.StatusBadRequest, http.StatusNotFound},
+	}, h.setOwner)
 }
 
 type areaQuery struct {
@@ -41,6 +49,16 @@ type areaResponse struct {
 	OwnerEmail    *string    `json:"owner_email" doc:"Whom to reach about the Area, as a Customer Admin states it; null until one does"`
 	Active        bool       `json:"active" doc:"False once the CMDB Source marks the Area inactive, stops returning it, or is disconnected"`
 	InactiveSince *time.Time `json:"inactive_since" doc:"When the Area became Inactive; null while it is Active"`
+}
+
+type setAreaOwnerRequest struct {
+	_     struct{} `additionalProperties:"true"`
+	Email *string  `json:"email" format:"email" doc:"Whom to reach about the Area; null clears it"`
+}
+
+type setAreaOwnerInput struct {
+	ID   int64 `path:"id"`
+	Body setAreaOwnerRequest
 }
 
 func (h areaHandler) list(ctx context.Context, caller tenancy.User, in *areaQuery) (*body[areaListResponse], error) {
@@ -76,4 +94,12 @@ func newAreaResponse(stored areas.StoredArea) areaResponse {
 		resp.OwnerEmail = ptr(owner.String())
 	}
 	return resp
+}
+
+func (h areaHandler) setOwner(ctx context.Context, caller tenancy.User, in *setAreaOwnerInput) (*body[areaResponse], error) {
+	stored, err := h.areas.SetOwner(ctx, caller, in.ID, in.Body.Email)
+	if err != nil {
+		return nil, err
+	}
+	return &body[areaResponse]{Body: newAreaResponse(stored)}, nil
 }

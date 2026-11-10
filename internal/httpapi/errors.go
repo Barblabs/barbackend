@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"barbackend/internal/agents"
+	"barbackend/internal/areas"
 	"barbackend/internal/assets"
 	"barbackend/internal/business"
 	"barbackend/internal/cmdb"
@@ -41,6 +42,7 @@ const (
 	customerDeactivated = "customer_deactivated"
 	emailTaken          = "email_taken"
 	userNotFound        = "user_not_found"
+	areaNotFound        = "area_not_found"
 	lastCustomerAdmin   = "last_customer_admin"
 	internalError       = "internal_error"
 
@@ -100,6 +102,8 @@ func apiError(err error) *codedError {
 		return &codedError{status: http.StatusBadRequest, Code: invalidRequest, Message: err.Error()}
 	case errors.Is(err, business.ErrStale):
 		return &codedError{status: http.StatusConflict, Code: businessContextStale, Message: business.ErrStale.Error()}
+	case errors.Is(err, areas.ErrAreaNotFound):
+		return &codedError{status: http.StatusNotFound, Code: areaNotFound, Message: "area not found"}
 	case errors.Is(err, assets.ErrInvalidQuery):
 		return &codedError{status: http.StatusBadRequest, Code: invalidRequest, Message: err.Error()}
 	case errors.Is(err, inventory.ErrNotConnected):

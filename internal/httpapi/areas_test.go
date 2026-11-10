@@ -6,21 +6,24 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"testing"
 
 	"barbackend/internal/inventory"
 )
 
 type areaList struct {
-	Areas []struct {
-		ID            int64   `json:"id"`
-		SourceID      string  `json:"source_id"`
-		RecordID      string  `json:"record_id"`
-		Name          string  `json:"name"`
-		OwnerEmail    *string `json:"owner_email"`
-		Active        bool    `json:"active"`
-		InactiveSince *string `json:"inactive_since"`
-	} `json:"areas"`
+	Areas []area `json:"areas"`
+}
+
+type area struct {
+	ID            int64   `json:"id"`
+	SourceID      string  `json:"source_id"`
+	RecordID      string  `json:"record_id"`
+	Name          string  `json:"name"`
+	OwnerEmail    *string `json:"owner_email"`
+	Active        bool    `json:"active"`
+	InactiveSince *string `json:"inactive_since"`
 }
 
 func (e env) listAreas(query url.Values) *httptest.ResponseRecorder {
@@ -107,5 +110,61 @@ func TestListAreasWithoutAreasIsEmpty(t *testing.T) {
 
 	if rec.Code != http.StatusOK || rec.Body.String() != `{"areas":[]}` {
 		t.Errorf("response = %d %s, want an empty list", rec.Code, rec.Body)
+	}
+}
+
+func (e env) setAreaOwner(authorization string, id int64, email any) *httptest.ResponseRecorder {
+	return e.asUser(authorization, http.MethodPut, "/areas/"+strconv.FormatInt(id, 10)+"/owner", map[string]any{"email": email})
+}
+
+func TestCustomerAdminSetsAndClearsAnAreasOwner(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	e.provider.Snapshot = inventory.Snapshot{Areas: []inventory.AreaRecord{areaRecord(t, "1", "IT")}}
+	e.connect(t, e.customer)
+	_, admin := e.customerAdmin(t, e.customer)
+	id := e.areaID(t, "1")
+
+	set := decode[area](t, e.setAreaOwner(admin, id, "Ana@Example.com"), http.StatusOK)
+	if set.ID != id || set.Name != "IT" || set.OwnerEmail == nil || *set.OwnerEmail != "ana@example.com" {
+		t.Errorf("after setting = %+v, want IT owned by ana@example.com", set)
+	}
+
+	cleared := decode[area](t, e.setAreaOwner(admin, id, nil), http.StatusOK)
+	if cleared.OwnerEmail != nil {
+		t.Errorf("owner_email after clearing = %q, want null", *cleared.OwnerEmail)
+	}
+}
+
+func TestSetAreaOwnerRejectsABadEmail(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	e.provider.Snapshot = inventory.Snapshot{Areas: []inventory.AreaRecord{areaRecord(t, "1", "IT")}}
+	e.connect(t, e.customer)
+	_, admin := e.customerAdmin(t, e.customer)
+
+	got := decode[codedError](t, e.setAreaOwner(admin, e.areaID(t, "1"), "not an email"), http.StatusBadRequest)
+
+	if got.Code != "invalid_request" {
+		t.Errorf("code = %q, want invalid_request", got.Code)
+	}
+}
+
+func TestSetOwnerOfAnotherCustomersAreaIsNotFound(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	other := e.newCustomer(t)
+	e.provider.Snapshot = inventory.Snapshot{Areas: []inventory.AreaRecord{areaRecord(t, "1", "Theirs")}}
+	e.connect(t, other)
+	var theirs int64
+	if err := e.conn.QueryRow(context.Background(), "SELECT id FROM customer_areas").Scan(&theirs); err != nil {
+		t.Fatal(err)
+	}
+	_, admin := e.customerAdmin(t, e.customer)
+
+	got := decode[codedError](t, e.setAreaOwner(admin, theirs, "ana@example.com"), http.StatusNotFound)
+
+	if got.Code != "area_not_found" {
+		t.Errorf("code = %q, want area_not_found", got.Code)
 	}
 }
