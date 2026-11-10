@@ -19,6 +19,15 @@ type ci struct {
 	IOSVersionID string     `json:"iosversion_id"`
 	Contacts     []contact  `json:"contacts_list"`
 	Instances    []instance `json:"softwares_list"`
+	OrgID        string     `json:"org_id"`
+}
+
+// organization is an iTop Organization, imported as an Area. Key comes from
+// the object envelope.
+type organization struct {
+	Key    string `json:"-"`
+	Name   string `json:"name"`
+	Status string `json:"status"`
 }
 
 type contact struct {

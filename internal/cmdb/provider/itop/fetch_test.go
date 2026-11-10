@@ -100,7 +100,7 @@ func recorder(t *testing.T, path string) http.Handler {
 func ptr(s string) *string { return &s }
 
 func TestFetchSeededInstance(t *testing.T) {
-	cis, lk, err := fetch(context.Background(), recorded(t, "seeded"))
+	cis, orgs, lk, err := fetch(context.Background(), recorded(t, "seeded"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,36 +127,54 @@ func TestFetchSeededInstance(t *testing.T) {
 			Brand: "HPE", Model: "DL380", OSFamily: "vCenter Server", OSVersion: "2022",
 			Contacts:  []contact{{ID: "18", Class: "Person"}, {ID: "53", Class: "Team"}},
 			Instances: []instance{{Class: "Middleware", Name: "RabbitMQ", SoftwareID: "3"}},
+			OrgID:     "6",
 		},
 		{
 			Key: "21", Class: "VirtualMachine", Name: "VM1", Status: "production", Criticality: ptr("medium"),
 			OSFamily: "vCenter Server", OSVersion: "2022",
 			Contacts:  []contact{{ID: "52", Class: "Team"}},
 			Instances: []instance{{Class: "WebServer", Name: "Apache", SoftwareID: "0"}},
+			OrgID:     "6",
 		},
 		{
 			Key: "33", Class: "PC", Name: "PC-MIXED", Status: "production",
 			Brand: "Lenovo", Model: "ThinkPad T14", OSFamily: "Ubuntu", OSVersion: "22.04 LTS",
 			Contacts:  []contact{{ID: "55", Class: "Person"}},
 			Instances: []instance{},
+			OrgID:     "6",
 		},
 		{
 			Key: "34", Class: "PC", Name: "PC-OLD", Status: "obsolete", Criticality: ptr("medium"),
 			OSFamily: "Windows", OSVersion: "10",
 			Contacts:  []contact{{ID: "54", Class: "Person"}},
 			Instances: []instance{},
+			OrgID:     "6",
 		},
 		{
 			Key: "40", Class: "NetworkDevice", Name: "Router2", Status: "production", Criticality: ptr("high"),
 			Brand: "Cisco", Model: "Cisco 6500", IOSVersionID: "90",
 			Contacts:  []contact{{ID: "46", Class: "Person"}},
 			Instances: []instance{},
+			OrgID:     "6",
 		},
 	}
 	for _, w := range want {
 		if got := byName[w.Name]; !reflect.DeepEqual(got, w) {
 			t.Errorf("%s:\n got %+v\nwant %+v", w.Name, got, w)
 		}
+	}
+
+	wantOrgs := []organization{
+		{Key: "1", Name: "My Company/Department", Status: "active"},
+		{Key: "2", Name: "Customer", Status: "active"},
+		{Key: "3", Name: "Demo", Status: "active"},
+		{Key: "4", Name: "HR Department", Status: "active"},
+		{Key: "5", Name: "InfraStore", Status: "active"},
+		{Key: "6", Name: "IT Department", Status: "active"},
+		{Key: "7", Name: "Sales Department", Status: "active"},
+	}
+	if !reflect.DeepEqual(orgs, wantOrgs) {
+		t.Errorf("organizations:\n got %+v\nwant %+v", orgs, wantOrgs)
 	}
 
 	wantLookups := lookups{

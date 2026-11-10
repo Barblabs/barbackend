@@ -30,7 +30,7 @@
     "message": "Found: 0",
     "objects": null
   },
-  "{\"operation\":\"core/get\",\"class\":\"NetworkDevice\",\"key\":\"SELECT NetworkDevice WHERE id \\u003e 0 AND id \\u003c= 500\",\"output_fields\":\"name,description,status,business_criticity,contacts_list,softwares_list,brand_name,model_name,iosversion_id\",\"limit\":501,\"page\":1}": {
+  "{\"operation\":\"core/get\",\"class\":\"NetworkDevice\",\"key\":\"SELECT NetworkDevice WHERE id \\u003e 0 AND id \\u003c= 500\",\"output_fields\":\"name,description,status,business_criticity,contacts_list,softwares_list,org_id,brand_name,model_name,iosversion_id\",\"limit\":501,\"page\":1}": {
     "code": 0,
     "message": "Found: 4",
     "objects": {
@@ -46,6 +46,7 @@
           "business_criticity": "low",
           "contacts_list": [],
           "softwares_list": [],
+          "org_id": "6",
           "brand_name": "HPE",
           "model_name": "Procurve 2450",
           "iosversion_id": "91"
@@ -63,6 +64,7 @@
           "business_criticity": "low",
           "contacts_list": [],
           "softwares_list": [],
+          "org_id": "6",
           "brand_name": "Cisco",
           "model_name": "Procurve 2450",
           "iosversion_id": "0"
@@ -89,6 +91,7 @@
             }
           ],
           "softwares_list": [],
+          "org_id": "6",
           "brand_name": "Cisco",
           "model_name": "Cisco 6500",
           "iosversion_id": "90"
@@ -106,6 +109,7 @@
           "business_criticity": "low",
           "contacts_list": [],
           "softwares_list": [],
+          "org_id": "6",
           "brand_name": "HPE",
           "model_name": "Procurve 2450",
           "iosversion_id": "0"
@@ -118,7 +122,88 @@
     "message": "Found: 0",
     "objects": null
   },
-  "{\"operation\":\"core/get\",\"class\":\"PC\",\"key\":\"SELECT PC WHERE id \\u003e 0 AND id \\u003c= 500\",\"output_fields\":\"name,description,status,business_criticity,contacts_list,softwares_list,brand_name,model_name,osfamily_name,osversion_name\",\"limit\":501,\"page\":1}": {
+  "{\"operation\":\"core/get\",\"class\":\"Organization\",\"key\":\"SELECT Organization WHERE id \\u003e 0 AND id \\u003c= 500\",\"output_fields\":\"name,status\",\"limit\":501,\"page\":1}": {
+    "code": 0,
+    "message": "Found: 7",
+    "objects": {
+      "Organization::2": {
+        "code": 0,
+        "message": "",
+        "class": "Organization",
+        "key": "2",
+        "fields": {
+          "name": "Customer",
+          "status": "active"
+        }
+      },
+      "Organization::3": {
+        "code": 0,
+        "message": "",
+        "class": "Organization",
+        "key": "3",
+        "fields": {
+          "name": "Demo",
+          "status": "active"
+        }
+      },
+      "Organization::4": {
+        "code": 0,
+        "message": "",
+        "class": "Organization",
+        "key": "4",
+        "fields": {
+          "name": "HR Department",
+          "status": "active"
+        }
+      },
+      "Organization::5": {
+        "code": 0,
+        "message": "",
+        "class": "Organization",
+        "key": "5",
+        "fields": {
+          "name": "InfraStore",
+          "status": "active"
+        }
+      },
+      "Organization::6": {
+        "code": 0,
+        "message": "",
+        "class": "Organization",
+        "key": "6",
+        "fields": {
+          "name": "IT Department",
+          "status": "active"
+        }
+      },
+      "Organization::1": {
+        "code": 0,
+        "message": "",
+        "class": "Organization",
+        "key": "1",
+        "fields": {
+          "name": "My Company\/Department",
+          "status": "active"
+        }
+      },
+      "Organization::7": {
+        "code": 0,
+        "message": "",
+        "class": "Organization",
+        "key": "7",
+        "fields": {
+          "name": "Sales Department",
+          "status": "active"
+        }
+      }
+    }
+  },
+  "{\"operation\":\"core/get\",\"class\":\"Organization\",\"key\":\"SELECT Organization WHERE id \\u003e 500\",\"output_fields\":\"id\",\"limit\":1,\"page\":1}": {
+    "code": 0,
+    "message": "Found: 0",
+    "objects": null
+  },
+  "{\"operation\":\"core/get\",\"class\":\"PC\",\"key\":\"SELECT PC WHERE id \\u003e 0 AND id \\u003c= 500\",\"output_fields\":\"name,description,status,business_criticity,contacts_list,softwares_list,org_id,brand_name,model_name,osfamily_name,osversion_name\",\"limit\":501,\"page\":1}": {
     "code": 0,
     "message": "Found: 4",
     "objects": {
@@ -177,6 +262,7 @@
               "softwarelicence_id_obsolescence_flag": ""
             }
           ],
+          "org_id": "6",
           "brand_name": "Dell",
           "model_name": "OptiPlex 7010",
           "osfamily_name": "Windows",
@@ -279,6 +365,7 @@
               "softwarelicence_id_obsolescence_flag": ""
             }
           ],
+          "org_id": "6",
           "brand_name": "Lenovo",
           "model_name": "ThinkPad T14",
           "osfamily_name": "Windows",
@@ -306,6 +393,7 @@
             }
           ],
           "softwares_list": [],
+          "org_id": "6",
           "brand_name": "Lenovo",
           "model_name": "ThinkPad T14",
           "osfamily_name": "Ubuntu",
@@ -333,6 +421,7 @@
             }
           ],
           "softwares_list": [],
+          "org_id": "6",
           "brand_name": "",
           "model_name": "",
           "osfamily_name": "Windows",
@@ -429,7 +518,7 @@
     "message": "Found: 0",
     "objects": null
   },
-  "{\"operation\":\"core/get\",\"class\":\"Server\",\"key\":\"SELECT Server WHERE id \\u003e 0 AND id \\u003c= 500\",\"output_fields\":\"name,description,status,business_criticity,contacts_list,softwares_list,brand_name,model_name,osfamily_name,osversion_name\",\"limit\":501,\"page\":1}": {
+  "{\"operation\":\"core/get\",\"class\":\"Server\",\"key\":\"SELECT Server WHERE id \\u003e 0 AND id \\u003c= 500\",\"output_fields\":\"name,description,status,business_criticity,contacts_list,softwares_list,org_id,brand_name,model_name,osfamily_name,osversion_name\",\"limit\":501,\"page\":1}": {
     "code": 0,
     "message": "Found: 6",
     "objects": {
@@ -462,6 +551,7 @@
             }
           ],
           "softwares_list": [],
+          "org_id": "6",
           "brand_name": "HPE",
           "model_name": "DL380",
           "osfamily_name": "vCenter Server",
@@ -514,6 +604,7 @@
               "softwarelicence_id_obsolescence_flag": ""
             }
           ],
+          "org_id": "6",
           "brand_name": "",
           "model_name": "",
           "osfamily_name": "",
@@ -583,6 +674,7 @@
               "softwarelicence_id_obsolescence_flag": ""
             }
           ],
+          "org_id": "6",
           "brand_name": "HPE",
           "model_name": "DL380",
           "osfamily_name": "vCenter Server",
@@ -635,6 +727,7 @@
               "softwarelicence_id_obsolescence_flag": ""
             }
           ],
+          "org_id": "6",
           "brand_name": "HPE",
           "model_name": "DL380",
           "osfamily_name": "vCenter Server",
@@ -696,6 +789,7 @@
               "softwarelicence_id_obsolescence_flag": ""
             }
           ],
+          "org_id": "6",
           "brand_name": "Dell",
           "model_name": "PowerEdge R740",
           "osfamily_name": "Red Hat",
@@ -757,6 +851,7 @@
               "softwarelicence_id_obsolescence_flag": ""
             }
           ],
+          "org_id": "6",
           "brand_name": "Dell",
           "model_name": "PowerEdge R740",
           "osfamily_name": "Windows server",
@@ -858,7 +953,7 @@
     "message": "Found: 0",
     "objects": null
   },
-  "{\"operation\":\"core/get\",\"class\":\"VirtualMachine\",\"key\":\"SELECT VirtualMachine WHERE id \\u003e 0 AND id \\u003c= 500\",\"output_fields\":\"name,description,status,business_criticity,contacts_list,softwares_list,osfamily_name,osversion_name\",\"limit\":501,\"page\":1}": {
+  "{\"operation\":\"core/get\",\"class\":\"VirtualMachine\",\"key\":\"SELECT VirtualMachine WHERE id \\u003e 0 AND id \\u003c= 500\",\"output_fields\":\"name,description,status,business_criticity,contacts_list,softwares_list,org_id,osfamily_name,osversion_name\",\"limit\":501,\"page\":1}": {
     "code": 0,
     "message": "Found: 5",
     "objects": {
@@ -925,6 +1020,7 @@
               "softwarelicence_id_obsolescence_flag": ""
             }
           ],
+          "org_id": "6",
           "osfamily_name": "vCenter Server",
           "osversion_name": "2022"
         }
@@ -1008,6 +1104,7 @@
               "softwarelicence_id_obsolescence_flag": ""
             }
           ],
+          "org_id": "6",
           "osfamily_name": "Oracle Linux",
           "osversion_name": "18.04 LTS"
         }
@@ -1058,6 +1155,7 @@
               "softwarelicence_id_obsolescence_flag": ""
             }
           ],
+          "org_id": "6",
           "osfamily_name": "vCenter Server",
           "osversion_name": "2022"
         }
@@ -1074,6 +1172,7 @@
           "business_criticity": "low",
           "contacts_list": [],
           "softwares_list": [],
+          "org_id": "6",
           "osfamily_name": "Oracle Linux",
           "osversion_name": "18.04 LTS"
         }
@@ -1190,6 +1289,7 @@
               "softwarelicence_id_obsolescence_flag": ""
             }
           ],
+          "org_id": "6",
           "osfamily_name": "Ubuntu server",
           "osversion_name": "22.04 LTS"
         }
