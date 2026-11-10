@@ -98,6 +98,14 @@ _Avoid_: Vuln, flaw, bug
 A notice a Feed publishes about one or more Vulnerabilities, such as an AWS Security Bulletin. It is kept only when it names a stored Vulnerability, and is linked to that Vulnerability by CVE, so every Finding of the Vulnerability shows it (ADR 0022).
 _Avoid_: Threat (ATT&CK techniques are threats too), bulletin, alert
 
+**Technique**:
+A way adversaries achieve a goal, as MITRE ATT&CK catalogs it, identified by its ATT&CK id such as `T1190`. It belongs to one or more tactics, the phases of an attack such as Initial Access. A revoked Technique is read as the one that replaced it (ADR 0023).
+_Avoid_: TTP, attack pattern (that is its STIX type), tactic (a Technique's phase, not the Technique)
+
+**Mitigation**:
+A security measure that MITRE ATT&CK says prevents or limits one or more Techniques, identified by its ATT&CK id such as `M1051`. Each Technique it mitigates comes with advice on how to apply it there (ADR 0023).
+_Avoid_: Countermeasure, course of action (that is its STIX type), remediation (what a User does to close a Finding)
+
 ### Risk
 
 **Finding**:
