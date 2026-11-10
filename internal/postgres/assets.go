@@ -271,8 +271,7 @@ func importedColumns(source inventory.CMDBSourceID, a *inventory.Asset, owners o
 // StoredAsset is an Asset with what only the database records about it.
 type StoredAsset struct {
 	Asset *inventory.Asset
-	// Area is the Asset's Area, nil when it has none. Only a listing across
-	// CMDB Sources loads it.
+	// Area is the Asset's Area, nil when it has none.
 	Area *AreaSummary
 	// InactiveSince is when the Asset became Inactive, nil while it is Active.
 	InactiveSince *time.Time
@@ -284,7 +283,11 @@ func restoreAsset(row sqlcgen.ListAssetsRow, software map[inventory.SourceRefere
 	if err != nil {
 		return StoredAsset{}, fmt.Errorf("restore asset %v: %w", ref, err)
 	}
-	return StoredAsset{Asset: a, InactiveSince: row.InactiveSince}, nil
+	stored := StoredAsset{Asset: a, InactiveSince: row.InactiveSince}
+	if row.AreaID != nil {
+		stored.Area = &AreaSummary{ID: *row.AreaID, Name: valueOrZero(row.AreaName)}
+	}
+	return stored, nil
 }
 
 func restoreAssetValues(ref inventory.SourceReference, row sqlcgen.ListAssetsRow, software []inventory.SoftwareComponent) (*inventory.Asset, error) {
