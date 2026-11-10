@@ -38,14 +38,38 @@ func (t *Tx) ListAreas(ctx context.Context, customer tenancy.CustomerID, active 
 	}
 	areas := make([]StoredArea, len(rows))
 	for i, row := range rows {
-		ref := inventory.SourceReference{Source: inventory.CMDBSourceID(row.CmdbSourceID), RecordID: row.RecordID}
-		a, err := restoreArea(ref, row.Name, row.OwnerEmail, row.InactiveSince)
-		if err != nil {
-			return nil, fmt.Errorf("restore area %v: %w", ref, err)
+		if areas[i], err = storedArea(sqlcgen.SetAreaOwnerRow(row)); err != nil {
+			return nil, err
 		}
-		areas[i] = StoredArea{ID: row.ID, Area: a, InactiveSince: row.InactiveSince}
 	}
 	return areas, nil
+}
+
+// SetAreaOwner states the owner of the Customer's Area with id; the zero
+// OwnerEmail clears it. It fails with ErrNotFound when the Customer has no
+// such Area.
+func (t *Tx) SetAreaOwner(ctx context.Context, customer tenancy.CustomerID, id int64, owner inventory.OwnerEmail) (StoredArea, error) {
+	var email *string
+	if owner != (inventory.OwnerEmail{}) {
+		email = new(owner.String())
+	}
+	row, err := t.q.SetAreaOwner(ctx, sqlcgen.SetAreaOwnerParams{OwnerEmail: email, ID: id, CustomerID: uuid.UUID(customer)})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return StoredArea{}, fmt.Errorf("area %d: %w", id, ErrNotFound)
+	}
+	if err != nil {
+		return StoredArea{}, fmt.Errorf("set owner of area %d: %w", id, err)
+	}
+	return storedArea(row)
+}
+
+func storedArea(row sqlcgen.SetAreaOwnerRow) (StoredArea, error) {
+	ref := inventory.SourceReference{Source: inventory.CMDBSourceID(row.CmdbSourceID), RecordID: row.RecordID}
+	a, err := restoreArea(ref, row.Name, row.OwnerEmail, row.InactiveSince)
+	if err != nil {
+		return StoredArea{}, fmt.Errorf("restore area %v: %w", ref, err)
+	}
+	return StoredArea{ID: row.ID, Area: a, InactiveSince: row.InactiveSince}, nil
 }
 
 func (t *sourceTx) areas(ctx context.Context) ([]*inventory.Area, error) {

@@ -48,7 +48,7 @@ func (e env) newCustomer(t *testing.T) tenancy.CustomerID {
 }
 
 // connect connects a CMDB Source for customer and syncs areas into it.
-func (e env) connect(t *testing.T, customer tenancy.CustomerID, areas ...inventory.AreaRecord) {
+func (e env) connect(t *testing.T, customer tenancy.CustomerID, areas ...inventory.AreaRecord) inventory.CMDBSourceID {
 	t.Helper()
 	src, err := inventory.NewCMDBSource(inventory.CMDBSourceID(uuid.New()), customer, "itop")
 	if err != nil {
@@ -57,12 +57,40 @@ func (e env) connect(t *testing.T, customer tenancy.CustomerID, areas ...invento
 	e.inTx(t, func(tx *postgres.Tx) error {
 		return tx.CreateCMDBSource(context.Background(), src, []byte(`{}`), []byte{})
 	})
-	_, err = e.db.CommitSync(context.Background(), src.ID(), time.Now(), func(existing inventory.Stored) (inventory.Reconciliation, error) {
-		return inventory.Reconcile(src.ID(), existing, inventory.Snapshot{Areas: areas})
+	e.sync(t, src.ID(), areas...)
+	return src.ID()
+}
+
+// sync syncs areas into the connected CMDB Source src.
+func (e env) sync(t *testing.T, src inventory.CMDBSourceID, areas ...inventory.AreaRecord) {
+	t.Helper()
+	_, err := e.db.CommitSync(context.Background(), src, time.Now(), func(existing inventory.Stored) (inventory.Reconciliation, error) {
+		return inventory.Reconcile(src, existing, inventory.Snapshot{Areas: areas})
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
+}
+
+// only lists the Customer's Areas, of which there must be one.
+func (e env) only(t *testing.T, customer tenancy.CustomerID) areas.StoredArea {
+	t.Helper()
+	got, err := e.areas.List(context.Background(), user(t, tenancy.Viewer, customer), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("areas = %s, want one", names(got))
+	}
+	return got[0]
+}
+
+func ownerOf(a areas.StoredArea) string {
+	owner, ok := a.Area.Owner()
+	if !ok {
+		return "none"
+	}
+	return owner.String()
 }
 
 func (e env) disconnect(t *testing.T, customer tenancy.CustomerID) {
@@ -171,5 +199,63 @@ func TestListRefusesAPlatformAdmin(t *testing.T) {
 
 	if !errors.Is(err, tenancy.ErrNoCustomer) {
 		t.Errorf("err = %v, want ErrNoCustomer", err)
+	}
+}
+
+func TestSetOwnerStatesTheCanonicalEmailAndASyncKeepsIt(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	customer := e.newCustomer(t)
+	src := e.connect(t, customer, area(t, "1", "IT", false))
+	admin := user(t, tenancy.CustomerAdmin, customer)
+
+	set, err := e.areas.SetOwner(context.Background(), admin, e.only(t, customer).ID, new("  Ana@Example.COM "))
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.sync(t, src, area(t, "1", "Information Technology", false))
+
+	if ownerOf(set) != "ana@example.com" {
+		t.Errorf("owner after setting = %s, want ana@example.com", ownerOf(set))
+	}
+	if got := e.only(t, customer); got.Area.Imported().Name() != "Information Technology" || ownerOf(got) != "ana@example.com" {
+		t.Errorf("area after a renaming Sync = %s owned by %s, want the new name and the owner kept", got.Area.Imported().Name(), ownerOf(got))
+	}
+}
+
+func TestSetOwnerWithNoEmailClearsIt(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	customer := e.newCustomer(t)
+	e.connect(t, customer, area(t, "1", "IT", false))
+	admin := user(t, tenancy.CustomerAdmin, customer)
+	id := e.only(t, customer).ID
+	if _, err := e.areas.SetOwner(context.Background(), admin, id, new("ana@example.com")); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := e.areas.SetOwner(context.Background(), admin, id, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := ownerOf(e.only(t, customer)); got != "none" {
+		t.Errorf("owner after clearing = %s, want none", got)
+	}
+}
+
+func TestSetOwnerOfAnotherCustomersAreaIsNotFound(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	mine, theirs := e.newCustomer(t), e.newCustomer(t)
+	e.connect(t, theirs, area(t, "1", "Theirs", false))
+	id := e.only(t, theirs).ID
+
+	_, err := e.areas.SetOwner(context.Background(), user(t, tenancy.CustomerAdmin, mine), id, new("ana@example.com"))
+
+	if !errors.Is(err, areas.ErrAreaNotFound) {
+		t.Errorf("err = %v, want ErrAreaNotFound", err)
+	}
+	if got := ownerOf(e.only(t, theirs)); got != "none" {
+		t.Errorf("their owner = %s, want none", got)
 	}
 }

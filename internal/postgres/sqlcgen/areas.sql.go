@@ -156,3 +156,40 @@ func (q *Queries) ReactivateAreas(ctx context.Context, arg ReactivateAreasParams
 	}
 	return result.RowsAffected(), nil
 }
+
+const setAreaOwner = `-- name: SetAreaOwner :one
+UPDATE customer_areas a
+SET owner_email = $1
+FROM cmdb_sources s
+WHERE a.id = $2 AND s.id = a.cmdb_source_id AND s.customer_id = $3
+RETURNING a.id, a.cmdb_source_id, a.record_id, a.name, a.owner_email, a.inactive_since
+`
+
+type SetAreaOwnerParams struct {
+	OwnerEmail *string
+	ID         int64
+	CustomerID uuid.UUID
+}
+
+type SetAreaOwnerRow struct {
+	ID            int64
+	CmdbSourceID  uuid.UUID
+	RecordID      string
+	Name          string
+	OwnerEmail    *string
+	InactiveSince *time.Time
+}
+
+func (q *Queries) SetAreaOwner(ctx context.Context, arg SetAreaOwnerParams) (SetAreaOwnerRow, error) {
+	row := q.db.QueryRow(ctx, setAreaOwner, arg.OwnerEmail, arg.ID, arg.CustomerID)
+	var i SetAreaOwnerRow
+	err := row.Scan(
+		&i.ID,
+		&i.CmdbSourceID,
+		&i.RecordID,
+		&i.Name,
+		&i.OwnerEmail,
+		&i.InactiveSince,
+	)
+	return i, err
+}

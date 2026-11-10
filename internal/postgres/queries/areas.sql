@@ -37,3 +37,10 @@ JOIN cmdb_sources s ON s.id = a.cmdb_source_id
 WHERE s.customer_id = @customer_id
   AND (sqlc.narg(active)::boolean IS NULL OR (a.inactive_since IS NULL) = sqlc.narg(active)::boolean)
 ORDER BY a.name, a.id;
+
+-- name: SetAreaOwner :one
+UPDATE customer_areas a
+SET owner_email = sqlc.narg(owner_email)
+FROM cmdb_sources s
+WHERE a.id = @id AND s.id = a.cmdb_source_id AND s.customer_id = @customer_id
+RETURNING a.id, a.cmdb_source_id, a.record_id, a.name, a.owner_email, a.inactive_since;
