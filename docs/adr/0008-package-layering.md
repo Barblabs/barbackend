@@ -8,6 +8,7 @@ internal/
   httpapi/             router + handlers           -> use-case packages, inventory, tenancy
   users/               use cases on Users          -> cognito, postgres, tenancy
   assets/              use cases on Assets         -> inventory, postgres, tenancy
+  areas/               use cases on Areas          -> inventory, postgres, tenancy
   cmdb/                use cases on CMDB Sources   -> cmdb/provider, encryption, inventory, postgres
     provider/          CMDB Provider seam          -> inventory
       <provider>/      adapters                    -> cmdb/provider, inventory, own subpackages
@@ -36,6 +37,7 @@ Everything about CMDBs lives under `internal/cmdb`, but the use case and the sea
 New features get a home before they get code:
 
 - **Declarations**: the use-case package `internal/assets`, which already lists Assets, with its queries in `postgres`.
+- **Areas**: the use-case package `internal/areas`, which lists a Customer's Areas and states their Area Owners, with its queries in `postgres`. The Sync that imports Areas stays in `internal/cmdb` (ADR 0018).
 - **Slack alerts**: an adapter under `internal/slack`, called from an alerting use-case package.
 - **Customers and Users**: Customer, User and Role are a pure domain package, `internal/tenancy`, which takes `CustomerID` out of `inventory`. It sits below `inventory`, since every CMDB Source belongs to a Customer, so it cannot also hold the use cases: they call `postgres`, which stores Users and so imports `tenancy`. Authenticating and creating Users is the use-case package `internal/users`, which also manages Customers, since creating a Customer creates its first Customer Admin in the same transaction, and Cognito is an adapter, `internal/cognito`, that `users` calls (ADR 0013).
 - **Threat matching**: a new domain package that imports `inventory`, never the reverse.
