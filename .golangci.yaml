@@ -282,6 +282,17 @@ linters:
           deny:
             - pkg: barbackend/internal
               desc: the findings use case calls only finding, inventory, matching, postgres, scoring and stixext (ADR 0008, ADR 0020)
+        advisories:
+          list-mode: lax
+          files:
+            - "**/internal/advisories/**"
+          allow:
+            - barbackend/internal/advisories
+            - barbackend/internal/postgres
+            - barbackend/internal/stixext
+          deny:
+            - pkg: barbackend/internal
+              desc: the advisories use case calls only postgres and stixext (ADR 0008, ADR 0022)
         users:
           list-mode: lax
           files:
