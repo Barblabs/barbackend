@@ -7,7 +7,24 @@ package sqlcgen
 
 import (
 	"context"
+	"time"
 )
+
+const countLabelingsSince = `-- name: CountLabelingsSince :one
+SELECT count(*)::integer
+FROM vulnerability_labelings
+WHERE labeled_at >= $1
+`
+
+// How many Labelings were attempted since a moment, so the Cartógrafo's
+// daily cap holds across restarts of serve (ADR 0024). A Labeling counts once,
+// at its last attempt.
+func (q *Queries) CountLabelingsSince(ctx context.Context, since time.Time) (int32, error) {
+	row := q.db.QueryRow(ctx, countLabelingsSince, since)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
 
 const getVulnerabilityLabeling = `-- name: GetVulnerabilityLabeling :one
 SELECT cve_id, outcome, attempts, model, prompt_hash, labeled_at

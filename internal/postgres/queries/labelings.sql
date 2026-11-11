@@ -40,3 +40,11 @@ SELECT attack_id, role, evidence, rationale
 FROM vulnerability_techniques
 WHERE cve_id = @cve_id
 ORDER BY array_position(ARRAY['exploitation', 'primary_impact', 'secondary_impact'], role), attack_id;
+
+-- How many Labelings were attempted since a moment, so the Cartógrafo's
+-- daily cap holds across restarts of serve (ADR 0024). A Labeling counts once,
+-- at its last attempt.
+-- name: CountLabelingsSince :one
+SELECT count(*)::integer
+FROM vulnerability_labelings
+WHERE labeled_at >= @since;
