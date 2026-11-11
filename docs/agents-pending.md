@@ -1,6 +1,6 @@
 # What the Agents still lack
 
-The Prioritizer, Luna and the Analista work as ADR 0016 describes, and the Drafter as ADR 0017 does, but only on what they are handed today, and none has answered with a real model yet. This is what is missing, most important first. Each item is ready to become an issue.
+The Prioritizer, Luna and the Analista work as ADR 0016 describes, and the Drafter as ADR 0017 does, but only on what they are handed today, and none has answered with a real model yet. The Reader and the Editor exist only in ADR 0018. This is what is missing, most important first. Each item is ready to become an issue.
 
 ## 1. Business context in the Prioritizer's criterion
 
@@ -46,3 +46,18 @@ The review of the Agents found structural changes that were left out to keep the
 - **`Crew` holds the Analista's client and model**: move them to `Service`, since the Crew is the Prioritizer and Luna.
 - **`agent finding` keeps use-case logic in `cmd`**, which ADR 0008 keeps to wiring, and reads the three Feeds one after another.
 - **Build test Dossiers literally** in `internal/agents`, so its depguard rule can drop `stixext`.
+
+## 6. News Items reach the Security Team
+
+ADR 0018 is not built: no News Item is stored, the AWS Feed's reports are pulled and dropped, and a report that names no CVE is skipped.
+
+- **Store News Items**: a migration in the shape ADR 0010 intends, with the Feed, published date and CVE IDs extracted; `ingest` stores what news Feeds emit through `Feed.Handle`; `aws` stops skipping items that name no CVE and refers them to the barbattack `identity`.
+- **`internal/feeds/rss`**: one adapter configured per text Feed (name, URL, interval, language), with the Feeds of ADR 0018 registered and `aws` as one of them.
+- **`internal/feeds/ransomwarelive`**: leak-site victims as `identity` objects with `sectors` and `victim/1`, and the table that maps its sector names to `business.Sectors()`. Check its terms of use and rate limits first.
+- **`internal/news`**: the Relevance rules (Named, Finding, Footprint, Peer), tested on fixed Business Contexts and Assets. With ransomware.live alone, Peer relevance works without a model.
+- **The Reader**: its prompt, schema and verifier, a loop in `serve` that reads stored News Items it has not read, and its reading stored with its Run.
+- **The Editor and the News Digest**: one per Customer and day with news, stored with the Business Context version it read; `GET /news-digests` and `GET /news-digests/{id}`; the dashboard renders it as plain text with the labels code writes.
+- **The Dossier gains News Items** that name its Vulnerability, which needs stored Findings (item 2) for Finding relevance.
+- **Named notices on Slack**: one `slack_deliveries` row of a news `kind` to the Security Team channel per Named News Item, once #96 and #105 exist.
+
+Done when a Customer with a stated sector gets a stored News Digest whose Peer items come from ransomware.live and the Reader, each labeled as context, with tests.

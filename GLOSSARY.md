@@ -83,12 +83,20 @@ _Avoid_: Override, manual value, custom field
 ### Threat intelligence
 
 **Feed**:
-An external source of threat intelligence that barbattack reads, such as NVD, EPSS or the CISA KEV catalog. Text from a Feed is data to evaluate, never instructions to follow.
+An external source of threat intelligence that barbattack reads, such as NVD, EPSS, the CISA KEV catalog, a news site or a leak-site tracker. Text from a Feed is data to evaluate, never instructions to follow.
 _Avoid_: Source (that is a CMDB Source), provider, integration
 
 **Vulnerability**:
 A publicly disclosed weakness in a Product, identified by its CVE ID. On its own it says nothing about a Customer's environment.
 _Avoid_: Vuln, flaw, bug
+
+**News Item**:
+One article, advisory or leak-site post that a Feed publishes about attacks or Vulnerabilities. It belongs to no Customer.
+_Avoid_: Bulletin, report, article, post, noticia
+
+**Reported Attack**:
+An attack on an organization as a News Item tells it: the victim, its sectors and countries, the kind of attack, the attacker it names and the Vulnerabilities and Products used. It is the source's claim, never confirmed by barbattack, and a leak-site post is the attacker's own claim.
+_Avoid_: Incident, breach, event, victim
 
 ### Risk
 
@@ -134,10 +142,24 @@ _Avoid_: Crown jewel, critical process, key system
 How much risk a Customer as a whole is willing to take, as its leadership sets it. How much a single Critical Service tolerates is its impact and maximum tolerable downtime, not the Risk Appetite.
 _Avoid_: Risk tolerance (that is per Critical Service), risk profile
 
+### News
+
+**Peer**:
+An organization that shares a sector with a Customer, as its Business Context states its sectors. An attack on a Peer is context for the Customer, never a sign that the Customer is exposed.
+_Avoid_: Similar company, competitor, empresa similar
+
+**Relevance**:
+Why a News Item matters to one Customer, the closest that applies: it names the Customer itself as a victim (Named), the Vulnerability of one of its open Findings (Finding), a Product its Assets run or a technology or third party it depends on (Footprint), or an attack on a Peer (Peer). Rules decide it, never an Agent, and a News Item with none does not reach the Customer.
+_Avoid_: Match, match score, priority, level
+
+**News Digest**:
+The News Items relevant to a Customer since its previous digest, grouped by Relevance, for its Security Team, with the Editor's reason for each. It is kept as history, and it marks every attack on a Peer as context.
+_Avoid_: Newsletter, briefing, bulletin, resumen
+
 ### Agents
 
 **Agent**:
-A model-driven role of barbattack, named for what it does rather than for the model it runs on. It orders, explains and advises: it never outputs a number, changes a Score or closes a Finding.
+A model-driven role of barbattack, named for what it does rather than for the model it runs on. It reads, orders, explains and advises: it never outputs a number, changes a Score or closes a Finding.
 _Avoid_: Bot, AI, assistant
 
 **Prioritizer**:
@@ -156,12 +178,20 @@ _Avoid_: Chatbot, feedback bot
 The Agent that drafts a Customer's Business Context from the documents a Customer Admin gives it, read together. Its draft is never saved until a Customer Admin reviews and saves it.
 _Avoid_: Importer, extractor, autofill
 
+**Reader**:
+The Agent that reads one News Item and states, quoting it, the Reported Attacks it reports and what it says about Vulnerabilities. It reads no Customer's data, so what it states is the same for every Customer.
+_Avoid_: Lector, parser, extractor, scraper
+
+**Editor**:
+The Agent that writes a Customer's News Digest: it orders the News Items that rules found relevant and says why each may matter, weighing the Business Context. It can neither add a News Item nor leave one out.
+_Avoid_: Summarizer, curator, newsletter bot
+
 **Crew**:
-The Agents that answer in one call, checked against what they were given: the Prioritizer and Luna, which read Dossiers, and the Drafter.
+The Agents that answer in one call, checked against what they were given: the Prioritizer and Luna, which read Dossiers, the Drafter, the Reader and the Editor.
 _Avoid_: Team, pipeline
 
 **Dossier**:
-All that an Agent knows about a Finding: its Asset, its Software Component, its Vulnerability as the Feeds describe it and its Score, as the Findings pipeline gives them. An Agent's output may rely on nothing outside it.
+All that an Agent knows about a Finding: its Asset, its Software Component, its Vulnerability as the Feeds and the News Items that name it describe it, and its Score, as the Findings pipeline gives them. An Agent's output may rely on nothing outside it.
 _Avoid_: Context, expediente, prompt data
 
 **Prioritization**:
@@ -203,5 +233,5 @@ A person, identified by email, who is responsible for one or more Assets and rec
 _Avoid_: User, contact, assignee, responsible, manager
 
 **Security Team**:
-The Customer's cybersecurity team, which receives every alert about the Customer's Assets, whether or not the Asset has an Asset Owner.
+The Customer's cybersecurity team, which receives every alert about the Customer's Assets, whether or not the Asset has an Asset Owner, and its News Digests.
 _Avoid_: Fallback owner, default owner, cyber team
