@@ -291,3 +291,20 @@ type VulnerabilityAdvisory struct {
 	AdvisoryID string
 	LinkedAt   time.Time
 }
+
+type VulnerabilityLabeling struct {
+	CveID      string
+	Outcome    string
+	Attempts   int32
+	Model      string
+	PromptHash string
+	LabeledAt  time.Time
+}
+
+type VulnerabilityTechnique struct {
+	CveID     string
+	AttackID  string
+	Role      string
+	Evidence  string
+	Rationale string
+}
