@@ -98,6 +98,37 @@ func TestLabelingInputTakesCPEProductsWhenTheAuthorityNamesNone(t *testing.T) {
 	}
 }
 
+func TestLabelingInputReadsAdvisoriesAsPlainText(t *testing.T) {
+	t.Parallel()
+	got := assessment.NewLabelingInput(storedVulnerability(t, nil), []assessment.AdvisoryFacts{{
+		Title: "CVE-2026-109518 - APT &amp; Debian",
+		Description: "<p><b>Bulletin ID:</b> 2026-172-AWS<br> <b>Publication Date:</b> 11/05/2026</p> \n" +
+			"<p><b>Description:</b></p> \n<p>A third party with a network position &lt;between&gt; the host and the mirror.</p>",
+	}}).Advisories[0]
+
+	if got.Title != "CVE-2026-109518 - APT & Debian" {
+		t.Errorf("title = %q, want its entity decoded", got.Title)
+	}
+	want := "Bulletin ID: 2026-172-AWS Publication Date: 11/05/2026\nDescription:\nA third party with a network position <between> the host and the mirror."
+	if got.Description != want {
+		t.Errorf("description = %q, want %q", got.Description, want)
+	}
+}
+
+func TestVerifyTechniqueLabelsQuotesTheAdvisoryAsTheCartografoReadIt(t *testing.T) {
+	t.Parallel()
+	in := assessment.NewLabelingInput(storedVulnerability(t, nil), []assessment.AdvisoryFacts{{
+		Title: "APT", Description: "<p>a third party with a <b>network position</b> between the host and the mirror</p>",
+	}})
+	l := assessment.TechniqueLabels{Techniques: []assessment.TechniqueLabel{
+		label("T1078", assessment.RoleExploitation, "a third party with a network position between the host"),
+	}}
+
+	if got := assessment.VerifyTechniqueLabels(in, catalog, l); len(got) != 0 {
+		t.Errorf("violations = %v, want none: the quote is of the text without its tags", got)
+	}
+}
+
 func TestVerifyTechniqueLabelsAcceptsLabelsQuotedFromTheInput(t *testing.T) {
 	t.Parallel()
 	l := assessment.TechniqueLabels{Techniques: []assessment.TechniqueLabel{
