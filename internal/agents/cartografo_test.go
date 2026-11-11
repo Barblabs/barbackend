@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -20,6 +22,13 @@ const (
 	accountsQ   = "against any internal account, including the administrator's"
 )
 
+// storeCVE stores a Vulnerability of that CVE ID with the description.
+func storeCVE(ctx context.Context, tx *postgres.Tx, cve string) error {
+	object := `{"type":"vulnerability","spec_version":"2.1","id":"vulnerability--48ddf16e-0c34-5fd4-aeeb-1f1fc8027213",` +
+		`"created":"2026-11-10T03:52:06.164Z","modified":"2026-11-10T03:52:06.164Z","name":"` + cve + `","description":"` + description + `"}`
+	return tx.StoreVulnerability(ctx, postgres.StoredVulnerability{CVE: cve, Object: json.RawMessage(object), Modified: time.Now()})
+}
+
 // cartografoEnv is a database with a stored ATT&CK catalog and the
 // Vulnerability of labeledCVE.
 func cartografoEnv(t *testing.T, catalog bool) env {
@@ -27,9 +36,7 @@ func cartografoEnv(t *testing.T, catalog bool) env {
 	e := newEnv(t)
 	ctx := context.Background()
 	err := e.db.InTx(ctx, func(tx *postgres.Tx) error {
-		object := `{"type":"vulnerability","spec_version":"2.1","id":"vulnerability--48ddf16e-0c34-5fd4-aeeb-1f1fc8027213",` +
-			`"created":"2026-11-10T03:52:06.164Z","modified":"2026-11-10T03:52:06.164Z","name":"` + labeledCVE + `","description":"` + description + `"}`
-		if err := tx.StoreVulnerability(ctx, postgres.StoredVulnerability{CVE: labeledCVE, Object: json.RawMessage(object), Modified: time.Now()}); err != nil {
+		if err := storeCVE(ctx, tx, labeledCVE); err != nil {
 			return err
 		}
 		if !catalog {
@@ -195,5 +202,79 @@ func TestTheCartografoWithoutACatalogLabelsNothing(t *testing.T) {
 	})
 	if !errors.Is(err, postgres.ErrNotFound) {
 		t.Errorf("labeling err = %v, want none stored: no attempt is spent", err)
+	}
+}
+
+func TestAModelThatCannotBeCalledStopsTheRunAndSpendsNoAttempt(t *testing.T) {
+	t.Parallel()
+	e := cartografoEnv(t, true)
+	if err := e.db.InTx(context.Background(), func(tx *postgres.Tx) error { return storeCVE(context.Background(), tx, "CVE-2026-116239") }); err != nil {
+		t.Fatal(err)
+	}
+	e.llm.Queue(claudetest.Fail(http.StatusUnauthorized))
+
+	_, err := e.svc.LabelVulnerabilities(context.Background())
+	if !errors.Is(err, agents.ErrUnavailable) {
+		t.Errorf("err = %v, want ErrUnavailable", err)
+	}
+	if n := len(e.llm.Requests()); n != 1 {
+		t.Errorf("%d requests, want the run stopped after the first", n)
+	}
+	err = e.db.InTx(context.Background(), func(tx *postgres.Tx) error {
+		_, err := tx.LabelingOf(context.Background(), labeledCVE)
+		return err
+	})
+	if !errors.Is(err, postgres.ErrNotFound) {
+		t.Errorf("labeling err = %v, want none stored: an outage is not the Vulnerability's failure", err)
+	}
+}
+
+func TestTheDailyCapCountsTheLabelingsOfEarlierRuns(t *testing.T) {
+	t.Parallel()
+	e := cartografoEnv(t, true)
+	ctx := context.Background()
+	if err := e.db.InTx(ctx, func(tx *postgres.Tx) error {
+		// An earlier run today, before a restart, labeled all but one.
+		for i := range agents.MaxLabelingsPerDay - 1 {
+			cve := fmt.Sprintf("CVE-2026-2%05d", i)
+			if err := storeCVE(ctx, tx, cve); err != nil {
+				return err
+			}
+			if err := tx.StoreLabeling(ctx, cve, "claude-haiku-5-5", "earlier", nil); err != nil {
+				return err
+			}
+		}
+		return storeCVE(ctx, tx, "CVE-2026-116239")
+	}); err != nil {
+		t.Fatal(err)
+	}
+	e.llm.Queue(claudetest.JSON(t, labels()))
+
+	if run := runCartografo(t, e); run != (agents.LabelingRun{None: 1}) || len(e.llm.Requests()) != 1 {
+		t.Errorf("run = %+v after %d requests, want only the one the cap leaves", run, len(e.llm.Requests()))
+	}
+	if run := runCartografo(t, e); run != (agents.LabelingRun{}) || len(e.llm.Requests()) != 1 {
+		t.Errorf("next run = %+v after %d requests, want nothing until tomorrow", run, len(e.llm.Requests()))
+	}
+}
+
+func TestAVulnerabilityThatCannotBeReadIsAFailedAttemptAndTheRunGoesOn(t *testing.T) {
+	t.Parallel()
+	e := cartografoEnv(t, true)
+	ctx := context.Background()
+	if err := e.db.InTx(ctx, func(tx *postgres.Tx) error {
+		return tx.StoreAdvisory(ctx, postgres.StoredAdvisory{
+			ID: "report--5a2b7c1e-3f4d-5e6f-8a9b-0c1d2e3f4a5b", Feed: "aws", Published: time.Now(),
+			Object: json.RawMessage(`[1]`), Modified: time.Now(),
+		}, []string{labeledCVE})
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if run := runCartografo(t, e); run != (agents.LabelingRun{Failed: 1}) || len(e.llm.Requests()) != 0 {
+		t.Errorf("run = %+v after %d requests, want a failed attempt and nothing asked", run, len(e.llm.Requests()))
+	}
+	if l := labelingOf(t, e); l.Outcome != postgres.LabelingFailed || l.Attempts != 1 {
+		t.Errorf("labeling = %+v, want one failed attempt", l)
 	}
 }
