@@ -140,7 +140,9 @@ func TestCurrentTechniquesLeaveOutRevokedAndDeprecatedOnes(t *testing.T) {
 		return nil
 	})
 
-	got := inTxValue(t, db, func(tx *postgres.Tx) ([]postgres.CatalogTechnique, error) { return tx.CurrentTechniques(context.Background()) })
+	got := inTxValue(t, db, func(tx *postgres.Tx) ([]postgres.CatalogTechnique, error) {
+		return tx.CurrentTechniques(context.Background())
+	})
 	if len(got) != 1 || got[0].AttackID != "T1190" || got[0].Name != "Exploit Public-Facing Application" || len(got[0].Tactics) != 1 {
 		t.Errorf("current techniques = %+v, want only T1190 with its tactic", got)
 	}
