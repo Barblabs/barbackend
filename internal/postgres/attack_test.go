@@ -123,6 +123,29 @@ func TestMitigationsOfATechniqueComeWithTheirAdvice(t *testing.T) {
 	}
 }
 
+func TestCurrentTechniquesLeaveOutRevokedAndDeprecatedOnes(t *testing.T) {
+	t.Parallel()
+	db := pgtest.NewDB(t)
+	inTx(t, db, func(tx *postgres.Tx) error {
+		ctx := context.Background()
+		revoked := technique(t1100ID, "T1100", "Web Shell", may)
+		revoked.Revoked = true
+		deprecated := technique("attack-pattern--e6a1b2c3-d4e5-4f60-8a71-b2c3d4e5f607", "T1300", "Old", may)
+		deprecated.Deprecated = true
+		for _, tech := range []postgres.AttackTechnique{technique(t1190ID, "T1190", "Exploit Public-Facing Application", may), revoked, deprecated} {
+			if err := tx.StoreAttackTechnique(ctx, tech); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+
+	got := inTxValue(t, db, func(tx *postgres.Tx) ([]postgres.CatalogTechnique, error) { return tx.CurrentTechniques(context.Background()) })
+	if len(got) != 1 || got[0].AttackID != "T1190" || got[0].Name != "Exploit Public-Facing Application" || len(got[0].Tactics) != 1 {
+		t.Errorf("current techniques = %+v, want only T1190 with its tactic", got)
+	}
+}
+
 func TestRevokingTechniqueIsTheOneThatReplacedIt(t *testing.T) {
 	t.Parallel()
 	db := pgtest.NewDB(t)
