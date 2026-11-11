@@ -53,5 +53,5 @@ A `HandleAWS` handler plugs into `ingest.Feed.Handle`, as `HandleNVD`, `HandleKE
 
 - Two migrations and their queries. `vulnerability_advisories` references `vulnerabilities`, which is never deleted (ADR 0020), so no link is orphaned.
 - `GLOSSARY.md` gains **Advisory**: a notice a Feed publishes about one or more Vulnerabilities, such as an AWS Security Bulletin.
-- The Dossier gains a list of Advisories, which changes what the Prioritizer reads. This has to be agreed with the Agents' owner before the Dossier changes.
+- The Dossier gains a list of Advisories, which changes what the Prioritizer reads. This has to be agreed with the Agents' owner before the Dossier changes; `docs/agents-pending.md` §6 proposes how.
 - A bulletin whose CVE NVD publishes after the bulletin leaves the RSS Feed is never linked. This gap is accepted.
