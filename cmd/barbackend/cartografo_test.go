@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -46,5 +47,23 @@ func TestLabelDailyDoesNotRunBeforeTheDelay(t *testing.T) {
 
 	if got := runs.Load(); got != 0 {
 		t.Errorf("runs = %d, want none before the delay", got)
+	}
+}
+
+func TestLabelOnceWritesTheOutcomesEvenOfARunThatStopped(t *testing.T) {
+	var out strings.Builder
+	stopped := errors.New("the model is unavailable")
+
+	err := labelOnce(context.Background(), &out, func(context.Context) (agents.LabelingRun, error) {
+		return agents.LabelingRun{Labeled: 2, None: 1}, stopped
+	})
+
+	if !errors.Is(err, stopped) {
+		t.Errorf("err = %v, want the run's", err)
+	}
+	for _, want := range []string{`"labeled": 2`, `"none": 1`, `"failed": 0`} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("output = %s, want %s", out.String(), want)
+		}
 	}
 }
