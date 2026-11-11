@@ -1,5 +1,6 @@
 // Package itop is the CMDB Provider adapter for iTop (ADR 0007). It reads
-// Servers, Virtual Machines, PCs and Network Devices through the REST API.
+// Servers, Virtual Machines, PCs and Network Devices through the REST API,
+// and Organizations as Areas.
 package itop
 
 import (
@@ -38,9 +39,9 @@ func (Provider) FromLogin(login provider.Login) (json.RawMessage, json.RawMessag
 }
 
 func (s settings) Snapshot(ctx context.Context) (inventory.Snapshot, error) {
-	cis, lk, err := fetch(ctx, rest.New(s.baseURL, s.auth, rest.Options{}))
+	cis, orgs, lk, err := fetch(ctx, rest.New(s.baseURL, s.auth, rest.Options{}))
 	if err != nil {
 		return inventory.Snapshot{}, s.classify(err)
 	}
-	return snapshot(cis, lk), nil
+	return snapshot(cis, orgs, lk), nil
 }

@@ -62,6 +62,19 @@ func (t *Tx) UserBySub(ctx context.Context, sub string) (tenancy.User, error) {
 	return stored.User, err
 }
 
+// UserByEmail fails with ErrNotFound when no User has the email.
+func (t *Tx) UserByEmail(ctx context.Context, email string) (tenancy.User, error) {
+	row, err := t.q.GetUserByEmail(ctx, email)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return tenancy.User{}, fmt.Errorf("user with email %q: %w", email, ErrNotFound)
+	}
+	if err != nil {
+		return tenancy.User{}, fmt.Errorf("get user with email %q: %w", email, err)
+	}
+	stored, err := restoreUser(row.User, row.CustomerDeactivated)
+	return stored.User, err
+}
+
 // Users are the Users of the Customer, disabled ones included, ordered by
 // email.
 func (t *Tx) Users(ctx context.Context, customer tenancy.CustomerID) ([]StoredUser, error) {

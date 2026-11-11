@@ -56,6 +56,17 @@ func CVEIDs(text string) []string {
 	return ids
 }
 
+// ReferenceURLs are the URLs v cites.
+func ReferenceURLs(v *stix2.Vulnerability) []string {
+	urls := []string{}
+	for _, ref := range v.ExternalReferences {
+		if ref.URL != "" {
+			urls = append(urls, ref.URL)
+		}
+	}
+	return urls
+}
+
 // ID returns the deterministic identifier of typ for key.
 func ID(typ stix2.STIXType, key string) stix2.Identifier {
 	return stix2.Identifier(fmt.Sprintf("%s--%s", typ, uuid.NewSHA1(namespace, []byte(string(typ)+":"+key))))

@@ -18,7 +18,15 @@ func TestOpenAPIListsEveryRoute(t *testing.T) {
 		} `json:"paths"`
 	}](t, rec, http.StatusOK)
 
-	for _, r := range slices.Concat(operations, everyRoleOperations) {
+	templated := []struct{ method, path string }{
+		{http.MethodGet, "/prioritizations/{id}"},
+		{http.MethodPost, "/prioritizations/{id}/plans"},
+		{http.MethodPost, "/prioritizations/{id}/feedback"},
+		{http.MethodPost, "/analista/conversations"},
+		{http.MethodPost, "/analista/conversations/{id}/messages"},
+		{http.MethodPut, "/areas/{id}/owner"},
+	}
+	for _, r := range slices.Concat(operations, businessContextEdits, everyRoleOperations, templated) {
 		if op, ok := spec.Paths[r.path][strings.ToLower(r.method)]; !ok || op.OperationID == "" {
 			t.Errorf("spec lacks %s %s with an operationId", r.method, r.path)
 		}

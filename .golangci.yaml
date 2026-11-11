@@ -69,6 +69,71 @@ linters:
               desc: scoring is pure and does no I/O (ADR 0009)
             - pkg: github.com/jackc/pgx
               desc: scoring is pure and does no I/O (ADR 0009)
+        business:
+          list-mode: lax
+          files:
+            - "**/internal/business/**"
+          allow:
+            - barbackend/internal/business
+          deny:
+            - pkg: barbackend/internal/businesscontext
+              desc: business is a pure domain; the businesscontext use case imports it, not the reverse (ADR 0017)
+            - pkg: barbackend/internal
+              desc: business is a pure domain and imports no other layer (ADR 0017)
+            - pkg: net/http
+              desc: business is a pure domain and does no I/O (ADR 0017)
+            - pkg: database/sql
+              desc: business is a pure domain and does no I/O (ADR 0017)
+            - pkg: github.com/jackc/pgx
+              desc: business is a pure domain and does no I/O (ADR 0017)
+        businesscontext:
+          list-mode: lax
+          files:
+            - "**/internal/businesscontext/**"
+          allow:
+            - barbackend/internal/businesscontext
+            - barbackend/internal/business
+            - barbackend/internal/postgres
+            - barbackend/internal/tenancy
+          deny:
+            - pkg: barbackend/internal
+              desc: the businesscontext use case calls only business, postgres and tenancy (ADR 0017)
+        finding:
+          list-mode: lax
+          files:
+            - "**/internal/finding/**"
+          allow:
+            - barbackend/internal/finding
+            - barbackend/internal/inventory
+            - barbackend/internal/matching
+            - barbackend/internal/scoring
+            - barbackend/internal/stixext
+          deny:
+            - pkg: barbackend/internal
+              desc: finding is a pure domain package that imports only inventory, matching, scoring and stixext (ADR 0008, ADR 0020)
+            - pkg: net/http
+              desc: finding is pure and does no I/O (ADR 0008)
+            - pkg: database/sql
+              desc: finding is pure and does no I/O (ADR 0008)
+            - pkg: github.com/jackc/pgx
+              desc: finding is pure and does no I/O (ADR 0008)
+        matching:
+          list-mode: lax
+          files:
+            - "**/internal/matching/**"
+          allow:
+            - barbackend/internal/inventory
+            - barbackend/internal/matching
+            - barbackend/internal/stixext
+          deny:
+            - pkg: barbackend/internal
+              desc: matching is a pure domain package that imports only inventory and stixext (ADR 0008, ADR 0010)
+            - pkg: net/http
+              desc: matching is pure and does no I/O (ADR 0008)
+            - pkg: database/sql
+              desc: matching is pure and does no I/O (ADR 0008)
+            - pkg: github.com/jackc/pgx
+              desc: matching is pure and does no I/O (ADR 0008)
         cmdb-provider:
           list-mode: lax
           files:
@@ -81,6 +146,49 @@ linters:
               desc: CMDB Provider adapters depend only on the seam and inventory, never on persistence or the cmdb use case (ADR 0008)
             - pkg: github.com/jackc/pgx
               desc: CMDB Provider adapters never touch the database (ADR 0008)
+        assessment:
+          list-mode: lax
+          files:
+            - "**/internal/assessment/**"
+          allow:
+            - barbackend/internal/assessment
+            - barbackend/internal/inventory
+            - barbackend/internal/scoring
+            - barbackend/internal/stixext
+          deny:
+            - pkg: barbackend/internal
+              desc: assessment is a pure domain package that imports only inventory, scoring and stixext (ADR 0016)
+            - pkg: net/http
+              desc: assessment is pure and does no I/O (ADR 0016)
+            - pkg: github.com/jackc/pgx
+              desc: assessment is pure and does no I/O (ADR 0016)
+        claude:
+          list-mode: lax
+          files:
+            - "**/internal/claude/**"
+          allow:
+            - barbackend/internal/claude
+          deny:
+            - pkg: barbackend/internal
+              desc: the Claude adapter imports no other layer; the agents use case calls it (ADR 0016)
+        agents:
+          list-mode: lax
+          files:
+            - "**/internal/agents/**"
+          allow:
+            - barbackend/internal/agents
+            - barbackend/internal/assessment
+            - barbackend/internal/business
+            - barbackend/internal/claude
+            - barbackend/internal/inventory
+            - barbackend/internal/postgres
+            - barbackend/internal/stixext
+            - barbackend/internal/tenancy
+          deny:
+            - pkg: barbackend/internal/businesscontext
+              desc: the agents use case reads the Business Context through postgres, never through another use case (ADR 0008)
+            - pkg: barbackend/internal
+              desc: the agents use case calls the domain, postgres and the Claude adapter, and reads no Feed (ADR 0016)
         stixext:
           list-mode: lax
           files:
@@ -90,10 +198,12 @@ linters:
           deny:
             - pkg: barbackend/internal
               desc: stixext is pure and imports no other layer (ADR 0010)
+        # Tests are exempt: a black-box test of an adapter imports that adapter.
         feeds:
           list-mode: lax
           files:
             - "**/internal/feeds/**"
+            - "!$test"
           allow:
             - barbackend/internal/feeds
             - barbackend/internal/feeds/httpx
@@ -145,6 +255,54 @@ linters:
           deny:
             - pkg: barbackend/internal
               desc: the assets use case calls only inventory, postgres and tenancy (ADR 0008)
+        areas:
+          list-mode: lax
+          files:
+            - "**/internal/areas/**"
+          allow:
+            - barbackend/internal/areas
+            - barbackend/internal/inventory
+            - barbackend/internal/postgres
+            - barbackend/internal/tenancy
+          deny:
+            - pkg: barbackend/internal
+              desc: the areas use case calls only inventory, postgres and tenancy (ADR 0008)
+        findings:
+          list-mode: lax
+          files:
+            - "**/internal/findings/**"
+          allow:
+            - barbackend/internal/finding
+            - barbackend/internal/findings
+            - barbackend/internal/inventory
+            - barbackend/internal/matching
+            - barbackend/internal/postgres
+            - barbackend/internal/scoring
+            - barbackend/internal/stixext
+          deny:
+            - pkg: barbackend/internal
+              desc: the findings use case calls only finding, inventory, matching, postgres, scoring and stixext (ADR 0008, ADR 0020)
+        advisories:
+          list-mode: lax
+          files:
+            - "**/internal/advisories/**"
+          allow:
+            - barbackend/internal/advisories
+            - barbackend/internal/postgres
+            - barbackend/internal/stixext
+          deny:
+            - pkg: barbackend/internal
+              desc: the advisories use case calls only postgres and stixext (ADR 0008, ADR 0022)
+        techniques:
+          list-mode: lax
+          files:
+            - "**/internal/techniques/**"
+          allow:
+            - barbackend/internal/techniques
+            - barbackend/internal/postgres
+          deny:
+            - pkg: barbackend/internal
+              desc: the techniques use case calls only postgres (ADR 0008, ADR 0023)
         users:
           list-mode: lax
           files:
@@ -162,10 +320,17 @@ linters:
           files:
             - "**/internal/postgres/**"
           allow:
+            - barbackend/internal/assessment
+            - barbackend/internal/business
+            - barbackend/internal/finding
             - barbackend/internal/inventory
+            - barbackend/internal/matching
             - barbackend/internal/postgres
+            - barbackend/internal/scoring
             - barbackend/internal/tenancy
           deny:
+            - pkg: barbackend/internal/businesscontext
+              desc: persistence depends only on the domain; the businesscontext use case calls it, not the reverse (ADR 0008)
             - pkg: barbackend/internal
               desc: persistence depends only on the domain; use cases call it, not the reverse (ADR 0008)
         # Handlers reach persistence and adapters only through use cases, so
@@ -180,7 +345,11 @@ linters:
             - barbackend/internal/httpapi
             - barbackend/internal/inventory
             - barbackend/internal/tenancy
+            - barbackend/internal/business
+            - barbackend/internal/agents
+            - barbackend/internal/areas
             - barbackend/internal/assets
+            - barbackend/internal/businesscontext
             - barbackend/internal/cmdb
             - barbackend/internal/users
           deny:

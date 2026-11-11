@@ -7,7 +7,10 @@ import (
 	"io"
 	"net/http"
 
+	"barbackend/internal/agents"
+	"barbackend/internal/areas"
 	"barbackend/internal/assets"
+	"barbackend/internal/businesscontext"
 	"barbackend/internal/cmdb"
 	"barbackend/internal/users"
 	"github.com/danielgtaylor/huma/v2"
@@ -16,9 +19,12 @@ import (
 )
 
 type Config struct {
-	Assets *assets.Service
-	CMDB   *cmdb.Service
-	Users  *users.Service
+	Agents          *agents.Service
+	Areas           *areas.Service
+	Assets          *assets.Service
+	BusinessContext *businesscontext.Service
+	CMDB            *cmdb.Service
+	Users           *users.Service
 	// AllowedOrigins may call the API from a browser.
 	AllowedOrigins []string
 }
@@ -33,6 +39,10 @@ func New(cfg Config) http.Handler {
 	api.UseMiddleware(authenticate(api, cfg.Users))
 	cmdbSourceHandler{cmdb: cfg.CMDB}.register(api)
 	assetHandler{assets: cfg.Assets}.register(api)
+	areaHandler{areas: cfg.Areas}.register(api)
+	prioritizationHandler{agents: cfg.Agents}.register(api)
+	analistaHandler{agents: cfg.Agents}.register(api)
+	businessContextHandler{contexts: cfg.BusinessContext, agents: cfg.Agents}.register(api)
 	customerHandler{users: cfg.Users}.register(api)
 	userHandler{users: cfg.Users}.register(api)
 	meHandler{users: cfg.Users}.register(api)

@@ -100,7 +100,7 @@ func recorder(t *testing.T, path string) http.Handler {
 func ptr(s string) *string { return &s }
 
 func TestFetchSeededInstance(t *testing.T) {
-	cis, lk, err := fetch(context.Background(), recorded(t, "seeded"))
+	cis, orgs, lk, err := fetch(context.Background(), recorded(t, "seeded"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,10 +112,10 @@ func TestFetchSeededInstance(t *testing.T) {
 		names = append(names, c.Name)
 	}
 	wantNames := []string{
-		"Server1", "Server2", "Server3", "Server4", "Server5",
-		"VM1", "VM2", "VM3", "VM4",
-		"PC-ALICE", "PC-MIXED", "PC-OLD",
-		"Router1", "Switch1", "Router2",
+		"Server1", "Server2", "Server3", "Server4", "Server5", "Server6",
+		"VM1", "VM2", "VM3", "VM4", "VM5",
+		"PC-ALICE", "PC-MIXED", "PC-OLD", "PC-BOB",
+		"Router1", "Switch1", "Router2", "Firewall1",
 	}
 	if !reflect.DeepEqual(names, wantNames) {
 		t.Errorf("names = %v, want %v", names, wantNames)
@@ -124,33 +124,38 @@ func TestFetchSeededInstance(t *testing.T) {
 	want := []ci{
 		{
 			Key: "3", Class: "Server", Name: "Server3", Status: "production", Criticality: ptr("low"),
-			Brand: "HPE", Model: "DL380", OSFamily: "vCenter Server", OSVersion: "2022",
+			Brand: "HPE", Model: "DL380", OSFamily: "vCenter Server", OSVersion: "2022", Location: "exposed",
 			Contacts:  []contact{{ID: "18", Class: "Person"}, {ID: "53", Class: "Team"}},
 			Instances: []instance{{Class: "Middleware", Name: "RabbitMQ", SoftwareID: "3"}},
+			OrgID:     "6",
 		},
 		{
 			Key: "21", Class: "VirtualMachine", Name: "VM1", Status: "production", Criticality: ptr("medium"),
 			OSFamily: "vCenter Server", OSVersion: "2022",
 			Contacts:  []contact{{ID: "52", Class: "Team"}},
 			Instances: []instance{{Class: "WebServer", Name: "Apache", SoftwareID: "0"}},
+			OrgID:     "6",
 		},
 		{
 			Key: "33", Class: "PC", Name: "PC-MIXED", Status: "production",
-			Brand: "Lenovo", Model: "ThinkPad T14", OSFamily: "Ubuntu", OSVersion: "22.04 LTS",
+			Brand: "Lenovo", Model: "ThinkPad T14", OSFamily: "Ubuntu", OSVersion: "22.04 LTS", Location: "not exposed",
 			Contacts:  []contact{{ID: "55", Class: "Person"}},
 			Instances: []instance{},
+			OrgID:     "6",
 		},
 		{
 			Key: "34", Class: "PC", Name: "PC-OLD", Status: "obsolete", Criticality: ptr("medium"),
 			OSFamily: "Windows", OSVersion: "10",
 			Contacts:  []contact{{ID: "54", Class: "Person"}},
 			Instances: []instance{},
+			OrgID:     "6",
 		},
 		{
 			Key: "40", Class: "NetworkDevice", Name: "Router2", Status: "production", Criticality: ptr("high"),
-			Brand: "Cisco", Model: "Cisco 6500", IOSVersionID: "90",
+			Brand: "Cisco", Model: "Cisco 6500", IOSVersionID: "90", Location: " Exposed ",
 			Contacts:  []contact{{ID: "46", Class: "Person"}},
 			Instances: []instance{},
+			OrgID:     "6",
 		},
 	}
 	for _, w := range want {
@@ -159,20 +164,35 @@ func TestFetchSeededInstance(t *testing.T) {
 		}
 	}
 
+	wantOrgs := []organization{
+		{Key: "1", Name: "My Company/Department", Status: "active"},
+		{Key: "2", Name: "Customer", Status: "active"},
+		{Key: "3", Name: "Demo", Status: "active"},
+		{Key: "4", Name: "HR Department", Status: "active"},
+		{Key: "5", Name: "InfraStore", Status: "active"},
+		{Key: "6", Name: "IT Department", Status: "active"},
+		{Key: "7", Name: "Sales Department", Status: "active"},
+	}
+	if !reflect.DeepEqual(orgs, wantOrgs) {
+		t.Errorf("organizations:\n got %+v\nwant %+v", orgs, wantOrgs)
+	}
+
 	wantLookups := lookups{
 		persons: map[string]person{
-			"5": {Email: "alice.milliat@customer.com"}, "8": {Email: "boris.vian@it.com"}, "18": {Email: "george.sand@it.com"},
-			"46": {Email: "victor.hugo@it.com"}, "54": {Email: ""}, "55": {Email: "Test.MixedCase@IT.com"},
+			"5": {Email: "alice.milliat@customer.com"}, "6": {Email: "anna.gavalda@it.com"}, "8": {Email: "boris.vian@it.com"},
+			"11": {Email: "charlie.parker@it.com"}, "18": {Email: "george.sand@it.com"}, "46": {Email: "victor.hugo@it.com"},
+			"54": {Email: ""}, "55": {Email: "Test.MixedCase@IT.com"},
 		},
 		software: map[string]software{
-			"1": {Name: "MySql", Version: "8"},
-			"2": {Name: "Oracle DB engine", Version: "19c"},
-			"3": {Name: "RabbitMQ", Version: "3.12.13"},
-			"4": {Name: "Chrome", Version: "120.0.6099.109"},
-			"5": {Name: "OpenSSH", Version: "9.6p1"},
-			"6": {Name: "Apache HTTP Server", Version: "2.4.58"},
+			"1": {Vendor: "Oracle", Name: "MySql", Version: "8"},
+			"2": {Vendor: "Oracle", Name: "Oracle DB engine", Version: "19c"},
+			"3": {Vendor: "Broadcom", Name: "RabbitMQ", Version: "3.12.13"},
+			"4": {Vendor: "Google", Name: "Chrome", Version: "120.0.6099.109"},
+			"5": {Vendor: "OpenBSD", Name: "OpenSSH", Version: "9.6p1"},
+			"6": {Vendor: "Apache", Name: "Apache HTTP Server", Version: "2.4.58"},
+			"7": {Vendor: "Microsoft", Name: "Microsoft SQL Server", Version: "2022"},
 		},
-		iosVersions: map[string]iosVersion{"90": {Brand: "Cisco", Name: "15.2(7)E"}},
+		iosVersions: map[string]iosVersion{"90": {Brand: "Cisco", Name: "15.2(7)E"}, "91": {Brand: "HPE", Name: "WC.16.11.0016"}},
 	}
 	if !reflect.DeepEqual(lk, wantLookups) {
 		t.Errorf("lookups:\n got %+v\nwant %+v", lk, wantLookups)

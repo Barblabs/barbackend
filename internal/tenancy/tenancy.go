@@ -17,8 +17,8 @@ var (
 	// ErrNotPlatformAdmin is a User of a Customer asking to manage Customers.
 	ErrNotPlatformAdmin = errors.New("only a platform admin manages customers")
 	// ErrNotCustomerAdmin is a Viewer or a Platform Admin asking to manage the
-	// Users of a Customer.
-	ErrNotCustomerAdmin = errors.New("only a customer admin manages users")
+	// Users or Areas of a Customer or to edit its Business Context.
+	ErrNotCustomerAdmin = errors.New("only a customer admin can do this")
 	// ErrLastCustomerAdmin is a change that would leave a Customer without an
 	// active Customer Admin.
 	ErrLastCustomerAdmin = errors.New("a customer keeps at least one active customer admin")
@@ -125,7 +125,7 @@ type User struct {
 // receives it. A Platform Admin has no Customer and every other role has one;
 // the zero CustomerID means none.
 func NewUser(id UserID, email string, role Role, customer CustomerID) (User, error) {
-	email = strings.ToLower(strings.TrimSpace(email))
+	email = CanonicalEmail(email)
 	switch {
 	case id == UserID{}:
 		return User{}, fmt.Errorf("%w: zero id", ErrInvalidUser)
@@ -140,6 +140,9 @@ func NewUser(id UserID, email string, role Role, customer CustomerID) (User, err
 	}
 	return User{id: id, email: email, role: role, customer: customer}, nil
 }
+
+// CanonicalEmail is the form of ADR 0003, in which Users are stored.
+func CanonicalEmail(email string) string { return strings.ToLower(strings.TrimSpace(email)) }
 
 // UserState is what can stop a stored User from signing in.
 type UserState struct {
@@ -202,6 +205,25 @@ func (u User) ManageCustomers() error {
 // ManageUsers returns the Customer whose Users u manages. It fails with
 // ErrNotCustomerAdmin for anyone but a Customer Admin.
 func (u User) ManageUsers() (CustomerID, error) {
+	if u.role != CustomerAdmin {
+		return CustomerID{}, ErrNotCustomerAdmin
+	}
+	return u.customer, nil
+}
+
+// EditBusinessContext returns the Customer whose Business Context u edits. It
+// fails with ErrNotCustomerAdmin for anyone but a Customer Admin.
+func (u User) EditBusinessContext() (CustomerID, error) {
+	if u.role != CustomerAdmin {
+		return CustomerID{}, ErrNotCustomerAdmin
+	}
+	return u.customer, nil
+}
+
+// ManageAreas returns the Customer whose Areas u manages, such as stating
+// their owners. It fails with ErrNotCustomerAdmin for anyone but a Customer
+// Admin.
+func (u User) ManageAreas() (CustomerID, error) {
 	if u.role != CustomerAdmin {
 		return CustomerID{}, ErrNotCustomerAdmin
 	}

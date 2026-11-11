@@ -1,6 +1,7 @@
 package httpapi_test
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
@@ -13,7 +14,13 @@ import (
 	"testing"
 	"time"
 
+	"barbackend/internal/agents"
+	"barbackend/internal/areas"
+	"barbackend/internal/assessment"
 	"barbackend/internal/assets"
+	"barbackend/internal/businesscontext"
+	"barbackend/internal/claude"
+	"barbackend/internal/claude/claudetest"
 	"barbackend/internal/cmdb"
 	"barbackend/internal/cmdb/provider/providertest"
 	"barbackend/internal/cognito/cognitotest"
@@ -38,6 +45,10 @@ var operations = []struct{ method, path string }{
 	{http.MethodPost, "/cmdb/source/test"},
 	{http.MethodPost, "/cmdb/source/sync"},
 	{http.MethodGet, "/assets"},
+	{http.MethodGet, "/areas"},
+	{http.MethodGet, "/prioritizations"},
+	{http.MethodGet, "/business-context"},
+	{http.MethodGet, "/business-context/brief"},
 }
 
 // platformOperations are those only a Platform Admin may call.
@@ -55,6 +66,14 @@ var customerAdminOperations = []struct{ method, path string }{
 	{http.MethodPost, "/users"},
 	{http.MethodPatch, "/users/" + uuid.Nil.String()},
 	{http.MethodPost, "/users/" + uuid.Nil.String() + "/disable"},
+	{http.MethodPut, "/areas/0/owner"},
+}
+
+// businessContextEdits are those only a Customer Admin may call on the
+// Business Context.
+var businessContextEdits = []struct{ method, path string }{
+	{http.MethodPut, "/business-context"},
+	{http.MethodPost, "/business-context/draft"},
 }
 
 // everyRoleOperations are those every User may call, a Platform Admin included.
@@ -72,6 +91,8 @@ type env struct {
 	provider *providertest.Provider
 	admin    *fakeAdmin
 	cmdb     *cmdb.Service
+	llm      *claudetest.Server
+	agents   *agents.Service
 	router   http.Handler
 }
 
@@ -87,8 +108,13 @@ func newEnv(t *testing.T) env {
 	pool := cognitotest.New(t)
 	svc := cmdb.New(db, p.Providers(), newKey(t), context.Background(), time.Minute)
 	admin := &fakeAdmin{}
-	router := httpapi.New(httpapi.Config{Assets: assets.New(db), CMDB: svc, Users: users.New(db, pool.Verifier(t), admin), AllowedOrigins: []string{allowedOrigin}})
-	e := env{db: db, conn: pgtest.Conn(t, url), pool: pool, provider: p, admin: admin, cmdb: svc, router: router}
+	llm := claudetest.New(t)
+	agentService := agents.NewService(db, agents.NewCrew(claude.New(llm.URL), agents.DefaultModels()))
+	router := httpapi.New(httpapi.Config{
+		Agents: agentService, Areas: areas.New(db), Assets: assets.New(db), BusinessContext: businesscontext.New(db), CMDB: svc,
+		Users: users.New(db, pool.Verifier(t), admin), AllowedOrigins: []string{allowedOrigin},
+	})
+	e := env{db: db, conn: pgtest.Conn(t, url), pool: pool, provider: p, admin: admin, cmdb: svc, llm: llm, agents: agentService, router: router}
 	e.customer = e.newCustomer(t)
 	e.token = e.signIn(t, e.newUser(t, tenancy.Viewer, e.customer))
 	return e
@@ -266,11 +292,33 @@ func record(t *testing.T, id, name string) inventory.Record {
 	return inventory.Record{RecordID: id, Imported: imported}
 }
 
+func areaRecord(t *testing.T, id, name string) inventory.AreaRecord {
+	t.Helper()
+	imported, err := inventory.NewImportedArea(inventory.ImportedAreaParams{Name: name})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return inventory.AreaRecord{RecordID: id, Imported: imported}
+}
+
+// areaID is the id of the env Customer's Area with recordID.
+func (e env) areaID(t *testing.T, recordID string) int64 {
+	t.Helper()
+	var id int64
+	err := e.conn.QueryRow(context.Background(), `
+		SELECT a.id FROM customer_areas a JOIN cmdb_sources s ON s.id = a.cmdb_source_id
+		WHERE s.customer_id = $1 AND a.record_id = $2`, [16]byte(e.customer), recordID).Scan(&id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
 func (e env) holdSyncLock(t *testing.T, src inventory.CMDBSourceID) (release func()) {
 	t.Helper()
 	locked, unlock, done := make(chan struct{}), make(chan struct{}), make(chan error)
 	go func() {
-		_, err := e.db.CommitSync(context.Background(), src, time.Now(), func(existing []*inventory.Asset) (inventory.Reconciliation, error) {
+		_, err := e.db.CommitSync(context.Background(), src, time.Now(), func(existing inventory.Stored) (inventory.Reconciliation, error) {
 			close(locked)
 			<-unlock
 			return inventory.Reconcile(src, existing, inventory.Snapshot{})
@@ -292,4 +340,76 @@ func viewerOf(customer tenancy.CustomerID) tenancy.User {
 		panic(err)
 	}
 	return u
+}
+
+// prioritize stores a Prioritization of two Findings for the Customer: the
+// Prioritizer puts f-1 first though f-2 has the higher Score.
+func (e env) prioritize(t *testing.T) agents.Prioritization {
+	t.Helper()
+	asset := assessment.Asset{Name: "pg-prod-01", Kind: "server", Criticality: "high", Exposure: "internal", Software: []assessment.Software{{Role: "application", Name: "PostgreSQL", Version: "15.6"}}}
+	findings := []assessment.Dossier{
+		{Finding: "f-1", CVE: "CVE-2025-1094", Asset: asset, Component: asset.Software[0], Score: assessment.Score{ScoringModel: 1, Value: 0.3}},
+		{Finding: "f-2", CVE: "CVE-2024-6387", Asset: asset, Component: asset.Software[0], Score: assessment.Score{ScoringModel: 1, Value: 0.6}},
+	}
+	e.llm.Queue(claudetest.JSON(t, assessment.PriorityList{Groups: []assessment.PriorityGroup{
+		{Title: "Primero", Findings: []string{"f-1"}, Reason: "Va en pg-prod-01.", Evidence: []assessment.FindingEvidence{{Finding: "f-1", Path: "/asset/name", Value: "pg-prod-01"}}},
+		{Title: "Después", Findings: []string{"f-2"}, Reason: "Sin KEV.", Evidence: []assessment.FindingEvidence{{Finding: "f-2", Path: "/kev", Value: "null"}}},
+	}}))
+	p, err := e.agents.Prioritize(context.Background(), e.customer, findings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+func jsonRequest(t *testing.T, method, path string, body any) *http.Request {
+	t.Helper()
+	raw, err := json.Marshal(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(method, path, bytes.NewReader(raw))
+	req.Header.Set("Content-Type", "application/json")
+	return req
+}
+
+type prioritizationBody struct {
+	ID     string `json:"id"`
+	Model  string `json:"model"`
+	Groups []struct {
+		Position   int      `json:"position"`
+		Title      string   `json:"title"`
+		FindingIDs []string `json:"finding_ids"`
+		Evidence   []struct {
+			FindingID string `json:"finding_id"`
+			Path      string `json:"path"`
+		} `json:"evidence"`
+	} `json:"groups"`
+	Findings []struct {
+		FindingID string  `json:"finding_id"`
+		CVEID     string  `json:"cve_id"`
+		Score     float64 `json:"score"`
+		ScoreRank int     `json:"score_rank"`
+		Group     int     `json:"group"`
+		Dossier   struct {
+			CVE string `json:"cve"`
+		} `json:"dossier"`
+	} `json:"findings"`
+	Plans []struct {
+		FindingID string `json:"finding_id"`
+		Output    struct {
+			Steps []string `json:"steps"`
+		} `json:"output"`
+	} `json:"plans"`
+	Feedback []struct {
+		FindingID   string `json:"finding_id"`
+		Verdict     string `json:"verdict"`
+		Note        string `json:"note"`
+		ViaAnalista bool   `json:"via_analista"`
+	} `json:"feedback"`
+}
+
+func lunaReply(t *testing.T) claudetest.Reply {
+	t.Helper()
+	return claudetest.JSON(t, assessment.ActionPlan{Summary: "Revisa.", Steps: []string{"Confirma si aplica."}, Verification: "Confirma con el fabricante."})
 }

@@ -39,3 +39,21 @@ func mustOwner(t *testing.T, email string) inventory.OwnerEmail {
 	}
 	return o
 }
+
+func mustImportedArea(t *testing.T, name string, inactive bool) inventory.ImportedArea {
+	t.Helper()
+	a, err := inventory.NewImportedArea(inventory.ImportedAreaParams{Name: name, Inactive: inactive})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return a
+}
+
+func restoreArea(t *testing.T, id, name string, state inventory.AreaState) *inventory.Area {
+	t.Helper()
+	a, err := inventory.RestoreArea(inventory.SourceReference{Source: sourceID, RecordID: id}, name, state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return a
+}

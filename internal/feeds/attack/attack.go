@@ -1,4 +1,5 @@
-// Package attack pulls the MITRE ATT&CK Enterprise techniques.
+// Package attack pulls the MITRE ATT&CK Enterprise catalog: its Techniques,
+// its Mitigations and the relationships between them (ADR 0023).
 package attack
 
 import (
@@ -27,7 +28,7 @@ func New(client *http.Client, url string) *Adapter {
 	return &Adapter{Endpoint: httpx.NewEndpoint(client, url, defaultURL)}
 }
 
-// Pull fetches the bundle and emits every technique that carries an ATT&CK id.
+// Pull fetches the bundle and emits the objects ADR 0023 keeps.
 func (a *Adapter) Pull(ctx context.Context, emit feeds.Emit) error {
 	resp, err := a.Get(ctx, "attack")
 	if err != nil {
@@ -80,39 +81,96 @@ func objectList(dec *json.Decoder, emit feeds.Emit) error {
 	return nil
 }
 
-func object(raw json.RawMessage, emit feeds.Emit) error {
-	var head struct {
-		Type stix2.STIXType `json:"type"`
-	}
-	if err := json.Unmarshal(raw, &head); err != nil {
-		return fmt.Errorf("attack: decode type: %w", err)
-	}
-	if head.Type != stix2.TypeAttackPattern {
-		return nil
-	}
-	c, err := stix2.FromJSON(append(append([]byte{'['}, raw...), ']'))
-	if err != nil {
-		return fmt.Errorf("attack: decode attack-pattern: %w", err)
-	}
-	patterns := c.AttackPatterns()
-	if len(patterns) != 1 {
-		return fmt.Errorf("attack: decoded %d attack-patterns from one object", len(patterns))
-	}
-	pattern := patterns[0]
-	if !attackID(pattern) {
-		log.Printf("attack: skipping %q: no ATT&CK id", pattern.Name)
-		return nil
-	}
-	return emit(pattern)
+// revokedBy is the relationship ATT&CK uses to point a revoked object at
+// the one that replaced it. The STIX library has no constant for it.
+const revokedBy stix2.RelationshipType = "revoked-by"
+
+// head is what object reads of a raw object to decide whether to keep it.
+type head struct {
+	Type             stix2.STIXType            `json:"type"`
+	Name             string                    `json:"name"`
+	RelationshipType stix2.RelationshipType    `json:"relationship_type"`
+	Source           stix2.Identifier          `json:"source_ref"`
+	Target           stix2.Identifier          `json:"target_ref"`
+	References       []stix2.ExternalReference `json:"external_references"`
 }
 
-func attackID(pattern *stix2.AttackPattern) bool {
-	for _, ref := range pattern.ExternalReferences {
-		if ref.Name == "mitre-attack" && strings.TrimSpace(ref.ExternalID) != "" {
+// object emits raw when ADR 0023 keeps it: a Technique or a Mitigation with
+// an ATT&CK id, a mitigates relationship, or a revoked-by relationship
+// between Techniques. Everything else in the bundle is dropped.
+func object(raw json.RawMessage, emit feeds.Emit) error {
+	var h head
+	if err := json.Unmarshal(raw, &h); err != nil {
+		return fmt.Errorf("attack: decode type: %w", err)
+	}
+	if !kept(h) {
+		return nil
+	}
+	obj, err := decode(raw, h.Type)
+	if err != nil {
+		return err
+	}
+	return emit(obj)
+}
+
+func kept(h head) bool {
+	switch h.Type {
+	case stix2.TypeAttackPattern:
+		if strings.HasPrefix(attackID(h.References), "T") {
 			return true
 		}
+		log.Printf("attack: skipping %q: no ATT&CK id", h.Name)
+		return false
+	case stix2.TypeCourseOfAction:
+		// Course-of-actions with a T id are an old, deprecated form of ATT&CK.
+		return strings.HasPrefix(attackID(h.References), "M")
+	case stix2.TypeRelationship:
+		return h.RelationshipType == stix2.RelationshipTypeMitigates ||
+			(h.RelationshipType == revokedBy && isType(h.Source, stix2.TypeAttackPattern) && isType(h.Target, stix2.TypeAttackPattern))
+	default:
+		return false
 	}
-	return false
+}
+
+// decode parses raw, a kept object of type typ, with the STIX library.
+func decode(raw json.RawMessage, typ stix2.STIXType) (stix2.STIXObject, error) {
+	c, err := stix2.FromJSON(append(append([]byte{'['}, raw...), ']'))
+	if err != nil {
+		return nil, fmt.Errorf("attack: decode %s: %w", typ, err)
+	}
+	var objs []stix2.STIXObject
+	switch typ {
+	case stix2.TypeAttackPattern:
+		for _, o := range c.AttackPatterns() {
+			objs = append(objs, o)
+		}
+	case stix2.TypeCourseOfAction:
+		for _, o := range c.CourseOfActions() {
+			objs = append(objs, o)
+		}
+	default:
+		for _, o := range c.Relationships() {
+			objs = append(objs, o)
+		}
+	}
+	if len(objs) != 1 {
+		return nil, fmt.Errorf("attack: decoded %d objects of type %s from one", len(objs), typ)
+	}
+	return objs[0], nil
+}
+
+// attackID is the ATT&CK id among refs, such as T1190 or M1051, or "".
+func attackID(refs []stix2.ExternalReference) string {
+	for _, ref := range refs {
+		if ref.Name == "mitre-attack" {
+			return strings.TrimSpace(ref.ExternalID)
+		}
+	}
+	return ""
+}
+
+func isType(id stix2.Identifier, typ stix2.STIXType) bool {
+	return strings.HasPrefix(string(id), string(typ)+"--")
 }
 
 func expect(dec *json.Decoder, want json.Delim) error {

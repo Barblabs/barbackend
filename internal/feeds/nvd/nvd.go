@@ -1,4 +1,4 @@
-// Package nvd pulls CVEs modified in the last 24 hours from the NVD API (ADR 0010).
+// Package nvd pulls CVEs modified in the last 24 hours from the NVD API, and looks up one CVE (ADR 0010).
 package nvd
 
 import (
@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-	"strings"
 	"time"
 
 	"barbackend/internal/feeds"
@@ -68,6 +67,22 @@ func (a *Adapter) Pull(ctx context.Context, emit feeds.Emit) error {
 	}
 }
 
+// Lookup fetches one CVE, returning nil when NVD does not have it.
+func (a *Adapter) Lookup(ctx context.Context, cveID string) (*stix2.Vulnerability, error) {
+	p, err := a.fetch(ctx, url.Values{"cveId": {cveID}})
+	if err != nil {
+		return nil, err
+	}
+	if len(p.Vulnerabilities) == 0 {
+		return nil, nil
+	}
+	v, ok, err := vulnerability(p.Vulnerabilities[0].CVE)
+	if err != nil || !ok {
+		return nil, err
+	}
+	return v, nil
+}
+
 func emitPage(p page, emit feeds.Emit) (int, error) {
 	for _, v := range p.Vulnerabilities {
 		obj, ok, err := vulnerability(v.CVE)
@@ -90,6 +105,10 @@ func (a *Adapter) page(ctx context.Context, from, to time.Time, index int) (page
 	query.Set("lastModEndDate", to.Format(timeLayout))
 	query.Set("startIndex", strconv.Itoa(index))
 	query.Set("resultsPerPage", strconv.Itoa(pageSize))
+	return a.fetch(ctx, query)
+}
+
+func (a *Adapter) fetch(ctx context.Context, query url.Values) (page, error) {
 	endpoint := a.WithURL(a.URL() + "?" + query.Encode())
 	resp, err := endpoint.Get(ctx, "nvd")
 	if err != nil {
@@ -98,7 +117,7 @@ func (a *Adapter) page(ctx context.Context, from, to time.Time, index int) (page
 	defer func() { _ = resp.Body.Close() }()
 	var p page
 	if err := json.NewDecoder(resp.Body).Decode(&p); err != nil {
-		return page{}, fmt.Errorf("nvd: decode page %d: %w", index, err)
+		return page{}, fmt.Errorf("nvd: decode %s: %w", query.Encode(), err)
 	}
 	return p, nil
 }
@@ -150,6 +169,7 @@ func vulnerability(c cve) (*stix2.Vulnerability, bool, error) {
 			CVSS:         cvssMetrics(c.Metrics),
 			CWEs:         weaknesses(c.Weaknesses),
 			Affected:     affected(c.Configurations),
+			CNAAffected:  cnaAffected(c.Affected),
 		})),
 	)
 	if err != nil {
@@ -195,15 +215,17 @@ func affected(configurations []configuration) []stixext.Affected {
 				if !m.Vulnerable {
 					continue
 				}
-				vendor, product, ok := cpeVendorProduct(m.Criteria)
+				c, ok := parseCPE(m.Criteria)
 				if !ok {
 					log.Printf("nvd: skipping CPE %q: not CPE 2.3", m.Criteria)
 					continue
 				}
 				out = append(out, stixext.Affected{
 					Criteria:              m.Criteria,
-					Vendor:                vendor,
-					Product:               product,
+					Vendor:                c.vendor,
+					Product:               c.product,
+					Version:               c.version,
+					Update:                c.update,
 					VersionStartIncluding: m.VersionStartIncluding,
 					VersionStartExcluding: m.VersionStartExcluding,
 					VersionEndIncluding:   m.VersionEndIncluding,
@@ -215,12 +237,18 @@ func affected(configurations []configuration) []stixext.Affected {
 	return out
 }
 
-func cpeVendorProduct(criteria string) (string, string, bool) {
-	parts := strings.Split(criteria, ":")
-	if len(parts) < 5 || parts[0] != "cpe" || parts[1] != "2.3" {
-		return "", "", false
+func cnaAffected(sources []affectedSource) []stixext.CNAAffected {
+	var out []stixext.CNAAffected
+	for _, source := range sources {
+		for _, data := range source.AffectedData {
+			versions := make([]stixext.CNAVersion, len(data.Versions))
+			for i, v := range data.Versions {
+				versions[i] = stixext.CNAVersion{Version: v.Version, LessThan: v.LessThan, LessThanOrEqual: v.LessThanOrEqual, Status: v.Status}
+			}
+			out = append(out, stixext.CNAAffected{Source: source.Source, Vendor: data.Vendor, Product: data.Product, DefaultStatus: data.DefaultStatus, Versions: versions})
+		}
 	}
-	return parts[3], parts[4], true
+	return out
 }
 
 func english(values []langString) string {
@@ -258,15 +286,16 @@ type item struct {
 }
 
 type cve struct {
-	ID             string          `json:"id"`
-	Published      string          `json:"published"`
-	LastModified   string          `json:"lastModified"`
-	VulnStatus     string          `json:"vulnStatus"`
-	Descriptions   []langString    `json:"descriptions"`
-	Metrics        metrics         `json:"metrics"`
-	Weaknesses     []weakness      `json:"weaknesses"`
-	Configurations []configuration `json:"configurations"`
-	References     []reference     `json:"references"`
+	ID             string           `json:"id"`
+	Published      string           `json:"published"`
+	LastModified   string           `json:"lastModified"`
+	VulnStatus     string           `json:"vulnStatus"`
+	Descriptions   []langString     `json:"descriptions"`
+	Metrics        metrics          `json:"metrics"`
+	Weaknesses     []weakness       `json:"weaknesses"`
+	Configurations []configuration  `json:"configurations"`
+	Affected       []affectedSource `json:"affected"`
+	References     []reference      `json:"references"`
 }
 
 type langString struct {
@@ -293,6 +322,21 @@ type metric struct {
 
 type weakness struct {
 	Description []langString `json:"description"`
+}
+
+type affectedSource struct {
+	Source       string `json:"source"`
+	AffectedData []struct {
+		Vendor        string `json:"vendor"`
+		Product       string `json:"product"`
+		DefaultStatus string `json:"defaultStatus"`
+		Versions      []struct {
+			Version         string `json:"version"`
+			LessThan        string `json:"lessThan"`
+			LessThanOrEqual string `json:"lessThanOrEqual"`
+			Status          string `json:"status"`
+		} `json:"versions"`
+	} `json:"affectedData"`
 }
 
 type configuration struct {

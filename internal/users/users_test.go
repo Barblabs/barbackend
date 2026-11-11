@@ -51,6 +51,53 @@ func newService(t *testing.T, admin users.Admin) (*users.Service, *postgres.DB) 
 	return users.New(db, nil, admin), db
 }
 
+func TestByEmailResolvesAnOperatorsInput(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	svc, db := newService(t, &fakeAdmin{})
+	created, err := svc.Create(ctx, "Admin@Example.com", tenancy.PlatformAdmin, tenancy.CustomerID{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := svc.ByEmail(ctx, "  ADMIN@example.com ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ID() != created.User.ID() {
+		t.Errorf("user = %s, want %s", got.ID(), created.User.ID())
+	}
+
+	if _, err := svc.ByEmail(ctx, "nobody@example.com"); !errors.Is(err, tenancy.ErrUserNotFound) {
+		t.Errorf("unknown email: err = %v, want ErrUserNotFound", err)
+	}
+
+	customer, err := tenancy.NewCustomer(tenancy.CustomerID(uuid.New()), "c")
+	if err != nil {
+		t.Fatal(err)
+	}
+	viewer, err := tenancy.NewUser(tenancy.UserID(uuid.New()), "viewer@example.com", tenancy.Viewer, customer.ID())
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = db.InTx(ctx, func(tx *postgres.Tx) error {
+		if _, err := tx.CreateCustomer(ctx, customer); err != nil {
+			return err
+		}
+		if _, err := tx.CreateUser(ctx, viewer, uuid.NewString()); err != nil {
+			return err
+		}
+		_, err := tx.DisableUser(ctx, customer.ID(), viewer.ID())
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.ByEmail(ctx, "viewer@example.com"); !errors.Is(err, tenancy.ErrUserDisabled) {
+		t.Errorf("disabled user: err = %v, want ErrUserDisabled", err)
+	}
+}
+
 func TestCreateStoresThePlatformAdmin(t *testing.T) {
 	t.Parallel()
 	admin := &fakeAdmin{}

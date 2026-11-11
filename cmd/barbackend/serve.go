@@ -7,13 +7,21 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
+	"barbackend/internal/advisories"
+	"barbackend/internal/agents"
+	"barbackend/internal/areas"
 	"barbackend/internal/assets"
+	"barbackend/internal/businesscontext"
 	"barbackend/internal/cmdb"
+	"barbackend/internal/findings"
 	"barbackend/internal/httpapi"
 	"barbackend/internal/ingest"
 	"barbackend/internal/postgres"
+	"barbackend/internal/scoring"
+	"barbackend/internal/techniques"
 	"barbackend/internal/users"
 )
 
@@ -41,27 +49,38 @@ func serve(ctx context.Context, _ []string) error {
 		return err
 	}
 
-	svc, err := ingest.New(registeredFeeds()...)
-	if err != nil {
-		return err
-	}
-	feedsDone := make(chan struct{})
-	go func() {
-		defer close(feedsDone)
-		svc.Run(ctx)
-	}()
-
 	return withDB(ctx, func(db *postgres.DB) error {
-		return listen(ctx, feedsDone, httpapi.New(httpapi.Config{
-			Assets:         assets.New(db),
-			CMDB:           cmdb.New(db, providers(), key, ctx, syncTimeout),
-			Users:          users.New(db, verifier, admin),
-			AllowedOrigins: allowedOrigins(),
+		found := findings.New(db, scoring.Model1, kevMaxAge)
+		svc, err := ingest.New(handledBy(found, advisories.New(db), techniques.New(db), registeredFeeds())...)
+		if err != nil {
+			return err
+		}
+		agentService := agents.NewService(db, newCrew())
+		// The Feeds and the Cartógrafo run in the background, and both stop
+		// before the database closes.
+		backgroundDone := make(chan struct{})
+		go func() {
+			defer close(backgroundDone)
+			var wg sync.WaitGroup
+			wg.Go(func() { svc.Run(ctx) })
+			wg.Go(func() { labelDaily(ctx, agentService.LabelVulnerabilities, labelingDelay, labelingInterval) })
+			wg.Wait()
+		}()
+		sources := cmdb.New(db, providers(), key, ctx, syncTimeout)
+		sources.OnSynced(found.AfterSync)
+		return listen(ctx, backgroundDone, httpapi.New(httpapi.Config{
+			Agents:          agentService,
+			Areas:           areas.New(db),
+			Assets:          assets.New(db),
+			BusinessContext: businesscontext.New(db),
+			CMDB:            sources,
+			Users:           users.New(db, verifier, admin),
+			AllowedOrigins:  allowedOrigins(),
 		}))
 	})
 }
 
-func listen(ctx context.Context, feedsDone <-chan struct{}, handler http.Handler) error {
+func listen(ctx context.Context, backgroundDone <-chan struct{}, handler http.Handler) error {
 	srv := &http.Server{
 		Addr:              listenAddr(),
 		Handler:           handler,
@@ -82,9 +101,9 @@ func listen(ctx context.Context, feedsDone <-chan struct{}, handler http.Handler
 		return err
 	}
 	select {
-	case <-feedsDone:
+	case <-backgroundDone:
 	case <-shutdownCtx.Done():
-		return errors.New("feeds did not stop")
+		return errors.New("the feeds or the cartografo did not stop")
 	}
 	if err := <-serveErr; !errors.Is(err, http.ErrServerClosed) {
 		return err

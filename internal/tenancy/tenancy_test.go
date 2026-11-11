@@ -144,7 +144,12 @@ func TestOnlyAPlatformAdminManagesCustomers(t *testing.T) {
 	}
 }
 
-func TestOnlyACustomerAdminManagesUsers(t *testing.T) {
+func TestOnlyACustomerAdminManagesUsersAreasAndTheBusinessContext(t *testing.T) {
+	actions := map[string]func(tenancy.User) (tenancy.CustomerID, error){
+		"ManageUsers":         tenancy.User.ManageUsers,
+		"ManageAreas":         tenancy.User.ManageAreas,
+		"EditBusinessContext": tenancy.User.EditBusinessContext,
+	}
 	tests := []struct {
 		role     tenancy.Role
 		customer tenancy.CustomerID
@@ -154,17 +159,19 @@ func TestOnlyACustomerAdminManagesUsers(t *testing.T) {
 		{tenancy.Viewer, customer, tenancy.ErrNotCustomerAdmin},
 		{tenancy.PlatformAdmin, tenancy.CustomerID{}, tenancy.ErrNotCustomerAdmin},
 	}
-	for _, tt := range tests {
-		t.Run(tt.role.String(), func(t *testing.T) {
-			u, err := tenancy.NewUser(userID, "a@example.com", tt.role, tt.customer)
-			if err != nil {
-				t.Fatal(err)
-			}
-			got, err := u.ManageUsers()
-			if !errors.Is(err, tt.want) || (err == nil && got != customer) {
-				t.Errorf("ManageUsers = %v, %v, want %v, %v", got, err, customer, tt.want)
-			}
-		})
+	for name, action := range actions {
+		for _, tt := range tests {
+			t.Run(name+"/"+tt.role.String(), func(t *testing.T) {
+				u, err := tenancy.NewUser(userID, "a@example.com", tt.role, tt.customer)
+				if err != nil {
+					t.Fatal(err)
+				}
+				got, err := action(u)
+				if !errors.Is(err, tt.want) || (err == nil && got != customer) {
+					t.Errorf("%s = %v, %v, want %v, %v", name, got, err, customer, tt.want)
+				}
+			})
+		}
 	}
 }
 

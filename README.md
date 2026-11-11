@@ -32,6 +32,24 @@ export CORS_ALLOWED_ORIGINS=http://localhost:5173
 
 `create-platform-admin` creates the user in Cognito, which emails the invitation, so it needs AWS credentials allowed to call `AdminCreateUser` and `AdminDeleteUser` on the pool, from the default AWS credential chain. The pool itself is created by Terraform outside this repo.
 
+### Container image
+
+The `Dockerfile` builds an image with the static binary and CA certificates only, running as a non-root user with Gin in release mode. `serve` is the default command, and any other command replaces it.
+
+```bash
+docker build -t barbackend .
+# both architectures, as CI builds them
+docker buildx build --platform linux/amd64,linux/arm64 -t barbackend .
+
+docker run --rm --env-file barbackend.env barbackend migrate   # before every deploy; safe to repeat
+docker run -d --restart unless-stopped -p 8080:8080 --env-file barbackend.env barbackend
+docker run --rm --env-file barbackend.env barbackend create-platform-admin <email>
+```
+
+`barbackend.env` holds the variables above as plain `KEY=value` lines: Docker reads no `export` and no quotes. Health checks go to `GET /ping`, as the image has no shell for a `HEALTHCHECK`.
+
+On EC2, give the instance a role allowed to call `AdminCreateUser` and `AdminDeleteUser` on the pool, and leave AWS keys out of the env file: the SDK falls back to the instance role. With IMDSv2, the container is one network hop further from the metadata service, so set the instance's metadata hop limit to at least 2 (`http_put_response_hop_limit = 2` in Terraform), or Cognito admin calls fail to get credentials.
+
 ### HTTP API
 
 Every error answers `{code, error}`: `code` is stable for the dashboard to translate, and `error` is readable on its own.
@@ -48,7 +66,48 @@ The OpenAPI 3.1 spec is served at `/openapi.json` and `/openapi.yaml`, with a br
 - `DELETE /cmdb/source`: disconnects the Connected CMDB Source, deleting nothing: the source and its Assets stay stored, its Assets become Inactive, and a Sync of it is refused from then on. Connecting again creates a new CMDB Source. Answers 204, 404 `not_connected` if no source is connected, and 409 `sync_in_progress` while a Sync of it commits.
 - `POST /cmdb/source/sync`: runs a Sync of the Connected CMDB Source and answers `{last_sync, created, updated, deactivated, reactivated, skipped}`. The Sync outlives its request and is cancelled only by a 5-minute limit or server shutdown. Answers 404 `not_connected` if no source is connected, 409 `sync_in_progress` while another Sync of it runs, and 502 when the Sync fails, which is recorded as a failed Sync Run. Its code is the CMDB's failure code, such as `invalid_credentials` after a password rotation, or `sync_failed` when the CMDB Provider did not classify why.
 
+- `GET /prioritizations`: the Customer's Prioritizations, newest first, as `{id, created_at, findings, groups}`. The newest is the order to follow. Takes `limit`.
+- `GET /prioritizations/{id}`: one Prioritization: its `groups` in the order to attend them, each `{position, title, reason, finding_ids, evidence}`; its `findings`, each with its `score`, its `score_rank` by Score alone, its `group` and its `dossier`, whose shape is not a contract; the newest Action Plan of each Finding that has one in `plans`; and its `feedback`. Answers 404 `prioritization_not_found`.
+- `POST /prioritizations/{id}/plans`: has Luna write the Action Plan of `{finding_id}` and answers 201 with it, which can take a minute. Answers 404 `prioritization_not_found` or `finding_not_found`, and 502 `agent_refused`, `agent_rejected` or `agent_unavailable` when Luna has no verified answer, storing nothing.
+- `POST /prioritizations/{id}/feedback`: records `{finding_id, verdict, note}`, where `verdict` is `applies`, `does_not_apply`, `remediated`, `should_be_earlier` or `should_be_later`. It changes no Score and no order.
+- `POST /analista/conversations`: starts a conversation with the Analista from `{message}` and answers 201 with `{conversation_id, reply}`.
+- `POST /analista/conversations/{id}/messages`: sends `{message}` in one of the User's conversations. Answers 404 `conversation_not_found`, 409 `conversation_busy` while it answers another message, refused without calling the model, and 409 `conversation_full` after 40 turns. A server that dies mid-answer leaves that conversation busy for up to 10 minutes. Both Analista endpoints answer 502 `agent_refused` or `agent_unavailable` when the model does not answer, storing nothing. A `reply`, like all other Agent text, comes from a model: render it as plain text.
+
+- `GET /business-context`: the newest version of the Customer's Business Context as `{version, saved_at, saved_by, context, key_fields, gaps}`, version 0 with nothing stated until one is saved. `context` is the `business_context/1` document: `profile`, `geography`, `operations`, `footprint` and `risk`, where blank text, a blank code or an empty list means not stated; `gaps` are the `key_fields` not stated. Every User of the Customer reads it.
+- `PUT /business-context`: a Customer Admin saves `{version, context}`, the whole document, as the version after `version`, the one read. Answers 400 `invalid_request` naming each field that breaks a rule, and 409 `business_context_stale` when another save came first, saving nothing.
+- `GET /business-context/brief`: the newest version as Markdown, for a model's prompt or a person, with the version as its ETag. Every field has a line, and one not stated says so.
+- `POST /business-context/draft`: a Customer Admin gives `{text, files}`, either or both, where each file is `{name, media_type, data}` with `data` in base64: text, Markdown, CSV, JSON, PDFs or `.docx`, up to 10 files, 10 MB each and 20 MB together. The Drafter reads them together and answers `{context, gaps}`, which can take a minute, and nothing is saved. Answers 400 `invalid_document` for a document it cannot read, and 502 `agent_refused`, `agent_rejected` or `agent_unavailable` without a verified draft.
+
 Run `./barbackend` with no arguments to print the usage.
+
+## Agents
+
+The Prioritizer, Luna (Advisor), the Analista (feedback), the Drafter (Business Context) and the Cartógrafo (ATT&CK Techniques of a Vulnerability, `docs/adr/0024-the-cartografo-labels-vulnerabilities-with-attack-techniques.md`) run on Anthropic's models; `docs/adr/0016-the-prioritizer-orders-findings-from-their-dossiers.md` explains what they read and how they are kept honest, and `docs/adr/0017-the-business-context-is-a-versioned-document-the-customer-states.md` what the Drafter reads. They need credentials, usually `ANTHROPIC_API_KEY`. No Agent reads a Feed: the Findings pipeline hands them one Dossier per Finding, in the shape of `docs/examples/findings.json`. Until that pipeline exists, `agent finding` builds one from the live Feeds. What they still lack, starting with each Customer's business context in the Prioritizer's criterion, is in `docs/agents-pending.md`.
+
+```sh
+# The Dossier of one Finding, from the live Feeds. Collect several into a JSON list.
+./barbackend agent finding --asset docs/examples/asset.json --component PostgreSQL --cve CVE-2025-1094 --id f-1
+
+# Prioritize the Findings of a file, and with --plans have Luna write each Action Plan. Needs no database and stores nothing.
+./barbackend agent run --findings docs/examples/findings.json --plans
+
+# The same for a Customer, acting as one of its Users, storing the Prioritization; then an Action Plan. These need DATABASE_URL.
+./barbackend agent prioritize --as <email> --findings docs/examples/findings.json
+./barbackend agent plan --as <email> --prioritization <id> --finding f-1
+
+# Talk with the Analista. Pass the printed conversation id to continue.
+./barbackend agent ask --as <email> "¿qué atiendo primero?"
+./barbackend agent ask --as <email> --conversation <id> "el de lab-01 debería ir antes, ahí corre la nómina"
+
+# Label the stored Vulnerabilities with ATT&CK Techniques now, as serve does daily, within the same cap of 50 a day. Needs DATABASE_URL.
+./barbackend agent label
+```
+
+## Findings
+
+`serve` turns Feeds and Syncs into Findings, one per Asset, Product and CVE (`docs/adr/0020-findings-are-opened-and-closed-never-deleted.md`). Each NVD pull matches its CVEs against the Software Components of every Active Asset (`docs/adr/0015-vulnerabilities-matched-by-product-and-version.md`); a match stores the CVE and opens, updates or reopens its Finding, scored with Scoring Model 1 (`docs/adr/0009-findings-scored-by-versioned-two-layer-model.md`). KEV and EPSS pulls rescore the open Findings of the CVEs already stored, and ignore every other CVE. After each successful Sync, the CMDB Source's Assets are matched again against the stored CVEs: Findings that no longer match are closed with a reason, and new Assets get theirs. `feed pull` only counts what each Feed returns and stores nothing.
+
+Only Software Components with a Product match, written as NVD's CPE vendor and product tokens in the CMDB (`docs/adr/0019-software-components-take-their-product-from-the-cmdb-in-cpe-terms.md`): in iTop, the Software linked to each SoftwareInstance.
 
 ## CMDB Sources
 

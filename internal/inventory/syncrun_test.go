@@ -13,7 +13,7 @@ func TestSucceededRun(t *testing.T) {
 	started := time.Date(2026, 10, 10, 12, 0, 0, 0, time.UTC)
 	finished := started.Add(time.Minute)
 	s := snapshot(t, recs("1", validParams()), "2")
-	r, err := inventory.Reconcile(sourceID, nil, s)
+	r, err := inventory.Reconcile(sourceID, inventory.Stored{}, s)
 	if err != nil {
 		t.Fatal(err)
 	}

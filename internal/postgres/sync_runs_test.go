@@ -108,7 +108,7 @@ func TestRecordFailedSyncRejectsSucceededRun(t *testing.T) {
 	t.Parallel()
 	db, conn := newDBWithConn(t)
 	src := newSource(t, db, newCustomer(t, db))
-	r, err := inventory.Reconcile(src.ID(), nil, inventory.Snapshot{})
+	r, err := inventory.Reconcile(src.ID(), inventory.Stored{}, inventory.Snapshot{})
 	if err != nil {
 		t.Fatal(err)
 	}
