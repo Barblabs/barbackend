@@ -115,6 +115,27 @@ func (t *Tx) RevokingTechnique(ctx context.Context, techniqueID string) (AttackT
 	}, nil
 }
 
+// CatalogTechnique is a current Technique as the Cartógrafo is offered it.
+type CatalogTechnique struct {
+	AttackID string
+	Name     string
+	Tactics  []string
+}
+
+// CurrentTechniques is the stored Techniques that are neither revoked nor
+// deprecated, by ATT&CK id (ADR 0024).
+func (t *Tx) CurrentTechniques(ctx context.Context) ([]CatalogTechnique, error) {
+	rows, err := t.q.ListCurrentAttackTechniques(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list current techniques: %w", err)
+	}
+	out := make([]CatalogTechnique, len(rows))
+	for i, row := range rows {
+		out[i] = CatalogTechnique{AttackID: row.AttackID, Name: row.Name, Tactics: row.Tactics}
+	}
+	return out, nil
+}
+
 // MitigationsOf is the stored Mitigations of the Technique of that STIX id,
 // by ATT&CK id.
 func (t *Tx) MitigationsOf(ctx context.Context, techniqueID string) ([]TechniqueMitigation, error) {
