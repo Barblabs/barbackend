@@ -2,6 +2,8 @@ package assessment
 
 import (
 	"fmt"
+	"html"
+	"regexp"
 	"slices"
 	"strings"
 	"unicode/utf8"
@@ -9,6 +11,9 @@ import (
 	"barbackend/internal/stixext"
 	"github.com/TcM1911/stix2"
 )
+
+// htmlTag is an HTML tag, such as those of an AWS Security Bulletin.
+var htmlTag = regexp.MustCompile(`<[^>]*>`)
 
 // MaxTechniques is how many Techniques the Cartógrafo may label one
 // Vulnerability with (ADR 0024).
@@ -51,16 +56,17 @@ type AdvisoryFacts struct {
 }
 
 // NewLabelingInput reads v, a stored Vulnerability with the extensions of
-// every Feed, and its Advisories. The products are those its numbering
-// authority names, or NVD's CPE matches when it names none.
+// every Feed, and its Advisories, as plain text: a Feed such as AWS's writes
+// HTML, whose tags cost tokens and tell nothing. The products are those its
+// numbering authority names, or NVD's CPE matches when it names none.
 func NewLabelingInput(v *stix2.Vulnerability, advisories []AdvisoryFacts) LabelingInput {
 	in := LabelingInput{
 		CVE: v.Name, Description: v.Description,
 		CWEs: []string{}, CVSSVectors: []string{}, AffectedProducts: []string{},
-		Advisories: slices.Clone(advisories),
+		Advisories: make([]AdvisoryFacts, len(advisories)),
 	}
-	if in.Advisories == nil {
-		in.Advisories = []AdvisoryFacts{}
+	for i, a := range advisories {
+		in.Advisories[i] = AdvisoryFacts{Title: plainText(a.Title), Description: plainText(a.Description)}
 	}
 	if nvd, ok := stixext.NVDOf(v); ok {
 		in.CWEs = append(in.CWEs, nvd.CWEs...)
@@ -80,6 +86,19 @@ func NewLabelingInput(v *stix2.Vulnerability, advisories []AdvisoryFacts) Labeli
 		in.KEV = &KEVFacts{RequiredAction: kev.RequiredAction, KnownRansomwareCampaignUse: kev.KnownRansomwareCampaignUse}
 	}
 	return in
+}
+
+// plainText is s without its HTML tags and entities, and with each run of
+// spaces made one, keeping its line breaks.
+func plainText(s string) string {
+	lines := strings.Split(html.UnescapeString(htmlTag.ReplaceAllString(s, " ")), "\n")
+	kept := lines[:0]
+	for _, line := range lines {
+		if line = strings.Join(strings.Fields(line), " "); line != "" {
+			kept = append(kept, line)
+		}
+	}
+	return strings.Join(kept, "\n")
 }
 
 func appendNew(values []string, v string) []string {
