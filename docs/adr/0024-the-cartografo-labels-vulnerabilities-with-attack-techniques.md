@@ -61,7 +61,7 @@ The Cartógrafo runs on `claude-haiku-5-5`, overridable with `CARTOGRAFO_MODEL`,
 
 ## Where the code goes
 
-The Cartógrafo is an Agent, so it lives in `internal/agents`, which already imports `claude` and `postgres` (ADR 0008, ADR 0016), and its verifier with it. `internal/claude`'s `Structured` gains a cached block for the catalog. The job is started by `serve`, beside the Feeds (ADR 0011).
+The Cartógrafo is an Agent, so it lives in `internal/agents`, which already imports `claude` and `postgres` (ADR 0008, ADR 0016). What it reads, what it answers and its verifier are pure domain, in `internal/assessment` beside the Prioritizer's and Luna's. `internal/claude`'s `Structured` gains a cached block for the catalog. The job is started by `serve`, beside the Feeds (ADR 0011).
 
 ## Considered Options
 
