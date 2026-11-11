@@ -70,6 +70,26 @@ func TestStructuredSendsThePDFsBeforeThePrompt(t *testing.T) {
 	}
 }
 
+func TestStructuredSendsTheCachedTextFirstMarkedForCaching(t *testing.T) {
+	c, srv := newClient(t)
+	srv.Queue(claudetest.Text(`{}`))
+
+	if _, err := c.Structured(context.Background(), claude.Request{Model: "m", Cached: "catalog", Prompt: "data"}); err != nil {
+		t.Fatal(err)
+	}
+	content := srv.Requests()[0]["messages"].([]any)[0].(map[string]any)["content"].([]any)
+	if len(content) != 2 {
+		t.Fatalf("content = %v, want the cached text and the prompt", content)
+	}
+	cached := content[0].(map[string]any)
+	if cached["text"] != "catalog" || cached["cache_control"].(map[string]any)["type"] != "ephemeral" {
+		t.Errorf("first block = %v, want the cached text with an ephemeral cache_control", cached)
+	}
+	if prompt := content[1].(map[string]any); prompt["text"] != "data" || prompt["cache_control"] != nil {
+		t.Errorf("second block = %v, want the prompt, not cached", prompt)
+	}
+}
+
 func TestStructuredFailures(t *testing.T) {
 	tests := []struct {
 		name  string

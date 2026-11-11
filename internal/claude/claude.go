@@ -50,6 +50,10 @@ type Request struct {
 	Model  string
 	System string
 	Prompt string
+	// Cached is text the model reads first, before PDFs and Prompt, that many
+	// requests share, such as a catalog: the API caches it with the system
+	// prompt, so a later request reads it at a tenth of the input price.
+	Cached string
 	// PDFs are PDF documents the model reads, in order, before Prompt.
 	PDFs [][]byte
 	// Schema is the JSON Schema of the answer, which the API enforces.
@@ -86,7 +90,12 @@ func (c *Client) Structured(ctx context.Context, r Request) ([]byte, error) {
 
 // The API reads a document best placed before the text about it.
 func (r Request) content() []anthropic.ContentBlockParamUnion {
-	blocks := make([]anthropic.ContentBlockParamUnion, 0, len(r.PDFs)+1)
+	blocks := make([]anthropic.ContentBlockParamUnion, 0, len(r.PDFs)+2)
+	if r.Cached != "" {
+		blocks = append(blocks, anthropic.ContentBlockParamUnion{OfText: &anthropic.TextBlockParam{
+			Text: r.Cached, CacheControl: anthropic.NewCacheControlEphemeralParam(),
+		}})
+	}
 	for _, pdf := range r.PDFs {
 		blocks = append(blocks, anthropic.NewDocumentBlock(anthropic.Base64PDFSourceParam{Data: base64.StdEncoding.EncodeToString(pdf)}))
 	}

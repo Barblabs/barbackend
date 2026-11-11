@@ -61,3 +61,34 @@ The review of the Agents found structural changes that were left out to keep the
 - **`Crew` holds the Analista's client and model**: move them to `Service`, since the Crew is the Prioritizer and Luna.
 - **`agent finding` keeps use-case logic in `cmd`**, which ADR 0008 keeps to wiring, and reads the three Feeds one after another.
 - **Build test Dossiers literally** in `internal/agents`, so its depguard rule can drop `stixext`.
+
+## 6. Threats in the Dossier: Advisories, Techniques and Mitigations
+
+barbattack now stores, for each stored Vulnerability, the AWS Advisories that name it (ADR 0022) and the ATT&CK Techniques the Cartógrafo labeled it with (ADR 0024), and the whole ATT&CK catalog with MITRE's Mitigations of each Technique (ADR 0023). The Dossier carries none of it yet, so the Prioritizer and Luna weigh a Finding without knowing how it would be attacked or what MITRE advises against that.
+
+**The Score stays as it is.** No Scoring Model reads any of this (ADR 0009, ADR 0022, ADR 0024): the Dossier keeps the stored Score, and these fields sit beside it for the Agents to weigh.
+
+What a Dossier should gain, and where each comes from in `internal/postgres`:
+
+| Dossier field | Holds | Where it comes from |
+|---|---|---|
+| `advisories` | each Advisory's title, publication date, Feed and description as plain text | `Tx.AdvisoriesOf(cve)`, newest first; the STIX `report` is in `Object`, its text is HTML that `assessment` already turns into plain text for the Cartógrafo |
+| `labeling` | whether the Vulnerability was labeled, and with which model: `labeled`, `none` (not enough to tell), `failed`, or not tried yet | `Tx.LabelingOf(cve)`, `ErrNotFound` when not tried |
+| `techniques` | each Technique's ATT&CK id, name, tactics, role (`exploitation`, `primary_impact`, `secondary_impact`), the quote that supports it and its rationale | `Tx.TechniquesOf(cve)` for the labels, and the catalog for name and tactics, read with ADR 0023's rules: a revoked Technique as its replacement |
+| `techniques[].mitigations` | each Mitigation's ATT&CK id (`M1036`), name and MITRE's advice for that Technique | `Tx.MitigationsOf(techniqueID)` |
+
+How each Agent uses them:
+
+- **The Prioritizer** weighs the phase of the attack. A Finding whose `exploitation` Technique is an Initial Access one, reached without credentials, such as T1190 or T1110.001 against an exposed Asset, is more urgent than one that needs the attacker already inside. An Advisory says a vendor has acted on the Vulnerability. Its reasons cite them as evidence by JSON pointer, as they cite KEV and EPSS today.
+- **Luna** proposes MITRE's Mitigations instead of inventing them: those of the `exploitation` Techniques first, which keep the attack from happening, then those of the impacts, which limit what it gives. It may name only Mitigations the Dossier holds, by their ATT&CK id, and an Advisory's advice may back a step.
+- **A label is an inference** (ADR 0024). Both Agents present it as "inferred by the Cartógrafo", never as MITRE's word, and treat `none`, `failed` or not tried as unknown, never as "no Techniques".
+
+What is left to do:
+
+- **Read them in one place.** `agents` may not import the `techniques` use case (ADR 0008), and following `revoked-by` lives there (`techniques.current`). Move that walk into `postgres`, for example `Tx.CurrentTechnique(attackID)`, so `techniques` and the Dossier read a Technique the same way.
+- **Add the fields to `assessment.Dossier` and `Brief`.** The Brief of the Prioritizer needs the Techniques' ids, names, tactics and roles; Luna's whole Dossier needs the Mitigations and the Advisories too. Keep a Dossier within one request: at most 5 Techniques, and the Advisories' text as given.
+- **Extend the verifiers.** Every ATT&CK id and Mitigation id a Prioritization or Action Plan names must be in its Dossier, as every CVE ID and version must be now.
+- **Tell each Agent in its prompt** what the fields mean and how to weigh them, as above; the text of Advisories and quotes stays in the user message as data (ADR 0010).
+- **The dashboard** shows them per Finding as plain text (ADR 0016, ADR 0024), from an endpoint over the same reads.
+
+Done when a Dossier built from a stored Finding carries its Advisories, Techniques and Mitigations, both prompts and verifiers use them with tests, and a Prioritization or Action Plan that names a Technique or Mitigation not in its Dossier is rejected.

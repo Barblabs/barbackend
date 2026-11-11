@@ -82,7 +82,7 @@ Run `./barbackend` with no arguments to print the usage.
 
 ## Agents
 
-The Prioritizer, Luna (Advisor), the Analista (feedback) and the Drafter (Business Context) run on Anthropic's models; `docs/adr/0016-the-prioritizer-orders-findings-from-their-dossiers.md` explains what they read and how they are kept honest, and `docs/adr/0017-the-business-context-is-a-versioned-document-the-customer-states.md` what the Drafter reads. They need credentials, usually `ANTHROPIC_API_KEY`. No Agent reads a Feed: the Findings pipeline hands them one Dossier per Finding, in the shape of `docs/examples/findings.json`. Until that pipeline exists, `agent finding` builds one from the live Feeds. What they still lack, starting with each Customer's business context in the Prioritizer's criterion, is in `docs/agents-pending.md`.
+The Prioritizer, Luna (Advisor), the Analista (feedback), the Drafter (Business Context) and the Cartógrafo (ATT&CK Techniques of a Vulnerability, `docs/adr/0024-the-cartografo-labels-vulnerabilities-with-attack-techniques.md`) run on Anthropic's models; `docs/adr/0016-the-prioritizer-orders-findings-from-their-dossiers.md` explains what they read and how they are kept honest, and `docs/adr/0017-the-business-context-is-a-versioned-document-the-customer-states.md` what the Drafter reads. They need credentials, usually `ANTHROPIC_API_KEY`. No Agent reads a Feed: the Findings pipeline hands them one Dossier per Finding, in the shape of `docs/examples/findings.json`. Until that pipeline exists, `agent finding` builds one from the live Feeds. What they still lack, starting with each Customer's business context in the Prioritizer's criterion, is in `docs/agents-pending.md`.
 
 ```sh
 # The Dossier of one Finding, from the live Feeds. Collect several into a JSON list.
@@ -98,6 +98,9 @@ The Prioritizer, Luna (Advisor), the Analista (feedback) and the Drafter (Busine
 # Talk with the Analista. Pass the printed conversation id to continue.
 ./barbackend agent ask --as <email> "¿qué atiendo primero?"
 ./barbackend agent ask --as <email> --conversation <id> "el de lab-01 debería ir antes, ahí corre la nómina"
+
+# Label the stored Vulnerabilities with ATT&CK Techniques now, as serve does daily, within the same cap of 50 a day. Needs DATABASE_URL.
+./barbackend agent label
 ```
 
 ## Findings

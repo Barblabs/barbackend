@@ -4,18 +4,20 @@ import (
 	"testing"
 	"time"
 
+	"barbackend/internal/advisories"
 	"barbackend/internal/findings"
 	"barbackend/internal/scoring"
+	"barbackend/internal/techniques"
 )
 
-func TestHandledByGivesTheFindingsOnlyNVDKEVAndEPSS(t *testing.T) {
-	feeds := handledBy(findings.New(nil, scoring.Model1, time.Hour), registeredFeeds())
+func TestHandledByGivesEachFeedItsUseCase(t *testing.T) {
+	feeds := handledBy(findings.New(nil, scoring.Model1, time.Hour), advisories.New(nil), techniques.New(nil), registeredFeeds())
 
 	handled := make(map[string]bool)
 	for _, f := range feeds {
 		handled[f.Name] = f.Handle != nil
 	}
-	want := map[string]bool{"nvd": true, "kev": true, "epss": true, "attack": false, "aws": false}
+	want := map[string]bool{"nvd": true, "kev": true, "epss": true, "attack": true, "aws": true}
 	for name, h := range want {
 		if handled[name] != h {
 			t.Errorf("feed %s handled = %t, want %t", name, handled[name], h)

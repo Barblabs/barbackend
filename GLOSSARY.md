@@ -94,6 +94,18 @@ _Avoid_: Source (that is a CMDB Source), provider, integration
 A publicly disclosed weakness in a Product, identified by its CVE ID. On its own it says nothing about a Customer's environment.
 _Avoid_: Vuln, flaw, bug
 
+**Advisory**:
+A notice a Feed publishes about one or more Vulnerabilities, such as an AWS Security Bulletin. It is kept only when it names a stored Vulnerability, and is linked to that Vulnerability by CVE, so every Finding of the Vulnerability shows it (ADR 0022).
+_Avoid_: Threat (ATT&CK techniques are threats too), bulletin, alert
+
+**Technique**:
+A way adversaries achieve a goal, as MITRE ATT&CK catalogs it, identified by its ATT&CK id such as `T1190`. It belongs to one or more tactics, the phases of an attack such as Initial Access. A revoked Technique is read as the one that replaced it (ADR 0023). The Cartógrafo labels each Vulnerability with its Techniques (ADR 0024).
+_Avoid_: TTP, attack pattern (that is its STIX type), tactic (a Technique's phase, not the Technique)
+
+**Mitigation**:
+A security measure that MITRE ATT&CK says prevents or limits one or more Techniques, identified by its ATT&CK id such as `M1051`. Each Technique it mitigates comes with advice on how to apply it there (ADR 0023).
+_Avoid_: Countermeasure, course of action (that is its STIX type), remediation (what a User does to close a Finding)
+
 ### Risk
 
 **Finding**:
@@ -163,6 +175,10 @@ _Avoid_: Chatbot, feedback bot
 **Drafter**:
 The Agent that drafts a Customer's Business Context from the documents a Customer Admin gives it, read together. Its draft is never saved until a Customer Admin reviews and saves it.
 _Avoid_: Importer, extractor, autofill
+
+**Cartógrafo**:
+The Agent that labels a stored Vulnerability with the ATT&CK Techniques it maps to, picked from the stored catalog, each with the words of the Vulnerability that support it. Its labels are inferences, shown as such (ADR 0024).
+_Avoid_: Mapper, tagger, Interpretador
 
 **Crew**:
 The Agents that answer in one call, checked against what they were given: the Prioritizer and Luna, which read Dossiers, and the Drafter.

@@ -23,6 +23,9 @@ import (
 var (
 	ErrNotFound   = errors.New("not found")
 	ErrSuperseded = errors.New("superseded by a later successful sync")
+	// ErrLabeled is a Labeling recorded for a Vulnerability whose Labeling is
+	// already final (ADR 0024).
+	ErrLabeled = errors.New("vulnerability is already labeled")
 	// ErrDisconnected is a Sync refused because its CMDB Source was
 	// disconnected: its Assets stay as the disconnect left them.
 	ErrDisconnected = errors.New("cmdb source is disconnected")

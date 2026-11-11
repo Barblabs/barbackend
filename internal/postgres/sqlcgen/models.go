@@ -19,6 +19,15 @@ type ActionPlan struct {
 	CreatedAt        time.Time
 }
 
+type Advisory struct {
+	ID          string
+	Feed        string
+	PublishedAt time.Time
+	Object      []byte
+	ModifiedAt  time.Time
+	StoredAt    time.Time
+}
+
 type AnalistaConversation struct {
 	ID             uuid.UUID
 	CustomerID     uuid.UUID
@@ -59,6 +68,37 @@ type AssetOwner struct {
 	ID         int64
 	CustomerID uuid.UUID
 	Email      string
+}
+
+type AttackMitigation struct {
+	ID         string
+	AttackID   string
+	Name       string
+	Object     []byte
+	ModifiedAt time.Time
+	StoredAt   time.Time
+}
+
+type AttackRelationship struct {
+	ID          string
+	Type        string
+	SourceID    string
+	TargetID    string
+	Description string
+	ModifiedAt  time.Time
+	StoredAt    time.Time
+}
+
+type AttackTechnique struct {
+	ID         string
+	AttackID   string
+	Name       string
+	Tactics    []string
+	Revoked    bool
+	Deprecated bool
+	Object     []byte
+	ModifiedAt time.Time
+	StoredAt   time.Time
 }
 
 type BusinessContext struct {
@@ -244,4 +284,27 @@ type Vulnerability struct {
 	Object     []byte
 	ModifiedAt time.Time
 	StoredAt   time.Time
+}
+
+type VulnerabilityAdvisory struct {
+	CveID      string
+	AdvisoryID string
+	LinkedAt   time.Time
+}
+
+type VulnerabilityLabeling struct {
+	CveID      string
+	Outcome    string
+	Attempts   int32
+	Model      string
+	PromptHash string
+	LabeledAt  time.Time
+}
+
+type VulnerabilityTechnique struct {
+	CveID     string
+	AttackID  string
+	Role      string
+	Evidence  string
+	Rationale string
 }
