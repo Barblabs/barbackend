@@ -70,6 +70,37 @@ type AssetOwner struct {
 	Email      string
 }
 
+type AttackMitigation struct {
+	ID         string
+	AttackID   string
+	Name       string
+	Object     []byte
+	ModifiedAt time.Time
+	StoredAt   time.Time
+}
+
+type AttackRelationship struct {
+	ID          string
+	Type        string
+	SourceID    string
+	TargetID    string
+	Description string
+	ModifiedAt  time.Time
+	StoredAt    time.Time
+}
+
+type AttackTechnique struct {
+	ID         string
+	AttackID   string
+	Name       string
+	Tactics    []string
+	Revoked    bool
+	Deprecated bool
+	Object     []byte
+	ModifiedAt time.Time
+	StoredAt   time.Time
+}
+
 type BusinessContext struct {
 	CustomerID uuid.UUID
 	Version    int32
