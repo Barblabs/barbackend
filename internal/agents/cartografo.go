@@ -3,9 +3,11 @@ package agents
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"barbackend/internal/assessment"
 	"barbackend/internal/postgres"
@@ -13,13 +15,18 @@ import (
 )
 
 const (
-	// MaxLabelingsPerRun bounds what one daily run of the Cartógrafo can cost
-	// (ADR 0024); what it leaves waits for the next run.
-	MaxLabelingsPerRun = 50
+	// MaxLabelingsPerDay bounds what the Cartógrafo can cost (ADR 0024): it
+	// counts the Labelings attempted in the last 24 hours, whatever run or
+	// restart of serve made them, and what it leaves waits for the next day.
+	MaxLabelingsPerDay = 50
 	// maxLabelingAttempts is how many runs try a Vulnerability whose Labeling
 	// keeps failing before it is left without labels.
 	maxLabelingAttempts = 3
 )
+
+// errUndecodable is a stored Vulnerability or Advisory that cannot be read,
+// which is that Vulnerability's failure, not the run's.
+var errUndecodable = errors.New("cannot be decoded")
 
 const cartografoSystem = `You are the Cartógrafo agent of barbattack, a threat intelligence platform. The user message holds, inside <catalog> tags, the current techniques of MITRE ATT&CK Enterprise, one per line as id | name | tactics, and inside <vulnerability> tags, one vulnerability as public feeds describe it. You label the vulnerability with the ATT&CK techniques it maps to, so that a security team sees how an attacker would use it.
 
@@ -101,46 +108,58 @@ type LabelingRun struct {
 	Labeled, None, Failed int
 }
 
-// LabelVulnerabilities runs the Cartógrafo on at most MaxLabelingsPerRun
-// stored Vulnerabilities without a final Labeling, newest first, and stores
-// each Labeling. No transaction is held while the model runs. A Vulnerability
-// whose Labeling fails is tried again in a later run, up to
-// maxLabelingAttempts times. Without a stored ATT&CK catalog it labels
-// nothing, so no attempt is spent.
+// LabelVulnerabilities runs the Cartógrafo on the stored Vulnerabilities
+// without a final Labeling, newest first, as many as MaxLabelingsPerDay leaves
+// for today, and stores each Labeling. No transaction is held while the model
+// runs.
+//
+// A rejected or refused answer, or a Vulnerability that cannot be read, is a
+// failed attempt of that Vulnerability, tried again in a later run up to
+// maxLabelingAttempts times. A model that cannot be called stops the run with
+// ErrUnavailable and spends no attempt, so a missing key or an outage leaves
+// no Vulnerability without labels. Without a stored ATT&CK catalog it labels
+// nothing.
 func (s *Service) LabelVulnerabilities(ctx context.Context) (LabelingRun, error) {
 	var cves []string
 	var catalog Catalog
 	err := s.db.InTx(ctx, func(tx *postgres.Tx) error {
-		var err error
-		if cves, err = tx.UnlabeledVulnerabilities(ctx, MaxLabelingsPerRun, maxLabelingAttempts); err != nil {
+		used, err := tx.LabelingsSince(ctx, time.Now().Add(-24*time.Hour))
+		if err != nil || used >= MaxLabelingsPerDay {
+			return err
+		}
+		if cves, err = tx.UnlabeledVulnerabilities(ctx, MaxLabelingsPerDay-used, maxLabelingAttempts); err != nil {
 			return err
 		}
 		techniques, err := tx.CurrentTechniques(ctx)
 		catalog = NewCatalog(techniques)
 		return err
 	})
-	if err != nil {
-		return LabelingRun{}, err
-	}
 	var run LabelingRun
-	if len(cves) == 0 {
-		return run, nil
+	if err != nil || len(cves) == 0 {
+		return run, err
 	}
 	if len(catalog.ids) == 0 {
 		log.Printf("agents: cartografo: no ATT&CK catalog stored yet, %d vulnerabilities wait", len(cves))
 		return run, nil
 	}
 	for _, cve := range cves {
-		if err := s.label(ctx, catalog, cve, &run); err != nil {
-			return run, err
+		if err = s.label(ctx, catalog, cve, &run); err != nil {
+			break
 		}
 	}
 	log.Printf("agents: cartografo: labeled %d, none %d, failed %d", run.Labeled, run.None, run.Failed)
-	return run, nil
+	return run, err
 }
 
 func (s *Service) label(ctx context.Context, catalog Catalog, cve string, run *LabelingRun) error {
+	model, prompt := s.crew.models.Cartografo, promptID(cartografoSystem)
 	in, err := s.labelingInput(ctx, cve)
+	if errors.Is(err, errUndecodable) {
+		log.Printf("agents: cartografo: %s: %v", cve, err)
+		return s.storeLabeling(ctx, cve, &run.Failed, func(tx *postgres.Tx) error {
+			return tx.StoreFailedLabeling(ctx, cve, model, prompt)
+		})
+	}
 	if err != nil {
 		return err
 	}
@@ -152,23 +171,42 @@ func (s *Service) label(ctx context.Context, catalog Catalog, cve string, run *L
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	return s.db.InTx(ctx, func(tx *postgres.Tx) error {
-		if labeling.Output == nil {
-			log.Printf("agents: cartografo: %s %s: %s", cve, labeling.Status, strings.Join(labeling.Violations, "; "))
-			run.Failed++
+	switch labeling.Status {
+	case Verified:
+	case Failed:
+		return fmt.Errorf("label %s: %w", cve, ErrUnavailable)
+	default:
+		log.Printf("agents: cartografo: %s %s: %q", cve, labeling.Status, labeling.Violations)
+		return s.storeLabeling(ctx, cve, &run.Failed, func(tx *postgres.Tx) error {
 			return tx.StoreFailedLabeling(ctx, cve, labeling.Model, labeling.PromptID)
-		}
-		labels := make([]postgres.TechniqueLabel, len(labeling.Output.Techniques))
-		for i, t := range labeling.Output.Techniques {
-			labels[i] = postgres.TechniqueLabel{AttackID: t.AttackID, Role: t.Role, Evidence: t.Evidence, Rationale: t.Rationale}
-		}
-		if len(labels) == 0 {
-			run.None++
-		} else {
-			run.Labeled++
-		}
+		})
+	}
+	labels := make([]postgres.TechniqueLabel, len(labeling.Output.Techniques))
+	for i, t := range labeling.Output.Techniques {
+		labels[i] = postgres.TechniqueLabel{AttackID: t.AttackID, Role: t.Role, Evidence: t.Evidence, Rationale: t.Rationale}
+	}
+	outcome := &run.Labeled
+	if len(labels) == 0 {
+		outcome = &run.None
+	}
+	return s.storeLabeling(ctx, cve, outcome, func(tx *postgres.Tx) error {
 		return tx.StoreLabeling(ctx, cve, labeling.Model, labeling.PromptID, labels)
 	})
+}
+
+// storeLabeling stores a Labeling of cve with store and counts it in outcome.
+// One another run already made final, such as on another instance of serve,
+// is left as it is and not counted.
+func (s *Service) storeLabeling(ctx context.Context, cve string, outcome *int, store func(*postgres.Tx) error) error {
+	err := s.db.InTx(ctx, store)
+	if errors.Is(err, postgres.ErrLabeled) {
+		log.Printf("agents: cartografo: %s was labeled by another run", cve)
+		return nil
+	}
+	if err == nil {
+		*outcome++
+	}
+	return err
 }
 
 // labelingInput reads the stored Vulnerability of cve with its Advisories.
@@ -181,7 +219,7 @@ func (s *Service) labelingInput(ctx context.Context, cve string) (assessment.Lab
 		}
 		var v stix2.Vulnerability
 		if err := json.Unmarshal(stored.Object, &v); err != nil {
-			return fmt.Errorf("decode vulnerability %s: %w", cve, err)
+			return fmt.Errorf("vulnerability %s %w: %w", cve, errUndecodable, err)
 		}
 		advisories, err := tx.AdvisoriesOf(ctx, cve)
 		if err != nil {
@@ -194,7 +232,7 @@ func (s *Service) labelingInput(ctx context.Context, cve string) (assessment.Lab
 				Description string `json:"description"`
 			}
 			if err := json.Unmarshal(a.Object, &report); err != nil {
-				return fmt.Errorf("decode advisory %s of %s: %w", a.ID, cve, err)
+				return fmt.Errorf("advisory %s of %s %w: %w", a.ID, cve, errUndecodable, err)
 			}
 			facts = append(facts, assessment.AdvisoryFacts{Title: report.Name, Description: report.Description})
 		}
