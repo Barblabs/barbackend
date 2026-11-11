@@ -150,6 +150,28 @@ func TestUnlabeledVulnerabilitiesAreTheNewestFirstUpToTheLimit(t *testing.T) {
 	}
 }
 
+func TestLabelingsSinceCountsTheAttemptsAfterAMoment(t *testing.T) {
+	t.Parallel()
+	db := storedCVEs(t, "CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003")
+	before := time.Now().Add(-time.Minute)
+	if err := storeLabeling(db, "CVE-2026-0001"); err != nil {
+		t.Fatal(err)
+	}
+	if err := storeFailedLabeling(db, "CVE-2026-0002"); err != nil {
+		t.Fatal(err)
+	}
+
+	count := func(since time.Time) int {
+		return inTxValue(t, db, func(tx *postgres.Tx) (int, error) { return tx.LabelingsSince(context.Background(), since) })
+	}
+	if got := count(before); got != 2 {
+		t.Errorf("labelings since a minute ago = %d, want 2", got)
+	}
+	if got := count(time.Now().Add(time.Minute)); got != 0 {
+		t.Errorf("labelings since a minute from now = %d, want 0", got)
+	}
+}
+
 func TestLabelingOfAVulnerabilityNotTriedIsNotFound(t *testing.T) {
 	t.Parallel()
 	db := storedCVEs(t, "CVE-2026-0001")
