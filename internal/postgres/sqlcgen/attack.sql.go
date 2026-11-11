@@ -80,6 +80,41 @@ func (q *Queries) GetRevokingTechnique(ctx context.Context, techniqueID string) 
 	return i, err
 }
 
+const listCurrentAttackTechniques = `-- name: ListCurrentAttackTechniques :many
+SELECT attack_id, name, tactics
+FROM attack_techniques
+WHERE NOT revoked AND NOT deprecated
+ORDER BY attack_id
+`
+
+type ListCurrentAttackTechniquesRow struct {
+	AttackID string
+	Name     string
+	Tactics  []string
+}
+
+// The current Techniques, neither revoked nor deprecated, by ATT&CK id: what
+// the Cartógrafo picks from (ADR 0024).
+func (q *Queries) ListCurrentAttackTechniques(ctx context.Context) ([]ListCurrentAttackTechniquesRow, error) {
+	rows, err := q.db.Query(ctx, listCurrentAttackTechniques)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCurrentAttackTechniquesRow
+	for rows.Next() {
+		var i ListCurrentAttackTechniquesRow
+		if err := rows.Scan(&i.AttackID, &i.Name, &i.Tactics); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMitigationsOfTechnique = `-- name: ListMitigationsOfTechnique :many
 SELECT m.attack_id, m.name, r.description
 FROM attack_relationships r

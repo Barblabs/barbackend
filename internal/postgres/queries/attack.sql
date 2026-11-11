@@ -55,3 +55,11 @@ FROM attack_relationships r
 JOIN attack_mitigations m ON m.id = r.source_id
 WHERE r.type = 'mitigates' AND r.target_id = @technique_id
 ORDER BY m.attack_id;
+
+-- The current Techniques, neither revoked nor deprecated, by ATT&CK id: what
+-- the Cartógrafo picks from (ADR 0024).
+-- name: ListCurrentAttackTechniques :many
+SELECT attack_id, name, tactics
+FROM attack_techniques
+WHERE NOT revoked AND NOT deprecated
+ORDER BY attack_id;
