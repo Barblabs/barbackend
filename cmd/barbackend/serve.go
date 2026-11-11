@@ -20,6 +20,7 @@ import (
 	"barbackend/internal/ingest"
 	"barbackend/internal/postgres"
 	"barbackend/internal/scoring"
+	"barbackend/internal/techniques"
 	"barbackend/internal/users"
 )
 
@@ -49,7 +50,7 @@ func serve(ctx context.Context, _ []string) error {
 
 	return withDB(ctx, func(db *postgres.DB) error {
 		found := findings.New(db, scoring.Model1, kevMaxAge)
-		svc, err := ingest.New(handledBy(found, advisories.New(db), registeredFeeds())...)
+		svc, err := ingest.New(handledBy(found, advisories.New(db), techniques.New(db), registeredFeeds())...)
 		if err != nil {
 			return err
 		}
