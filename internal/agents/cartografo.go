@@ -105,7 +105,9 @@ func newCartografo(model string, catalog Catalog, in assessment.LabelingInput) a
 
 // LabelingRun is what one run of the Cartógrafo did, by outcome.
 type LabelingRun struct {
-	Labeled, None, Failed int
+	Labeled int `json:"labeled"`
+	None    int `json:"none"`
+	Failed  int `json:"failed"`
 }
 
 // LabelVulnerabilities runs the Cartógrafo on the stored Vulnerabilities
