@@ -38,7 +38,7 @@ ADR 0015 keeps a Feed object only when it matches a Customer. The ATT&CK catalog
 
 ## Reading a Technique across versions
 
-A label stores the ATT&CK id its source gave, which may be from an older ATT&CK version than the stored catalog (CTID maps against ATT&CK 16.1, for example). Reading a Technique by that id:
+A label stores the ATT&CK id its source gave, which may be from an older ATT&CK version than the stored catalog: one stored before ATT&CK revoked its Technique, for example. Reading a Technique by that id:
 
 - **Current**: returned as it is.
 - **Revoked**: `revoked-by` is followed to the current Technique, for at most 5 steps, since a revoked Technique can be replaced by one that was revoked later. The current one is returned along with the id that was asked for, so a reader can tell that a replacement happened.
