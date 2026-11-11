@@ -51,6 +51,16 @@ func (t *Tx) UnlabeledVulnerabilities(ctx context.Context, limit, maxAttempts in
 	return cves, nil
 }
 
+// LabelingsSince is how many Labelings had their last attempt at or after
+// since.
+func (t *Tx) LabelingsSince(ctx context.Context, since time.Time) (int, error) {
+	n, err := t.q.CountLabelingsSince(ctx, since)
+	if err != nil {
+		return 0, fmt.Errorf("count labelings since %s: %w", since.Format(time.RFC3339), err)
+	}
+	return int(n), nil
+}
+
 // StoreLabeling stores the final Labeling of the Vulnerability of cve with
 // its labels, labeled when there are any and none otherwise. It fails with
 // ErrLabeled when the Vulnerability already has a final Labeling.
