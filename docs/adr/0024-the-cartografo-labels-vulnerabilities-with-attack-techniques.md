@@ -34,16 +34,22 @@ All of it comes from Feeds, so it travels in the user message as JSON, never in 
 ## How it is kept honest
 
 - **The API enforces the answer's shape**: a list of at most 5 labels, each with the four fields, the role one of the three.
-- **A verifier without a model** checks each answer against the request: every ATT&CK id is one of the Techniques offered; no Technique is labeled twice; every evidence is an exact quote, ignoring case and spacing, of the description or an Advisory given; no URL appears. An answer that fails gets one retry told what was wrong.
+- **A verifier without a model** checks each answer against the request: every ATT&CK id is one of the Techniques offered; no Technique is labeled twice; every evidence is an exact quote, ignoring case and spacing, of at least 20 characters of the description, KEV's required action or an Advisory given; no URL appears. An answer that fails gets one retry told what was wrong.
 - **It cannot judge whether a label is right.** A label can be wrong and still pass, if its quote is real and its Technique exists. This is why a label shows its evidence, and why it is never more than an input to a person or to another Agent.
 - **A Labeling records its model and the hash of its prompt**, as a Run does (ADR 0016), so a label can be traced to what produced it.
+- **The model reaches nothing.** It has no tools and no access to the database or to barbattack: the Cartógrafo's code in the backend reads what the model is given, calls it, and stores only what the verifier passed. Text in a Feed that tricked the model can at most make a label wrong.
+- **A label is shown as plain text.** Its evidence and rationale are Feed text read by a model, so a client must never render them as HTML (ADR 0016), or they could carry a script or a tracking link.
 
 ## When it runs
 
-A job in `serve` runs once a day, when `serve` starts and every 24 hours after, as a Feed is polled (ADR 0011). Each run takes the stored Vulnerabilities that have no Labeling, newest first, at most 50, and labels them one by one. A label is not needed within minutes: Techniques add to what a Finding shows, while the Score and the Finding exist without them. The cap bounds what one day can cost, at most 50 Labelings and their retries; what it leaves waits for the next run. A request to the model is never made inside a Feed's transaction: the Vulnerability is read, the model is called, and the Labeling is stored in a transaction of its own.
+A job in `serve` runs once a day: 15 minutes after `serve` starts, so the Feeds' first pulls, ATT&CK's among them, have finished, and every 24 hours after. Each run takes the stored Vulnerabilities that have no Labeling, newest first, and labels them one by one. A label is not needed within minutes: Techniques add to what a Finding shows, while the Score and the Finding exist without them.
+
+**At most 50 Labelings a day**, counted from the Labelings stored in the last 24 hours, so restarting `serve` does not start a new budget. Each costs at most two requests, the answer and its retry. What the cap leaves waits for the next day. A request to the model is never made inside a Feed's transaction: the Vulnerability is read, the model is called, and the Labeling is stored in a transaction of its own.
 
 - **Once per Vulnerability.** A stored Labeling, with labels or with none, is final. A later change to the Vulnerability's description or a new ATT&CK version does not label it again; that is a later decision.
-- **A failed attempt is retried.** An answer that fails twice, a refusal or an API error stores a failed attempt and no labels. The Vulnerability is tried again in a later run, at most 3 times; after the third failure it stays without labels. Claude Haiku 5.5 has no server-side fallback for a refusal, and this domain is close to its cybersecurity classifiers.
+- **A failed attempt is retried.** An answer that fails twice, a refusal, or a stored Vulnerability or Advisory that cannot be read stores a failed attempt and no labels, and the run goes on with the next. The Vulnerability is tried again in a later run, at most 3 times; after the third failure it stays without labels. Claude Haiku 5.5 has no server-side fallback for a refusal, and this domain is close to its cybersecurity classifiers.
+- **A model that cannot be called spends no attempt.** An API error, such as a missing key or an outage, stops the run and stores nothing, so it cannot leave every waiting Vulnerability without labels. The next run tries again.
+- **`serve` runs as one instance**, so one Cartógrafo runs at a time. Were a second to run, a Labeling the other made final would be left as it is, but the same Vulnerability could be paid twice; more than one instance is a later decision, for the Feeds too.
 - Only stored Vulnerabilities are labeled, which are those that match some Customer (ADR 0015).
 
 ## Tables
