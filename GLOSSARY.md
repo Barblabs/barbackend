@@ -99,7 +99,7 @@ A notice a Feed publishes about one or more Vulnerabilities, such as an AWS Secu
 _Avoid_: Threat (ATT&CK techniques are threats too), bulletin, alert
 
 **Technique**:
-A way adversaries achieve a goal, as MITRE ATT&CK catalogs it, identified by its ATT&CK id such as `T1190`. It belongs to one or more tactics, the phases of an attack such as Initial Access. A revoked Technique is read as the one that replaced it (ADR 0023).
+A way adversaries achieve a goal, as MITRE ATT&CK catalogs it, identified by its ATT&CK id such as `T1190`. It belongs to one or more tactics, the phases of an attack such as Initial Access. A revoked Technique is read as the one that replaced it (ADR 0023). The Cartógrafo labels each Vulnerability with its Techniques (ADR 0024).
 _Avoid_: TTP, attack pattern (that is its STIX type), tactic (a Technique's phase, not the Technique)
 
 **Mitigation**:
@@ -175,6 +175,10 @@ _Avoid_: Chatbot, feedback bot
 **Drafter**:
 The Agent that drafts a Customer's Business Context from the documents a Customer Admin gives it, read together. Its draft is never saved until a Customer Admin reviews and saves it.
 _Avoid_: Importer, extractor, autofill
+
+**Cartógrafo**:
+The Agent that labels a stored Vulnerability with the ATT&CK Techniques it maps to, picked from the stored catalog, each with the words of the Vulnerability that support it. Its labels are inferences, shown as such (ADR 0024).
+_Avoid_: Mapper, tagger, Interpretador
 
 **Crew**:
 The Agents that answer in one call, checked against what they were given: the Prioritizer and Luna, which read Dossiers, and the Drafter.
