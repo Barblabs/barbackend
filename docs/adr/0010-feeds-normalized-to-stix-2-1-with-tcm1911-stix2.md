@@ -33,11 +33,14 @@ internal/
 | barbattack itself | `identity` SDO, `identity_class: "system"` | `created_by_ref` of every object we mint. |
 | Feed (provenance) | `external_references` entry + its extension | Not an Identity: the Feed is a source, not the producer of the normalized object. |
 | ATT&CK technique, tactic, group, etc. | MITRE's own objects, unchanged | Do not re-mint IDs or translate `x_mitre_*` properties. |
-| News Item: an article, advisory or leak-site post (ADR 0025) | `report` SDO with `object_refs` to the Vulnerabilities and victims it names | Its text is untrusted data. `news/1` says which Feed published it and what kind of post it is. |
+| Advisory, such as an AWS Security Bulletin (ADR 0022) | `report` SDO with `object_refs` to Vulnerabilities | Its text is untrusted data. |
+| News Item: an article or leak-site post (ADR 0025) | `report` SDO with `object_refs` to the Vulnerabilities and victims it names | Its text is untrusted data. `news/1` says which Feed published it and what kind of post it is. |
 | Victim of a Reported Attack, when a Feed names it | `identity` SDO, `identity_class: "organization"`, with `sectors` | Only structured Feeds, such as leak-site trackers, name one. Its countries and domain go in `victim/1`. |
 | Asset, Software Component, Finding, Score | none for now | These belong to the Customer and live in Postgres. Exporting them to STIX (e.g. `infrastructure`, `software`, `sighting`) is a separate decision. |
 
-A News Item's `object_refs` point at the deterministic Vulnerability IDs for the CVE IDs its text mentions, and at the `identity` of each victim its Feed names. STIX requires at least one `object_ref`. A News Item that names neither, as most articles do, refers only to the barbattack `identity`, its `created_by_ref`, which says nothing about it and keeps it valid. It is stored all the same: an attack on a Peer rarely names a CVE (ADR 0025).
+An Advisory's `object_refs` point at the deterministic Vulnerability IDs for the CVE IDs its text mentions. STIX requires at least one `object_ref`, so a bulletin that mentions none is skipped and logged.
+
+A News Item's `object_refs` point the same way at the CVE IDs its text mentions, and at the `identity` of each victim its Feed names. A News Item that names neither, as most articles do, refers only to the barbattack `identity`, its `created_by_ref`, which says nothing about it and keeps it valid. It is stored all the same: an attack on a Peer rarely names a CVE (ADR 0025).
 
 Do not create `software` SCOs or `relationship` objects for affected products in this version. A `software` object holds a single version, but NVD says "every version from 2.4.0 up to but not including 2.4.58". The affected ranges go in the NVD extension instead, where filters can compare them with a Software Component's version.
 
@@ -82,7 +85,7 @@ The `extension-definition` objects are created once in `stixext` with `stix2.New
 | `vuln_status` | string | NVD status as given (`Analyzed`, `Awaiting Analysis`, `Rejected`...) |
 | `cvss` | list | Every CVSS metric NVD returns: `{version, base_score, vector, source, type}`, with `type` `Primary` or `Secondary`. Keep all of them. Choosing one is scoring's job (ADR 0009), not normalization's. |
 | `cwes` | list of string | `CWE-79`, ... |
-| `affected` | list | One entry per CPE match with `vulnerable: true`: `{criteria, vendor, product, version_start_including, version_start_excluding, version_end_including, version_end_excluding}`. `vendor` and `product` are the CPE 2.3 tokens split out of `criteria`. Absent bounds are omitted. |
+| `affected` | list | One entry per CPE match with `vulnerable: true`: `{criteria, vendor, product, version, update, version_start_including, version_start_excluding, version_end_including, version_end_excluding}`. `vendor`, `product`, `version` and `update` are the CPE 2.3 fields split out of `criteria`, unescaped (`15.2\(7\)e` is `15.2(7)e`); `version` is exact, `*` for any or `-` for none (ADR 0015). Absent bounds are omitted. `version` and `update` were added in a minor version, so entries stored before have neither. |
 | `cna_affected` | list, optional | What the CVE's numbering authority lists, as NVD relays it: `{source, vendor, product, default_status, versions: [{version, less_than, less_than_or_equal, status}]}`. A CVE NVD did not analyze has no CPE matches, only this (ADR 0016). |
 
 The CVE's English description goes in the SDO's `description`. NVD's reference URLs go in `external_references`, after the required `{"source_name": "cve", "external_id": "CVE-..."}` entry, which must always come first.
@@ -115,7 +118,7 @@ Having the extension means the CVE is in the catalog. If a later catalog read no
 | Field | Type | Meaning |
 |---|---|---|
 | `feed` | string | The Feed that published it, as registered (`bleepingcomputer`, `ransomwarelive`) |
-| `kind` | string | `article`, `advisory` or `leak_post`. A `leak_post` is the attacker's own claim. |
+| `kind` | string | `article` or `leak_post`. A `leak_post` is the attacker's own claim. |
 | `language` | string, optional | BCP 47 (`en`, `es`), when the Feed says |
 | `attacker` | string, optional | The attacker a structured Feed names, as written |
 
@@ -163,7 +166,9 @@ When a bundle is parsed, the library returns any extension it does not know as a
 
 ## Storage
 
-The schema is not decided by this ADR and comes with the first Feed's migration. The intended shape is one row per STIX object ID, holding its type, `modified` and the object as `jsonb`. Each adapter updates only its own extension key, in one statement, so two Feeds writing the same `vulnerability` at once cannot lose each other's data. Columns that filters need often (the CVE ID, the affected `vendor`/`product` pairs) may be extracted next to the `jsonb` when the filters need them. News Items are the first objects stored, with their Feed, published date and CVE IDs extracted (ADR 0025).
+The schema is not decided by this ADR and comes with the first Feed's migration. The intended shape is one row per STIX object ID, holding its type, `modified` and the object as `jsonb`. Each adapter updates only its own extension key, in one statement, so two Feeds writing the same `vulnerability` at once cannot lose each other's data. Columns that filters need often (the CVE ID, the affected `vendor`/`product` pairs) may be extracted next to the `jsonb` when the filters need them.
+
+ADR 0015 replaces this shape for Vulnerabilities: Feed objects are not stored on receipt. A Vulnerability is kept only when it opens a Finding, and KEV and EPSS objects only rescore the Findings of their CVE. News Items are the exception: each is stored on receipt, with its Feed, published date and CVE IDs extracted, because what makes one relevant is known only once it is read (ADR 0025).
 
 ## Open questions
 

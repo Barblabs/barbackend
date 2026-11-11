@@ -250,13 +250,17 @@ func TestScoreRanksShowWhereTheScoreAlonePutsEachFinding(t *testing.T) {
 func TestModelsFromTheEnvironment(t *testing.T) {
 	t.Parallel()
 	got := agents.ModelsFrom(func(name string) string {
-		if name == "PRIORITIZER_MODEL" {
+		switch name {
+		case "PRIORITIZER_MODEL":
 			return " other-model "
+		case "CARTOGRAFO_MODEL":
+			return "claude-sonnet-5-5"
 		}
 		return ""
 	})
 	want := agents.DefaultModels()
 	want.Prioritizer = "other-model"
+	want.Cartografo = "claude-sonnet-5-5"
 	if got != want {
 		t.Errorf("models = %+v, want %+v", got, want)
 	}

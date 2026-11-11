@@ -29,15 +29,19 @@ The CMDB Source a Customer currently syncs its Assets from. A Customer has at mo
 _Avoid_: Active connection, current integration
 
 **Disconnected CMDB Source**:
-A CMDB Source that is no longer synced. It is never deleted, its Assets become Inactive Assets, and connecting the same CMDB again creates a new CMDB Source.
+A CMDB Source that is no longer synced. It is never deleted, its Assets become Inactive Assets and its Areas Inactive, and connecting the same CMDB again creates a new CMDB Source.
 _Avoid_: Deleted source, removed source, inactive source
 
 **Asset**:
 A host-level thing in a Customer's environment that barbattack monitors for threats: a server, virtual machine, workstation or network device. It mirrors exactly one record in one CMDB Source, and is an operational configuration item, never a financial or procurement record.
 _Avoid_: CI, configuration item, device, host, machine
 
+**Area**:
+A part of a Customer's organization, such as a department or a subsidiary, that Assets belong to, imported from a CMDB Source; iTop calls it an Organization. Areas are flat, and an Area that its CMDB Source marks inactive or no longer contains becomes Inactive, never deleted.
+_Avoid_: Organization, department, business unit, org
+
 **Source Reference**:
-The identity of the record an Asset was imported from, made of its CMDB Source and the provider's own identifier for that record.
+The identity of the record an Asset or an Area was imported from, made of its CMDB Source and the provider's own identifier for that record.
 _Avoid_: External ID, foreign key
 
 **Asset Kind**:
@@ -65,7 +69,7 @@ An Asset that barbattack has stopped monitoring, normally because its CMDB Sourc
 _Avoid_: Deleted, obsolete, retired, archived
 
 **Sync**:
-Bringing the Assets of one CMDB Source in line with a complete snapshot of its records: creating, updating, deactivating and reactivating Assets.
+Bringing the Assets and Areas of one CMDB Source in line with a complete snapshot of its records: creating, updating, deactivating and reactivating them.
 _Avoid_: Import job, refresh, poll, crawl
 
 **Sync Run**:
@@ -90,19 +94,35 @@ _Avoid_: Source (that is a CMDB Source), provider, integration
 A publicly disclosed weakness in a Product, identified by its CVE ID. On its own it says nothing about a Customer's environment.
 _Avoid_: Vuln, flaw, bug
 
+**Advisory**:
+A notice a Feed publishes about one or more Vulnerabilities, such as an AWS Security Bulletin. It is kept only when it names a stored Vulnerability, and is linked to that Vulnerability by CVE, so every Finding of the Vulnerability shows it (ADR 0022).
+_Avoid_: Threat (ATT&CK techniques are threats too), bulletin, alert
+
 **News Item**:
-One article, advisory or leak-site post that a Feed publishes about attacks or Vulnerabilities. It belongs to no Customer.
-_Avoid_: Bulletin, report, article, post, noticia
+One article or leak-site post that a Feed publishes about attacks or Vulnerabilities. It belongs to no Customer, and unlike an Advisory it is kept whether or not it names a stored Vulnerability.
+_Avoid_: Advisory (a notice about Vulnerabilities), report, article, post, noticia
 
 **Reported Attack**:
 An attack on an organization as a News Item tells it: the victim, its sectors and countries, the kind of attack, the attacker it names and the Vulnerabilities and Products used. It is the source's claim, never confirmed by barbattack, and a leak-site post is the attacker's own claim.
 _Avoid_: Incident, breach, event, victim
 
+**Technique**:
+A way adversaries achieve a goal, as MITRE ATT&CK catalogs it, identified by its ATT&CK id such as `T1190`. It belongs to one or more tactics, the phases of an attack such as Initial Access. A revoked Technique is read as the one that replaced it (ADR 0023). The Cartógrafo labels each Vulnerability with its Techniques (ADR 0024).
+_Avoid_: TTP, attack pattern (that is its STIX type), tactic (a Technique's phase, not the Technique)
+
+**Mitigation**:
+A security measure that MITRE ATT&CK says prevents or limits one or more Techniques, identified by its ATT&CK id such as `M1051`. Each Technique it mitigates comes with advice on how to apply it there (ADR 0023).
+_Avoid_: Countermeasure, course of action (that is its STIX type), remediation (what a User does to close a Finding)
+
 ### Risk
 
 **Finding**:
-The fact that one Vulnerability affects one Software Component of one Asset. It is open until it is remediated or no longer applies, and only open Findings are scored.
+The fact that one Vulnerability affects one Product installed on one Asset. It is open until it is remediated or no longer applies, then closed with a reason, and reopened if it applies again; it is never deleted. Only open Findings are scored.
 _Avoid_: Hallazgo, issue, vulnerability instance, alert
+
+**Match Flag**:
+A reason a Finding's match is uncertain, such as a version that could not be compared. A Finding with no Match Flags is a certain match; one with any is still a Finding.
+_Avoid_: Dudoso, warning, uncertain boolean
 
 **Score**:
 A deterministic number from 0 to 1 that ranks how urgently a Finding should be remediated, computed from its Vulnerability's CVSS base score, EPSS probability and presence in the CISA KEV catalog, and its Asset's Criticality and Exposure.
@@ -121,7 +141,7 @@ An input that was missing when a Score was computed and was replaced by the Scor
 _Avoid_: Missing data, warning, flag
 
 **Exposure**:
-Whether an Asset as a whole is reachable from the public internet: Internet-facing, Internal, or Unknown. It only comes from a Declaration and is Unknown until declared.
+Whether an Asset as a whole is reachable from the public internet: Internet-facing, Internal, or Unknown. It is imported from the iTop Location (`exposed` or `not exposed`) and can be declared over it; the Declaration wins. It is Unknown when neither gives it, as for every Virtual Machine until declared (ADR 0021).
 _Avoid_: Public/private, external, DMZ
 
 **Criticality**:
@@ -178,6 +198,10 @@ _Avoid_: Chatbot, feedback bot
 The Agent that drafts a Customer's Business Context from the documents a Customer Admin gives it, read together. Its draft is never saved until a Customer Admin reviews and saves it.
 _Avoid_: Importer, extractor, autofill
 
+**Cartógrafo**:
+The Agent that labels a stored Vulnerability with the ATT&CK Techniques it maps to, picked from the stored catalog, each with the words of the Vulnerability that support it. Its labels are inferences, shown as such (ADR 0024).
+_Avoid_: Mapper, tagger, Interpretador
+
 **Reader**:
 The Agent that reads one News Item and states, quoting it, the Reported Attacks it reports and what it says about Vulnerabilities. It reads no Customer's data, so what it states is the same for every Customer.
 _Avoid_: Lector, parser, extractor, scraper
@@ -231,6 +255,10 @@ _Avoid_: Member, regular user, analyst
 **Asset Owner**:
 A person, identified by email, who is responsible for one or more Assets and receives alerts about them on Slack. It is imported from the CMDB Source or set by a Declaration. An Asset Owner is not a User.
 _Avoid_: User, contact, assignee, responsible, manager
+
+**Area Owner**:
+The person, identified by email, whom barbattack reaches about an Area. Only a Customer Admin states it, never a CMDB Source; it is not an Asset Owner and need not be a User.
+_Avoid_: Asset Owner, area contact, area manager
 
 **Security Team**:
 The Customer's cybersecurity team, which receives every alert about the Customer's Assets, whether or not the Asset has an Asset Owner, and its News Digests.

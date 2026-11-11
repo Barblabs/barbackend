@@ -11,7 +11,7 @@ Exposure is a property of the whole Asset, not of each Software Component. An in
 - **Operating System**: the OS family as name and the OS version as version. Network Devices have no OS family in iTop, only an IOSVersion (a brand and a version name), so the brand is the name and the IOSVersion's name the version: Cisco `15.2(7)E`. A fixed "IOS" name would mislabel the other vendors iTop stores as IOSVersions, and the friendly name "Cisco 15.2(7)E" as a name would leave no version to match on.
 - No Operating System when its name is blank.
 - Operating Systems have no Product: iTop's OS family and IOSVersion carry no vendor.
-- **Application**: one per SoftwareInstance, named and versioned after its linked Software, or after the instance itself when it links to none. Its Product is the Software's vendor and name, as free text, when both are non-blank. A blank vendor leaves it an Unidentified Component rather than a half Product, which would skip the whole Asset.
+- **Application**: one per SoftwareInstance, named after the instance and versioned after its linked Software (ADR 0019). Its Product is the Software's vendor and name, as free text, when both are non-blank. A blank vendor leaves it an Unidentified Component rather than a half Product, which would skip the whole Asset.
 
 ## Considered Options
 

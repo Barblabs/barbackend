@@ -27,12 +27,18 @@ type assetList struct {
 		Criticality   *string                         `json:"criticality"`
 		Exposure      *string                         `json:"exposure"`
 		Owner         *struct{ Email, Source string } `json:"owner"`
+		Area          *areaRef                        `json:"area"`
 		Retired       bool                            `json:"retired"`
 		Active        bool                            `json:"active"`
 		InactiveSince *string                         `json:"inactive_since"`
 	} `json:"assets"`
 	NextCursor *string `json:"next_cursor"`
 	Total      int     `json:"total"`
+}
+
+type areaRef struct {
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
 }
 
 func (e env) listAssets(query url.Values) *httptest.ResponseRecorder {
@@ -201,14 +207,17 @@ func TestListAssetsShape(t *testing.T) {
 	e := newEnv(t)
 	owner, _ := inventory.NewOwnerEmail("imported@example.com")
 	physical := imported(t, inventory.ImportedAssetParams{
-		Name: "phys", Kind: inventory.Server, Criticality: inventory.CriticalityHigh, Owner: owner,
+		Name: "phys", Kind: inventory.Server, Criticality: inventory.CriticalityHigh, Owner: owner, Area: "7",
 		Hardware: inventory.Hardware{Vendor: "Dell", Model: "R640"},
 		Software: []inventory.SoftwareComponent{
 			{Role: inventory.OperatingSystem, Name: "Ubuntu", Version: "22.04", Product: inventory.Product{Vendor: "Canonical", Name: "Ubuntu"}},
 			{Role: inventory.Application, Name: "mystery", Version: "1"},
 		},
 	})
-	e.provider.Snapshot = inventory.Snapshot{Records: []inventory.Record{{RecordID: "P", Imported: physical}, record(t, "V", "virt")}}
+	e.provider.Snapshot = inventory.Snapshot{
+		Areas:   []inventory.AreaRecord{areaRecord(t, "7", "IT")},
+		Records: []inventory.Record{{RecordID: "P", Imported: physical}, record(t, "V", "virt")},
+	}
 	e.connect(t, e.customer)
 	if _, err := e.conn.Exec(context.Background(), `
 		WITH owner AS (INSERT INTO asset_owners (customer_id, email) VALUES ($1, 'declared@example.com') RETURNING id)
@@ -228,11 +237,14 @@ func TestListAssetsShape(t *testing.T) {
 	if phys.Owner == nil || *phys.Owner != (struct{ Email, Source string }{"declared@example.com", "declared"}) {
 		t.Errorf("owner = %+v, want the declared one", phys.Owner)
 	}
+	if phys.Area == nil || phys.Area.Name != "IT" || phys.Area.ID != e.areaID(t, "7") {
+		t.Errorf("area = %+v, want IT", phys.Area)
+	}
 	if len(phys.Software) != 2 || phys.Software[0].Role != "operating_system" || phys.Software[0].Product == nil || phys.Software[1].Product != nil {
 		t.Errorf("software = %+v, want an identified OS then an unidentified application", phys.Software)
 	}
-	if virt.Hardware != nil || virt.Owner != nil || virt.Criticality != nil || virt.Exposure != nil || virt.Software == nil || len(virt.Software) != 0 {
-		t.Errorf("virtual = %+v, want null hardware, owner, criticality and exposure and an empty software array", virt)
+	if virt.Hardware != nil || virt.Owner != nil || virt.Area != nil || virt.Criticality != nil || virt.Exposure != nil || virt.Software == nil || len(virt.Software) != 0 {
+		t.Errorf("virtual = %+v, want null hardware, owner, area, criticality and exposure and an empty software array", virt)
 	}
 }
 

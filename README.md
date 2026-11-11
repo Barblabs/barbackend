@@ -82,7 +82,7 @@ Run `./barbackend` with no arguments to print the usage.
 
 ## Agents
 
-The Prioritizer, Luna (Advisor), the Analista (feedback) and the Drafter (Business Context) run on Anthropic's models; `docs/adr/0016-the-prioritizer-orders-findings-from-their-dossiers.md` explains what they read and how they are kept honest, and `docs/adr/0017-the-business-context-is-a-versioned-document-the-customer-states.md` what the Drafter reads. They need credentials, usually `ANTHROPIC_API_KEY`. No Agent that weighs a Finding reads a Feed: the Findings pipeline hands them one Dossier per Finding, in the shape of `docs/examples/findings.json`. Only the Reader reads Feed text, one News Item at a time, and the Editor writes each Customer's News Digest from what rules found relevant (`docs/adr/0025-news-items-are-read-once-and-matched-to-customers-by-rules.md`). Until that pipeline exists, `agent finding` builds one from the live Feeds. What they still lack, starting with each Customer's business context in the Prioritizer's criterion, is in `docs/agents-pending.md`.
+The Prioritizer, Luna (Advisor), the Analista (feedback), the Drafter (Business Context) and the Cartógrafo (ATT&CK Techniques of a Vulnerability, `docs/adr/0024-the-cartografo-labels-vulnerabilities-with-attack-techniques.md`) run on Anthropic's models; `docs/adr/0016-the-prioritizer-orders-findings-from-their-dossiers.md` explains what they read and how they are kept honest, and `docs/adr/0017-the-business-context-is-a-versioned-document-the-customer-states.md` what the Drafter reads. They need credentials, usually `ANTHROPIC_API_KEY`. No Agent that weighs a Finding reads a Feed: the Findings pipeline hands them one Dossier per Finding, in the shape of `docs/examples/findings.json`. Until that pipeline exists, `agent finding` builds one from the live Feeds. Two more Agents are designed but not built (`docs/adr/0025-news-items-are-read-once-and-matched-to-customers-by-rules.md`): the Reader, which reads each News Item once for every Customer, and the Editor, which writes each Customer's News Digest from what rules found relevant. What they still lack, starting with each Customer's business context in the Prioritizer's criterion, is in `docs/agents-pending.md`.
 
 ```sh
 # The Dossier of one Finding, from the live Feeds. Collect several into a JSON list.
@@ -98,7 +98,16 @@ The Prioritizer, Luna (Advisor), the Analista (feedback) and the Drafter (Busine
 # Talk with the Analista. Pass the printed conversation id to continue.
 ./barbackend agent ask --as <email> "¿qué atiendo primero?"
 ./barbackend agent ask --as <email> --conversation <id> "el de lab-01 debería ir antes, ahí corre la nómina"
+
+# Label the stored Vulnerabilities with ATT&CK Techniques now, as serve does daily, within the same cap of 50 a day. Needs DATABASE_URL.
+./barbackend agent label
 ```
+
+## Findings
+
+`serve` turns Feeds and Syncs into Findings, one per Asset, Product and CVE (`docs/adr/0020-findings-are-opened-and-closed-never-deleted.md`). Each NVD pull matches its CVEs against the Software Components of every Active Asset (`docs/adr/0015-vulnerabilities-matched-by-product-and-version.md`); a match stores the CVE and opens, updates or reopens its Finding, scored with Scoring Model 1 (`docs/adr/0009-findings-scored-by-versioned-two-layer-model.md`). KEV and EPSS pulls rescore the open Findings of the CVEs already stored, and ignore every other CVE. After each successful Sync, the CMDB Source's Assets are matched again against the stored CVEs: Findings that no longer match are closed with a reason, and new Assets get theirs. `feed pull` only counts what each Feed returns and stores nothing.
+
+Only Software Components with a Product match, written as NVD's CPE vendor and product tokens in the CMDB (`docs/adr/0019-software-components-take-their-product-from-the-cmdb-in-cpe-terms.md`): in iTop, the Software linked to each SoftwareInstance.
 
 ## CMDB Sources
 

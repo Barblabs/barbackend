@@ -67,6 +67,9 @@ func TestNewImportedAsset(t *testing.T) {
 		{"criticality high", func(p *inventory.ImportedAssetParams) { p.Criticality = inventory.CriticalityHigh }, nil},
 		{"criticality out of range", func(p *inventory.ImportedAssetParams) { p.Criticality = 42 }, inventory.ErrInvalidCriticality},
 		{"negative criticality", func(p *inventory.ImportedAssetParams) { p.Criticality = -1 }, inventory.ErrInvalidCriticality},
+		{"exposure internal", func(p *inventory.ImportedAssetParams) { p.Exposure = inventory.Internal }, nil},
+		{"exposure out of range", func(p *inventory.ImportedAssetParams) { p.Exposure = 42 }, inventory.ErrInvalidExposure},
+		{"negative exposure", func(p *inventory.ImportedAssetParams) { p.Exposure = -1 }, inventory.ErrInvalidExposure},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -86,7 +89,7 @@ func TestImportedAssetGetters(t *testing.T) {
 		Name: "n", Description: "d", Kind: inventory.Server,
 		Hardware:    inventory.Hardware{Vendor: "Dell", Model: "R740"},
 		Software:    []inventory.SoftwareComponent{{Role: inventory.OperatingSystem, Name: "Ubuntu", Version: "22.04"}},
-		Criticality: inventory.CriticalityLow, Owner: owner, Retired: true,
+		Criticality: inventory.CriticalityLow, Exposure: inventory.InternetFacing, Owner: owner, Retired: true,
 	}
 	a := mustImported(t, p)
 	if got := a.Name(); got != "n" {
@@ -106,6 +109,9 @@ func TestImportedAssetGetters(t *testing.T) {
 	}
 	if got := a.Criticality(); got != inventory.CriticalityLow {
 		t.Errorf("Criticality() = %v, want %v", got, inventory.CriticalityLow)
+	}
+	if got := a.Exposure(); got != inventory.InternetFacing {
+		t.Errorf("Exposure() = %v, want %v", got, inventory.InternetFacing)
 	}
 	if got, ok := a.Owner(); !ok || got != owner {
 		t.Errorf("Owner() = %v, %v; want %v, true", got, ok, owner)
@@ -200,6 +206,30 @@ func TestSoftwareComponentIdentified(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := tt.c.Identified(); got != tt.want {
 				t.Errorf("Identified() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNewImportedArea(t *testing.T) {
+	tests := []struct {
+		name string
+		p    inventory.ImportedAreaParams
+		want error
+	}{
+		{"valid", inventory.ImportedAreaParams{Name: "IT Department"}, nil},
+		{"valid inactive", inventory.ImportedAreaParams{Name: "IT Department", Inactive: true}, nil},
+		{"empty name", inventory.ImportedAreaParams{}, inventory.ErrEmptyName},
+		{"whitespace name", inventory.ImportedAreaParams{Name: " \t\n"}, inventory.ErrEmptyName},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a, err := inventory.NewImportedArea(tt.p)
+			if !errors.Is(err, tt.want) {
+				t.Fatalf("err = %v, want %v", err, tt.want)
+			}
+			if err == nil && (a.Name() != tt.p.Name || a.Inactive() != tt.p.Inactive) {
+				t.Errorf("got %q inactive=%v, want %q inactive=%v", a.Name(), a.Inactive(), tt.p.Name, tt.p.Inactive)
 			}
 		})
 	}

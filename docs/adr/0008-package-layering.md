@@ -8,11 +8,15 @@ internal/
   httpapi/             router + handlers           -> use-case packages, inventory, tenancy
   users/               use cases on Users          -> cognito, postgres, tenancy
   assets/              use cases on Assets         -> inventory, postgres, tenancy
+  areas/               use cases on Areas          -> inventory, postgres, tenancy
   cmdb/                use cases on CMDB Sources   -> cmdb/provider, encryption, inventory, postgres
     provider/          CMDB Provider seam          -> inventory
       <provider>/      adapters                    -> cmdb/provider, inventory, own subpackages
   agents/              use case on the Agents      -> assessment, business, claude, inventory, postgres, tenancy
   businesscontext/     use cases on the Business Context -> business, postgres, tenancy
+  findings/            use case turning Feeds and Syncs into Findings -> finding, inventory, matching, postgres, scoring, stixext
+  advisories/          use case linking Advisories to Vulnerabilities -> postgres, stixext
+  techniques/          use case keeping the ATT&CK catalog -> postgres
   ingest/              use case polling Feeds      -> feeds, stixext
   feeds/               Feed seam                   -> stixext
     httpx/             shared HTTP client setup    -> nothing internal
@@ -20,7 +24,9 @@ internal/
   claude/              Anthropic adapter           -> nothing internal
   cognito/             Cognito adapter             -> tenancy
   encryption/          sealing credentials         -> nothing internal
-  postgres/            all persistence             -> assessment, business, inventory, tenancy
+  postgres/            all persistence             -> assessment, business, finding, inventory, matching, scoring, tenancy
+  finding/             pure domain                 -> inventory, matching, scoring, stixext
+  matching/            pure domain                 -> inventory, stixext
   assessment/          pure domain                 -> inventory, scoring, stixext
   business/            pure domain                 -> nothing internal
   scoring/             pure domain                 -> inventory
@@ -36,11 +42,15 @@ Everything about CMDBs lives under `internal/cmdb`, but the use case and the sea
 New features get a home before they get code:
 
 - **Declarations**: the use-case package `internal/assets`, which already lists Assets, with its queries in `postgres`.
+- **Areas**: the use-case package `internal/areas`, which lists a Customer's Areas and states their Area Owners, with its queries in `postgres`. The Sync that imports Areas stays in `internal/cmdb` (ADR 0018).
 - **Slack alerts**: an adapter under `internal/slack`, called from an alerting use-case package.
 - **Customers and Users**: Customer, User and Role are a pure domain package, `internal/tenancy`, which takes `CustomerID` out of `inventory`. It sits below `inventory`, since every CMDB Source belongs to a Customer, so it cannot also hold the use cases: they call `postgres`, which stores Users and so imports `tenancy`. Authenticating and creating Users is the use-case package `internal/users`, which also manages Customers, since creating a Customer creates its first Customer Admin in the same transaction, and Cognito is an adapter, `internal/cognito`, that `users` calls (ADR 0013).
-- **Threat matching**: a new domain package that imports `inventory`, never the reverse.
+- **Threat matching**: the pure domain package `internal/matching`, which imports `inventory` and reads Feed objects through `stixext` (ADR 0010), never the reverse.
+- **Findings**: the pure domain package `internal/finding` holds what identifies a Finding, what a match makes of it and why it is closed, so `postgres` can store it; the use-case package `internal/findings` reacts to Feeds and Syncs by calling `matching`, `scoring` and `postgres` (ADR 0020).
+- **Advisories**: the use-case package `internal/advisories` keeps the Advisories that name a stored Vulnerability and links them by CVE, with its queries in `postgres` (ADR 0022). It is not part of `internal/findings`, which turns Feeds into Findings: an Advisory is about a Vulnerability, not a Finding.
+- **ATT&CK catalog**: the use-case package `internal/techniques` stores the Techniques, Mitigations and their relationships from the ATT&CK Feed and reads a Technique across ATT&CK versions, with its queries in `postgres` (ADR 0023).
 - **Business Context**: the pure domain package `internal/business`, which imports no other layer, and the use-case package `internal/businesscontext`, which reads and saves it. The Drafter is an Agent, so it lives in `internal/agents`, which reads the Business Context through `postgres`, never through `businesscontext` (ADR 0017).
-- **News Items**: Feed adapters like any other, `internal/feeds/rss` for every text Feed and one package per structured Feed, stored by `ingest`, which gains `news` and `postgres`. The pure domain package `internal/news` holds the News Item, the Reported Attack, the rules of Relevance and the Reader's verifier, and imports `business`, `inventory` and `stixext`. The Reader and the Editor are Agents, so they live in `internal/agents` (ADR 0025).
+- **News Items**: Feed adapters like any other, `internal/feeds/rss` for every text Feed and one package per structured Feed. The use-case package `internal/newsitems` stores what they emit through `ingest.Feed.Handle`, as `internal/advisories` does for Advisories, with its queries in `postgres`. The pure domain package `internal/news` holds the News Item, the Reported Attack, the rules of Relevance and the Reader's verifier, and imports `business`, `inventory` and `stixext`. The Reader and the Editor are Agents, so they live in `internal/agents` (ADR 0025).
 
 The direction is enforced by `depguard` rules in `.golangci.yaml`, which deny all of `barbackend/internal` to a layer and allow back only the layers below it, so a new use-case package is forbidden to `inventory`, `cmdb/provider` and `postgres` without touching the config. `internal/httpapi` may import only the domain packages `inventory`, `tenancy` and `business` and the use-case packages it serves, listed by name, so serving a new use case means adding it to that list. It is denied `cmdb/provider` by name, since allowing `cmdb` would otherwise allow everything under it; for the same reason, every layer allowed `business` is denied `businesscontext` by name. Its tests are exempt, because they wire a real router on Postgres as `cmd` does. Only `cmd` and `internal/httpapi` may import gin.
 

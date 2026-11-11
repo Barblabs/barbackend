@@ -27,7 +27,7 @@ import (
 	"github.com/google/uuid"
 )
 
-const agentSynopsis = "finding --asset <file> --component <name> --cve <id> [--id <finding>] | run --findings <file> [--plans] | prioritize --as <email> --findings <file> | plan --as <email> --prioritization <id> --finding <id> | ask --as <email> [--conversation <id>] <message>"
+const agentSynopsis = "finding --asset <file> --component <name> --cve <id> [--id <finding>] | run --findings <file> [--plans] | prioritize --as <email> --findings <file> | plan --as <email> --prioritization <id> --finding <id> | ask --as <email> [--conversation <id>] <message> | label"
 
 const lookupTimeout = 30 * time.Second
 
@@ -50,6 +50,8 @@ func agent(ctx context.Context, args []string) error {
 		return agentPlan(ctx, os.Stdout, args[1:])
 	case "ask":
 		return agentAsk(ctx, os.Stdout, args[1:])
+	case "label":
+		return agentLabel(ctx, os.Stdout, args[1:])
 	default:
 		return errors.New("usage: barbackend agent " + agentSynopsis)
 	}
@@ -268,6 +270,27 @@ func askAnalista(ctx context.Context, svc *agents.Service, caller tenancy.User, 
 		return agents.Answer{}, fmt.Errorf("--conversation: %w", err)
 	}
 	return svc.Continue(ctx, caller, id, message)
+}
+
+// agentLabel runs the Cartógrafo once, as serve does every day, on the stored
+// Vulnerabilities it has not labeled, within the same daily cap (ADR 0024).
+func agentLabel(ctx context.Context, out io.Writer, args []string) error {
+	if len(args) > 0 {
+		return errors.New("usage: barbackend agent label")
+	}
+	return withDB(ctx, func(db *postgres.DB) error {
+		return labelOnce(ctx, out, agents.NewService(db, newCrew()).LabelVulnerabilities)
+	})
+}
+
+// labelOnce runs label and writes how many Vulnerabilities each outcome had,
+// those of a run that stopped too.
+func labelOnce(ctx context.Context, out io.Writer, label func(context.Context) (agents.LabelingRun, error)) error {
+	run, err := label(ctx)
+	if writeErr := writeJSON(out, run); writeErr != nil {
+		return errors.Join(err, writeErr)
+	}
+	return err
 }
 
 func writeJSON(out io.Writer, v any) error {

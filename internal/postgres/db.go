@@ -23,6 +23,9 @@ import (
 var (
 	ErrNotFound   = errors.New("not found")
 	ErrSuperseded = errors.New("superseded by a later successful sync")
+	// ErrLabeled is a Labeling recorded for a Vulnerability whose Labeling is
+	// already final (ADR 0024).
+	ErrLabeled = errors.New("vulnerability is already labeled")
 	// ErrDisconnected is a Sync refused because its CMDB Source was
 	// disconnected: its Assets stay as the disconnect left them.
 	ErrDisconnected = errors.New("cmdb source is disconnected")
@@ -100,9 +103,10 @@ func InTxValue[T any](ctx context.Context, db *DB, fn func(*Tx) (T, error)) (T, 
 }
 
 // CommitSync is the transactional end of a Sync. It locks the CMDB Source,
-// passes its stored Assets to reconcile, saves the Reconciliation and records
-// its succeeded Sync Run, all in one transaction. reconcile runs while the
-// lock is held, so it must do no I/O; its error rolls everything back.
+// passes its stored Assets and Areas to reconcile, saves the Reconciliation
+// and records its succeeded Sync Run, all in one transaction. reconcile runs
+// while the lock is held, so it must do no I/O; its error rolls everything
+// back.
 //
 // While another Sync holds the lock, CommitSync fails at once with
 // ErrSyncInProgress. A Sync of a Disconnected CMDB Source fails with
@@ -114,7 +118,7 @@ func InTxValue[T any](ctx context.Context, db *DB, fn func(*Tx) (T, error)) (T, 
 // fails with ErrSuperseded instead of overwriting newer imported values. That
 // check reads succeeded Sync Runs, which is why only CommitSync records them,
 // together with their changes.
-func (db *DB) CommitSync(ctx context.Context, id inventory.CMDBSourceID, started time.Time, reconcile func(existing []*inventory.Asset) (inventory.Reconciliation, error)) (inventory.SyncRun, error) {
+func (db *DB) CommitSync(ctx context.Context, id inventory.CMDBSourceID, started time.Time, reconcile func(existing inventory.Stored) (inventory.Reconciliation, error)) (inventory.SyncRun, error) {
 	var run inventory.SyncRun
 	err := pgx.BeginFunc(ctx, db.pool, func(tx pgx.Tx) error {
 		q := sqlcgen.New(tx)
@@ -122,7 +126,7 @@ func (db *DB) CommitSync(ctx context.Context, id inventory.CMDBSourceID, started
 			return err
 		}
 		st := &sourceTx{q: q, source: id}
-		existing, err := st.assets(ctx)
+		existing, err := st.stored(ctx)
 		if err != nil {
 			return err
 		}

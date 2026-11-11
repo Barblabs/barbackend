@@ -2,6 +2,7 @@ package itop
 
 import (
 	"fmt"
+	"strings"
 
 	"barbackend/internal/inventory"
 )
@@ -19,12 +20,26 @@ var criticalities = map[string]inventory.Criticality{
 	"low":    inventory.CriticalityLow,
 }
 
-const retiredStatus = "obsolete"
+// exposures maps the Locations a Customer keeps in iTop to record Exposure
+// (ADR 0021). Any other Location is Unknown.
+var exposures = map[string]inventory.Exposure{
+	"exposed":     inventory.InternetFacing,
+	"not exposed": inventory.Internal,
+}
 
-func snapshot(cis []ci, lk lookups) inventory.Snapshot {
-	var s inventory.Snapshot
+const (
+	retiredStatus      = "obsolete"
+	inactiveAreaStatus = "inactive"
+)
+
+func snapshot(cis []ci, orgs []organization, lk lookups) inventory.Snapshot {
+	s := inventory.Snapshot{Areas: readableAreas(orgs)}
+	readable := make(map[string]bool, len(s.Areas))
+	for _, a := range s.Areas {
+		readable[a.RecordID] = true
+	}
 	for _, c := range cis {
-		imported, err := importedAsset(c, lk)
+		imported, err := importedAsset(c, readable, lk)
 		if err != nil {
 			s.Skipped = append(s.Skipped, inventory.SkippedRecord{RecordID: c.Key, Reason: err.Error()})
 			continue
@@ -34,7 +49,25 @@ func snapshot(cis []ci, lk lookups) inventory.Snapshot {
 	return s
 }
 
-func importedAsset(c ci, lk lookups) (inventory.ImportedAsset, error) {
+func readableAreas(orgs []organization) []inventory.AreaRecord {
+	var areas []inventory.AreaRecord
+	for _, org := range orgs {
+		imported, err := inventory.NewImportedArea(inventory.ImportedAreaParams{
+			Name:     org.Name,
+			Inactive: org.Status == inactiveAreaStatus,
+		})
+		if err != nil {
+			continue
+		}
+		areas = append(areas, inventory.AreaRecord{RecordID: org.Key, Imported: imported})
+	}
+	return areas
+}
+
+func importedAsset(c ci, readableAreas map[string]bool, lk lookups) (inventory.ImportedAsset, error) {
+	if !readableAreas[c.OrgID] {
+		return inventory.ImportedAsset{}, fmt.Errorf("organization %s is not readable", c.OrgID)
+	}
 	kind, ok := kinds[c.Class]
 	if !ok {
 		return inventory.ImportedAsset{}, fmt.Errorf("class %s is not imported", c.Class)
@@ -55,7 +88,9 @@ func importedAsset(c ci, lk lookups) (inventory.ImportedAsset, error) {
 		Hardware:    hardware(c, kind),
 		Software:    components,
 		Criticality: crit,
+		Exposure:    exposures[strings.ToLower(strings.TrimSpace(c.Location))],
 		Owner:       owner(c, lk),
+		Area:        c.OrgID,
 		Retired:     c.Status == retiredStatus,
 	})
 }

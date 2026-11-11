@@ -16,9 +16,9 @@ func TestApplications(t *testing.T) {
 	app := func(name, version string) inventory.SoftwareComponent {
 		return inventory.SoftwareComponent{Role: inventory.Application, Name: name, Version: version}
 	}
-	identified := func(vendor, name, version string) inventory.SoftwareComponent {
+	identified := func(name, vendor, product, version string) inventory.SoftwareComponent {
 		c := app(name, version)
-		c.Product = inventory.Product{Vendor: vendor, Name: name}
+		c.Product = inventory.Product{Vendor: vendor, Name: product}
 		return c
 	}
 	tests := []struct {
@@ -28,14 +28,14 @@ func TestApplications(t *testing.T) {
 	}{
 		{"none", nil, nil},
 		{
-			"named and identified after the linked Software, not the instance",
-			[]instance{{Class: "DBServer", Name: "MySQL", SoftwareID: "2"}},
-			[]inventory.SoftwareComponent{identified("Oracle", "Oracle DB engine", "19c")},
+			"named after the instance, identified and versioned after the linked Software",
+			[]instance{{Class: "DBServer", Name: "Billing database", SoftwareID: "2"}},
+			[]inventory.SoftwareComponent{identified("Billing database", "Oracle", "Oracle DB engine", "19c")},
 		},
 		{
 			"Software with a blank vendor stays unidentified",
 			[]instance{{Class: "OtherSoftware", Name: "Portal", SoftwareID: "7"}},
-			[]inventory.SoftwareComponent{app("Internal portal", "3.1")},
+			[]inventory.SoftwareComponent{app("Portal", "3.1")},
 		},
 		{
 			"no linked Software keeps the instance name and stays unidentified",
@@ -55,8 +55,8 @@ func TestApplications(t *testing.T) {
 				{Class: "WebServer", Name: "IIS", SoftwareID: blankKey},
 			},
 			[]inventory.SoftwareComponent{
-				identified("Oracle", "Oracle DB engine", "19c"),
-				identified("OpenBSD", "OpenSSH", "9.6p1"),
+				identified("MySQL", "Oracle", "Oracle DB engine", "19c"),
+				identified("OpenSSH", "OpenBSD", "OpenSSH", "9.6p1"),
 				app("IIS", ""),
 			},
 		},

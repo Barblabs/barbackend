@@ -61,9 +61,10 @@ func (t *Tx) UpdateConnectedLogin(ctx context.Context, id inventory.CMDBSourceID
 }
 
 // DisconnectCMDBSource makes the Customer's Connected CMDB Source a
-// Disconnected one and its Assets Inactive, deleting nothing. It locks the
-// source as CommitSync does, so it fails at once with ErrSyncInProgress
-// while a Sync commits, and with inventory.ErrNotConnected when nothing is connected.
+// Disconnected one and its Assets and Areas Inactive, deleting nothing. It
+// locks the source as CommitSync does, so it fails at once with
+// ErrSyncInProgress while a Sync commits, and with inventory.ErrNotConnected
+// when nothing is connected.
 func (t *Tx) DisconnectCMDBSource(ctx context.Context, customer tenancy.CustomerID) error {
 	id, err := t.q.LockConnectedCMDBSource(ctx, uuid.UUID(customer))
 	if err != nil {
@@ -74,6 +75,9 @@ func (t *Tx) DisconnectCMDBSource(ctx context.Context, customer tenancy.Customer
 	}
 	if err := t.q.DeactivateSourceAssets(ctx, id); err != nil {
 		return fmt.Errorf("deactivate assets of %s: %w", id, err)
+	}
+	if err := t.q.DeactivateSourceAreas(ctx, id); err != nil {
+		return fmt.Errorf("deactivate areas of %s: %w", id, err)
 	}
 	return nil
 }

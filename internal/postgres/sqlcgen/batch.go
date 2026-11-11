@@ -17,6 +17,63 @@ var (
 	ErrBatchAlreadyClosed = errors.New("batch already closed")
 )
 
+const renameAreas = `-- name: RenameAreas :batchone
+UPDATE customer_areas
+SET name = $1,
+    imported_changed_at = now()
+WHERE cmdb_source_id = $2 AND record_id = $3
+RETURNING record_id
+`
+
+type RenameAreasBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type RenameAreasParams struct {
+	Name         string
+	CmdbSourceID uuid.UUID
+	RecordID     string
+}
+
+func (q *Queries) RenameAreas(ctx context.Context, arg []RenameAreasParams) *RenameAreasBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.Name,
+			a.CmdbSourceID,
+			a.RecordID,
+		}
+		batch.Queue(renameAreas, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &RenameAreasBatchResults{br, len(arg), false}
+}
+
+func (b *RenameAreasBatchResults) QueryRow(f func(int, string, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		var record_id string
+		if b.closed {
+			if f != nil {
+				f(t, record_id, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		row := b.br.QueryRow()
+		err := row.Scan(&record_id)
+		if f != nil {
+			f(t, record_id, err)
+		}
+	}
+}
+
+func (b *RenameAreasBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
 const updateAssetImported = `-- name: UpdateAssetImported :batchone
 UPDATE assets
 SET name = $1,
@@ -25,10 +82,12 @@ SET name = $1,
     hardware_vendor = $4,
     hardware_model = $5,
     criticality_id = $6,
-    imported_owner_id = $7,
-    retired = $8,
+    imported_exposure_id = $7,
+    imported_owner_id = $8,
+    area_record_id = $9,
+    retired = $10,
     imported_changed_at = now()
-WHERE cmdb_source_id = $9 AND record_id = $10
+WHERE cmdb_source_id = $11 AND record_id = $12
 RETURNING record_id
 `
 
@@ -39,16 +98,18 @@ type UpdateAssetImportedBatchResults struct {
 }
 
 type UpdateAssetImportedParams struct {
-	Name            string
-	Description     string
-	KindID          int16
-	HardwareVendor  *string
-	HardwareModel   *string
-	CriticalityID   *int16
-	ImportedOwnerID *int64
-	Retired         bool
-	CmdbSourceID    uuid.UUID
-	RecordID        string
+	Name               string
+	Description        string
+	KindID             int16
+	HardwareVendor     *string
+	HardwareModel      *string
+	CriticalityID      *int16
+	ImportedExposureID *int16
+	ImportedOwnerID    *int64
+	AreaRecordID       *string
+	Retired            bool
+	CmdbSourceID       uuid.UUID
+	RecordID           string
 }
 
 func (q *Queries) UpdateAssetImported(ctx context.Context, arg []UpdateAssetImportedParams) *UpdateAssetImportedBatchResults {
@@ -61,7 +122,9 @@ func (q *Queries) UpdateAssetImported(ctx context.Context, arg []UpdateAssetImpo
 			a.HardwareVendor,
 			a.HardwareModel,
 			a.CriticalityID,
+			a.ImportedExposureID,
 			a.ImportedOwnerID,
+			a.AreaRecordID,
 			a.Retired,
 			a.CmdbSourceID,
 			a.RecordID,

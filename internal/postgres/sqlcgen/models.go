@@ -19,6 +19,15 @@ type ActionPlan struct {
 	CreatedAt        time.Time
 }
 
+type Advisory struct {
+	ID          string
+	Feed        string
+	PublishedAt time.Time
+	Object      []byte
+	ModifiedAt  time.Time
+	StoredAt    time.Time
+}
+
 type AnalistaConversation struct {
 	ID             uuid.UUID
 	CustomerID     uuid.UUID
@@ -46,6 +55,8 @@ type Asset struct {
 	CreatedAt          time.Time
 	ImportedChangedAt  time.Time
 	InactiveSince      *time.Time
+	AreaRecordID       *string
+	ImportedExposureID *int16
 }
 
 type AssetKind struct {
@@ -57,6 +68,37 @@ type AssetOwner struct {
 	ID         int64
 	CustomerID uuid.UUID
 	Email      string
+}
+
+type AttackMitigation struct {
+	ID         string
+	AttackID   string
+	Name       string
+	Object     []byte
+	ModifiedAt time.Time
+	StoredAt   time.Time
+}
+
+type AttackRelationship struct {
+	ID          string
+	Type        string
+	SourceID    string
+	TargetID    string
+	Description string
+	ModifiedAt  time.Time
+	StoredAt    time.Time
+}
+
+type AttackTechnique struct {
+	ID         string
+	AttackID   string
+	Name       string
+	Tactics    []string
+	Revoked    bool
+	Deprecated bool
+	Object     []byte
+	ModifiedAt time.Time
+	StoredAt   time.Time
 }
 
 type BusinessContext struct {
@@ -90,12 +132,73 @@ type Customer struct {
 	DeactivatedAt *time.Time
 }
 
+type CustomerArea struct {
+	ID                int64
+	CmdbSourceID      uuid.UUID
+	RecordID          string
+	Name              string
+	OwnerEmail        *string
+	CreatedAt         time.Time
+	ImportedChangedAt time.Time
+	InactiveSince     *time.Time
+}
+
 type Exposure struct {
 	ID   int16
 	Name string
 }
 
 type FeedbackVerdict struct {
+	ID   int16
+	Name string
+}
+
+type Finding struct {
+	ID               uuid.UUID
+	CmdbSourceID     uuid.UUID
+	RecordID         string
+	ProductVendor    string
+	ProductName      string
+	CveID            string
+	ComponentName    string
+	ComponentVersion string
+	Evidence         []byte
+	FirstOpenedAt    time.Time
+	OpenedAt         time.Time
+	ClosedAt         *time.Time
+	CloseReasonID    *int16
+}
+
+type FindingCloseReason struct {
+	ID   int16
+	Name string
+}
+
+type FindingMatchFlag struct {
+	FindingID uuid.UUID
+	FlagID    int16
+}
+
+type FindingScore struct {
+	FindingID             uuid.UUID
+	ScoredAt              time.Time
+	Model                 int16
+	Value                 float64
+	Alpha                 float64
+	Beta                  float64
+	Gamma                 float64
+	Vulnerability         float64
+	CriticalityMultiplier float64
+	ExposureMultiplier    float64
+}
+
+type FindingScoreDataGap struct {
+	FindingID uuid.UUID
+	ScoredAt  time.Time
+	GapID     int16
+}
+
+type MatchFlag struct {
 	ID   int16
 	Name string
 }
@@ -118,6 +221,11 @@ type PrioritizationFeedback struct {
 	Note             string
 	ViaAnalista      bool
 	CreatedAt        time.Time
+}
+
+type ScoreDataGap struct {
+	ID   int16
+	Name string
 }
 
 type SoftwareComponent struct {
@@ -169,4 +277,34 @@ type User struct {
 type UserRole struct {
 	ID   int16
 	Name string
+}
+
+type Vulnerability struct {
+	CveID      string
+	Object     []byte
+	ModifiedAt time.Time
+	StoredAt   time.Time
+}
+
+type VulnerabilityAdvisory struct {
+	CveID      string
+	AdvisoryID string
+	LinkedAt   time.Time
+}
+
+type VulnerabilityLabeling struct {
+	CveID      string
+	Outcome    string
+	Attempts   int32
+	Model      string
+	PromptHash string
+	LabeledAt  time.Time
+}
+
+type VulnerabilityTechnique struct {
+	CveID     string
+	AttackID  string
+	Role      string
+	Evidence  string
+	Rationale string
 }
