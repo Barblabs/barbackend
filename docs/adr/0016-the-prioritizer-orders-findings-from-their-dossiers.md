@@ -2,7 +2,7 @@
 status: proposed
 ---
 
-# The Prioritizer orders Findings from their Dossiers, and no Agent reads a Feed
+# The Prioritizer orders Findings from their Dossiers, and no Agent that weighs a Finding reads a Feed
 
 barbattack has three Agents: the **Prioritizer**, **Luna** (the Advisor) and the **Analista** (the feedback agent). The Prioritizer takes a Customer's open Findings and puts them in **Priority Groups**, in the order to attend them: Findings in one group are attended at the same time, such as those one update fixes together. It starts from each Score (ADR 0009) and weighs it with what the Score leaves out or cannot say: whether the Vulnerability is exploited now, by ransomware too, what kind of Asset it is and what the affected component does, and how sure the Score is. Every Finding goes in exactly one group, however low its Score: being last is still being attended. No Agent outputs a number, changes a Score or closes a Finding. The Score stays the deterministic rank of record, and each Finding of a Prioritization shows where its Score alone would put it, so a reader sees which ones the Prioritizer moved and reads why.
 
@@ -10,9 +10,11 @@ An Agent's name is its role, not its model. The Prioritizer and Luna run on `cla
 
 ## What an Agent reads
 
-**No Agent reads a Feed.** The Findings pipeline, which matches Vulnerabilities to Software Components, already holds what each Feed said and the Score it computed. It hands the Agents one **Dossier** per Finding: the Finding's id, its Asset without the Asset Owner, the affected Software Component, the Vulnerability as KEV, EPSS and NVD describe it, and the Score. An Agent that read the Feeds itself could explain a Score other than the one the Customer sees, and would make a Feed outage the Agent's. `Dossier.Validate` rejects a Dossier built wrong before any model is paid.
+**No Agent that weighs a Finding reads a Feed.** The Findings pipeline, which matches Vulnerabilities to Software Components, already holds what each Feed said and the Score it computed. It hands the Agents one **Dossier** per Finding: the Finding's id, its Asset without the Asset Owner, the affected Software Component, the Vulnerability as KEV, EPSS and NVD describe it, and the Score. An Agent that read the Feeds itself could explain a Score other than the one the Customer sees, and would make a Feed outage the Agent's. `Dossier.Validate` rejects a Dossier built wrong before any model is paid.
 
 **The Score in a Dossier is the stored one.** It is the latest row of `finding_scores` for that Finding, with its Data Gaps (ADR 0009, ADR 0020), and its `finding` is the Finding's `findings.id`. No Agent, and nothing that builds a Dossier, computes a Score. `assessment.NewDossier` still computes one from Feed records with Scoring Model 1, as a stand-in from before Findings were stored: it serves `agent finding` only, and goes away when the pipeline hands the Agents its Findings (`docs/agents-pending.md` §2).
+
+**The Cartógrafo and the Reader read what Feeds wrote, and weigh no Finding.** The Cartógrafo labels a stored Vulnerability with Techniques (ADR 0024). The Reader reads a stored News Item, the one text no Feed structures, once for every Customer, and states what it reports with quotes its verifier finds in the text (ADR 0025). Neither reason above applies to them: they explain no Score, and a Feed outage only delays what they read. What they state reaches the Prioritizer and Luna only through the Dossier, which gains the newest News Items that name its Vulnerability (ADR 0025).
 
 The Prioritizer reads every Finding in one request, because ordering means weighing them against each other, so a Prioritization holds at most 100. It reads a Brief of each, without the affected versions and references only an Action Plan needs. Luna writes the Action Plan of one Finding when someone asks for it, reading its whole Dossier: a plan for every Finding of every Prioritization would cost a request each, most of them never read.
 
@@ -55,5 +57,5 @@ internal/
 
 - **The Score alone as the order, and an Agent that only explains it**: rejected. It cannot group the Findings one update fixes, nor weigh what the Score leaves out, and the team asked for a prioritized list of what to attend first, next and at the same time.
 - **TypeSafe AI's Jev for the Prioritizer, as first drawn**: rejected for now. It returns choices and probabilities, not reasons, and no public evaluation covers vulnerabilities.
-- **Agents that read the Feeds by CVE**: rejected, for the reasons above; the first version did, before the pipeline was drawn.
+- **Agents that read the Feeds by CVE**: rejected, for the reasons above; the first version did, before the pipeline was drawn. The Reader reads News Items, not Vulnerabilities by CVE, and explains no Finding (ADR 0025).
 - **A tool-using agent for the Prioritizer and Luna**: rejected. It would not be repeatable, and a tool reachable while reading Feed text is what an injected instruction would aim for.

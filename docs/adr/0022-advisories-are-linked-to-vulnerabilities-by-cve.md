@@ -38,7 +38,7 @@ A `HandleAWS` handler plugs into `ingest.Feed.Handle`, as `HandleNVD`, `HandleKE
 ## Out of scope
 
 - **Threats that reach an Asset without a CVE**, such as indicators of compromise matched to an Asset's address, or advisories that name a Product but no CVE: no Feed gives them today. The AWS adapter already drops bulletins without a CVE.
-- **News about attacks on a Customer's industry**: a separate Feed, built by the Agents' owner, that weighs news against the Customer's Business Context.
+- **News about attacks on a Customer's industry**: a separate Feed, built by the Agents' owner, that weighs news against the Customer's Business Context (ADR 0025).
 - **Alerts**: whether a new Advisory on an open Finding notifies anyone, for example on Slack, is not decided here.
 
 ## Considered Options
