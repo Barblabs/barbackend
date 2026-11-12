@@ -72,6 +72,8 @@ var customerAdminOperations = []struct{ method, path string }{
 	{http.MethodPatch, "/users/" + uuid.Nil.String()},
 	{http.MethodPost, "/users/" + uuid.Nil.String() + "/disable"},
 	{http.MethodPut, "/areas/0/owner"},
+	{http.MethodPut, "/assets/0/exposure"},
+	{http.MethodDelete, "/assets/0/exposure"},
 }
 
 // businessContextEdits are those only a Customer Admin may call on the

@@ -24,6 +24,22 @@ func (h assetHandler) register(api huma.API) {
 		Description: "Pages through Assets in a stable order. Pass next_cursor as cursor, with the same filters, to get the next page.",
 		Errors:      []int{http.StatusBadRequest},
 	}, h.list)
+	register(api, huma.Operation{
+		OperationID: "declare-asset-exposure",
+		Method:      http.MethodPut,
+		Path:        "/assets/{id}/exposure",
+		Summary:     "Declare an Asset's Exposure",
+		Description: "Only a Customer Admin declares it, over the imported Exposure, and only on an Active Asset. Unknown cannot be declared: clear the Declaration instead. The Asset's open Findings are rescored before the response; if that fails, the request fails but the Declaration stands. A Sync never changes it.",
+		Errors:      []int{http.StatusBadRequest, http.StatusNotFound, http.StatusConflict},
+	}, h.declareExposure)
+	register(api, huma.Operation{
+		OperationID: "clear-asset-exposure",
+		Method:      http.MethodDelete,
+		Path:        "/assets/{id}/exposure",
+		Summary:     "Clear an Asset's declared Exposure",
+		Description: "Only a Customer Admin clears it. The Asset's Exposure falls back to the imported one, and its open Findings are rescored before the response.",
+		Errors:      []int{http.StatusNotFound},
+	}, h.clearExposure)
 }
 
 type assetQuery struct {
@@ -90,6 +106,7 @@ type assetListResponse struct {
 }
 
 type assetResponse struct {
+	ID            int64              `json:"id" doc:"The Asset's handle in this API, as in PUT /assets/{id}/exposure"`
 	SourceID      string             `json:"source_id"`
 	RecordID      string             `json:"record_id"`
 	Name          string             `json:"name"`
@@ -98,7 +115,7 @@ type assetResponse struct {
 	Hardware      *hardwareResponse  `json:"hardware"`
 	Software      []softwareResponse `json:"software"`
 	Criticality   *string            `json:"criticality"`
-	Exposure      *string            `json:"exposure"`
+	Exposure      exposureResponse   `json:"exposure"`
 	Owner         *ownerResponse     `json:"owner"`
 	Area          *areaRefResponse   `json:"area"`
 	Retired       bool               `json:"retired"`
@@ -121,6 +138,34 @@ type softwareResponse struct {
 type productResponse struct {
 	Vendor string `json:"vendor"`
 	Name   string `json:"name"`
+}
+
+type exposureResponse struct {
+	Value      *string    `json:"value" doc:"The effective Exposure, internet_facing or internal: the declared one, otherwise the imported one; null when Unknown"`
+	Source     string     `json:"source" enum:"imported,declared" doc:"Whether value is the imported Exposure or a Declaration"`
+	Imported   *string    `json:"imported" doc:"The Exposure the CMDB Source gives, internet_facing or internal, also beneath a Declaration; null when Unknown"`
+	DeclaredBy *string    `json:"declared_by" doc:"Email of the User who declared it; null without a Declaration"`
+	DeclaredAt *time.Time `json:"declared_at" doc:"When it was declared; null without a Declaration"`
+}
+
+type exposureCode string
+
+func (exposureCode) Schema(huma.Registry) *huma.Schema {
+	return &huma.Schema{Type: huma.TypeString, Enum: codes(inventory.InternetFacing, inventory.Internal)}
+}
+
+type declareExposureRequest struct {
+	_        struct{}     `additionalProperties:"true"`
+	Exposure exposureCode `json:"exposure" doc:"Unknown cannot be declared; clear the Declaration instead"`
+}
+
+type declareExposureInput struct {
+	ID   int64 `path:"id"`
+	Body declareExposureRequest
+}
+
+type assetIDInput struct {
+	ID int64 `path:"id"`
 }
 
 type ownerResponse struct {
@@ -160,6 +205,7 @@ func newAssetResponse(stored assets.StoredAsset) assetResponse {
 	a, imported := stored.Asset, stored.Asset.Imported()
 	software := imported.Software()
 	resp := assetResponse{
+		ID:            stored.ID,
 		SourceID:      a.Ref().Source.String(),
 		RecordID:      a.Ref().RecordID,
 		Name:          imported.Name(),
@@ -167,7 +213,7 @@ func newAssetResponse(stored assets.StoredAsset) assetResponse {
 		Kind:          imported.Kind().Code(),
 		Software:      make([]softwareResponse, len(software)),
 		Criticality:   code(imported.Criticality().Code()),
-		Exposure:      code(a.Exposure().Code()),
+		Exposure:      newExposureResponse(stored),
 		Retired:       imported.Retired(),
 		Active:        a.Active(),
 		InactiveSince: stored.InactiveSince,
@@ -191,6 +237,39 @@ func newAssetResponse(stored assets.StoredAsset) assetResponse {
 		}
 	}
 	return resp
+}
+
+func newExposureResponse(stored assets.StoredAsset) exposureResponse {
+	a := stored.Asset
+	resp := exposureResponse{
+		Value:    code(a.Exposure().Code()),
+		Source:   "imported",
+		Imported: code(a.Imported().Exposure().Code()),
+	}
+	if d := stored.ExposureDeclaration; d != nil {
+		resp.Source, resp.DeclaredBy, resp.DeclaredAt = "declared", &d.By, &d.At
+	}
+	return resp
+}
+
+func (h assetHandler) declareExposure(ctx context.Context, caller tenancy.User, in *declareExposureInput) (*body[assetResponse], error) {
+	e, err := inventory.ParseExposure(string(in.Body.Exposure))
+	if err != nil {
+		return nil, err
+	}
+	stored, err := h.assets.DeclareExposure(ctx, caller, in.ID, e)
+	if err != nil {
+		return nil, err
+	}
+	return &body[assetResponse]{Body: newAssetResponse(stored)}, nil
+}
+
+func (h assetHandler) clearExposure(ctx context.Context, caller tenancy.User, in *assetIDInput) (*body[assetResponse], error) {
+	stored, err := h.assets.ClearExposure(ctx, caller, in.ID)
+	if err != nil {
+		return nil, err
+	}
+	return &body[assetResponse]{Body: newAssetResponse(stored)}, nil
 }
 
 func ptr[T any](v T) *T { return &v }

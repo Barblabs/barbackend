@@ -43,6 +43,8 @@ const (
 	emailTaken          = "email_taken"
 	userNotFound        = "user_not_found"
 	areaNotFound        = "area_not_found"
+	assetNotFound       = "asset_not_found"
+	assetInactive       = "asset_inactive"
 	lastCustomerAdmin   = "last_customer_admin"
 	internalError       = "internal_error"
 
@@ -104,6 +106,12 @@ func apiError(err error) *codedError {
 		return &codedError{status: http.StatusConflict, Code: businessContextStale, Message: business.ErrStale.Error()}
 	case errors.Is(err, areas.ErrAreaNotFound):
 		return &codedError{status: http.StatusNotFound, Code: areaNotFound, Message: "area not found"}
+	case errors.Is(err, assets.ErrAssetNotFound):
+		return &codedError{status: http.StatusNotFound, Code: assetNotFound, Message: "asset not found"}
+	case errors.Is(err, inventory.ErrAssetInactive):
+		return &codedError{status: http.StatusConflict, Code: assetInactive, Message: "an inactive asset cannot be declared"}
+	case errors.Is(err, inventory.ErrInvalidExposure):
+		return &codedError{status: http.StatusBadRequest, Code: invalidRequest, Message: err.Error()}
 	case errors.Is(err, assets.ErrInvalidQuery):
 		return &codedError{status: http.StatusBadRequest, Code: invalidRequest, Message: err.Error()}
 	case errors.Is(err, inventory.ErrNotConnected):
