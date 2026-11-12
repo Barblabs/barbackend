@@ -84,9 +84,15 @@ func (a *Asset) DeclareOwner(o OwnerEmail) error {
 
 func (a *Asset) ClearOwnerDeclaration() { a.declaredOwner = OwnerEmail{} }
 
+// DeclareExposure states the Asset's Exposure over the imported one. Unknown
+// is no statement, and an Inactive Asset is not monitored, so neither can be
+// declared; a Declaration made while Active survives deactivation (ADR 0021).
 func (a *Asset) DeclareExposure(e Exposure) error {
 	if !e.valid() || e == ExposureUnknown {
 		return fmt.Errorf("%w: %d", ErrInvalidExposure, int(e))
+	}
+	if !a.active {
+		return fmt.Errorf("%w: %v", ErrAssetInactive, a.ref)
 	}
 	a.declaredExposure = e
 	return nil

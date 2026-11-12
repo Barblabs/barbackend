@@ -17,6 +17,9 @@ var (
 	ErrInvalidExposure          = errors.New("invalid exposure")
 	ErrEmptyOwnerEmail          = errors.New("owner email is empty")
 	ErrZeroImportedAsset        = errors.New("imported asset is the zero value")
+	// ErrAssetInactive is a Declaration asked of an Asset barbattack no longer
+	// monitors.
+	ErrAssetInactive = errors.New("asset is inactive")
 )
 
 type SourceReference struct {
