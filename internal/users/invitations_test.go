@@ -106,3 +106,38 @@ func TestADisabledPendingUserIsNotInvited(t *testing.T) {
 		t.Errorf("invited %d, want only the Customer Admin", len(admin.created))
 	}
 }
+
+func TestAFailingInvitationWaitsTwiceAsLongEachTimeUpToAnHour(t *testing.T) {
+	t.Parallel()
+	admin := &fakeAdmin{err: errors.New("cognito unreachable")}
+	svc, db := newService(t, admin)
+	u, err := tenancy.NewUser(tenancy.UserID(uuid.New()), "admin@example.com", tenancy.PlatformAdmin, tenancy.CustomerID{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 11, 11, 12, 0, 0, 0, time.UTC)
+	if err := db.InTx(context.Background(), func(tx *postgres.Tx) error {
+		_, _, err := tx.CreatePendingUser(context.Background(), u, now)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.SendDueInvitations(context.Background(), now); err == nil {
+		t.Fatal("first attempt succeeded, want Cognito's failure")
+	}
+
+	// The invite's own attempt is the first, so the worker's first failure is
+	// the second.
+	for _, delay := range []time.Duration{time.Minute, 2 * time.Minute, 4 * time.Minute, 8 * time.Minute, 16 * time.Minute, 32 * time.Minute, time.Hour, time.Hour} {
+		calls := admin.calls
+		_ = svc.SendDueInvitations(context.Background(), now.Add(delay-time.Second))
+		if admin.calls != calls {
+			t.Fatalf("retried %s after the last failure, want %s", delay-time.Second, delay)
+		}
+		now = now.Add(delay)
+		_ = svc.SendDueInvitations(context.Background(), now)
+		if admin.calls != calls+1 {
+			t.Fatalf("not retried %s after the last failure", delay)
+		}
+	}
+}

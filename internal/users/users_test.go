@@ -18,10 +18,12 @@ type fakeAdmin struct {
 	err error
 	// beforeCreate runs at the start of each CreateUser.
 	beforeCreate func(email string)
+	calls        int
 	created      []string
 }
 
 func (a *fakeAdmin) CreateUser(_ context.Context, email string) (string, error) {
+	a.calls++
 	if a.beforeCreate != nil {
 		a.beforeCreate(email)
 	}
