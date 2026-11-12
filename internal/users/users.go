@@ -134,10 +134,6 @@ func (s *Service) invite(ctx context.Context, u tenancy.User, before func(*postg
 		stored, err = tx.CreateUser(ctx, u, sub)
 		return err
 	})
-	// Cognito and Postgres disagree when a Cognito user is deleted by hand.
-	if errors.Is(err, cognito.ErrUsernameExists) {
-		err = fmt.Errorf("%w: %w", tenancy.ErrEmailTaken, err)
-	}
 	if err != nil && sub != "" {
 		if delErr := s.admin.DeleteUser(context.WithoutCancel(ctx), sub); delErr != nil {
 			err = errors.Join(err, delErr)
