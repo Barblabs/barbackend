@@ -33,7 +33,6 @@ func (s *Service) DeclareExposure(ctx context.Context, caller tenancy.User, id i
 // the Declaration stays cleared. It fails with ErrAssetNotFound.
 func (s *Service) ClearExposure(ctx context.Context, caller tenancy.User, id int64) (StoredAsset, error) {
 	return s.declare(ctx, caller, id, func(tx *postgres.Tx, a *inventory.Asset) error {
-		a.ClearExposureDeclaration()
 		return tx.ClearExposureDeclaration(ctx, a.Ref())
 	})
 }
