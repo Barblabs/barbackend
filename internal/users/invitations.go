@@ -64,8 +64,9 @@ func (s *Service) send(ctx context.Context, invitation postgres.Invitation, now 
 	sub, err := s.admin.CreateUser(callCtx, invitation.Email)
 	if err != nil {
 		err = fmt.Errorf("invite user %s, attempt %d: %w", invitation.User, invitation.Attempt, err)
-		retryErr := s.db.InTx(ctx, func(tx *postgres.Tx) error {
-			return tx.RetryInvitation(ctx, invitation.User, now.Add(retryDelay(invitation.Attempt)), err)
+		recordCtx := context.WithoutCancel(ctx)
+		retryErr := s.db.InTx(recordCtx, func(tx *postgres.Tx) error {
+			return tx.RetryInvitation(recordCtx, invitation.User, now.Add(retryDelay(invitation.Attempt)), err)
 		})
 		return "", errors.Join(err, retryErr)
 	}
