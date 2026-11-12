@@ -26,9 +26,10 @@ import (
 )
 
 const (
-	readHeaderTimeout = 10 * time.Second
-	shutdownTimeout   = 10 * time.Second
-	syncTimeout       = 5 * time.Minute
+	readHeaderTimeout  = 10 * time.Second
+	shutdownTimeout    = 10 * time.Second
+	syncTimeout        = 5 * time.Minute
+	invitationInterval = 10 * time.Second
 )
 
 func serve(ctx context.Context, _ []string) error {
@@ -56,14 +57,16 @@ func serve(ctx context.Context, _ []string) error {
 			return err
 		}
 		agentService := agents.NewService(db, newCrew())
-		// The Feeds and the Cartógrafo run in the background, and both stop
-		// before the database closes.
+		userService := users.New(db, verifier, admin)
+		// The Feeds, the Cartógrafo and the Invitations run in the background,
+		// and all stop before the database closes.
 		backgroundDone := make(chan struct{})
 		go func() {
 			defer close(backgroundDone)
 			var wg sync.WaitGroup
 			wg.Go(func() { svc.Run(ctx) })
 			wg.Go(func() { labelDaily(ctx, agentService.LabelVulnerabilities, labelingDelay, labelingInterval) })
+			wg.Go(func() { userService.SendInvitations(ctx, invitationInterval) })
 			wg.Wait()
 		}()
 		sources := cmdb.New(db, providers(), key, ctx, syncTimeout)
@@ -74,7 +77,7 @@ func serve(ctx context.Context, _ []string) error {
 			Assets:          assets.New(db),
 			BusinessContext: businesscontext.New(db),
 			CMDB:            sources,
-			Users:           users.New(db, verifier, admin),
+			Users:           userService,
 			AllowedOrigins:  allowedOrigins(),
 		}))
 	})
@@ -103,7 +106,7 @@ func listen(ctx context.Context, backgroundDone <-chan struct{}, handler http.Ha
 	select {
 	case <-backgroundDone:
 	case <-shutdownCtx.Done():
-		return errors.New("the feeds or the cartografo did not stop")
+		return errors.New("the feeds, the cartografo or the invitations did not stop")
 	}
 	if err := <-serveErr; !errors.Is(err, http.ErrServerClosed) {
 		return err

@@ -146,15 +146,26 @@ func (e env) newUser(t *testing.T, role tenancy.Role, customer tenancy.CustomerI
 	return sub
 }
 
-// fakeAdmin is a user pool that invites every email under a new sub.
+// fakeAdmin is a user pool that invites every email under a new sub, or
+// fails with err while it is set.
 type fakeAdmin struct {
 	mu      sync.Mutex
+	err     error
 	created []string
+}
+
+func (a *fakeAdmin) failWith(err error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.err = err
 }
 
 func (a *fakeAdmin) CreateUser(context.Context, string) (string, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if a.err != nil {
+		return "", a.err
+	}
 	sub := uuid.NewString()
 	a.created = append(a.created, sub)
 	return sub, nil

@@ -55,6 +55,7 @@ type userResponse struct {
 	Role       roleCode   `json:"role"`
 	CreatedAt  time.Time  `json:"created_at"`
 	DisabledAt *time.Time `json:"disabled_at"`
+	Pending    bool       `json:"pending" doc:"The invitation email has not been sent yet; it is retried until it is, and the User cannot sign in until then."`
 }
 
 type roleCode string
@@ -123,7 +124,7 @@ func userOutput(u users.StoredUser, err error) (*body[userResponse], error) {
 }
 
 func newUserResponse(u users.StoredUser) userResponse {
-	resp := userResponse{ID: u.User.ID().String(), Email: u.User.Email(), Role: roleCode(u.User.Role().Code()), CreatedAt: u.Created}
+	resp := userResponse{ID: u.User.ID().String(), Email: u.User.Email(), Role: roleCode(u.User.Role().Code()), CreatedAt: u.Created, Pending: u.User.Pending()}
 	if !u.Disabled.IsZero() {
 		resp.DisabledAt = &u.Disabled
 	}
