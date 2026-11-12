@@ -27,11 +27,15 @@ func createPending(t *testing.T, db *postgres.DB, customer tenancy.CustomerID, c
 	return stored
 }
 
+// claim returns the Invitation claimed at now, or nil when none is due.
 func claim(t *testing.T, db *postgres.DB, now time.Time) []postgres.Invitation {
 	t.Helper()
 	var claimed []postgres.Invitation
-	inTx(t, db, func(tx *postgres.Tx) (err error) {
-		claimed, err = tx.ClaimInvitations(context.Background(), now, now.Add(time.Minute), 10)
+	inTx(t, db, func(tx *postgres.Tx) error {
+		invitation, due, err := tx.ClaimInvitation(context.Background(), now, now.Add(time.Minute))
+		if due {
+			claimed = append(claimed, invitation)
+		}
 		return err
 	})
 	return claimed

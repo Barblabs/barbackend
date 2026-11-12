@@ -13,7 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const claimDueUserInvitations = `-- name: ClaimDueUserInvitations :many
+const claimDueUserInvitation = `-- name: ClaimDueUserInvitation :one
 WITH due AS (
     SELECT i.user_id
     FROM user_invitations i
@@ -23,7 +23,7 @@ WITH due AS (
       AND u.disabled_at IS NULL
       AND c.deactivated_at IS NULL
     ORDER BY i.next_attempt_at
-    LIMIT $3
+    LIMIT 1
     FOR UPDATE OF i SKIP LOCKED
 )
 UPDATE user_invitations i
@@ -33,36 +33,22 @@ WHERE i.user_id = due.user_id AND u.id = i.user_id
 RETURNING i.user_id, u.email, i.attempts
 `
 
-type ClaimDueUserInvitationsParams struct {
-	ClaimedUntil   time.Time
-	Now            time.Time
-	MaxInvitations int32
+type ClaimDueUserInvitationParams struct {
+	ClaimedUntil time.Time
+	Now          time.Time
 }
 
-type ClaimDueUserInvitationsRow struct {
+type ClaimDueUserInvitationRow struct {
 	UserID   uuid.UUID
 	Email    string
 	Attempts int32
 }
 
-func (q *Queries) ClaimDueUserInvitations(ctx context.Context, arg ClaimDueUserInvitationsParams) ([]ClaimDueUserInvitationsRow, error) {
-	rows, err := q.db.Query(ctx, claimDueUserInvitations, arg.ClaimedUntil, arg.Now, arg.MaxInvitations)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ClaimDueUserInvitationsRow
-	for rows.Next() {
-		var i ClaimDueUserInvitationsRow
-		if err := rows.Scan(&i.UserID, &i.Email, &i.Attempts); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
+func (q *Queries) ClaimDueUserInvitation(ctx context.Context, arg ClaimDueUserInvitationParams) (ClaimDueUserInvitationRow, error) {
+	row := q.db.QueryRow(ctx, claimDueUserInvitation, arg.ClaimedUntil, arg.Now)
+	var i ClaimDueUserInvitationRow
+	err := row.Scan(&i.UserID, &i.Email, &i.Attempts)
+	return i, err
 }
 
 const countActiveUsersWithRole = `-- name: CountActiveUsersWithRole :one

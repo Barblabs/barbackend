@@ -8,7 +8,7 @@ INSERT INTO user_invitations (user_id, attempts, next_attempt_at)
 VALUES ($1, 1, $2)
 RETURNING attempts;
 
--- name: ClaimDueUserInvitations :many
+-- name: ClaimDueUserInvitation :one
 WITH due AS (
     SELECT i.user_id
     FROM user_invitations i
@@ -18,7 +18,7 @@ WITH due AS (
       AND u.disabled_at IS NULL
       AND c.deactivated_at IS NULL
     ORDER BY i.next_attempt_at
-    LIMIT @max_invitations
+    LIMIT 1
     FOR UPDATE OF i SKIP LOCKED
 )
 UPDATE user_invitations i

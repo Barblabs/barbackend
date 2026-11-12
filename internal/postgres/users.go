@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"time"
 
 	"barbackend/internal/postgres/sqlcgen"
@@ -87,23 +86,19 @@ type Invitation struct {
 	Attempt int
 }
 
-// ClaimInvitations claims, until claimedUntil, at most max Invitations due at
-// now. It skips the Invitations of disabled Users and of Deactivated
-// Customers, and those another transaction is claiming.
-func (t *Tx) ClaimInvitations(ctx context.Context, now, claimedUntil time.Time, maxInvitations int) ([]Invitation, error) {
-	rows, err := t.q.ClaimDueUserInvitations(ctx, sqlcgen.ClaimDueUserInvitationsParams{
-		Now:            now,
-		MaxInvitations: int32(min(maxInvitations, math.MaxInt32)),
-		ClaimedUntil:   claimedUntil,
-	})
+// ClaimInvitation claims, until claimedUntil, the Invitation that has been
+// due the longest at now, and reports false when none is. It skips the
+// Invitations of disabled Users and of Deactivated Customers, and one another
+// transaction is claiming.
+func (t *Tx) ClaimInvitation(ctx context.Context, now, claimedUntil time.Time) (Invitation, bool, error) {
+	row, err := t.q.ClaimDueUserInvitation(ctx, sqlcgen.ClaimDueUserInvitationParams{Now: now, ClaimedUntil: claimedUntil})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Invitation{}, false, nil
+	}
 	if err != nil {
-		return nil, fmt.Errorf("claim invitations: %w", err)
+		return Invitation{}, false, fmt.Errorf("claim invitation: %w", err)
 	}
-	invitations := make([]Invitation, 0, len(rows))
-	for _, row := range rows {
-		invitations = append(invitations, Invitation{User: tenancy.UserID(row.UserID), Email: row.Email, Attempt: int(row.Attempts)})
-	}
-	return invitations, nil
+	return Invitation{User: tenancy.UserID(row.UserID), Email: row.Email, Attempt: int(row.Attempts)}, true, nil
 }
 
 // CompleteInvitation stores the Cognito sub that signs the User in and drops

@@ -11,12 +11,10 @@ import (
 )
 
 const (
-	// invitationClaim outlasts a Cognito call, so no two callers send the
-	// same Invitation at once.
-	invitationClaim    = 2 * time.Minute
-	invitationsPerPass = 20
-	firstRetryDelay    = 30 * time.Second
-	maxRetryDelay      = time.Hour
+	cognitoTimeout  = 30 * time.Second
+	invitationClaim = 4 * cognitoTimeout
+	firstRetryDelay = 30 * time.Second
+	maxRetryDelay   = time.Hour
 )
 
 // SendInvitations sends the Invitations that are due every interval, until
@@ -43,27 +41,27 @@ func (s *Service) SendInvitations(ctx context.Context, interval time.Duration) {
 func (s *Service) SendDueInvitations(ctx context.Context, now time.Time) error {
 	var errs []error
 	for {
-		claimed, err := postgres.InTxValue(ctx, s.db, func(tx *postgres.Tx) ([]postgres.Invitation, error) {
-			return tx.ClaimInvitations(ctx, now, now.Add(invitationClaim), invitationsPerPass)
+		var (
+			invitation postgres.Invitation
+			due        bool
+		)
+		err := s.db.InTx(ctx, func(tx *postgres.Tx) (err error) {
+			invitation, due, err = tx.ClaimInvitation(ctx, now, now.Add(invitationClaim))
+			return err
 		})
-		if err != nil {
+		if err != nil || !due {
 			return errors.Join(append(errs, err)...)
 		}
-		for _, invitation := range claimed {
-			if _, err := s.send(ctx, invitation, now); err != nil {
-				errs = append(errs, err)
-			}
-		}
-		if len(claimed) < invitationsPerPass {
-			return errors.Join(errs...)
+		if _, err := s.send(ctx, invitation, now); err != nil {
+			errs = append(errs, err)
 		}
 	}
 }
 
-// send runs no transaction while Cognito is called, so a slow Cognito holds
-// no lock.
 func (s *Service) send(ctx context.Context, invitation postgres.Invitation, now time.Time) (string, error) {
-	sub, err := s.admin.CreateUser(ctx, invitation.Email)
+	callCtx, cancel := context.WithTimeout(ctx, cognitoTimeout)
+	defer cancel()
+	sub, err := s.admin.CreateUser(callCtx, invitation.Email)
 	if err != nil {
 		err = fmt.Errorf("invite user %s, attempt %d: %w", invitation.User, invitation.Attempt, err)
 		retryErr := s.db.InTx(ctx, func(tx *postgres.Tx) error {
