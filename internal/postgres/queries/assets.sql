@@ -146,21 +146,12 @@ WHERE (cmdb_source_id, record_id) IN (
 )
 ORDER BY cmdb_source_id, record_id, position;
 
--- One Asset of the Customer by its id, as ListAssets reads it, locked until
--- the transaction ends so a Declaration and a Sync of it take turns.
+-- The reference of the Customer's Asset with that id, locked until the
+-- transaction ends so a Declaration and a Sync of it take turns.
 -- name: LockCustomerAsset :one
-SELECT a.id, a.cmdb_source_id, a.record_id, a.name, a.description, a.kind_id,
-       a.hardware_vendor, a.hardware_model, a.criticality_id,
-       imported_owner.email AS imported_owner, declared_owner.email AS declared_owner,
-       a.imported_exposure_id, a.declared_exposure_id, a.area_record_id, a.retired, a.inactive_since,
-       area.id AS area_id, area.name AS area_name,
-       exposure_declarer.email AS exposure_declared_by, a.exposure_declared_at
+SELECT a.cmdb_source_id, a.record_id
 FROM assets a
 JOIN cmdb_sources s ON s.id = a.cmdb_source_id
-LEFT JOIN asset_owners imported_owner ON imported_owner.id = a.imported_owner_id
-LEFT JOIN asset_owners declared_owner ON declared_owner.id = a.declared_owner_id
-LEFT JOIN customer_areas area ON area.cmdb_source_id = a.cmdb_source_id AND area.record_id = a.area_record_id
-LEFT JOIN users exposure_declarer ON exposure_declarer.id = a.exposure_declared_by
 WHERE a.id = @id AND s.customer_id = @customer_id
 FOR UPDATE OF a;
 

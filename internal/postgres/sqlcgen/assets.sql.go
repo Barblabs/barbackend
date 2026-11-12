@@ -519,18 +519,9 @@ func (q *Queries) ListSoftwareComponentsOf(ctx context.Context, arg ListSoftware
 }
 
 const lockCustomerAsset = `-- name: LockCustomerAsset :one
-SELECT a.id, a.cmdb_source_id, a.record_id, a.name, a.description, a.kind_id,
-       a.hardware_vendor, a.hardware_model, a.criticality_id,
-       imported_owner.email AS imported_owner, declared_owner.email AS declared_owner,
-       a.imported_exposure_id, a.declared_exposure_id, a.area_record_id, a.retired, a.inactive_since,
-       area.id AS area_id, area.name AS area_name,
-       exposure_declarer.email AS exposure_declared_by, a.exposure_declared_at
+SELECT a.cmdb_source_id, a.record_id
 FROM assets a
 JOIN cmdb_sources s ON s.id = a.cmdb_source_id
-LEFT JOIN asset_owners imported_owner ON imported_owner.id = a.imported_owner_id
-LEFT JOIN asset_owners declared_owner ON declared_owner.id = a.declared_owner_id
-LEFT JOIN customer_areas area ON area.cmdb_source_id = a.cmdb_source_id AND area.record_id = a.area_record_id
-LEFT JOIN users exposure_declarer ON exposure_declarer.id = a.exposure_declared_by
 WHERE a.id = $1 AND s.customer_id = $2
 FOR UPDATE OF a
 `
@@ -541,55 +532,16 @@ type LockCustomerAssetParams struct {
 }
 
 type LockCustomerAssetRow struct {
-	ID                 int64
-	CmdbSourceID       uuid.UUID
-	RecordID           string
-	Name               string
-	Description        string
-	KindID             int16
-	HardwareVendor     *string
-	HardwareModel      *string
-	CriticalityID      *int16
-	ImportedOwner      *string
-	DeclaredOwner      *string
-	ImportedExposureID *int16
-	DeclaredExposureID *int16
-	AreaRecordID       *string
-	Retired            bool
-	InactiveSince      *time.Time
-	AreaID             *int64
-	AreaName           *string
-	ExposureDeclaredBy *string
-	ExposureDeclaredAt *time.Time
+	CmdbSourceID uuid.UUID
+	RecordID     string
 }
 
-// One Asset of the Customer by its id, as ListAssets reads it, locked until
-// the transaction ends so a Declaration and a Sync of it take turns.
+// The reference of the Customer's Asset with that id, locked until the
+// transaction ends so a Declaration and a Sync of it take turns.
 func (q *Queries) LockCustomerAsset(ctx context.Context, arg LockCustomerAssetParams) (LockCustomerAssetRow, error) {
 	row := q.db.QueryRow(ctx, lockCustomerAsset, arg.ID, arg.CustomerID)
 	var i LockCustomerAssetRow
-	err := row.Scan(
-		&i.ID,
-		&i.CmdbSourceID,
-		&i.RecordID,
-		&i.Name,
-		&i.Description,
-		&i.KindID,
-		&i.HardwareVendor,
-		&i.HardwareModel,
-		&i.CriticalityID,
-		&i.ImportedOwner,
-		&i.DeclaredOwner,
-		&i.ImportedExposureID,
-		&i.DeclaredExposureID,
-		&i.AreaRecordID,
-		&i.Retired,
-		&i.InactiveSince,
-		&i.AreaID,
-		&i.AreaName,
-		&i.ExposureDeclaredBy,
-		&i.ExposureDeclaredAt,
-	)
+	err := row.Scan(&i.CmdbSourceID, &i.RecordID)
 	return i, err
 }
 

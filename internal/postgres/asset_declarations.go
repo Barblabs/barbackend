@@ -17,20 +17,26 @@ import (
 // Sync of the Asset take turns. It fails with ErrNotFound for an Asset of
 // another Customer as for a missing one.
 func (t *Tx) CustomerAsset(ctx context.Context, customer tenancy.CustomerID, id int64) (StoredAsset, error) {
-	row, err := t.q.LockCustomerAsset(ctx, sqlcgen.LockCustomerAssetParams{ID: id, CustomerID: uuid.UUID(customer)})
+	locked, err := t.q.LockCustomerAsset(ctx, sqlcgen.LockCustomerAssetParams{ID: id, CustomerID: uuid.UUID(customer)})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return StoredAsset{}, fmt.Errorf("asset %d: %w", id, ErrNotFound)
 	}
 	if err != nil {
+		return StoredAsset{}, fmt.Errorf("lock asset %d: %w", id, err)
+	}
+	ref := sqlcgen.ListAssetsByReferenceParams{SourceIds: []uuid.UUID{locked.CmdbSourceID}, RecordIds: []string{locked.RecordID}}
+	rows, err := t.q.ListAssetsByReference(ctx, ref)
+	if err != nil {
 		return StoredAsset{}, fmt.Errorf("read asset %d: %w", id, err)
 	}
-	components, err := t.q.ListSoftwareComponentsOf(ctx, sqlcgen.ListSoftwareComponentsOfParams{
-		SourceIds: []uuid.UUID{row.CmdbSourceID}, RecordIds: []string{row.RecordID},
-	})
+	if len(rows) != 1 {
+		return StoredAsset{}, fmt.Errorf("read asset %d: got %d rows for its lock", id, len(rows))
+	}
+	components, err := t.q.ListSoftwareComponentsOf(ctx, sqlcgen.ListSoftwareComponentsOfParams(ref))
 	if err != nil {
 		return StoredAsset{}, fmt.Errorf("list software of asset %d: %w", id, err)
 	}
-	return restoreAsset(sqlcgen.ListAssetsRow(row), softwareByAsset(components))
+	return restoreAsset(sqlcgen.ListAssetsRow(rows[0]), softwareByAsset(components))
 }
 
 // DeclareExposure stores the Asset's declared Exposure as by's Declaration,
