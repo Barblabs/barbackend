@@ -172,6 +172,9 @@ func (u User) Email() string { return u.email }
 
 func (u User) Role() Role { return u.role }
 
+// Pending is a User whose Invitation has not been sent yet.
+func (u User) Pending() bool { return u.pending }
+
 // Customer is the Customer the User belongs to; a Platform Admin belongs to
 // none.
 func (u User) Customer() (CustomerID, bool) { return u.customer, u.role != PlatformAdmin }
