@@ -14,10 +14,8 @@ import (
 
 func newClient(t *testing.T) (*claude.Client, *claudetest.Server) {
 	t.Helper()
-	// The fake checks no key; the SDK refuses to send a request without one.
-	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 	srv := claudetest.New(t)
-	return claude.New(srv.URL), srv
+	return srv.Client(), srv
 }
 
 func TestStructuredSendsTheSchemaAndReturnsTheAnswer(t *testing.T) {

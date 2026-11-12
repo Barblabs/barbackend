@@ -44,7 +44,7 @@ func (s *Service) matchIn(ctx context.Context, tx *postgres.Tx, cve string, v *s
 	if err != nil {
 		return err
 	}
-	if n.VulnStatus == rejected {
+	if n.Rejected() {
 		return closeAll(ctx, tx, open, finding.VulnerabilityRejected)
 	}
 	candidates, err := tx.ComponentsWithProducts(ctx, affectedProducts(n))

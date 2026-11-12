@@ -10,6 +10,8 @@ import (
 	"net/http/httptest"
 	"sync"
 	"testing"
+
+	"barbackend/internal/claude"
 )
 
 // UnknownField is on every message's thinking block and in no SDK type, so a
@@ -18,7 +20,7 @@ const UnknownField = "future_field"
 
 // Server answers each request with the next queued Reply.
 type Server struct {
-	URL string
+	url string
 
 	mu       sync.Mutex
 	replies  []Reply
@@ -41,8 +43,14 @@ func New(t *testing.T) *Server {
 	s := &Server{}
 	srv := httptest.NewServer(http.HandlerFunc(s.serve))
 	t.Cleanup(srv.Close)
-	s.URL = srv.URL
+	s.url = srv.URL
 	return s
+}
+
+// Client returns a claude.Client of the Server.
+func (s *Server) Client() *claude.Client {
+	// The Server checks no key, but the SDK refuses to send a request without one.
+	return claude.New(s.url, "test-key")
 }
 
 // Queue adds replies, in order, after those already queued.

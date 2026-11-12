@@ -10,7 +10,6 @@ import (
 
 	"barbackend/internal/agents"
 	"barbackend/internal/assessment"
-	"barbackend/internal/claude"
 	"barbackend/internal/claude/claudetest"
 	"barbackend/internal/finding"
 	"barbackend/internal/inventory"
@@ -70,7 +69,7 @@ func newEnv(t *testing.T) env {
 func newCrew(t *testing.T) (*agents.Crew, *claudetest.Server) {
 	t.Helper()
 	llm := claudetest.New(t)
-	return agents.NewCrew(claude.New(llm.URL), agents.DefaultModels()), llm
+	return agents.NewCrew(llm.Client(), agents.DefaultModels()), llm
 }
 
 // newCustomer stores a Customer with a Viewer and one synced Asset of that

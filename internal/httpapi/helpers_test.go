@@ -20,7 +20,6 @@ import (
 	"barbackend/internal/assessment"
 	"barbackend/internal/assets"
 	"barbackend/internal/businesscontext"
-	"barbackend/internal/claude"
 	"barbackend/internal/claude/claudetest"
 	"barbackend/internal/cmdb"
 	"barbackend/internal/cmdb/provider/providertest"
@@ -117,7 +116,7 @@ func newEnv(t *testing.T) env {
 	svc := cmdb.New(db, p.Providers(), newKey(t), context.Background(), time.Minute)
 	admin := &fakeAdmin{}
 	llm := claudetest.New(t)
-	agentService := agents.NewService(db, agents.NewCrew(claude.New(llm.URL), agents.DefaultModels()))
+	agentService := agents.NewService(db, agents.NewCrew(llm.Client(), agents.DefaultModels()))
 	router := httpapi.New(httpapi.Config{
 		Agents: agentService, Areas: areas.New(db), Assets: assets.New(db, findings.New(db, scoring.Model1, time.Hour)), BusinessContext: businesscontext.New(db), CMDB: svc,
 		Users: users.New(db, pool.Verifier(t), admin), AllowedOrigins: []string{allowedOrigin},

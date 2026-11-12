@@ -8,9 +8,6 @@ import (
 	"barbackend/internal/stixext"
 )
 
-// rejected is the vuln_status NVD gives a CVE it withdrew.
-const rejected = "Rejected"
-
 // Result is whether a Vulnerability affects a Software Component.
 type Result struct {
 	Matched bool
@@ -26,7 +23,7 @@ type Result struct {
 // vulnerable entry is matched on its own, as if AND configurations were plain
 // lists, and the component gets one Result for all of them.
 func Match(c inventory.SoftwareComponent, n stixext.NVD) Result {
-	if !c.Identified() || n.VulnStatus == rejected {
+	if !c.Identified() || n.Rejected() {
 		return Result{}
 	}
 	var best Result

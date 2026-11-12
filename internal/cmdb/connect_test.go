@@ -195,7 +195,7 @@ func TestConnectedSourceReportsLatestSyncRuns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	lastSync := succeeded.Finished().Truncate(time.Microsecond)
+	lastSync := succeeded.Finished()
 	if got := e.connectedSource(t, customer); !got.LastSync.Equal(lastSync) || got.LastSyncFailure != nil {
 		t.Errorf("after a successful Sync: %+v, want last Sync %v and no failure", got, lastSync)
 	}
@@ -241,7 +241,7 @@ func TestUpdateLogin(t *testing.T) {
 	if got.URL != rotated.URL || got.User != rotated.User {
 		t.Errorf("connected source = %+v, want the new url and user", got)
 	}
-	if lastSync := synced.Finished().Truncate(time.Microsecond); !got.LastSync.Equal(lastSync) {
+	if lastSync := synced.Finished(); !got.LastSync.Equal(lastSync) {
 		t.Errorf("last Sync = %v, want still %v, since the Sync history stays and the update runs no Sync", got.LastSync, lastSync)
 	}
 	if id := e.connected(t, customer).Source.ID(); id != src {

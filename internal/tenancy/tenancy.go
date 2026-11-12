@@ -150,8 +150,7 @@ func CanonicalEmail(email string) string { return strings.ToLower(strings.TrimSp
 
 // UserState is what can stop a stored User from signing in.
 type UserState struct {
-	Disabled bool
-	// Pending is a User whose Invitation has not been sent yet.
+	Disabled            bool
 	Pending             bool
 	CustomerDeactivated bool
 }

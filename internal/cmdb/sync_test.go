@@ -330,7 +330,7 @@ func TestSyncOutlivesItsCaller(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := e.connectedSource(t, customer); !got.LastSync.Equal(run.Finished().Truncate(time.Microsecond)) {
+	if got := e.connectedSource(t, customer); !got.LastSync.Equal(run.Finished()) {
 		t.Errorf("last sync = %v, want the Sync that finished at %v", got.LastSync, run.Finished())
 	}
 }

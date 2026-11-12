@@ -213,7 +213,6 @@ func (t *Tx) ActiveCustomerAdmins(ctx context.Context, customer tenancy.Customer
 	return int(n), nil
 }
 
-// SetUserRole stores the role of u on the User with its id.
 func (t *Tx) SetUserRole(ctx context.Context, u tenancy.User) error {
 	if err := t.q.SetUserRole(ctx, sqlcgen.SetUserRoleParams{ID: uuid.UUID(u.ID()), RoleID: int16(u.Role())}); err != nil {
 		return fmt.Errorf("set role of user %s: %w", u.ID(), err)
