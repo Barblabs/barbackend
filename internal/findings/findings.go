@@ -44,10 +44,10 @@ func New(db *postgres.DB, model scoring.Model, kevMaxAge time.Duration) *Service
 	return &Service{db: db, model: model, kevMaxAge: kevMaxAge, now: time.Now}
 }
 
-// OnChanged has fn called after each batch of a Feed and each AfterSync, which
-// may have opened, closed or rescored Findings, so the Prioritizer can place
-// them (ADR 0026). fn must return at once. It is meant to be set once, before
-// the Service is used.
+// OnChanged has fn called after each batch of a Feed, each AfterSync and each
+// RescoreAsset, which may have opened, closed or rescored Findings, so the
+// Prioritizer can place them (ADR 0026). fn must return at once. It is meant
+// to be set once, before the Service is used.
 func (s *Service) OnChanged(fn func()) {
 	s.onChanged = fn
 }
