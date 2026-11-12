@@ -5,7 +5,6 @@ import (
 
 	"barbackend/internal/inventory"
 	"barbackend/internal/postgres"
-	"github.com/TcM1911/stix2"
 )
 
 // RescoreAsset rescores every open Finding of the Asset from its stored
@@ -20,9 +19,8 @@ func (s *Service) RescoreAsset(ctx context.Context, asset inventory.SourceRefere
 		if err != nil {
 			return err
 		}
-		vulnerabilities := make(map[string]*stix2.Vulnerability)
 		for _, f := range open {
-			v, err := storedOnce(ctx, tx, vulnerabilities, f.Key.CVE)
+			v, err := storedVulnerability(ctx, tx, f.Key.CVE)
 			if err != nil {
 				return err
 			}
@@ -32,22 +30,4 @@ func (s *Service) RescoreAsset(ctx context.Context, asset inventory.SourceRefere
 		}
 		return nil
 	})
-}
-
-// storedOnce is the stored Vulnerability cve, read only on its first request,
-// since an Asset can have several Findings of one CVE.
-func storedOnce(ctx context.Context, tx *postgres.Tx, read map[string]*stix2.Vulnerability, cve string) (*stix2.Vulnerability, error) {
-	if v, ok := read[cve]; ok {
-		return v, nil
-	}
-	withFeeds, err := tx.Vulnerability(ctx, cve)
-	if err != nil {
-		return nil, err
-	}
-	v, err := stored(withFeeds)
-	if err != nil {
-		return nil, err
-	}
-	read[cve] = v
-	return v, nil
 }

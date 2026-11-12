@@ -74,11 +74,7 @@ func (s *Service) rescoreWith(ctx context.Context, cve string, definition stix2.
 		if err != nil || !set {
 			return err
 		}
-		withFeeds, err := tx.Vulnerability(ctx, cve)
-		if err != nil {
-			return err
-		}
-		v, err := stored(withFeeds)
+		v, err := storedVulnerability(ctx, tx, cve)
 		if err != nil {
 			return err
 		}

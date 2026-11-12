@@ -91,6 +91,16 @@ func stored(v postgres.StoredVulnerability) (*stix2.Vulnerability, error) {
 	return &out, nil
 }
 
+// storedVulnerability reads the stored Vulnerability cve with every extension
+// the Feeds set on it.
+func storedVulnerability(ctx context.Context, tx *postgres.Tx, cve string) (*stix2.Vulnerability, error) {
+	withFeeds, err := tx.Vulnerability(ctx, cve)
+	if err != nil {
+		return nil, err
+	}
+	return stored(withFeeds)
+}
+
 // each runs fn on every Vulnerability of batch. A failure is logged and the
 // rest still run, so one odd CVE does not stop a Feed's pull, which a Handle
 // error would (ingest.Feed). Only a cancelled context stops it.
