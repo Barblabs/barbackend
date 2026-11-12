@@ -58,13 +58,11 @@ type CNAVersion struct {
 	Status          string `json:"status"`
 }
 
-// NewNVD returns n as a property extension.
 func NewNVD(n NVD) NVD {
 	n.ExtensionType = "property-extension"
 	return n
 }
 
-// NVDOf decodes the nvd/1 extension of v.
 func NVDOf(v *stix2.Vulnerability) (NVD, bool) {
 	return decodeExtension[NVD](v, NVDDefinitionID)
 }

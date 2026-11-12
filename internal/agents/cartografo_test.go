@@ -23,7 +23,6 @@ const (
 	accountsQ   = "against any internal account, including the administrator's"
 )
 
-// storeCVE stores a Vulnerability of that CVE ID with the description.
 func storeCVE(ctx context.Context, tx *postgres.Tx, cve string) error {
 	object := `{"type":"vulnerability","spec_version":"2.1","id":"vulnerability--48ddf16e-0c34-5fd4-aeeb-1f1fc8027213",` +
 		`"created":"2026-11-10T03:52:06.164Z","modified":"2026-11-10T03:52:06.164Z","name":"` + cve + `","description":"` + description + `"}`

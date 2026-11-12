@@ -56,7 +56,6 @@ func (t *Tx) Customers(ctx context.Context) ([]StoredCustomer, error) {
 	return customers, nil
 }
 
-// RenameCustomer stores the name of c on the Customer with its id.
 func (t *Tx) RenameCustomer(ctx context.Context, c tenancy.Customer) (StoredCustomer, error) {
 	row, err := t.q.RenameCustomer(ctx, sqlcgen.RenameCustomerParams{ID: uuid.UUID(c.ID()), Name: c.Name()})
 	if err != nil {

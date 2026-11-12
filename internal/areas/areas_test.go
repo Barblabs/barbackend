@@ -61,7 +61,6 @@ func (e env) connect(t *testing.T, customer tenancy.CustomerID, areas ...invento
 	return src.ID()
 }
 
-// sync syncs areas into the connected CMDB Source src.
 func (e env) sync(t *testing.T, src inventory.CMDBSourceID, areas ...inventory.AreaRecord) {
 	t.Helper()
 	_, err := e.db.CommitSync(context.Background(), src, time.Now(), func(existing inventory.Stored) (inventory.Reconciliation, error) {
