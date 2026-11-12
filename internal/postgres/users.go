@@ -30,23 +30,9 @@ type StoredUser struct {
 
 // CreateUser stores a User with the Cognito sub that signs them in.
 func (t *Tx) CreateUser(ctx context.Context, u tenancy.User, sub string) (StoredUser, error) {
-	var customer pgtype.UUID
-	if id, ok := u.Customer(); ok {
-		customer = customerUUID(id)
-	}
-	created, err := t.q.InsertUser(ctx, sqlcgen.InsertUserParams{
-		ID:         uuid.UUID(u.ID()),
-		CognitoSub: &sub,
-		Email:      u.Email(),
-		CustomerID: customer,
-		RoleID:     int16(u.Role()),
-	})
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && pgErr.Code == uniqueViolation && pgErr.ConstraintName == userEmailKey {
-		return StoredUser{}, fmt.Errorf("insert user %s: %w", u.ID(), tenancy.ErrEmailTaken)
-	}
+	created, err := t.insertUser(ctx, u, &sub)
 	if err != nil {
-		return StoredUser{}, fmt.Errorf("insert user %s: %w", u.ID(), err)
+		return StoredUser{}, err
 	}
 	return StoredUser{User: u, Sub: sub, Created: created}, nil
 }
@@ -54,33 +40,42 @@ func (t *Tx) CreateUser(ctx context.Context, u tenancy.User, sub string) (Stored
 // CreatePendingUser stores a User who cannot sign in until their Invitation
 // is sent, with the Invitation claimed by the caller until claimedUntil.
 func (t *Tx) CreatePendingUser(ctx context.Context, u tenancy.User, claimedUntil time.Time) (StoredUser, Invitation, error) {
+	created, err := t.insertUser(ctx, u, nil)
+	if err != nil {
+		return StoredUser{}, Invitation{}, err
+	}
+	attempts, err := t.q.InsertUserInvitation(ctx, sqlcgen.InsertUserInvitationParams{UserID: uuid.UUID(u.ID()), NextAttemptAt: claimedUntil})
+	if err != nil {
+		return StoredUser{}, Invitation{}, fmt.Errorf("insert invitation of user %s: %w", u.ID(), err)
+	}
+	customer, _ := u.Customer()
+	pending, err := tenancy.RestoreUser(u.ID(), u.Email(), u.Role(), customer, tenancy.UserState{Pending: true})
+	if err != nil {
+		return StoredUser{}, Invitation{}, err
+	}
+	return StoredUser{User: pending, Created: created}, Invitation{User: u.ID(), Email: u.Email(), Attempt: int(attempts)}, nil
+}
+
+func (t *Tx) insertUser(ctx context.Context, u tenancy.User, sub *string) (time.Time, error) {
 	var customer pgtype.UUID
 	if id, ok := u.Customer(); ok {
 		customer = customerUUID(id)
 	}
-	created, err := t.q.InsertPendingUser(ctx, sqlcgen.InsertPendingUserParams{
+	created, err := t.q.InsertUser(ctx, sqlcgen.InsertUserParams{
 		ID:         uuid.UUID(u.ID()),
+		CognitoSub: sub,
 		Email:      u.Email(),
 		CustomerID: customer,
 		RoleID:     int16(u.Role()),
 	})
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == uniqueViolation && pgErr.ConstraintName == userEmailKey {
-		return StoredUser{}, Invitation{}, fmt.Errorf("insert user %s: %w", u.ID(), tenancy.ErrEmailTaken)
+		return time.Time{}, fmt.Errorf("insert user %s: %w", u.ID(), tenancy.ErrEmailTaken)
 	}
 	if err != nil {
-		return StoredUser{}, Invitation{}, fmt.Errorf("insert user %s: %w", u.ID(), err)
+		return time.Time{}, fmt.Errorf("insert user %s: %w", u.ID(), err)
 	}
-	err = t.q.InsertUserInvitation(ctx, sqlcgen.InsertUserInvitationParams{UserID: uuid.UUID(u.ID()), NextAttemptAt: claimedUntil})
-	if err != nil {
-		return StoredUser{}, Invitation{}, fmt.Errorf("insert invitation of user %s: %w", u.ID(), err)
-	}
-	id, _ := u.Customer()
-	pending, err := tenancy.RestoreUser(u.ID(), u.Email(), u.Role(), id, tenancy.UserState{Pending: true})
-	if err != nil {
-		return StoredUser{}, Invitation{}, err
-	}
-	return StoredUser{User: pending, Created: created}, Invitation{User: u.ID(), Email: u.Email(), Attempt: 1}, nil
+	return created, nil
 }
 
 // Invitation is one attempt, claimed by its caller, to have Cognito invite a

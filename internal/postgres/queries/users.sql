@@ -3,14 +3,10 @@ INSERT INTO users (id, cognito_sub, email, customer_id, role_id)
 VALUES ($1, $2, $3, $4, $5)
 RETURNING created_at;
 
--- name: InsertPendingUser :one
-INSERT INTO users (id, email, customer_id, role_id)
-VALUES ($1, $2, $3, $4)
-RETURNING created_at;
-
--- name: InsertUserInvitation :exec
+-- name: InsertUserInvitation :one
 INSERT INTO user_invitations (user_id, attempts, next_attempt_at)
-VALUES ($1, 1, $2);
+VALUES ($1, 1, $2)
+RETURNING attempts;
 
 -- name: ClaimDueUserInvitations :many
 WITH due AS (

@@ -201,31 +201,6 @@ func (q *Queries) GetUserBySub(ctx context.Context, cognitoSub *string) (GetUser
 	return i, err
 }
 
-const insertPendingUser = `-- name: InsertPendingUser :one
-INSERT INTO users (id, email, customer_id, role_id)
-VALUES ($1, $2, $3, $4)
-RETURNING created_at
-`
-
-type InsertPendingUserParams struct {
-	ID         uuid.UUID
-	Email      string
-	CustomerID pgtype.UUID
-	RoleID     int16
-}
-
-func (q *Queries) InsertPendingUser(ctx context.Context, arg InsertPendingUserParams) (time.Time, error) {
-	row := q.db.QueryRow(ctx, insertPendingUser,
-		arg.ID,
-		arg.Email,
-		arg.CustomerID,
-		arg.RoleID,
-	)
-	var created_at time.Time
-	err := row.Scan(&created_at)
-	return created_at, err
-}
-
 const insertUser = `-- name: InsertUser :one
 INSERT INTO users (id, cognito_sub, email, customer_id, role_id)
 VALUES ($1, $2, $3, $4, $5)
@@ -253,9 +228,10 @@ func (q *Queries) InsertUser(ctx context.Context, arg InsertUserParams) (time.Ti
 	return created_at, err
 }
 
-const insertUserInvitation = `-- name: InsertUserInvitation :exec
+const insertUserInvitation = `-- name: InsertUserInvitation :one
 INSERT INTO user_invitations (user_id, attempts, next_attempt_at)
 VALUES ($1, 1, $2)
+RETURNING attempts
 `
 
 type InsertUserInvitationParams struct {
@@ -263,9 +239,11 @@ type InsertUserInvitationParams struct {
 	NextAttemptAt time.Time
 }
 
-func (q *Queries) InsertUserInvitation(ctx context.Context, arg InsertUserInvitationParams) error {
-	_, err := q.db.Exec(ctx, insertUserInvitation, arg.UserID, arg.NextAttemptAt)
-	return err
+func (q *Queries) InsertUserInvitation(ctx context.Context, arg InsertUserInvitationParams) (int32, error) {
+	row := q.db.QueryRow(ctx, insertUserInvitation, arg.UserID, arg.NextAttemptAt)
+	var attempts int32
+	err := row.Scan(&attempts)
+	return attempts, err
 }
 
 const listCustomerUsers = `-- name: ListCustomerUsers :many
