@@ -31,6 +31,7 @@ import (
 	"barbackend/internal/postgres"
 	"barbackend/internal/postgres/pgtest"
 	"barbackend/internal/scoring"
+	"barbackend/internal/stixext"
 	"barbackend/internal/tenancy"
 	"barbackend/internal/users"
 	"github.com/TcM1911/stix2"
@@ -371,7 +372,11 @@ func (e env) prioritize(t *testing.T) agents.Prioritization {
 	}
 	var ids []string
 	for i, cve := range []string{"CVE-2025-1094", "CVE-2024-6387"} {
-		v, err := stix2.NewVulnerability(cve, stix2.OptionDescription("PostgreSQL is affected."))
+		options := []stix2.STIXOption{stix2.OptionDescription("PostgreSQL is affected.")}
+		if i == 0 {
+			options = append(options, stix2.OptionExtension(string(stixext.KEVDefinitionID), stixext.NewKEV(stixext.KEV{DateAdded: "2025-02-13", RequiredAction: "Apply updates."})))
+		}
+		v, err := stix2.NewVulnerability(cve, options...)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -468,9 +473,26 @@ type findingBody struct {
 	Group     int     `json:"group"`
 	PlacedAt  string  `json:"placed_at"`
 	ClosedAt  *string `json:"closed_at"`
-	Dossier   struct {
-		CVE string `json:"cve"`
-	} `json:"dossier"`
+	Details   struct {
+		Description string `json:"description"`
+		Asset       struct {
+			Name             string `json:"name"`
+			Criticality      string `json:"criticality"`
+			CriticalServices []any  `json:"critical_services"`
+		} `json:"asset"`
+		ScoreDetails struct {
+			Value    float64  `json:"value"`
+			DataGaps []string `json:"data_gaps"`
+		} `json:"score_details"`
+		KEV *struct {
+			DateAdded string `json:"date_added"`
+		} `json:"kev"`
+		Labeling struct {
+			Outcome string `json:"outcome"`
+		} `json:"labeling"`
+		Techniques []any `json:"techniques"`
+		Advisories []any `json:"advisories"`
+	} `json:"details"`
 }
 
 func lunaReply(t *testing.T) claudetest.Reply {

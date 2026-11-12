@@ -41,6 +41,9 @@ var (
 // Feedback is what a User said about a Finding of a Prioritization.
 type Feedback = postgres.StoredFeedback
 
+// Dossier is all that an Agent knows about a Finding (ADR 0016).
+type Dossier = assessment.Dossier
+
 // Summary is a stored Prioritization without its Findings.
 type Summary = postgres.PrioritizationSummary
 
