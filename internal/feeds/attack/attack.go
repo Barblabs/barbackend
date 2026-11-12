@@ -13,6 +13,7 @@ import (
 
 	"barbackend/internal/feeds"
 	"barbackend/internal/feeds/httpx"
+	"barbackend/internal/stixext"
 	"github.com/TcM1911/stix2"
 )
 
@@ -87,12 +88,12 @@ const revokedBy stix2.RelationshipType = "revoked-by"
 
 // head is what object reads of a raw object to decide whether to keep it.
 type head struct {
-	Type             stix2.STIXType            `json:"type"`
-	Name             string                    `json:"name"`
-	RelationshipType stix2.RelationshipType    `json:"relationship_type"`
-	Source           stix2.Identifier          `json:"source_ref"`
-	Target           stix2.Identifier          `json:"target_ref"`
-	References       []stix2.ExternalReference `json:"external_references"`
+	Type             stix2.STIXType             `json:"type"`
+	Name             string                     `json:"name"`
+	RelationshipType stix2.RelationshipType     `json:"relationship_type"`
+	Source           stix2.Identifier           `json:"source_ref"`
+	Target           stix2.Identifier           `json:"target_ref"`
+	References       []*stix2.ExternalReference `json:"external_references"`
 }
 
 // object emits raw when ADR 0023 keeps it: a Technique or a Mitigation with
@@ -116,14 +117,14 @@ func object(raw json.RawMessage, emit feeds.Emit) error {
 func kept(h head) bool {
 	switch h.Type {
 	case stix2.TypeAttackPattern:
-		if strings.HasPrefix(attackID(h.References), "T") {
+		if strings.HasPrefix(stixext.AttackID(h.References), "T") {
 			return true
 		}
 		log.Printf("attack: skipping %q: no ATT&CK id", h.Name)
 		return false
 	case stix2.TypeCourseOfAction:
 		// Course-of-actions with a T id are an old, deprecated form of ATT&CK.
-		return strings.HasPrefix(attackID(h.References), "M")
+		return strings.HasPrefix(stixext.AttackID(h.References), "M")
 	case stix2.TypeRelationship:
 		return h.RelationshipType == stix2.RelationshipTypeMitigates ||
 			(h.RelationshipType == revokedBy && isType(h.Source, stix2.TypeAttackPattern) && isType(h.Target, stix2.TypeAttackPattern))
@@ -157,16 +158,6 @@ func decode(raw json.RawMessage, typ stix2.STIXType) (stix2.STIXObject, error) {
 		return nil, fmt.Errorf("attack: decoded %d objects of type %s from one", len(objs), typ)
 	}
 	return objs[0], nil
-}
-
-// attackID is the ATT&CK id among refs, such as T1190 or M1051, or "".
-func attackID(refs []stix2.ExternalReference) string {
-	for _, ref := range refs {
-		if ref.Name == "mitre-attack" {
-			return strings.TrimSpace(ref.ExternalID)
-		}
-	}
-	return ""
 }
 
 func isType(id stix2.Identifier, typ stix2.STIXType) bool {
