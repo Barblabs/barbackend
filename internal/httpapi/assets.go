@@ -247,10 +247,8 @@ func newExposureResponse(stored assets.StoredAsset) exposureResponse {
 		Imported: code(a.Imported().Exposure().Code()),
 	}
 	if a.DeclaredExposure() != inventory.ExposureUnknown {
-		resp.Source = "declared"
-		if d := stored.ExposureAudit; d != nil {
-			resp.DeclaredBy, resp.DeclaredAt = &d.By, &d.At
-		}
+		audit := stored.ExposureAudit
+		resp.Source, resp.DeclaredBy, resp.DeclaredAt = "declared", &audit.By, &audit.At
 	}
 	return resp
 }

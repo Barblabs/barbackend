@@ -140,7 +140,7 @@ func TestDeclareExposureStoresTheCallersDeclarationAndRescoresTheAsset(t *testin
 		t.Fatal(err)
 	}
 
-	if got.Asset.Exposure() != inventory.Internal || got.ExposureAudit == nil || got.ExposureAudit.By != e.admin.Email() {
+	if got.Asset.Exposure() != inventory.Internal || got.ExposureAudit.By != e.admin.Email() {
 		t.Errorf("returned exposure %v declared %+v, want Internal by %s", got.Asset.Exposure(), got.ExposureAudit, e.admin.Email())
 	}
 	if stored := e.asset(t, "vm"); stored.Asset.Exposure() != inventory.Internal {
@@ -164,7 +164,7 @@ func TestClearExposureFallsBackToTheImportedExposureAndRescores(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if got.Asset.Exposure() != inventory.ExposureUnknown || got.ExposureAudit != nil {
+	if got.Asset.Exposure() != inventory.ExposureUnknown || got.ExposureAudit != (postgres.DeclarationAudit{}) {
 		t.Errorf("exposure %v declared %+v, want Unknown and no Declaration", got.Asset.Exposure(), got.ExposureAudit)
 	}
 	if len(e.rescorer.rescored) != 2 {

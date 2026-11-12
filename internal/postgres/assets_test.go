@@ -142,7 +142,7 @@ func TestImportedUpdateKeepsDeclarations(t *testing.T) {
 	if got := assets(t, db, src.ID()); len(got) != 1 || !reflect.DeepEqual(got[0], want) {
 		t.Errorf("assets = %+v, want [%+v]", got, want)
 	}
-	if got := onlyAsset(t, db, src.Customer()).ExposureAudit; got == nil || *got != *declaration {
+	if got := onlyAsset(t, db, src.Customer()).ExposureAudit; got != declaration {
 		t.Errorf("ExposureAudit after the Sync = %+v, want %+v", got, declaration)
 	}
 }

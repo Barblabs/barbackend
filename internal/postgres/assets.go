@@ -274,9 +274,9 @@ type StoredAsset struct {
 	Area *AreaSummary
 	// InactiveSince is when the Asset became Inactive, nil while it is Active.
 	InactiveSince *time.Time
-	// ExposureAudit is who declared the Asset's Exposure and when, nil
-	// when it has no Declaration.
-	ExposureAudit *DeclarationAudit
+	// ExposureAudit is who declared the Asset's Exposure and when, set exactly
+	// when Asset.DeclaredExposure is not Unknown.
+	ExposureAudit DeclarationAudit
 }
 
 // DeclarationAudit is who stated a declared value and when.
@@ -295,8 +295,11 @@ func restoreAsset(row sqlcgen.ListAssetsRow, software map[inventory.SourceRefere
 	if row.AreaID != nil {
 		stored.Area = &AreaSummary{ID: *row.AreaID, Name: valueOrZero(row.AreaName)}
 	}
-	if row.ExposureDeclaredBy != nil && row.ExposureDeclaredAt != nil {
-		stored.ExposureAudit = &DeclarationAudit{By: *row.ExposureDeclaredBy, At: *row.ExposureDeclaredAt}
+	if row.DeclaredExposureID != nil {
+		if row.ExposureDeclaredBy == nil || row.ExposureDeclaredAt == nil {
+			return StoredAsset{}, fmt.Errorf("restore asset %v: declared exposure without who declared it and when", ref)
+		}
+		stored.ExposureAudit = DeclarationAudit{By: *row.ExposureDeclaredBy, At: *row.ExposureDeclaredAt}
 	}
 	return stored, nil
 }
