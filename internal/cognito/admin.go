@@ -10,7 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider/types"
 )
 
-// Admin creates and deletes users in one user pool, which signs users in by
+// Admin creates users in one user pool, which signs users in by
 // email.
 type Admin struct {
 	client *cip.Client
@@ -86,13 +86,4 @@ func subAttribute(email string, attrs []types.AttributeType) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("cognito user %s: response has no sub", email)
-}
-
-// DeleteUser accepts the sub because Cognito takes it wherever it takes a
-// username.
-func (a *Admin) DeleteUser(ctx context.Context, sub string) error {
-	if _, err := a.client.AdminDeleteUser(ctx, &cip.AdminDeleteUserInput{UserPoolId: &a.poolID, Username: &sub}); err != nil {
-		return fmt.Errorf("delete cognito user %s: %w", sub, err)
-	}
-	return nil
 }
