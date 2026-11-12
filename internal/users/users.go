@@ -23,11 +23,10 @@ var (
 
 type StoredUser = postgres.StoredUser
 
-// Admin creates, disables and deletes users in the user pool.
-// *cognito.Admin is the real one.
+// Admin creates and deletes users in the user pool. *cognito.Admin is the
+// real one.
 type Admin interface {
 	CreateUser(ctx context.Context, email string) (sub string, err error)
-	DisableUser(ctx context.Context, sub string) error
 	DeleteUser(ctx context.Context, sub string) error
 }
 

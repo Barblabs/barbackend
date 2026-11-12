@@ -31,7 +31,7 @@ func userBySub(t *testing.T, db *postgres.DB, sub string) tenancy.User {
 	return u
 }
 
-func TestDisableUserDisablesThemInCognitoAndPostgres(t *testing.T) {
+func TestDisabledUserIsRefusedAtOnce(t *testing.T) {
 	t.Parallel()
 	admin := &fakeAdmin{}
 	svc, db := newService(t, admin)
@@ -40,36 +40,17 @@ func TestDisableUserDisablesThemInCognitoAndPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sub := admin.created[len(admin.created)-1]
 
 	if _, err := svc.DisableUser(context.Background(), caller, viewer.User.ID()); err != nil {
 		t.Fatal(err)
 	}
 
-	if len(admin.disabled) != 1 || admin.disabled[0] != sub || !errors.Is(userBySub(t, db, sub).SignIn(), tenancy.ErrUserDisabled) {
-		t.Errorf("disabled in cognito = %v, want %s, and the stored User unable to sign in", admin.disabled, sub)
+	if err := userBySub(t, db, admin.created[len(admin.created)-1]).SignIn(); !errors.Is(err, tenancy.ErrUserDisabled) {
+		t.Errorf("sign in after disabling: err = %v, want ErrUserDisabled", err)
 	}
 }
 
-func TestDisableUserStoresNothingWhenCognitoFails(t *testing.T) {
-	t.Parallel()
-	cognitoDown := errors.New("cognito unreachable")
-	admin := &fakeAdmin{disableErr: cognitoDown}
-	svc, db := newService(t, admin)
-	caller := customerAdmin(t, svc, db, admin)
-	viewer, err := svc.InviteUser(context.Background(), caller, "viewer@example.com", tenancy.Viewer)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	_, err = svc.DisableUser(context.Background(), caller, viewer.User.ID())
-
-	if !errors.Is(err, cognitoDown) || userBySub(t, db, admin.created[len(admin.created)-1]).SignIn() != nil {
-		t.Errorf("err = %v, want the Cognito failure and the User still able to sign in", err)
-	}
-}
-
-func TestDisablingTheLastCustomerAdminLeavesThemInCognito(t *testing.T) {
+func TestDisablingTheLastCustomerAdminIsRefused(t *testing.T) {
 	t.Parallel()
 	admin := &fakeAdmin{}
 	svc, db := newService(t, admin)
@@ -77,7 +58,7 @@ func TestDisablingTheLastCustomerAdminLeavesThemInCognito(t *testing.T) {
 
 	_, err := svc.DisableUser(context.Background(), caller, caller.ID())
 
-	if !errors.Is(err, tenancy.ErrLastCustomerAdmin) || len(admin.disabled) != 0 {
-		t.Errorf("err = %v, disabled in cognito = %v, want ErrLastCustomerAdmin and nobody disabled", err, admin.disabled)
+	if !errors.Is(err, tenancy.ErrLastCustomerAdmin) || userBySub(t, db, admin.created[0]).SignIn() != nil {
+		t.Errorf("err = %v, want ErrLastCustomerAdmin and the admin still able to sign in", err)
 	}
 }
