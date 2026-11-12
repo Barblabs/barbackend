@@ -217,35 +217,30 @@ func (u User) ManageCustomers() error {
 // ManageUsers returns the Customer whose Users u manages. It fails with
 // ErrNotCustomerAdmin for anyone but a Customer Admin.
 func (u User) ManageUsers() (CustomerID, error) {
-	if u.role != CustomerAdmin {
-		return CustomerID{}, ErrNotCustomerAdmin
-	}
-	return u.customer, nil
+	return u.customerAdmin()
 }
 
 // EditBusinessContext returns the Customer whose Business Context u edits. It
 // fails with ErrNotCustomerAdmin for anyone but a Customer Admin.
 func (u User) EditBusinessContext() (CustomerID, error) {
-	if u.role != CustomerAdmin {
-		return CustomerID{}, ErrNotCustomerAdmin
-	}
-	return u.customer, nil
+	return u.customerAdmin()
 }
 
 // ManageAreas returns the Customer whose Areas u manages, such as stating
 // their owners. It fails with ErrNotCustomerAdmin for anyone but a Customer
 // Admin.
 func (u User) ManageAreas() (CustomerID, error) {
-	if u.role != CustomerAdmin {
-		return CustomerID{}, ErrNotCustomerAdmin
-	}
-	return u.customer, nil
+	return u.customerAdmin()
 }
 
 // DeclareAssetValues returns the Customer whose Assets u declares values on,
 // such as their Exposure. It fails with ErrNotCustomerAdmin for anyone but a
 // Customer Admin.
 func (u User) DeclareAssetValues() (CustomerID, error) {
+	return u.customerAdmin()
+}
+
+func (u User) customerAdmin() (CustomerID, error) {
 	if u.role != CustomerAdmin {
 		return CustomerID{}, ErrNotCustomerAdmin
 	}
