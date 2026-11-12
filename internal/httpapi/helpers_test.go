@@ -25,12 +25,15 @@ import (
 	"barbackend/internal/cmdb/provider/providertest"
 	"barbackend/internal/cognito/cognitotest"
 	"barbackend/internal/encryption"
+	"barbackend/internal/finding"
 	"barbackend/internal/httpapi"
 	"barbackend/internal/inventory"
 	"barbackend/internal/postgres"
 	"barbackend/internal/postgres/pgtest"
+	"barbackend/internal/scoring"
 	"barbackend/internal/tenancy"
 	"barbackend/internal/users"
+	"github.com/TcM1911/stix2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -342,24 +345,79 @@ func viewerOf(customer tenancy.CustomerID) tenancy.User {
 	return u
 }
 
-// prioritize stores a Prioritization of two Findings for the Customer: the
-// Prioritizer puts f-1 first though f-2 has the higher Score.
+// prioritize stores two Findings on the Customer's pg-prod-01 and their
+// Prioritization, in which the Prioritizer puts the one of CVE-2025-1094 first
+// though the other has the higher Score.
 func (e env) prioritize(t *testing.T) agents.Prioritization {
 	t.Helper()
-	asset := assessment.Asset{Name: "pg-prod-01", Kind: "server", Criticality: "high", Exposure: "internal", Software: []assessment.Software{{Role: "application", Name: "PostgreSQL", Version: "15.6"}}}
-	findings := []assessment.Dossier{
-		{Finding: "f-1", CVE: "CVE-2025-1094", Asset: asset, Component: asset.Software[0], Score: assessment.Score{ScoringModel: 1, Value: 0.3}},
-		{Finding: "f-2", CVE: "CVE-2024-6387", Asset: asset, Component: asset.Software[0], Score: assessment.Score{ScoringModel: 1, Value: 0.6}},
+	ctx := context.Background()
+	postgreSQL := inventory.SoftwareComponent{Role: inventory.Application, Name: "PostgreSQL", Version: "15.6", Product: inventory.Product{Vendor: "postgresql", Name: "postgresql"}}
+	source, err := inventory.NewCMDBSource(inventory.CMDBSourceID(uuid.New()), e.customer, "fake")
+	if err != nil {
+		t.Fatal(err)
 	}
-	e.llm.Queue(claudetest.JSON(t, assessment.PriorityList{Groups: []assessment.PriorityGroup{
-		{Title: "Primero", Findings: []string{"f-1"}, Reason: "Va en pg-prod-01.", Evidence: []assessment.FindingEvidence{{Finding: "f-1", Path: "/asset/name", Value: "pg-prod-01"}}},
-		{Title: "Después", Findings: []string{"f-2"}, Reason: "Sin KEV.", Evidence: []assessment.FindingEvidence{{Finding: "f-2", Path: "/kev", Value: "null"}}},
+	if err := e.db.InTx(ctx, func(tx *postgres.Tx) error { return tx.CreateCMDBSource(ctx, source, []byte(`{}`), []byte{}) }); err != nil {
+		t.Fatal(err)
+	}
+	imported, err := inventory.NewImportedAsset(inventory.ImportedAssetParams{Name: "pg-prod-01", Kind: inventory.Server, Criticality: inventory.CriticalityHigh, Software: []inventory.SoftwareComponent{postgreSQL}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot := inventory.Snapshot{Records: []inventory.Record{{RecordID: "1", Imported: imported}}}
+	if _, err := e.db.CommitSync(ctx, source.ID(), time.Now(), func(existing inventory.Stored) (inventory.Reconciliation, error) {
+		return inventory.Reconcile(source.ID(), existing, snapshot)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var ids []string
+	for i, cve := range []string{"CVE-2025-1094", "CVE-2024-6387"} {
+		v, err := stix2.NewVulnerability(cve, stix2.OptionDescription("PostgreSQL is affected."))
+		if err != nil {
+			t.Fatal(err)
+		}
+		object, err := json.Marshal(v)
+		if err != nil {
+			t.Fatal(err)
+		}
+		key, err := finding.NewKey(inventory.SourceReference{Source: source.ID(), RecordID: "1"}, postgreSQL.Product, cve)
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = e.db.InTx(ctx, func(tx *postgres.Tx) error {
+			if err := tx.StoreVulnerability(ctx, postgres.StoredVulnerability{CVE: cve, Object: object, Modified: time.Now()}); err != nil {
+				return err
+			}
+			id, _, err := tx.SaveMatch(ctx, finding.Match{Key: key, Component: postgreSQL})
+			if err != nil {
+				return err
+			}
+			ids = append(ids, id.String())
+			value := []float64{0.3, 0.6}[i]
+			_, err = tx.SaveScoreIfChanged(ctx, id, scoring.Score{Model: 1, Value: value, Factors: scoring.Factors{Alpha: 0.5, Beta: 0.5, Vulnerability: value, CriticalityMultiplier: 1, ExposureMultiplier: 1}})
+			return err
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	e.llm.Queue(claudetest.JSON(t, assessment.Placement{Groups: []assessment.PlacedGroup{
+		{Title: "Primero", Findings: ids[:1], Reason: "Va en pg-prod-01.", Evidence: []assessment.FindingEvidence{{Finding: ids[0], Path: "/asset/name", Value: "pg-prod-01"}}},
+		{Title: "Después", Findings: ids[1:], Reason: "Sin KEV.", Evidence: []assessment.FindingEvidence{{Finding: ids[1], Path: "/kev", Value: "null"}}},
 	}}))
-	p, err := e.agents.Prioritize(context.Background(), e.customer, findings)
+	if _, err := e.agents.Prioritize(ctx, e.customer); err != nil {
+		t.Fatal(err)
+	}
+	p, err := e.agents.Latest(ctx, viewerOf(e.customer))
 	if err != nil {
 		t.Fatal(err)
 	}
 	return p
+}
+
+// firstAndSecond are the ids of the Findings of the first and second groups
+// of p.
+func firstAndSecond(p agents.Prioritization) (string, string) {
+	return p.List.Groups[0].Findings()[0], p.List.Groups[1].Findings()[0]
 }
 
 func jsonRequest(t *testing.T, method, path string, body any) *http.Request {
@@ -374,9 +432,11 @@ func jsonRequest(t *testing.T, method, path string, body any) *http.Request {
 }
 
 type prioritizationBody struct {
-	ID     string `json:"id"`
-	Model  string `json:"model"`
-	Groups []struct {
+	ID                     string  `json:"id"`
+	PreviousID             *string `json:"previous_id"`
+	BusinessContextVersion *int    `json:"business_context_version"`
+	Model                  string  `json:"model"`
+	Groups                 []struct {
 		Position   int      `json:"position"`
 		Title      string   `json:"title"`
 		FindingIDs []string `json:"finding_ids"`
@@ -385,17 +445,8 @@ type prioritizationBody struct {
 			Path      string `json:"path"`
 		} `json:"evidence"`
 	} `json:"groups"`
-	Findings []struct {
-		FindingID string  `json:"finding_id"`
-		CVEID     string  `json:"cve_id"`
-		Score     float64 `json:"score"`
-		ScoreRank int     `json:"score_rank"`
-		Group     int     `json:"group"`
-		Dossier   struct {
-			CVE string `json:"cve"`
-		} `json:"dossier"`
-	} `json:"findings"`
-	Plans []struct {
+	Findings []findingBody `json:"findings"`
+	Plans    []struct {
 		FindingID string `json:"finding_id"`
 		Output    struct {
 			Steps []string `json:"steps"`
@@ -407,6 +458,19 @@ type prioritizationBody struct {
 		Note        string `json:"note"`
 		ViaAnalista bool   `json:"via_analista"`
 	} `json:"feedback"`
+}
+
+type findingBody struct {
+	FindingID string  `json:"finding_id"`
+	CVEID     string  `json:"cve_id"`
+	Score     float64 `json:"score"`
+	ScoreRank int     `json:"score_rank"`
+	Group     int     `json:"group"`
+	PlacedAt  string  `json:"placed_at"`
+	ClosedAt  *string `json:"closed_at"`
+	Dossier   struct {
+		CVE string `json:"cve"`
+	} `json:"dossier"`
 }
 
 func lunaReply(t *testing.T) claudetest.Reply {

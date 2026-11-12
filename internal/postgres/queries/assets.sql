@@ -110,6 +110,25 @@ WHERE s.customer_id = @customer_id
   AND (sqlc.narg(kind_id)::smallint IS NULL OR a.kind_id = sqlc.narg(kind_id)::smallint)
   AND (sqlc.narg(criticality_id)::smallint IS NULL OR a.criticality_id = sqlc.narg(criticality_id)::smallint);
 
+-- Assets by their references, as ListAssets reads them. The two arrays are
+-- parallel: element i of each names one Asset.
+-- name: ListAssetsByReference :many
+SELECT a.cmdb_source_id, a.record_id, a.name, a.description, a.kind_id,
+       a.hardware_vendor, a.hardware_model, a.criticality_id,
+       imported_owner.email AS imported_owner, declared_owner.email AS declared_owner,
+       a.imported_exposure_id, a.declared_exposure_id, a.area_record_id, a.retired, a.inactive_since,
+       area.id AS area_id, area.name AS area_name
+FROM assets a
+LEFT JOIN asset_owners imported_owner ON imported_owner.id = a.imported_owner_id
+LEFT JOIN asset_owners declared_owner ON declared_owner.id = a.declared_owner_id
+LEFT JOIN customer_areas area ON area.cmdb_source_id = a.cmdb_source_id AND area.record_id = a.area_record_id
+WHERE (a.cmdb_source_id, a.record_id) IN (
+    SELECT s.id, r.id
+    FROM unnest(@source_ids::uuid[]) WITH ORDINALITY AS s (id, n)
+    JOIN unnest(@record_ids::text[]) WITH ORDINALITY AS r (id, n) USING (n)
+)
+ORDER BY a.cmdb_source_id, a.record_id;
+
 -- The two arrays are parallel: element i of each names one Asset.
 -- name: ListSoftwareComponentsOf :many
 SELECT *

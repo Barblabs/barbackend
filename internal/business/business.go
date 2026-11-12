@@ -132,6 +132,21 @@ func Problems(f Fields) []string {
 // Fields are never nil slices, so an unstated list is an empty JSON array.
 func (c Context) Fields() Fields { return c.fields.clone() }
 
+// ServicesOf is the Critical Services that name the Asset of that name among
+// the Assets that run them. Names match ignoring case and surrounding spaces,
+// since a Critical Service names its Assets as their CMDB Source writes them.
+func (c Context) ServicesOf(asset string) []CriticalService {
+	asset = strings.TrimSpace(asset)
+	var out []CriticalService
+	for _, s := range c.fields.Operations.CriticalServices {
+		if slices.ContainsFunc(s.Assets, func(name string) bool { return strings.EqualFold(strings.TrimSpace(name), asset) }) {
+			s.Assets = cloned(s.Assets)
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
 var keyFields = []string{
 	"profile.summary",
 	"profile.sectors",

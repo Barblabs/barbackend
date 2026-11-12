@@ -229,14 +229,11 @@ func (s *Service) labelingInput(ctx context.Context, cve string) (assessment.Lab
 		}
 		facts := make([]assessment.AdvisoryFacts, 0, len(advisories))
 		for _, a := range advisories {
-			var report struct {
-				Name        string `json:"name"`
-				Description string `json:"description"`
+			title, description, err := advisoryText(a)
+			if err != nil {
+				return fmt.Errorf("%s: %w", cve, err)
 			}
-			if err := json.Unmarshal(a.Object, &report); err != nil {
-				return fmt.Errorf("advisory %s of %s %w: %w", a.ID, cve, errUndecodable, err)
-			}
-			facts = append(facts, assessment.AdvisoryFacts{Title: report.Name, Description: report.Description})
+			facts = append(facts, assessment.AdvisoryFacts{Title: title, Description: description})
 		}
 		in = assessment.NewLabelingInput(&v, facts)
 		return nil

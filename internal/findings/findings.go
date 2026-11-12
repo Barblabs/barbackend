@@ -34,12 +34,28 @@ type Service struct {
 
 	mu      sync.Mutex
 	lastKEV time.Time
+
+	onChanged func()
 }
 
 // New scores with model. A KEV catalog not received within kevMaxAge is
 // stale, and so is one never received since the Service started (ADR 0009).
 func New(db *postgres.DB, model scoring.Model, kevMaxAge time.Duration) *Service {
 	return &Service{db: db, model: model, kevMaxAge: kevMaxAge, now: time.Now}
+}
+
+// OnChanged has fn called after each batch of a Feed and each AfterSync, which
+// may have opened, closed or rescored Findings, so the Prioritizer can place
+// them (ADR 0026). fn must return at once. It is meant to be set once, before
+// the Service is used.
+func (s *Service) OnChanged(fn func()) {
+	s.onChanged = fn
+}
+
+func (s *Service) changed() {
+	if s.onChanged != nil {
+		s.onChanged()
+	}
 }
 
 func (s *Service) kevStale() bool {

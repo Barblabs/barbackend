@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"barbackend/internal/assessment"
+	"barbackend/internal/business"
 	"barbackend/internal/claude"
 	"github.com/google/uuid"
 )
@@ -31,8 +32,9 @@ const (
 	defaultDrafterModel     = "claude-opus-5-5"
 	defaultCartografoModel  = "claude-haiku-5-5"
 
-	// MaxFindings bounds a Prioritization: the Prioritizer reads every Finding
-	// in one request, to weigh them against each other.
+	// MaxFindings bounds the Findings one round places: the Prioritizer reads
+	// them all in one request, to weigh them against each other and against
+	// the order that stands (ADR 0026).
 	MaxFindings = 100
 
 	maxAttempts        = 2
@@ -43,8 +45,9 @@ const (
 )
 
 var (
-	// ErrInvalidFindings is a list of Findings that is empty, longer than
-	// MaxFindings, repeats a Finding or holds a Dossier built wrong.
+	// ErrInvalidFindings is a Round that places no Finding or more than
+	// MaxFindings, places one twice or one that stands, or holds a Dossier
+	// built wrong.
 	ErrInvalidFindings = errors.New("invalid findings")
 	// ErrFindingNotFound is a Finding that a Prioritization does not hold.
 	ErrFindingNotFound = errors.New("finding not found")
@@ -114,24 +117,76 @@ type Run[T any] struct {
 	Violations []string `json:"violations,omitempty"`
 }
 
-// Prioritization is what the Prioritizer said about a Customer's open Findings
-// at one moment, with the Dossiers it was given. Only Service stores one,
-// giving it the fields JSON leaves out.
+// Prioritization is one version of the order of a Customer's open Findings
+// (ADR 0026): its Priority Groups, the Dossier of each Finding as it was when
+// placed, and what the Prioritizer answered in the round that made it. Only
+// Service stores one: the Dossiers with the placements that read them, and
+// the rest as content.
 type Prioritization struct {
-	ID       uuid.UUID  `json:"-"`
-	Created  time.Time  `json:"-"`
-	Plans    []Plan     `json:"-"`
-	Feedback []Feedback `json:"-"`
+	ID      uuid.UUID `json:"-"`
+	Created time.Time `json:"-"`
+	// Previous is the Prioritization it was built from, nil for a Customer's
+	// first.
+	Previous *uuid.UUID `json:"-"`
+	// BusinessContext is the version of the Business Context its round read,
+	// 0 when the Customer had stated none.
+	BusinessContext int `json:"-"`
+	// States are what is known of each of its Findings since it was stored.
+	States   map[string]FindingState `json:"-"`
+	Plans    []Plan                  `json:"-"`
+	Feedback []Feedback              `json:"-"`
 
-	Findings    []assessment.Dossier         `json:"findings"`
-	Prioritizer Run[assessment.PriorityList] `json:"prioritizer"`
+	Findings    []assessment.Dossier      `json:"findings"`
+	List        assessment.PriorityList   `json:"list"`
+	Prioritizer Run[assessment.Placement] `json:"prioritizer"`
 }
 
-// Plan is Luna's Action Plan for one Finding of a Prioritization.
+// FindingState is when the chain last placed a Finding of a Prioritization,
+// as the round that placed it read it, and when the Finding was closed, nil
+// while it is open: a closed Finding leaves the order the next round starts
+// from.
+type FindingState struct {
+	Placed time.Time
+	Closed *time.Time
+
+	placement uuid.UUID
+}
+
+// Plan is Luna's Action Plan for one Finding of a Prioritization, with the
+// Dossier Luna read.
 type Plan struct {
 	Finding string                     `json:"finding"`
 	Created time.Time                  `json:"created"`
+	Dossier assessment.Dossier         `json:"dossier"`
 	Luna    Run[assessment.ActionPlan] `json:"luna"`
+}
+
+// Round is what one request of the Prioritizer places (ADR 0026): Findings,
+// in the order that stands, read with the Customer's Business Context.
+type Round struct {
+	// Previous is the Prioritization the round builds on, nil for a
+	// Customer's first.
+	Previous *uuid.UUID
+	// Context is the Customer's Business Context, and ContextVersion its
+	// version, 0 with the zero Context when it has stated none.
+	Context        business.Context
+	ContextVersion int
+	// Standing is the order that stands, and Placed the Dossiers of its
+	// Findings as they were placed. Standing is empty for a Customer's first
+	// round, and when its Business Context changed since the last one.
+	Standing assessment.PriorityList
+	Placed   []assessment.Dossier
+	// Findings are the Findings to place: new ones, and those that changed
+	// since they were placed.
+	Findings []assessment.Dossier
+	// Feedback is what Users said about where Findings to place should be, by
+	// Finding.
+	Feedback map[string][]assessment.OrderFeedback
+
+	// read is when the round read what it places, and kept the placement
+	// each Finding that stands keeps.
+	read time.Time
+	kept map[string]uuid.UUID
 }
 
 // Finding is the Dossier of the Finding of that id, if p holds it.
@@ -145,17 +200,7 @@ func (p Prioritization) Finding(id string) (assessment.Dossier, bool) {
 
 // GroupOf is the position, from 1, of the Priority Group holding the Finding
 // of that id, or 0 when none does.
-func (p Prioritization) GroupOf(id string) int {
-	if p.Prioritizer.Output == nil {
-		return 0
-	}
-	for i, g := range p.Prioritizer.Output.Groups {
-		if slices.Contains(g.Findings, id) {
-			return i + 1
-		}
-	}
-	return 0
-}
+func (p Prioritization) GroupOf(id string) int { return p.List.GroupOf(id) }
 
 // PlanOf is the newest Action Plan of the Finding of that id, if it has one.
 func (p Prioritization) PlanOf(id string) (Plan, bool) {
@@ -178,36 +223,81 @@ func (p Prioritization) ScoreRanks() map[string]int {
 	return ranks
 }
 
-// Prioritize runs the Prioritizer on findings, a Customer's open Findings as
-// the Findings pipeline built their Dossiers. It fails with ErrInvalidFindings
-// before calling the model. A Prioritizer that cannot answer only shows in its
-// Status.
-func (c *Crew) Prioritize(ctx context.Context, findings []assessment.Dossier) (Prioritization, error) {
-	if err := checkFindings(findings); err != nil {
+// Prioritize runs the Prioritizer on one Round. Its Prioritization holds the
+// Dossiers of the Findings that stand and those placed, and its List is the
+// order they give when the Prioritizer has a verified answer. It fails with
+// ErrInvalidFindings before calling the model. A Prioritizer that cannot
+// answer only shows in its Status.
+func (c *Crew) Prioritize(ctx context.Context, r Round) (Prioritization, error) {
+	if err := checkRound(r); err != nil {
 		return Prioritization{}, err
 	}
-	briefs := make([]assessment.Brief, len(findings))
-	for i, d := range findings {
-		briefs[i] = d.Brief()
+	in := assessment.Round{
+		Standing: assessment.NewStanding(r.Standing, r.Placed),
+		Briefs:   make([]assessment.Brief, len(r.Findings)),
+		Feedback: map[string][]assessment.OrderFeedback{},
 	}
-	prompt, err := tagged("findings", briefs)
+	for i, d := range r.Findings {
+		in.Briefs[i] = d.Brief()
+		if said := r.Feedback[d.Finding]; len(said) > 0 {
+			in.Feedback[d.Finding] = said
+		}
+	}
+	var context any
+	if r.ContextVersion > 0 {
+		context = r.Context.Fields()
+		raw, err := json.Marshal(context)
+		if err != nil {
+			return Prioritization{}, fmt.Errorf("write business context: %w", err)
+		}
+		in.Context = raw
+	}
+	prompt, err := sections(
+		section{"business_context", context},
+		section{"priority_list", in.Standing},
+		section{"findings", in.Briefs},
+		section{"feedback", in.Feedback},
+	)
 	if err != nil {
 		return Prioritization{}, err
 	}
-	run := newPrioritizer(c.models.Prioritizer, briefs).run(ctx, c.llm, prompt)
-	return Prioritization{Findings: findings, Prioritizer: run}, nil
+	run := newPrioritizer(c.models.Prioritizer, in).run(ctx, c.llm, prompt)
+	p := Prioritization{
+		Previous: r.Previous, BusinessContext: r.ContextVersion,
+		Findings: slices.Concat(r.Placed, r.Findings), List: assessment.PriorityList{Groups: []assessment.PriorityGroup{}}, Prioritizer: run,
+	}
+	if run.Output != nil {
+		p.List = assessment.Merge(r.Standing, *run.Output)
+	}
+	return p, nil
 }
 
-func checkFindings(findings []assessment.Dossier) error {
-	if len(findings) == 0 || len(findings) > MaxFindings {
-		return fmt.Errorf("%w: give from 1 to %d, not %d", ErrInvalidFindings, MaxFindings, len(findings))
+// checkRound checks that r places from 1 to MaxFindings valid Findings, none
+// twice nor one that stands, and that every Finding that stands has its
+// Dossier.
+func checkRound(r Round) error {
+	if len(r.Findings) == 0 || len(r.Findings) > MaxFindings {
+		return fmt.Errorf("%w: give from 1 to %d, not %d", ErrInvalidFindings, MaxFindings, len(r.Findings))
 	}
-	seen := make(map[string]bool, len(findings))
-	for _, d := range findings {
+	placed := make(map[string]bool, len(r.Placed))
+	for _, d := range r.Placed {
+		placed[d.Finding] = true
+	}
+	stands := map[string]bool{}
+	for _, g := range r.Standing.Groups {
+		for _, id := range g.Findings() {
+			if !placed[id] {
+				return fmt.Errorf("%w: standing finding %q has no dossier", ErrInvalidFindings, id)
+			}
+			stands[id] = true
+		}
+	}
+	seen := make(map[string]bool, len(r.Findings))
+	for _, d := range r.Findings {
 		if err := d.Validate(); err != nil {
 			return fmt.Errorf("%w: %w", ErrInvalidFindings, err)
 		}
-		if seen[d.Finding] {
+		if seen[d.Finding] || stands[d.Finding] {
 			return fmt.Errorf("%w: finding %q is repeated", ErrInvalidFindings, d.Finding)
 		}
 		seen[d.Finding] = true
@@ -215,19 +305,32 @@ func checkFindings(findings []assessment.Dossier) error {
 	return nil
 }
 
-// Plan runs Luna on the Finding of p with that id. It fails with
-// ErrFindingNotFound before calling the model. Luna not answering only shows
+// Plan runs Luna on the Dossier of one Finding. Luna not answering only shows
 // in the Run's Status.
-func (c *Crew) Plan(ctx context.Context, p Prioritization, finding string) (Run[assessment.ActionPlan], error) {
-	d, ok := p.Finding(finding)
-	if !ok {
-		return Run[assessment.ActionPlan]{}, fmt.Errorf("%w: %q", ErrFindingNotFound, finding)
-	}
+func (c *Crew) Plan(ctx context.Context, d assessment.Dossier) (Run[assessment.ActionPlan], error) {
 	prompt, err := tagged("dossier", d)
 	if err != nil {
 		return Run[assessment.ActionPlan]{}, err
 	}
 	return newLuna(c.models.Luna, d).run(ctx, c.llm, prompt), nil
+}
+
+// section is one tagged part of a user message.
+type section struct {
+	tag string
+	v   any
+}
+
+func sections(parts ...section) (string, error) {
+	out := make([]string, len(parts))
+	for i, part := range parts {
+		text, err := tagged(part.tag, part.v)
+		if err != nil {
+			return "", err
+		}
+		out[i] = text
+	}
+	return strings.Join(out, "\n\n"), nil
 }
 
 // json.Marshal escapes < and >, so no text in v can close the tag.
