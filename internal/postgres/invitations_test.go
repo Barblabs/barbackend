@@ -27,18 +27,17 @@ func createPending(t *testing.T, db *postgres.DB, customer tenancy.CustomerID, c
 	return stored
 }
 
-// claim returns the Invitation claimed at now, or nil when none is due.
-func claim(t *testing.T, db *postgres.DB, now time.Time) []postgres.Invitation {
+func claim(t *testing.T, db *postgres.DB, now time.Time) (postgres.Invitation, bool) {
 	t.Helper()
-	var claimed []postgres.Invitation
-	inTx(t, db, func(tx *postgres.Tx) error {
-		invitation, due, err := tx.ClaimInvitation(context.Background(), now, now.Add(time.Minute))
-		if due {
-			claimed = append(claimed, invitation)
-		}
+	var (
+		claimed postgres.Invitation
+		due     bool
+	)
+	inTx(t, db, func(tx *postgres.Tx) (err error) {
+		claimed, due, err = tx.ClaimInvitation(context.Background(), now, now.Add(time.Minute))
 		return err
 	})
-	return claimed
+	return claimed, due
 }
 
 func TestAPendingUserIsListedButNotFoundBySub(t *testing.T) {
@@ -69,16 +68,16 @@ func TestAnInvitationIsClaimedOnceItIsDue(t *testing.T) {
 	db, _ := newDBWithConn(t)
 	u := createPending(t, db, newCustomer(t, db), invitedAt)
 
-	early := claim(t, db, invitedAt.Add(-time.Second))
-	due := claim(t, db, invitedAt)
-	whileClaimed := claim(t, db, invitedAt.Add(time.Second))
+	_, early := claim(t, db, invitedAt.Add(-time.Second))
+	got, due := claim(t, db, invitedAt)
+	_, whileClaimed := claim(t, db, invitedAt.Add(time.Second))
 
-	if len(early) != 0 || len(whileClaimed) != 0 {
-		t.Errorf("claimed early = %v, while claimed = %v, want neither", early, whileClaimed)
+	if early || whileClaimed {
+		t.Errorf("claimed early = %t, while claimed = %t, want neither", early, whileClaimed)
 	}
 	want := postgres.Invitation{User: u.User.ID(), Email: u.User.Email(), Attempt: 2}
-	if len(due) != 1 || due[0] != want {
-		t.Errorf("claimed when due = %+v, want [%+v]", due, want)
+	if !due || got != want {
+		t.Errorf("claimed when due = %+v, %t, want %+v", got, due, want)
 	}
 }
 
@@ -98,8 +97,8 @@ func TestInvitationsOfUsersWhoCannotSignInAreNotClaimed(t *testing.T) {
 		return err
 	})
 
-	if claimed := claim(t, db, invitedAt); len(claimed) != 0 {
-		t.Errorf("claimed = %+v, want none", claimed)
+	if claimed, due := claim(t, db, invitedAt); due {
+		t.Errorf("claimed %+v, want none", claimed)
 	}
 }
 
@@ -119,8 +118,8 @@ func TestCompletingAnInvitationSignsTheUserIn(t *testing.T) {
 	if got.ID() != u.User.ID() || got.SignIn() != nil {
 		t.Errorf("user with the sub = %+v, want %s able to sign in", got, u.User.ID())
 	}
-	if claimed := claim(t, db, invitedAt.Add(time.Hour)); len(claimed) != 0 {
-		t.Errorf("claimed after completing = %+v, want none", claimed)
+	if claimed, due := claim(t, db, invitedAt.Add(time.Hour)); due {
+		t.Errorf("claimed after completing %+v, want none", claimed)
 	}
 	again := db.InTx(context.Background(), func(tx *postgres.Tx) error {
 		return tx.CompleteInvitation(context.Background(), u.User.ID(), uuid.NewString())
@@ -140,11 +139,11 @@ func TestARetriedInvitationIsDueAtItsNextAttempt(t *testing.T) {
 		return tx.RetryInvitation(context.Background(), u.User.ID(), next, errors.New("cognito unreachable"))
 	})
 
-	if early := claim(t, db, next.Add(-time.Second)); len(early) != 0 {
-		t.Errorf("claimed before the next attempt = %+v, want none", early)
+	if claimed, early := claim(t, db, next.Add(-time.Second)); early {
+		t.Errorf("claimed %+v before the next attempt, want none", claimed)
 	}
-	if due := claim(t, db, next); len(due) != 1 {
-		t.Errorf("claimed at the next attempt = %+v, want the invitation", due)
+	if _, due := claim(t, db, next); !due {
+		t.Error("nothing claimed at the next attempt, want the invitation")
 	}
 }
 
@@ -153,7 +152,7 @@ func TestAnInvitationBeingClaimedIsSkippedByAnotherClaim(t *testing.T) {
 	db, _ := newDBWithConn(t)
 	createPending(t, db, newCustomer(t, db), invitedAt)
 	firstClaimed := make(chan struct{})
-	secondDue := make(chan bool)
+	secondDue := make(chan bool, 1)
 	secondErr := make(chan error, 1)
 	go func() {
 		<-firstClaimed
@@ -169,7 +168,11 @@ func TestAnInvitationBeingClaimedIsSkippedByAnotherClaim(t *testing.T) {
 	inTx(t, db, func(tx *postgres.Tx) (err error) {
 		_, firstDue, err = tx.ClaimInvitation(context.Background(), invitedAt, invitedAt.Add(time.Minute))
 		close(firstClaimed)
-		secondWasDue = <-secondDue
+		select {
+		case secondWasDue = <-secondDue:
+		case <-time.After(5 * time.Second):
+			t.Error("the second claim waited for the first")
+		}
 		return err
 	})
 
