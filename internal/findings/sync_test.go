@@ -71,16 +71,7 @@ func TestAfterSyncRescoresWhenTheExposureChanges(t *testing.T) {
 		t.Errorf("gaps = %v, want no exposure_undeclared once the CMDB gives the Exposure", gaps)
 	}
 
-	w.exec(t, `
-		WITH admin AS (
-			INSERT INTO users (id, cognito_sub, email, customer_id, role_id)
-			SELECT gen_random_uuid(), gen_random_uuid()::text, 'admin@example.com', s.customer_id, 2
-			FROM cmdb_sources s JOIN assets a ON a.cmdb_source_id = s.id WHERE a.record_id = 'payments'
-			RETURNING id
-		)
-		UPDATE assets
-		SET declared_exposure_id = $1, exposure_declared_by = (SELECT id FROM admin), exposure_declared_at = now()
-		WHERE record_id = 'payments'`, int16(inventory.InternetFacing))
+	w.declareExposure(t, "payments", inventory.InternetFacing)
 	w.afterSync(t, exposedTo(t, payments, inventory.Internal))
 	if m, scores := multiplier(); m != 1 || scores != 3 {
 		t.Errorf("after declaring it Internet-facing: multiplier %v in %d scores, want the Declaration's 1 in a third score", m, scores)

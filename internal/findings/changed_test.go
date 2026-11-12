@@ -3,9 +3,11 @@ package findings_test
 import (
 	"context"
 	"testing"
+
+	"barbackend/internal/inventory"
 )
 
-func TestEveryFeedBatchAndSyncNotifiesAChange(t *testing.T) {
+func TestEveryFeedBatchSyncAndRescoreNotifiesAChange(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
 	notices := 0
@@ -16,6 +18,9 @@ func TestEveryFeedBatchAndSyncNotifiesAChange(t *testing.T) {
 		"kev":        func() error { return w.findings.HandleKEV(ctx, nil) },
 		"epss":       func() error { return w.findings.HandleEPSS(ctx, nil) },
 		"after sync": func() error { return w.findings.AfterSync(ctx, w.source) },
+		"rescore asset": func() error {
+			return w.findings.RescoreAsset(ctx, inventory.SourceReference{Source: w.source, RecordID: "absent"})
+		},
 	}
 
 	for name, step := range steps {
