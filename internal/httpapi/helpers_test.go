@@ -26,6 +26,7 @@ import (
 	"barbackend/internal/cognito/cognitotest"
 	"barbackend/internal/encryption"
 	"barbackend/internal/finding"
+	"barbackend/internal/findings"
 	"barbackend/internal/httpapi"
 	"barbackend/internal/inventory"
 	"barbackend/internal/postgres"
@@ -115,7 +116,7 @@ func newEnv(t *testing.T) env {
 	llm := claudetest.New(t)
 	agentService := agents.NewService(db, agents.NewCrew(claude.New(llm.URL), agents.DefaultModels()))
 	router := httpapi.New(httpapi.Config{
-		Agents: agentService, Areas: areas.New(db), Assets: assets.New(db), BusinessContext: businesscontext.New(db), CMDB: svc,
+		Agents: agentService, Areas: areas.New(db), Assets: assets.New(db, findings.New(db, scoring.Model1, time.Hour)), BusinessContext: businesscontext.New(db), CMDB: svc,
 		Users: users.New(db, pool.Verifier(t), admin), AllowedOrigins: []string{allowedOrigin},
 	})
 	e := env{db: db, conn: pgtest.Conn(t, url), pool: pool, provider: p, admin: admin, cmdb: svc, llm: llm, agents: agentService, router: router}
