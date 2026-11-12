@@ -55,12 +55,8 @@ func TestAfterSyncRescoresWhenTheExposureChanges(t *testing.T) {
 	payments := server(t, "payments", inventory.CriticalityHigh, app("Nginx", "f5", "nginx", "1.18.0"))
 	multiplier := func() (m float64, scores int) {
 		t.Helper()
-		if err := w.conn.QueryRow(context.Background(), `
-			SELECT exposure_multiplier, (SELECT count(*) FROM finding_scores WHERE finding_id = $1)
-			FROM finding_scores WHERE finding_id = $1 ORDER BY scored_at DESC LIMIT 1`, f.id).Scan(&m, &scores); err != nil {
-			t.Fatal(err)
-		}
-		return m, scores
+		_, _, _, scores = w.latestScore(t, f.id)
+		return w.latestExposureMultiplier(t, f.id), scores
 	}
 
 	w.afterSync(t, exposedTo(t, payments, inventory.Internal))
