@@ -248,7 +248,7 @@ func newExposureResponse(stored assets.StoredAsset) exposureResponse {
 	}
 	if a.DeclaredExposure() != inventory.ExposureUnknown {
 		resp.Source = "declared"
-		if d := stored.ExposureDeclaration; d != nil {
+		if d := stored.ExposureAudit; d != nil {
 			resp.DeclaredBy, resp.DeclaredAt = &d.By, &d.At
 		}
 	}

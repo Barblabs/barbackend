@@ -26,8 +26,8 @@ func TestAnExposureDeclarationIsStoredWithItsAuthorAndClearedWithThem(t *testing
 	if got := declared.Asset.Exposure(); got != inventory.Internal {
 		t.Errorf("Exposure() = %v, want Internal", got)
 	}
-	if d := declared.ExposureDeclaration; d == nil || d.By != "admin@example.com" || d.At.IsZero() {
-		t.Errorf("ExposureDeclaration = %+v, want by admin@example.com at a time", d)
+	if d := declared.ExposureAudit; d == nil || d.By != "admin@example.com" || d.At.IsZero() {
+		t.Errorf("ExposureAudit = %+v, want by admin@example.com at a time", d)
 	}
 
 	declareExposure(t, db, customer, id, inventory.ExposureUnknown, admin.ID())
@@ -36,8 +36,8 @@ func TestAnExposureDeclarationIsStoredWithItsAuthorAndClearedWithThem(t *testing
 	if got := cleared.Asset.Exposure(); got != inventory.ExposureUnknown {
 		t.Errorf("after clearing Exposure() = %v, want Unknown", got)
 	}
-	if cleared.ExposureDeclaration != nil {
-		t.Errorf("after clearing ExposureDeclaration = %+v, want nil", cleared.ExposureDeclaration)
+	if cleared.ExposureAudit != nil {
+		t.Errorf("after clearing ExposureAudit = %+v, want nil", cleared.ExposureAudit)
 	}
 }
 

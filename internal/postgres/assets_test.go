@@ -122,7 +122,7 @@ func TestImportedUpdateKeepsDeclarations(t *testing.T) {
 		t.Fatal(err)
 	}
 	declareExposure(t, db, src.Customer(), onlyAsset(t, db, src.Customer()).ID, inventory.Internal, admin.ID())
-	declaration := onlyAsset(t, db, src.Customer()).ExposureDeclaration
+	declaration := onlyAsset(t, db, src.Customer()).ExposureAudit
 
 	changed := inventory.ImportedAssetParams{
 		Name:     "srv-01-renamed",
@@ -142,8 +142,8 @@ func TestImportedUpdateKeepsDeclarations(t *testing.T) {
 	if got := assets(t, db, src.ID()); len(got) != 1 || !reflect.DeepEqual(got[0], want) {
 		t.Errorf("assets = %+v, want [%+v]", got, want)
 	}
-	if got := onlyAsset(t, db, src.Customer()).ExposureDeclaration; got == nil || *got != *declaration {
-		t.Errorf("ExposureDeclaration after the Sync = %+v, want %+v", got, declaration)
+	if got := onlyAsset(t, db, src.Customer()).ExposureAudit; got == nil || *got != *declaration {
+		t.Errorf("ExposureAudit after the Sync = %+v, want %+v", got, declaration)
 	}
 }
 

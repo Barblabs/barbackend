@@ -140,8 +140,8 @@ func TestDeclareExposureStoresTheCallersDeclarationAndRescoresTheAsset(t *testin
 		t.Fatal(err)
 	}
 
-	if got.Asset.Exposure() != inventory.Internal || got.ExposureDeclaration == nil || got.ExposureDeclaration.By != e.admin.Email() {
-		t.Errorf("returned exposure %v declared %+v, want Internal by %s", got.Asset.Exposure(), got.ExposureDeclaration, e.admin.Email())
+	if got.Asset.Exposure() != inventory.Internal || got.ExposureAudit == nil || got.ExposureAudit.By != e.admin.Email() {
+		t.Errorf("returned exposure %v declared %+v, want Internal by %s", got.Asset.Exposure(), got.ExposureAudit, e.admin.Email())
 	}
 	if stored := e.asset(t, "vm"); stored.Asset.Exposure() != inventory.Internal {
 		t.Errorf("stored exposure = %v, want Internal", stored.Asset.Exposure())
@@ -164,8 +164,8 @@ func TestClearExposureFallsBackToTheImportedExposureAndRescores(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if got.Asset.Exposure() != inventory.ExposureUnknown || got.ExposureDeclaration != nil {
-		t.Errorf("exposure %v declared %+v, want Unknown and no Declaration", got.Asset.Exposure(), got.ExposureDeclaration)
+	if got.Asset.Exposure() != inventory.ExposureUnknown || got.ExposureAudit != nil {
+		t.Errorf("exposure %v declared %+v, want Unknown and no Declaration", got.Asset.Exposure(), got.ExposureAudit)
 	}
 	if len(e.rescorer.rescored) != 2 {
 		t.Errorf("rescored %d times, want once per change", len(e.rescorer.rescored))
