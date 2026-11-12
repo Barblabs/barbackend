@@ -42,8 +42,18 @@ func TestPrioritizationLifecycle(t *testing.T) {
 		t.Fatalf("findings = %+v, want %s", got.Findings, f1)
 	}
 	first := got.Findings[i]
-	if first.Group != 1 || first.ScoreRank != 2 || first.Dossier.CVE != "CVE-2025-1094" || first.PlacedAt == "" || first.ClosedAt != nil {
+	if first.Group != 1 || first.ScoreRank != 2 || first.CVEID != "CVE-2025-1094" || first.PlacedAt == "" || first.ClosedAt != nil {
 		t.Errorf("finding = %+v, want it in the first group though second by Score, open", first)
+	}
+	details := first.Details
+	if details.Description != "PostgreSQL is affected." || details.Asset.Name != "pg-prod-01" || details.Asset.Criticality != "high" || details.ScoreDetails.Value != 0.3 {
+		t.Errorf("details = %+v", details)
+	}
+	if details.KEV == nil || details.KEV.DateAdded != "2025-02-13" || details.Labeling.Outcome != "not_tried" {
+		t.Errorf("details = %+v, want its KEV listing and no Labeling yet", details)
+	}
+	if details.Techniques == nil || details.Advisories == nil || details.Asset.CriticalServices == nil || details.ScoreDetails.DataGaps == nil {
+		t.Errorf("details = %+v, want empty lists, never null", details)
 	}
 
 	e.llm.Queue(lunaReply(t))
