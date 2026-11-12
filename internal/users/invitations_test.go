@@ -51,8 +51,6 @@ func TestAnInvitationCognitoFailsIsSentByALaterPass(t *testing.T) {
 	}
 }
 
-// Storing the pending User without sending is where a crash after the
-// commit leaves an invite.
 func TestAnInterruptedInviteIsSentOnceItsClaimEnds(t *testing.T) {
 	t.Parallel()
 	admin := &fakeAdmin{}
@@ -83,7 +81,7 @@ func TestAnInterruptedInviteIsSentOnceItsClaimEnds(t *testing.T) {
 	}
 }
 
-func TestADisabledPendingUserIsNotInvited(t *testing.T) {
+func TestDisablingAPendingUserCancelsTheirInvitation(t *testing.T) {
 	t.Parallel()
 	admin := &fakeAdmin{}
 	svc, db := newService(t, admin)
@@ -93,8 +91,12 @@ func TestADisabledPendingUserIsNotInvited(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.DisableUser(context.Background(), caller, invited.User.ID()); err != nil {
+	disabled, err := svc.DisableUser(context.Background(), caller, invited.User.ID())
+	if err != nil {
 		t.Fatal(err)
+	}
+	if disabled.Disabled.IsZero() || !disabled.User.Pending() {
+		t.Errorf("disabled = %+v, want the User disabled and still pending", disabled)
 	}
 
 	admin.err = nil
