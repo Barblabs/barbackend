@@ -283,12 +283,19 @@ type SyncRun struct {
 
 type User struct {
 	ID         uuid.UUID
-	CognitoSub string
+	CognitoSub *string
 	Email      string
 	CustomerID pgtype.UUID
 	RoleID     int16
 	CreatedAt  time.Time
 	DisabledAt *time.Time
+}
+
+type UserInvitation struct {
+	UserID        uuid.UUID
+	Attempts      int32
+	NextAttemptAt time.Time
+	LastError     *string
 }
 
 type UserRole struct {

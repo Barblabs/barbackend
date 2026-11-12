@@ -26,9 +26,10 @@ import (
 )
 
 const (
-	readHeaderTimeout = 10 * time.Second
-	shutdownTimeout   = 10 * time.Second
-	syncTimeout       = 5 * time.Minute
+	readHeaderTimeout  = 10 * time.Second
+	shutdownTimeout    = 10 * time.Second
+	syncTimeout        = 5 * time.Minute
+	invitationInterval = 10 * time.Second
 )
 
 func serve(ctx context.Context, _ []string) error {
@@ -63,6 +64,7 @@ func serve(ctx context.Context, _ []string) error {
 			return err
 		}
 		agentService := agents.NewService(db, newCrew())
+		userService := users.New(db, verifier, admin)
 		agentService.OnOrderFeedback(changed.notify)
 		label := func(ctx context.Context) (agents.LabelingRun, error) {
 			run, err := agentService.LabelVulnerabilities(ctx)
@@ -71,8 +73,8 @@ func serve(ctx context.Context, _ []string) error {
 			}
 			return run, err
 		}
-		// The Feeds, the Cartógrafo and the Prioritizer run in the
-		// background, and all stop before the database closes.
+		// The Feeds, the Cartógrafo, the Prioritizer and the Invitations run
+		// in the background, and all stop before the database closes.
 		backgroundDone := make(chan struct{})
 		go func() {
 			defer close(backgroundDone)
@@ -82,6 +84,7 @@ func serve(ctx context.Context, _ []string) error {
 			wg.Go(func() {
 				prioritizeOnChange(ctx, changed, agentService.PrioritizeAll, prioritizeQuiet, prioritizeMaxWait, prioritizeInterval)
 			})
+			wg.Go(func() { userService.SendInvitations(ctx, invitationInterval) })
 			wg.Wait()
 		}()
 		sources := cmdb.New(db, providers(), key, ctx, syncTimeout)
@@ -92,7 +95,7 @@ func serve(ctx context.Context, _ []string) error {
 			Assets:          assets.New(db),
 			BusinessContext: businessContext,
 			CMDB:            sources,
-			Users:           users.New(db, verifier, admin),
+			Users:           userService,
 			AllowedOrigins:  allowedOrigins(),
 		}))
 	})
@@ -121,7 +124,7 @@ func listen(ctx context.Context, backgroundDone <-chan struct{}, handler http.Ha
 	select {
 	case <-backgroundDone:
 	case <-shutdownCtx.Done():
-		return errors.New("the feeds, the cartografo or the prioritizer did not stop")
+		return errors.New("the feeds, the cartografo, the prioritizer or the invitations did not stop")
 	}
 	if err := <-serveErr; !errors.Is(err, http.ErrServerClosed) {
 		return err

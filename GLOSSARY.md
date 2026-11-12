@@ -244,6 +244,10 @@ _Avoid_: Label, correction, comment
 A person who signs in to barbattack. A User is either a Platform Admin or belongs to exactly one Customer, and never moves between Customers.
 _Avoid_: Account, login, member
 
+**Invitation**:
+The email through which Cognito gives a new User their first, temporary password. A User whose Invitation has not been sent yet is pending and cannot sign in; it is retried until it is sent (ADR 0027).
+_Avoid_: Invite email, welcome email
+
 **Platform Admin**:
 A barbattack staff User who creates, renames, deactivates and reactivates Customers, and creates each Customer's first Customer Admin. A Platform Admin belongs to no Customer and cannot see any Customer's Assets or Findings.
 _Avoid_: Super admin, superadmin, staff

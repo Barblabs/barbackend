@@ -7,6 +7,7 @@ require (
 	github.com/anthropics/anthropic-sdk-go/v2 v2.5.0
 	github.com/aws/aws-sdk-go-v2 v1.47.4
 	github.com/aws/aws-sdk-go-v2/config v1.33.11
+	github.com/aws/aws-sdk-go-v2/credentials v1.20.11
 	github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider v1.75.5
 	github.com/danielgtaylor/huma/v2 v2.40.0
 	github.com/fergusstrange/embedded-postgres v1.34.0
@@ -19,7 +20,6 @@ require (
 )
 
 require (
-	github.com/aws/aws-sdk-go-v2/credentials v1.20.11 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.20.4 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.5.7 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.8.7 // indirect

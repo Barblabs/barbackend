@@ -2,6 +2,7 @@ package httpapi_test
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"slices"
 	"strings"
@@ -20,6 +21,7 @@ type user struct {
 	Role       string     `json:"role"`
 	CreatedAt  time.Time  `json:"created_at"`
 	DisabledAt *time.Time `json:"disabled_at"`
+	Pending    bool       `json:"pending"`
 }
 
 // customerAdmin stores a Customer Admin of customer and returns their id and
@@ -72,8 +74,8 @@ func TestCustomerAdminInvitesPromotesAndDisablesAUser(t *testing.T) {
 	invited := decode[user](t, e.asUser(admin, http.MethodPost, "/users", map[string]string{"email": "Ana@Example.com", "role": "viewer"}), http.StatusCreated)
 	anaSub := e.admin.invited()[0]
 	ana := "Bearer " + e.signIn(t, anaSub)
-	if invited.Email != "ana@example.com" || invited.Role != "viewer" || invited.DisabledAt != nil {
-		t.Errorf("invited = %+v, want an enabled viewer ana@example.com", invited)
+	if invited.Email != "ana@example.com" || invited.Role != "viewer" || invited.DisabledAt != nil || invited.Pending {
+		t.Errorf("invited = %+v, want an enabled, invited viewer ana@example.com", invited)
 	}
 
 	promoted := decode[user](t, e.asUser(admin, http.MethodPatch, "/users/"+invited.ID, map[string]string{"role": "customer_admin"}), http.StatusOK)
@@ -90,6 +92,22 @@ func TestCustomerAdminInvitesPromotesAndDisablesAUser(t *testing.T) {
 	}
 	if code := e.asUser(ana, http.MethodGet, "/users", nil).Code; code != http.StatusUnauthorized {
 		t.Errorf("list as the disabled User = %d, want 401", code)
+	}
+}
+
+func TestAUserCognitoCouldNotInviteIsListedPending(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	_, admin := e.customerAdmin(t, e.customer)
+	e.admin.failWith(errors.New("cognito unreachable"))
+
+	invited := decode[user](t, e.asUser(admin, http.MethodPost, "/users", map[string]string{"email": "ana@example.com", "role": "viewer"}), http.StatusCreated)
+	listed := decode[struct {
+		Users []user `json:"users"`
+	}](t, e.asUser(admin, http.MethodGet, "/users", nil), http.StatusOK)
+
+	if !invited.Pending || !slices.ContainsFunc(listed.Users, func(u user) bool { return u.ID == invited.ID && u.Pending }) {
+		t.Errorf("invited = %+v, listed = %+v, want the User pending in both", invited, listed.Users)
 	}
 }
 

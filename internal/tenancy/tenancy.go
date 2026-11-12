@@ -24,6 +24,8 @@ var (
 	ErrLastCustomerAdmin = errors.New("a customer keeps at least one active customer admin")
 	// ErrUserDisabled is a User disabled by a Customer Admin.
 	ErrUserDisabled = errors.New("user is disabled")
+	// ErrUserPending is a User whose Invitation has not been sent yet.
+	ErrUserPending = errors.New("user has not been invited yet")
 	// ErrCustomerDeactivated is a Customer that is no longer served: its Users
 	// cannot sign in and its CMDB Source does not sync.
 	ErrCustomerDeactivated = errors.New("customer is deactivated")
@@ -117,6 +119,7 @@ type User struct {
 	customer CustomerID
 
 	disabled            bool
+	pending             bool
 	customerDeactivated bool
 }
 
@@ -146,7 +149,9 @@ func CanonicalEmail(email string) string { return strings.ToLower(strings.TrimSp
 
 // UserState is what can stop a stored User from signing in.
 type UserState struct {
-	Disabled            bool
+	Disabled bool
+	// Pending is a User whose Invitation has not been sent yet.
+	Pending             bool
 	CustomerDeactivated bool
 }
 
@@ -156,6 +161,7 @@ func RestoreUser(id UserID, email string, role Role, customer CustomerID, state 
 		return User{}, err
 	}
 	u.disabled = state.Disabled
+	u.pending = state.Pending
 	u.customerDeactivated = state.CustomerDeactivated
 	return u, nil
 }
@@ -166,17 +172,22 @@ func (u User) Email() string { return u.email }
 
 func (u User) Role() Role { return u.role }
 
+// Pending is a User whose Invitation has not been sent yet.
+func (u User) Pending() bool { return u.pending }
+
 // Customer is the Customer the User belongs to; a Platform Admin belongs to
 // none.
 func (u User) Customer() (CustomerID, bool) { return u.customer, u.role != PlatformAdmin }
 
-// SignIn fails with ErrUserDisabled before ErrCustomerDeactivated: a disabled
-// User is told to sign in again whatever their Customer's state, and learns
-// nothing about it.
+// SignIn fails with ErrUserDisabled, then ErrUserPending, before
+// ErrCustomerDeactivated: a User who cannot sign in for their own sake
+// learns nothing about their Customer's state.
 func (u User) SignIn() error {
 	switch {
 	case u.disabled:
 		return fmt.Errorf("user %s: %w", u.id, ErrUserDisabled)
+	case u.pending:
+		return fmt.Errorf("user %s: %w", u.id, ErrUserPending)
 	case u.customerDeactivated:
 		return fmt.Errorf("user %s: %w", u.id, ErrCustomerDeactivated)
 	}
