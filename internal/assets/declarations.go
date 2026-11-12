@@ -18,7 +18,7 @@ import (
 // stands. It fails with ErrAssetNotFound, inventory.ErrInvalidExposure or
 // inventory.ErrAssetInactive.
 func (s *Service) DeclareExposure(ctx context.Context, caller tenancy.User, id int64, exposure inventory.Exposure) (StoredAsset, error) {
-	return s.declare(ctx, caller, id, func(tx *postgres.Tx, a *inventory.Asset) error {
+	return s.changeDeclaration(ctx, caller, id, func(tx *postgres.Tx, a *inventory.Asset) error {
 		if err := a.DeclareExposure(exposure); err != nil {
 			return err
 		}
@@ -32,12 +32,12 @@ func (s *Service) DeclareExposure(ctx context.Context, caller tenancy.User, id i
 // rescore runs after the clearing commits: if it fails, so does the call, but
 // the Declaration stays cleared. It fails with ErrAssetNotFound.
 func (s *Service) ClearExposure(ctx context.Context, caller tenancy.User, id int64) (StoredAsset, error) {
-	return s.declare(ctx, caller, id, func(tx *postgres.Tx, a *inventory.Asset) error {
+	return s.changeDeclaration(ctx, caller, id, func(tx *postgres.Tx, a *inventory.Asset) error {
 		return tx.ClearExposureDeclaration(ctx, a.Ref())
 	})
 }
 
-func (s *Service) declare(ctx context.Context, caller tenancy.User, id int64, apply func(*postgres.Tx, *inventory.Asset) error) (StoredAsset, error) {
+func (s *Service) changeDeclaration(ctx context.Context, caller tenancy.User, id int64, apply func(*postgres.Tx, *inventory.Asset) error) (StoredAsset, error) {
 	customer, err := caller.DeclareAssetValues()
 	if err != nil {
 		return StoredAsset{}, err
