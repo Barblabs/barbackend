@@ -6,16 +6,9 @@ import (
 	"fmt"
 	"time"
 
+	"barbackend/internal/assessment"
 	"barbackend/internal/postgres/sqlcgen"
 	"github.com/jackc/pgx/v5"
-)
-
-// The outcomes of a Labeling (ADR 0024). Labeled and none are final; failed
-// is tried again while attempts last.
-const (
-	LabelingLabeled = "labeled"
-	LabelingNone    = "none"
-	LabelingFailed  = "failed"
 )
 
 // Labeling is the Cartógrafo's last attempt to label a Vulnerability.
@@ -65,9 +58,9 @@ func (t *Tx) LabelingsSince(ctx context.Context, since time.Time) (int, error) {
 // its labels, labeled when there are any and none otherwise. It fails with
 // ErrLabeled when the Vulnerability already has a final Labeling.
 func (t *Tx) StoreLabeling(ctx context.Context, cve, model, promptHash string, labels []TechniqueLabel) error {
-	outcome := LabelingNone
+	outcome := assessment.LabelingNone
 	if len(labels) > 0 {
-		outcome = LabelingLabeled
+		outcome = assessment.LabelingLabeled
 	}
 	if err := t.recordLabeling(ctx, cve, outcome, model, promptHash); err != nil {
 		return err
@@ -86,7 +79,7 @@ func (t *Tx) StoreLabeling(ctx context.Context, cve, model, promptHash string, l
 // Vulnerability of cve. It fails with ErrLabeled when the Vulnerability
 // already has a final Labeling.
 func (t *Tx) StoreFailedLabeling(ctx context.Context, cve, model, promptHash string) error {
-	return t.recordLabeling(ctx, cve, LabelingFailed, model, promptHash)
+	return t.recordLabeling(ctx, cve, assessment.LabelingFailed, model, promptHash)
 }
 
 func (t *Tx) recordLabeling(ctx context.Context, cve, outcome, model, promptHash string) error {

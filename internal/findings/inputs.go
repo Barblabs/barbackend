@@ -15,6 +15,7 @@ import (
 // ignored, not kept (ADR 0020). The catalog counts as received before the
 // rescoring, so the Scores it makes are not stale.
 func (s *Service) HandleKEV(ctx context.Context, batch []stix2.STIXObject) error {
+	defer s.changed()
 	s.kevReceived()
 	return s.setScoreInput(ctx, "kev", batch, stixext.KEVDefinitionID)
 }
@@ -23,6 +24,7 @@ func (s *Service) HandleKEV(ctx context.Context, batch []stix2.STIXObject) error
 // rescores its open Findings. EPSS has an entry for every CVE, so it asks
 // once per batch which of them are stored and touches only those.
 func (s *Service) HandleEPSS(ctx context.Context, batch []stix2.STIXObject) error {
+	defer s.changed()
 	return s.setScoreInput(ctx, "epss", batch, stixext.EPSSDefinitionID)
 }
 

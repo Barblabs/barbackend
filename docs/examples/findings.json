@@ -19,6 +19,14 @@
           "name": "PostgreSQL",
           "version": "15.6"
         }
+      ],
+      "critical_services": [
+        {
+          "name": "Pagos en línea",
+          "description": "Cobros con tarjeta de los comercios.",
+          "impact": "critical",
+          "max_downtime": "1h_4h"
+        }
       ]
     },
     "component": {
@@ -106,7 +114,31 @@
         "https://security.netapp.com/advisory/ntap-20250221-0010/"
       ]
     },
-    "unavailable_feeds": []
+    "unavailable_feeds": [],
+    "advisories": [],
+    "labeling": {
+      "outcome": "labeled",
+      "model": "claude-haiku-5-5"
+    },
+    "techniques": [
+      {
+        "attack_id": "T1190",
+        "name": "Exploit Public-Facing Application",
+        "tactics": [
+          "initial-access"
+        ],
+        "role": "exploitation",
+        "evidence": "allows a database input provider to achieve SQL injection",
+        "rationale": "Una inyección SQL en una función que reciben datos de fuera.",
+        "mitigations": [
+          {
+            "attack_id": "M1051",
+            "name": "Update Software",
+            "advice": "Update software regularly by employing patch management for externally exposed applications."
+          }
+        ]
+      }
+    ]
   },
   {
     "finding": "f-2",
@@ -128,7 +160,8 @@
           "name": "PostgreSQL",
           "version": "15.6"
         }
-      ]
+      ],
+      "critical_services": []
     },
     "component": {
       "role": "operating_system",
@@ -1042,7 +1075,12 @@
         "https://cert-portal.siemens.com/productcert/html/ssa-446545.html"
       ]
     },
-    "unavailable_feeds": []
+    "unavailable_feeds": [],
+    "advisories": [],
+    "labeling": {
+      "outcome": "not_tried"
+    },
+    "techniques": []
   },
   {
     "finding": "f-3",
@@ -1064,7 +1102,8 @@
           "name": "Apache HTTP Server",
           "version": "2.4.49"
         }
-      ]
+      ],
+      "critical_services": []
     },
     "component": {
       "role": "application",
@@ -1244,7 +1283,12 @@
         "https://www.cisa.gov/known-exploited-vulnerabilities-catalog?field_cve=CVE-2021-41773"
       ]
     },
-    "unavailable_feeds": []
+    "unavailable_feeds": [],
+    "advisories": [],
+    "labeling": {
+      "outcome": "not_tried"
+    },
+    "techniques": []
   },
   {
     "finding": "f-4",
@@ -1266,7 +1310,8 @@
           "name": "Apache HTTP Server",
           "version": "2.4.49"
         }
-      ]
+      ],
+      "critical_services": []
     },
     "component": {
       "role": "application",
@@ -1470,7 +1515,12 @@
         "https://www.cisa.gov/known-exploited-vulnerabilities-catalog?field_cve=CVE-2021-42013"
       ]
     },
-    "unavailable_feeds": []
+    "unavailable_feeds": [],
+    "advisories": [],
+    "labeling": {
+      "outcome": "not_tried"
+    },
+    "techniques": []
   },
   {
     "finding": "f-5",
@@ -1487,7 +1537,8 @@
           "name": "Jenkins",
           "version": "2.441"
         }
-      ]
+      ],
+      "critical_services": []
     },
     "component": {
       "role": "application",
@@ -1718,6 +1769,11 @@
         "https://www.cisa.gov/known-exploited-vulnerabilities-catalog?field_cve=CVE-2024-23897"
       ]
     },
-    "unavailable_feeds": []
+    "unavailable_feeds": [],
+    "advisories": [],
+    "labeling": {
+      "outcome": "not_tried"
+    },
+    "techniques": []
   }
 ]

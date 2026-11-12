@@ -71,7 +71,7 @@ internal/
 
 - **News Items are the one Feed object stored on receipt**, with each one's Feed, published date and CVE IDs extracted, where ADR 0015 keeps a Vulnerability only when it opens a Finding and ADR 0022 an Advisory only when it names one. An RSS window holds 10 to 50 items and cannot be asked again later. How long one that no Customer found relevant is kept is not decided.
 - **A News Item that names no CVE is kept**, where an Advisory without one is skipped (ADR 0010, ADR 0022).
-- **Finding relevance reads the open Findings ADR 0020 stores.** The Dossier carries News Items only once Dossiers are built from stored Findings (`docs/agents-pending.md`, items 2 and 6).
+- **Finding relevance reads the open Findings ADR 0020 stores.** Dossiers are built from them (ADR 0026), so News Items join a Dossier beside its Advisories (`docs/agents-pending.md`, item 5).
 - **Nothing here changes a Score or an order** (ADR 0009). If "exploited, says CISA" should raise a Score, that is a new Scoring Model fed by a structured signal, never by what the Reader states.
 - **It costs one Reader request per text News Item**, tens to a few hundred a day for all Customers together, under a daily cap set once the Feeds' real volume is measured, and one Editor request per Customer and day with news. There is no quota per Customer yet (`docs/agents-pending.md`, item 4).
 - ransomware.live's terms of use and rate limits must be checked before it is polled in production.

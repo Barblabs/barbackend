@@ -56,6 +56,14 @@ JOIN attack_mitigations m ON m.id = r.source_id
 WHERE r.type = 'mitigates' AND r.target_id = @technique_id
 ORDER BY m.attack_id;
 
+-- The Mitigations of some Techniques, each with its advice for it.
+-- name: ListMitigationsOfTechniques :many
+SELECT r.target_id AS technique_id, m.attack_id, m.name, r.description
+FROM attack_relationships r
+JOIN attack_mitigations m ON m.id = r.source_id
+WHERE r.type = 'mitigates' AND r.target_id = ANY(@technique_ids::text[])
+ORDER BY r.target_id, m.attack_id;
+
 -- The current Techniques, neither revoked nor deprecated, by ATT&CK id: what
 -- the Cartógrafo picks from (ADR 0024).
 -- name: ListCurrentAttackTechniques :many

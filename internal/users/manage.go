@@ -51,7 +51,7 @@ func (s *Service) ChangeRole(ctx context.Context, caller tenancy.User, id tenanc
 
 // DisableUser disables a User of the caller's Customer; they are never
 // deleted. Authenticate refuses them from the next request on, while Cognito
-// still signs them in (ADR 0026). Disabling the last active Customer Admin
+// still signs them in (ADR 0027). Disabling the last active Customer Admin
 // fails with tenancy.ErrLastCustomerAdmin.
 func (s *Service) DisableUser(ctx context.Context, caller tenancy.User, id tenancy.UserID) (StoredUser, error) {
 	var stored StoredUser

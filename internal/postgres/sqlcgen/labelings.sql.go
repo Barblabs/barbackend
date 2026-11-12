@@ -70,6 +70,74 @@ func (q *Queries) InsertVulnerabilityTechnique(ctx context.Context, arg InsertVu
 	return err
 }
 
+const listLabelingsOfVulnerabilities = `-- name: ListLabelingsOfVulnerabilities :many
+SELECT cve_id, outcome, attempts, model, prompt_hash, labeled_at
+FROM vulnerability_labelings
+WHERE cve_id = ANY($1::text[])
+ORDER BY cve_id
+`
+
+func (q *Queries) ListLabelingsOfVulnerabilities(ctx context.Context, cveIds []string) ([]VulnerabilityLabeling, error) {
+	rows, err := q.db.Query(ctx, listLabelingsOfVulnerabilities, cveIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []VulnerabilityLabeling
+	for rows.Next() {
+		var i VulnerabilityLabeling
+		if err := rows.Scan(
+			&i.CveID,
+			&i.Outcome,
+			&i.Attempts,
+			&i.Model,
+			&i.PromptHash,
+			&i.LabeledAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTechniquesOfVulnerabilities = `-- name: ListTechniquesOfVulnerabilities :many
+SELECT cve_id, attack_id, role, evidence, rationale
+FROM vulnerability_techniques
+WHERE cve_id = ANY($1::text[])
+ORDER BY cve_id, array_position(ARRAY['exploitation', 'primary_impact', 'secondary_impact'], role), attack_id
+`
+
+// The Techniques of some Vulnerabilities, each how it is exploited first.
+func (q *Queries) ListTechniquesOfVulnerabilities(ctx context.Context, cveIds []string) ([]VulnerabilityTechnique, error) {
+	rows, err := q.db.Query(ctx, listTechniquesOfVulnerabilities, cveIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []VulnerabilityTechnique
+	for rows.Next() {
+		var i VulnerabilityTechnique
+		if err := rows.Scan(
+			&i.CveID,
+			&i.AttackID,
+			&i.Role,
+			&i.Evidence,
+			&i.Rationale,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listTechniquesOfVulnerability = `-- name: ListTechniquesOfVulnerability :many
 SELECT attack_id, role, evidence, rationale
 FROM vulnerability_techniques

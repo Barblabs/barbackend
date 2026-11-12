@@ -19,12 +19,12 @@ func TestAskAnswersFromTheCustomersData(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
 	p := e.prioritize(t)
-	if _, err := e.svc.RecordFeedback(context.Background(), e.user, p.ID, pgFind, "remediated", "ya"); err != nil {
+	if _, err := e.svc.RecordFeedback(context.Background(), e.user, p.ID, e.pg(), "remediated", "ya"); err != nil {
 		t.Fatal(err)
 	}
 	e.llm.Queue(
 		claudetest.ToolCall("1", "get_prioritization", map[string]any{"prioritization_id": nil}),
-		claudetest.ToolCall("2", "get_finding", map[string]any{"prioritization_id": p.ID.String(), "finding_id": pgFind}),
+		claudetest.ToolCall("2", "get_finding", map[string]any{"prioritization_id": p.ID.String(), "finding_id": e.pg()}),
 		claudetest.ToolCall("3", "list_assets", map[string]any{"criticality": "high"}),
 		claudetest.ToolCall("4", "list_assets", map[string]any{"criticality": "low"}),
 		claudetest.Text("Tienes un hallazgo."),
@@ -58,7 +58,7 @@ func TestAnalistaRecordsWhatTheUserSays(t *testing.T) {
 	e := newEnv(t)
 	p := e.prioritize(t)
 	e.llm.Queue(
-		claudetest.ToolCall("1", "record_feedback", map[string]any{"prioritization_id": p.ID.String() + "\n", "finding_id": pgFind, "verdict": "remediated", "note": "parchado ayer"}),
+		claudetest.ToolCall("1", "record_feedback", map[string]any{"prioritization_id": p.ID.String() + "\n", "finding_id": e.pg(), "verdict": "remediated", "note": "parchado ayer"}),
 		claudetest.Text("Lo registré."),
 	)
 
@@ -89,7 +89,7 @@ func TestContinueStoresWhatTheUserSays(t *testing.T) {
 		t.Fatal(err)
 	}
 	call := func(id string) claudetest.Reply {
-		return claudetest.ToolCall(id, "record_feedback", map[string]any{"prioritization_id": p.ID.String(), "finding_id": pgFind, "verdict": "applies", "note": "sigue ahí"})
+		return claudetest.ToolCall(id, "record_feedback", map[string]any{"prioritization_id": p.ID.String(), "finding_id": e.pg(), "verdict": "applies", "note": "sigue ahí"})
 	}
 	e.llm.Queue(call("1"), call("2"), claudetest.Text("Lo registré."))
 
@@ -121,7 +121,7 @@ func TestAMessageOvertakenWhileAnsweredStoresNothing(t *testing.T) {
 	}
 	owner := postgres.ConversationOwner{Customer: customer, User: e.user.ID()}
 	e.llm.Queue(
-		claudetest.ToolCall("1", "record_feedback", map[string]any{"prioritization_id": p.ID.String(), "finding_id": pgFind, "verdict": "applies", "note": "x"}),
+		claudetest.ToolCall("1", "record_feedback", map[string]any{"prioritization_id": p.ID.String(), "finding_id": e.pg(), "verdict": "applies", "note": "x"}),
 		claudetest.Text("Lo registré."),
 	)
 	release := e.llm.Hold()
@@ -155,7 +155,7 @@ func TestATurnWithoutTextIsNoAnswer(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
 	p := e.prioritize(t)
-	record := claudetest.ToolCall("1", "record_feedback", map[string]any{"prioritization_id": p.ID.String(), "finding_id": pgFind, "verdict": "applies", "note": "x"})
+	record := claudetest.ToolCall("1", "record_feedback", map[string]any{"prioritization_id": p.ID.String(), "finding_id": e.pg(), "verdict": "applies", "note": "x"})
 	e.llm.Queue(record, claudetest.Empty())
 
 	_, err := e.svc.Ask(context.Background(), e.user, "sí aplica")
@@ -175,7 +175,7 @@ func TestATurnThatFailsStoresNoFeedback(t *testing.T) {
 	e := newEnv(t)
 	p := e.prioritize(t)
 	record := func(id string) claudetest.Reply {
-		return claudetest.ToolCall(id, "record_feedback", map[string]any{"prioritization_id": p.ID.String(), "finding_id": pgFind, "verdict": "remediated", "note": "x"})
+		return claudetest.ToolCall(id, "record_feedback", map[string]any{"prioritization_id": p.ID.String(), "finding_id": e.pg(), "verdict": "remediated", "note": "x"})
 	}
 	e.llm.Queue(record("1"), claudetest.Refusal())
 	_, err := e.svc.Ask(context.Background(), e.user, "ya lo parchamos")
@@ -206,8 +206,8 @@ func TestAnalistaToolsStayInTheCallersCustomer(t *testing.T) {
 	stranger := e.newCustomer(t, "strangers-own-asset")
 	id := theirs.ID.String()
 	e.llm.Queue(
-		claudetest.ToolCall("1", "get_finding", map[string]any{"prioritization_id": id, "finding_id": pgFind}),
-		claudetest.ToolCall("2", "record_feedback", map[string]any{"prioritization_id": id, "finding_id": pgFind, "verdict": "does_not_apply", "note": "x"}),
+		claudetest.ToolCall("1", "get_finding", map[string]any{"prioritization_id": id, "finding_id": e.pg()}),
+		claudetest.ToolCall("2", "record_feedback", map[string]any{"prioritization_id": id, "finding_id": e.pg(), "verdict": "does_not_apply", "note": "x"}),
 		claudetest.ToolCall("3", "get_prioritization", map[string]any{"prioritization_id": id}),
 		claudetest.ToolCall("4", "get_prioritization", map[string]any{"prioritization_id": nil}),
 		claudetest.ToolCall("5", "list_assets", map[string]any{"criticality": nil}),
@@ -244,8 +244,8 @@ func TestAnalistaToolsTellTheModelOnlyWhatItCanCorrect(t *testing.T) {
 	e := newEnv(t)
 	p := e.prioritize(t)
 	e.llm.Queue(
-		claudetest.ToolCall("1", "get_finding", map[string]any{"prioritization_id": "not-a-uuid", "finding_id": pgFind}),
-		claudetest.ToolCall("2", "record_feedback", map[string]any{"prioritization_id": p.ID.String(), "finding_id": pgFind, "verdict": "maybe", "note": "x"}),
+		claudetest.ToolCall("1", "get_finding", map[string]any{"prioritization_id": "not-a-uuid", "finding_id": e.pg()}),
+		claudetest.ToolCall("2", "record_feedback", map[string]any{"prioritization_id": p.ID.String(), "finding_id": e.pg(), "verdict": "maybe", "note": "x"}),
 		claudetest.ToolCall("3", "list_assets", map[string]any{"criticality": "huge"}),
 		claudetest.Text("Fin."),
 	)

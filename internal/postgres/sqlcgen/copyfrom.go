@@ -121,6 +121,41 @@ func (q *Queries) InsertFindingMatchFlags(ctx context.Context, arg []InsertFindi
 	return q.db.CopyFrom(ctx, []string{"finding_match_flags"}, []string{"finding_id", "flag_id"}, &iteratorForInsertFindingMatchFlags{rows: arg})
 }
 
+// iteratorForInsertFindingPlacements implements pgx.CopyFromSource.
+type iteratorForInsertFindingPlacements struct {
+	rows                 []InsertFindingPlacementsParams
+	skippedFirstNextCall bool
+}
+
+func (r *iteratorForInsertFindingPlacements) Next() bool {
+	if len(r.rows) == 0 {
+		return false
+	}
+	if !r.skippedFirstNextCall {
+		r.skippedFirstNextCall = true
+		return true
+	}
+	r.rows = r.rows[1:]
+	return len(r.rows) > 0
+}
+
+func (r iteratorForInsertFindingPlacements) Values() ([]interface{}, error) {
+	return []interface{}{
+		r.rows[0].ID,
+		r.rows[0].FindingID,
+		r.rows[0].PlacedAt,
+		r.rows[0].Dossier,
+	}, nil
+}
+
+func (r iteratorForInsertFindingPlacements) Err() error {
+	return nil
+}
+
+func (q *Queries) InsertFindingPlacements(ctx context.Context, arg []InsertFindingPlacementsParams) (int64, error) {
+	return q.db.CopyFrom(ctx, []string{"finding_placements"}, []string{"id", "finding_id", "placed_at", "dossier"}, &iteratorForInsertFindingPlacements{rows: arg})
+}
+
 // iteratorForInsertFindingScoreDataGaps implements pgx.CopyFromSource.
 type iteratorForInsertFindingScoreDataGaps struct {
 	rows                 []InsertFindingScoreDataGapsParams
@@ -153,6 +188,42 @@ func (r iteratorForInsertFindingScoreDataGaps) Err() error {
 
 func (q *Queries) InsertFindingScoreDataGaps(ctx context.Context, arg []InsertFindingScoreDataGapsParams) (int64, error) {
 	return q.db.CopyFrom(ctx, []string{"finding_score_data_gaps"}, []string{"finding_id", "scored_at", "gap_id"}, &iteratorForInsertFindingScoreDataGaps{rows: arg})
+}
+
+// iteratorForInsertPrioritizationFindings implements pgx.CopyFromSource.
+type iteratorForInsertPrioritizationFindings struct {
+	rows                 []InsertPrioritizationFindingsParams
+	skippedFirstNextCall bool
+}
+
+func (r *iteratorForInsertPrioritizationFindings) Next() bool {
+	if len(r.rows) == 0 {
+		return false
+	}
+	if !r.skippedFirstNextCall {
+		r.skippedFirstNextCall = true
+		return true
+	}
+	r.rows = r.rows[1:]
+	return len(r.rows) > 0
+}
+
+func (r iteratorForInsertPrioritizationFindings) Values() ([]interface{}, error) {
+	return []interface{}{
+		r.rows[0].PrioritizationID,
+		r.rows[0].FindingID,
+		r.rows[0].PlacementID,
+		r.rows[0].GroupPosition,
+		r.rows[0].ScoreRank,
+	}, nil
+}
+
+func (r iteratorForInsertPrioritizationFindings) Err() error {
+	return nil
+}
+
+func (q *Queries) InsertPrioritizationFindings(ctx context.Context, arg []InsertPrioritizationFindingsParams) (int64, error) {
+	return q.db.CopyFrom(ctx, []string{"prioritization_findings"}, []string{"prioritization_id", "finding_id", "placement_id", "group_position", "score_rank"}, &iteratorForInsertPrioritizationFindings{rows: arg})
 }
 
 // iteratorForInsertSoftwareComponents implements pgx.CopyFromSource.

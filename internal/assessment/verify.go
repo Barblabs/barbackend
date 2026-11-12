@@ -21,33 +21,49 @@ const minQuote = 20
 var (
 	urlPattern     = regexp.MustCompile(`(?i)https?://[^\s<>"')\]]+`)
 	versionPattern = regexp.MustCompile(`\d+(?:\.\d+)+`)
-	pointerToken   = strings.NewReplacer("~1", "/", "~0", "~")
+	// attackIDPattern is an ATT&CK Technique or Mitigation id in prose, such
+	// as T1190, T1110.001 or M1051.
+	attackIDPattern    = regexp.MustCompile(`\b[TM]\d{4}(?:\.\d{3})?\b`)
+	techniqueIDPattern = regexp.MustCompile(`^T\d{4}(?:\.\d{3})?$`)
+	pointerToken       = strings.NewReplacer("~1", "/", "~0", "~")
 )
 
-// VerifyPriorityList returns every way l misplaces a Finding of briefs or
-// relies on something they do not say, none when it holds: each Finding is in
-// exactly one Priority Group, each group cites evidence from its own Findings,
-// and its reason names the Data Gaps of their Scores, because an estimated
-// Score must not be mistaken for a measured one.
-func VerifyPriorityList(briefs []Brief, l PriorityList) []string {
-	f, roots, err := briefFacts(briefs)
+// VerifyPlacement returns every way p misplaces a Finding of r or relies on
+// something r does not say, none when it holds: each standing group is named
+// once, in its order; each Finding to place is in exactly one group, and no
+// standing Finding is placed again; each group that places Findings cites
+// evidence from them, quotes the Business Context as the Customer stated it,
+// and names the Data Gaps of their Scores, because an estimated Score must not
+// be mistaken for a measured one.
+func VerifyPlacement(r Round, p Placement) []string {
+	f, roots, context, err := roundFacts(r)
 	if err != nil {
 		return []string{err.Error()}
 	}
+	stands := standingFindings(r.Standing)
 	var violations []string
-	if len(l.Groups) == 0 {
+	if len(p.Groups) == 0 {
 		violations = append(violations, "gives no groups")
 	}
+	next := 1
 	placed := map[string]int{}
-	for i, g := range l.Groups {
+	for i, g := range p.Groups {
 		group := fmt.Sprintf("group %d", i+1)
-		violations = append(violations, place(group, i, g.Findings, roots, placed)...)
-		violations = append(violations, f.checkProse(group+" title", g.Title)...)
-		violations = append(violations, f.checkProse(group+" reason", g.Reason)...)
-		violations = append(violations, checkGroupEvidence(group, g, roots)...)
-		violations = append(violations, checkGaps(group, g, briefs)...)
+		if g.Standing != nil {
+			violations = append(violations, checkStanding(group, *g.Standing, &next, len(r.Standing))...)
+			if len(g.Findings) == 0 {
+				continue
+			}
+		} else {
+			violations = append(violations, f.checkProse(group+" title", g.Title)...)
+		}
+		violations = append(violations, place(group, i, g.Findings, roots, stands, placed)...)
+		violations = append(violations, f.checkPlaced(group, g, roots, context, r.Briefs)...)
 	}
-	for _, b := range briefs {
+	for n := next; n <= len(r.Standing); n++ {
+		violations = append(violations, fmt.Sprintf("standing group %d is missing", n))
+	}
+	for _, b := range r.Briefs {
 		if _, ok := placed[b.Finding]; !ok {
 			violations = append(violations, fmt.Sprintf("finding %q is in no group", b.Finding))
 		}
@@ -55,8 +71,67 @@ func VerifyPriorityList(briefs []Brief, l PriorityList) []string {
 	return violations
 }
 
+// roundFacts is what r mentions, the Brief of each Finding to place by id, and
+// the Business Context, nil when the Customer has stated none.
+func roundFacts(r Round) (facts, map[string]any, any, error) {
+	f, roots, err := briefFacts(r.Briefs)
+	if err != nil {
+		return facts{}, nil, nil, err
+	}
+	for _, part := range []any{r.Standing, r.Feedback} {
+		root, err := generic(part)
+		if err != nil {
+			return facts{}, nil, nil, err
+		}
+		f.addMentions(root)
+	}
+	if r.Context == nil {
+		return f, roots, nil, nil
+	}
+	context, err := generic(r.Context)
+	if err != nil {
+		return facts{}, nil, nil, err
+	}
+	f.addMentions(context)
+	return f, roots, context, nil
+}
+
+// checkPlaced checks why g places its Findings where it does.
+func (f facts) checkPlaced(group string, g PlacedGroup, roots map[string]any, context any, briefs []Brief) []string {
+	return slices.Concat(
+		f.checkProse(group+" reason", g.Reason),
+		checkGroupEvidence(group, g.Findings, g.Evidence, roots),
+		checkContextEvidence(group, g.ContextEvidence, context),
+		checkGaps(group, g.Findings, g.Reason, briefs),
+	)
+}
+
+// checkStanding checks that a group names the standing group expected next,
+// and moves next past it when it does.
+func checkStanding(group string, number int, next *int, count int) []string {
+	switch {
+	case number < 1 || number > count:
+		return []string{fmt.Sprintf("%s names standing group %d, and there are %d", group, number, count)}
+	case number != *next:
+		return []string{fmt.Sprintf("%s names standing group %d where standing group %d goes: standing groups keep their order", group, number, *next)}
+	default:
+		*next++
+		return nil
+	}
+}
+
+func standingFindings(groups []StandingGroup) map[string]int {
+	out := map[string]int{}
+	for _, g := range groups {
+		for _, s := range g.Findings {
+			out[s.Finding] = g.Number
+		}
+	}
+	return out
+}
+
 func briefFacts(briefs []Brief) (facts, map[string]any, error) {
-	f := facts{source: "the findings", cves: map[string]bool{}, versions: map[string]bool{}, urls: map[string]bool{}}
+	f := facts{source: "what you were given", cves: map[string]bool{}, versions: map[string]bool{}, attackIDs: map[string]bool{}, urls: map[string]bool{}}
 	roots := make(map[string]any, len(briefs))
 	for _, b := range briefs {
 		root, err := generic(b)
@@ -69,12 +144,16 @@ func briefFacts(briefs []Brief) (facts, map[string]any, error) {
 	return f, roots, nil
 }
 
-func place(group string, index int, findings []string, roots map[string]any, placed map[string]int) []string {
+func place(group string, index int, findings []string, roots map[string]any, stands map[string]int, placed map[string]int) []string {
 	if len(findings) == 0 {
 		return []string{group + " has no findings"}
 	}
 	var violations []string
 	for _, id := range findings {
+		if number, ok := stands[id]; ok {
+			violations = append(violations, fmt.Sprintf("%s has finding %q, which keeps its place in standing group %d", group, id, number))
+			continue
+		}
 		if _, ok := roots[id]; !ok {
 			violations = append(violations, fmt.Sprintf("%s has finding %q, which it was not given", group, id))
 			continue
@@ -88,14 +167,14 @@ func place(group string, index int, findings []string, roots map[string]any, pla
 	return violations
 }
 
-func checkGroupEvidence(group string, g PriorityGroup, roots map[string]any) []string {
-	if len(g.Evidence) == 0 {
+func checkGroupEvidence(group string, findings []string, evidence []FindingEvidence, roots map[string]any) []string {
+	if len(evidence) == 0 {
 		return []string{group + " cites no evidence"}
 	}
 	var violations []string
-	for _, e := range g.Evidence {
-		if !slices.Contains(g.Findings, e.Finding) {
-			violations = append(violations, fmt.Sprintf("%s cites finding %q, which is not in it", group, e.Finding))
+	for _, e := range evidence {
+		if !slices.Contains(findings, e.Finding) {
+			violations = append(violations, fmt.Sprintf("%s cites finding %q, which it does not place", group, e.Finding))
 			continue
 		}
 		if problem := evidenceProblem(roots[e.Finding], e.Path, e.Value); problem != "" {
@@ -105,14 +184,28 @@ func checkGroupEvidence(group string, g PriorityGroup, roots map[string]any) []s
 	return violations
 }
 
-func checkGaps(group string, g PriorityGroup, briefs []Brief) []string {
+func checkContextEvidence(group string, evidence []ContextEvidence, context any) []string {
+	var violations []string
+	for _, e := range evidence {
+		if context == nil {
+			violations = append(violations, fmt.Sprintf("%s cites the business context, which the customer has not stated", group))
+			continue
+		}
+		if problem := evidenceProblem(context, e.Path, e.Value); problem != "" {
+			violations = append(violations, fmt.Sprintf("%s: business context: %s", group, problem))
+		}
+	}
+	return violations
+}
+
+func checkGaps(group string, findings []string, reason string, briefs []Brief) []string {
 	var violations []string
 	for _, b := range briefs {
-		if !slices.Contains(g.Findings, b.Finding) {
+		if !slices.Contains(findings, b.Finding) {
 			continue
 		}
 		for _, gap := range b.Score.DataGaps {
-			if !strings.Contains(g.Reason, gap) {
+			if !strings.Contains(reason, gap) {
 				violations = append(violations, fmt.Sprintf("%s reason does not name the data gap %s of finding %q", group, gap, b.Finding))
 			}
 		}
@@ -149,14 +242,30 @@ func (d Dossier) VerifyPlan(p ActionPlan) []string {
 	if p.Mitigation != nil {
 		violations = append(violations, f.checkSteps("mitigation", *p.Mitigation)...)
 	}
+	for i, m := range p.AttackMitigations {
+		label := fmt.Sprintf("attack mitigation %d", i+1)
+		if !d.mitigates(m.Mitigation, m.Technique) {
+			violations = append(violations, fmt.Sprintf("%s: %s is not a mitigation the dossier gives for technique %s", label, m.Mitigation, m.Technique))
+		}
+		violations = append(violations, f.checkSteps(label, m.Step)...)
+	}
 	return violations
+}
+
+// mitigates is whether the Dossier gives the Mitigation of that ATT&CK id for
+// its Technique of that ATT&CK id.
+func (d Dossier) mitigates(mitigation, technique string) bool {
+	return slices.ContainsFunc(d.Techniques, func(t Technique) bool {
+		return t.AttackID == technique && slices.ContainsFunc(t.Mitigations, func(m Mitigation) bool { return m.AttackID == mitigation })
+	})
 }
 
 type facts struct {
 	// source names what was given, in a violation.
-	source   string
-	cves     map[string]bool
-	versions map[string]bool
+	source    string
+	cves      map[string]bool
+	versions  map[string]bool
+	attackIDs map[string]bool
 	// fixes are the versions the Feeds tell to remediate with, and planVersions
 	// those plus the still vulnerable bounds and what the Asset runs.
 	fixes        map[string]bool
@@ -169,7 +278,7 @@ func newFacts(d Dossier) (facts, error) {
 	if err != nil {
 		return facts{}, err
 	}
-	f := facts{source: "the dossier", cves: map[string]bool{}, versions: map[string]bool{}, fixes: map[string]bool{}, planVersions: map[string]bool{}, urls: map[string]bool{}}
+	f := facts{source: "the dossier", cves: map[string]bool{}, versions: map[string]bool{}, attackIDs: map[string]bool{}, fixes: map[string]bool{}, planVersions: map[string]bool{}, urls: map[string]bool{}}
 	f.addMentions(root)
 	fixes, vulnerable := d.versionBounds()
 	addAll(f.fixes, fixes)
@@ -178,7 +287,7 @@ func newFacts(d Dossier) (facts, error) {
 	}
 	maps.Copy(f.planVersions, f.fixes)
 	addAll(f.planVersions, vulnerable)
-	for _, s := range d.Asset.Software {
+	for _, s := range append(slices.Clone(d.Asset.Software), d.Component) {
 		addAll(f.planVersions, versionPattern.FindAllString(s.Version, -1))
 	}
 	if d.NVD != nil {
@@ -232,6 +341,7 @@ func (f facts) addMentions(root any) {
 	for _, value := range values(root) {
 		addAll(f.cves, stixext.CVEIDs(value))
 		addAll(f.versions, versionPattern.FindAllString(value, -1))
+		addAll(f.attackIDs, attackIDPattern.FindAllString(value, -1))
 	}
 }
 
@@ -359,6 +469,10 @@ func (f facts) unknownMentions(text string, versions map[string]bool) []string {
 	}
 	withoutURLs := urlPattern.ReplaceAllStringFunc(text, func(url string) string {
 		check(f.urls, "url", strings.TrimRight(url, ".,;:"))
+		return " "
+	})
+	withoutURLs = attackIDPattern.ReplaceAllStringFunc(withoutURLs, func(id string) string {
+		check(f.attackIDs, "ATT&CK id", id)
 		return " "
 	})
 	for _, id := range stixext.CVEIDs(withoutURLs) {

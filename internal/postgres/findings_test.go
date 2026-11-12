@@ -13,6 +13,7 @@ import (
 	"barbackend/internal/postgres/pgtest"
 	"barbackend/internal/scoring"
 	"barbackend/internal/stixext"
+	"barbackend/internal/tenancy"
 )
 
 var (
@@ -25,6 +26,7 @@ var (
 // nginx and Vault) and a lab server (Low, nginx), and CVE-2021-23017 stored.
 type findingWorld struct {
 	db       *postgres.DB
+	customer tenancy.CustomerID
 	source   inventory.CMDBSourceID
 	payments inventory.SourceReference
 	lab      inventory.SourceReference
@@ -33,9 +35,11 @@ type findingWorld struct {
 func newFindingWorld(t *testing.T) findingWorld {
 	t.Helper()
 	db := pgtest.NewDB(t)
-	src := newSource(t, db, newCustomer(t, db))
+	customer := newCustomer(t, db)
+	src := newSource(t, db, customer)
 	w := findingWorld{
 		db:       db,
+		customer: customer,
 		source:   src.ID(),
 		payments: inventory.SourceReference{Source: src.ID(), RecordID: "1"},
 		lab:      inventory.SourceReference{Source: src.ID(), RecordID: "2"},

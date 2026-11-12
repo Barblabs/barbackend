@@ -14,11 +14,20 @@ import (
 type Stored = postgres.StoredBusinessContext
 
 type Service struct {
-	db *postgres.DB
+	db      *postgres.DB
+	onSaved func()
 }
 
 func New(db *postgres.DB) *Service {
 	return &Service{db: db}
+}
+
+// OnSaved has fn called after each save, since the Prioritizer orders a
+// Customer's Findings anew when its Business Context changes (ADR 0026). fn
+// must return at once. It is meant to be set once, before the Service is
+// used.
+func (s *Service) OnSaved(fn func()) {
+	s.onSaved = fn
 }
 
 // Get is the newest version of the caller's Customer's Business Context,
@@ -71,7 +80,11 @@ func (s *Service) Save(ctx context.Context, caller tenancy.User, base int, f bus
 	if err != nil {
 		return Stored{}, err
 	}
-	return postgres.InTxValue(ctx, s.db, func(tx *postgres.Tx) (Stored, error) {
+	stored, err := postgres.InTxValue(ctx, s.db, func(tx *postgres.Tx) (Stored, error) {
 		return tx.SaveBusinessContext(ctx, customer, base, c, caller)
 	})
+	if err == nil && s.onSaved != nil {
+		s.onSaved()
+	}
+	return stored, err
 }

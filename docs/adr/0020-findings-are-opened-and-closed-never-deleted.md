@@ -153,6 +153,7 @@ Matching a new Asset against stored Vulnerabilities does not bring back old CVEs
 
 ## Consequences
 
-- The Agents' tables (ADR 0016) can reference `findings.id` once Findings are stored; until then their `finding_id` is the text id `agent finding` builds. `assessment.NewDossier` computes a Score from the live Feeds as a stand-in for this pipeline; once the Agents read the Findings, they read the Score stored here and nothing else (ADR 0009, ADR 0016), so the Score a Customer sees and the one an Agent explains are the same.
+- The Agents' tables (ADR 0016) reference `findings.id`, and a Dossier is built from the Score stored here and nothing else (ADR 0009, ADR 0026), so the Score a Customer sees and the one an Agent explains are the same.
 - A Finding is as current as its last event: a component upgraded in the CMDB is seen at the next Sync, not before.
+- Disconnecting a CMDB Source closes the open Findings of its Assets as `asset_inactive` in the same transaction, since it is never synced again (ADR 0026).
 - Rescoring follows the Feeds: an open Finding is rescored when its Vulnerability's CVSS, EPSS or KEV changes, which for EPSS is daily.
