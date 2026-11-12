@@ -164,14 +164,14 @@ LEFT JOIN users exposure_declarer ON exposure_declarer.id = a.exposure_declared_
 WHERE a.id = @id AND s.customer_id = @customer_id
 FOR UPDATE OF a;
 
--- name: DeclareAssetExposure :execrows
+-- name: DeclareAssetExposure :exec
 UPDATE assets
 SET declared_exposure_id = @declared_exposure_id::smallint,
     exposure_declared_by = @declared_by::uuid,
     exposure_declared_at = now()
 WHERE cmdb_source_id = @cmdb_source_id AND record_id = @record_id;
 
--- name: ClearAssetExposure :execrows
+-- name: ClearAssetExposure :exec
 UPDATE assets
 SET declared_exposure_id = NULL, exposure_declared_by = NULL, exposure_declared_at = NULL
 WHERE cmdb_source_id = @cmdb_source_id AND record_id = @record_id;

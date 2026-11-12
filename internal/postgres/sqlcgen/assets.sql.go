@@ -13,7 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const clearAssetExposure = `-- name: ClearAssetExposure :execrows
+const clearAssetExposure = `-- name: ClearAssetExposure :exec
 UPDATE assets
 SET declared_exposure_id = NULL, exposure_declared_by = NULL, exposure_declared_at = NULL
 WHERE cmdb_source_id = $1 AND record_id = $2
@@ -24,12 +24,9 @@ type ClearAssetExposureParams struct {
 	RecordID     string
 }
 
-func (q *Queries) ClearAssetExposure(ctx context.Context, arg ClearAssetExposureParams) (int64, error) {
-	result, err := q.db.Exec(ctx, clearAssetExposure, arg.CmdbSourceID, arg.RecordID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+func (q *Queries) ClearAssetExposure(ctx context.Context, arg ClearAssetExposureParams) error {
+	_, err := q.db.Exec(ctx, clearAssetExposure, arg.CmdbSourceID, arg.RecordID)
+	return err
 }
 
 const countCustomerAssets = `-- name: CountCustomerAssets :one
@@ -91,7 +88,7 @@ func (q *Queries) DeactivateSourceAssets(ctx context.Context, cmdbSourceID uuid.
 	return err
 }
 
-const declareAssetExposure = `-- name: DeclareAssetExposure :execrows
+const declareAssetExposure = `-- name: DeclareAssetExposure :exec
 UPDATE assets
 SET declared_exposure_id = $1::smallint,
     exposure_declared_by = $2::uuid,
@@ -106,17 +103,14 @@ type DeclareAssetExposureParams struct {
 	RecordID           string
 }
 
-func (q *Queries) DeclareAssetExposure(ctx context.Context, arg DeclareAssetExposureParams) (int64, error) {
-	result, err := q.db.Exec(ctx, declareAssetExposure,
+func (q *Queries) DeclareAssetExposure(ctx context.Context, arg DeclareAssetExposureParams) error {
+	_, err := q.db.Exec(ctx, declareAssetExposure,
 		arg.DeclaredExposureID,
 		arg.DeclaredBy,
 		arg.CmdbSourceID,
 		arg.RecordID,
 	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+	return err
 }
 
 const deleteSoftwareComponents = `-- name: DeleteSoftwareComponents :exec

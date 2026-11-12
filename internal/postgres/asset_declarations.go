@@ -33,26 +33,25 @@ func (t *Tx) CustomerAsset(ctx context.Context, customer tenancy.CustomerID, id 
 	return restoreAsset(sqlcgen.ListAssetsRow(row), softwareByAsset(components))
 }
 
-// SaveExposureDeclaration stores the Asset's declared Exposure as by's
-// Declaration, made now, or clears it with its author and time when the
-// Asset has none.
-func (t *Tx) SaveExposureDeclaration(ctx context.Context, a *inventory.Asset, by tenancy.UserID) error {
-	ref := a.Ref()
-	var n int64
-	var err error
-	if declared := a.DeclaredExposure(); declared == inventory.ExposureUnknown {
-		n, err = t.q.ClearAssetExposure(ctx, sqlcgen.ClearAssetExposureParams{CmdbSourceID: uuid.UUID(ref.Source), RecordID: ref.RecordID})
-	} else {
-		n, err = t.q.DeclareAssetExposure(ctx, sqlcgen.DeclareAssetExposureParams{
-			DeclaredExposureID: int16(declared), DeclaredBy: uuid.UUID(by),
-			CmdbSourceID: uuid.UUID(ref.Source), RecordID: ref.RecordID,
-		})
-	}
+// DeclareExposure stores e as by's Declaration of the Asset's Exposure,
+// made now.
+func (t *Tx) DeclareExposure(ctx context.Context, asset inventory.SourceReference, e inventory.Exposure, by tenancy.UserID) error {
+	err := t.q.DeclareAssetExposure(ctx, sqlcgen.DeclareAssetExposureParams{
+		DeclaredExposureID: int16(e), DeclaredBy: uuid.UUID(by),
+		CmdbSourceID: uuid.UUID(asset.Source), RecordID: asset.RecordID,
+	})
 	if err != nil {
-		return fmt.Errorf("save exposure declaration of %v: %w", ref, err)
+		return fmt.Errorf("declare exposure of %v: %w", asset, err)
 	}
-	if n == 0 {
-		return fmt.Errorf("save exposure declaration of %v: %w", ref, ErrNotFound)
+	return nil
+}
+
+// ClearExposureDeclaration clears the Asset's declared Exposure with who
+// declared it and when.
+func (t *Tx) ClearExposureDeclaration(ctx context.Context, asset inventory.SourceReference) error {
+	err := t.q.ClearAssetExposure(ctx, sqlcgen.ClearAssetExposureParams{CmdbSourceID: uuid.UUID(asset.Source), RecordID: asset.RecordID})
+	if err != nil {
+		return fmt.Errorf("clear exposure declaration of %v: %w", asset, err)
 	}
 	return nil
 }

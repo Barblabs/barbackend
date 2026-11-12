@@ -33,11 +33,9 @@ func declareExposure(t *testing.T, db *postgres.DB, customer tenancy.CustomerID,
 			return err
 		}
 		if e == inventory.ExposureUnknown {
-			stored.Asset.ClearExposureDeclaration()
-		} else if err := stored.Asset.DeclareExposure(e); err != nil {
-			return err
+			return tx.ClearExposureDeclaration(context.Background(), stored.Asset.Ref())
 		}
-		return tx.SaveExposureDeclaration(context.Background(), stored.Asset, by)
+		return tx.DeclareExposure(context.Background(), stored.Asset.Ref(), e, by)
 	})
 }
 
