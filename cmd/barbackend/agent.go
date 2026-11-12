@@ -22,7 +22,7 @@ import (
 const agentSynopsis = "run --findings <file> [--plans] | prioritize --as <email> | plan --as <email> --prioritization <id> --finding <id> | ask --as <email> [--conversation <id>] <message> | label"
 
 func newCrew() *agents.Crew {
-	return agents.NewCrew(claude.New(""), agents.ModelsFrom(os.Getenv))
+	return agents.NewCrew(claude.New("", ""), agents.ModelsFrom(os.Getenv))
 }
 
 func agent(ctx context.Context, args []string) error {
