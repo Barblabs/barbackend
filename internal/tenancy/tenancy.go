@@ -243,8 +243,8 @@ func (u User) ManageAreas() (CustomerID, error) {
 }
 
 // DeclareAssetValues returns the Customer whose Assets u declares values on,
-// such as their Exposure. A wrong Declaration silently lowers Scores, so it
-// fails with ErrNotCustomerAdmin for anyone but a Customer Admin (ADR 0021).
+// such as their Exposure. It fails with ErrNotCustomerAdmin for anyone but a
+// Customer Admin.
 func (u User) DeclareAssetValues() (CustomerID, error) {
 	if u.role != CustomerAdmin {
 		return CustomerID{}, ErrNotCustomerAdmin

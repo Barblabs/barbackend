@@ -4,9 +4,8 @@
 -- Area; the Source Reference stays the key (ADR 0021).
 ALTER TABLE assets ADD COLUMN id bigint NOT NULL GENERATED ALWAYS AS IDENTITY UNIQUE;
 
--- Who declared the Exposure and when, so a User reading Internal knows whether
--- the CMDB Source or a person said so. Nothing wrote declared_exposure_id
--- before this migration, so every row already meets the CHECK.
+-- Nothing wrote declared_exposure_id before this migration, so every row
+-- already meets the CHECK.
 ALTER TABLE assets
     ADD COLUMN exposure_declared_by uuid REFERENCES users (id),
     ADD COLUMN exposure_declared_at timestamptz,

@@ -30,9 +30,7 @@ var ErrAssetNotFound = errors.New("asset not found")
 type StoredAsset = postgres.StoredAsset
 
 // Rescorer rescores the open Findings of an Asset from its effective
-// Criticality and Exposure. findings.Service is one, wired in by cmd, so this
-// package keeps the rule that a Declaration rescores its Asset without
-// depending on how Findings are scored (ADR 0008, ADR 0021).
+// Criticality and Exposure.
 type Rescorer interface {
 	RescoreAsset(ctx context.Context, asset inventory.SourceReference) error
 }
