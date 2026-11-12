@@ -57,6 +57,9 @@ type Asset struct {
 	InactiveSince      *time.Time
 	AreaRecordID       *string
 	ImportedExposureID *int16
+	ID                 int64
+	ExposureDeclaredBy pgtype.UUID
+	ExposureDeclaredAt *time.Time
 }
 
 type AssetKind struct {

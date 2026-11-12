@@ -44,10 +44,10 @@ func New(db *postgres.DB, model scoring.Model, kevMaxAge time.Duration) *Service
 	return &Service{db: db, model: model, kevMaxAge: kevMaxAge, now: time.Now}
 }
 
-// OnChanged has fn called after each batch of a Feed and each AfterSync, which
-// may have opened, closed or rescored Findings, so the Prioritizer can place
-// them (ADR 0026). fn must return at once. It is meant to be set once, before
-// the Service is used.
+// OnChanged has fn called after each batch of a Feed, each AfterSync and each
+// RescoreAsset, which may have opened, closed or rescored Findings, so the
+// Prioritizer can place them (ADR 0026). fn must return at once. It is meant
+// to be set once, before the Service is used.
 func (s *Service) OnChanged(fn func()) {
 	s.onChanged = fn
 }
@@ -89,6 +89,16 @@ func stored(v postgres.StoredVulnerability) (*stix2.Vulnerability, error) {
 		return nil, fmt.Errorf("decode vulnerability %s: %w", v.CVE, err)
 	}
 	return &out, nil
+}
+
+// storedVulnerability reads the stored Vulnerability cve with every extension
+// the Feeds set on it.
+func storedVulnerability(ctx context.Context, tx *postgres.Tx, cve string) (*stix2.Vulnerability, error) {
+	withFeeds, err := tx.Vulnerability(ctx, cve)
+	if err != nil {
+		return nil, err
+	}
+	return stored(withFeeds)
 }
 
 // each runs fn on every Vulnerability of batch. A failure is logged and the

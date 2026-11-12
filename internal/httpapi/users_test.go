@@ -54,7 +54,7 @@ func TestOnlyACustomerAdminManagesUsers(t *testing.T) {
 		}
 		token := "Bearer " + e.signIn(t, e.newUser(t, role, customer))
 		for _, op := range customerAdminOperations {
-			rec := e.asUser(token, op.method, op.path, map[string]string{"email": "a@example.com", "role": "viewer"})
+			rec := e.asUser(token, op.method, op.path, map[string]string{"email": "a@example.com", "role": "viewer", "exposure": "internal"})
 
 			if rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), `"code":"forbidden"`) {
 				t.Errorf("%s: %s %s = %d %s, want 403 forbidden", role, op.method, op.path, rec.Code, rec.Body)

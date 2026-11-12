@@ -50,6 +50,28 @@ func (w world) exec(t *testing.T, sql string, args ...any) {
 	}
 }
 
+// declareExposure stores a Customer Admin's Declaration of the record's
+// Exposure, or clears it for Unknown, as the assets use case does, without
+// rescoring.
+func (w world) declareExposure(t *testing.T, record string, e inventory.Exposure) {
+	t.Helper()
+	if e == inventory.ExposureUnknown {
+		w.exec(t, `UPDATE assets SET declared_exposure_id = NULL, exposure_declared_by = NULL, exposure_declared_at = NULL WHERE record_id = $1`, record)
+		return
+	}
+	w.exec(t, `
+		WITH admin AS (
+			INSERT INTO users (id, cognito_sub, email, customer_id, role_id)
+			SELECT gen_random_uuid(), gen_random_uuid()::text, 'admin@example.com', customer_id, 2
+			FROM cmdb_sources WHERE id = $3
+			ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email
+			RETURNING id
+		)
+		UPDATE assets
+		SET declared_exposure_id = $1, exposure_declared_by = (SELECT id FROM admin), exposure_declared_at = now()
+		WHERE record_id = $2`, int16(e), record, uuid.UUID(w.source))
+}
+
 // server is an Asset record of that Criticality running components.
 func server(t *testing.T, id string, criticality inventory.Criticality, components ...inventory.SoftwareComponent) inventory.Record {
 	t.Helper()
@@ -188,4 +210,15 @@ func (w world) count(t *testing.T, sql string, args ...any) int {
 		t.Fatal(err)
 	}
 	return n
+}
+
+// latestExposureMultiplier is the exposure multiplier of the Finding's newest Score.
+func (w world) latestExposureMultiplier(t *testing.T, id uuid.UUID) float64 {
+	t.Helper()
+	var m float64
+	if err := w.conn.QueryRow(context.Background(),
+		`SELECT exposure_multiplier FROM finding_scores WHERE finding_id = $1 ORDER BY scored_at DESC LIMIT 1`, id).Scan(&m); err != nil {
+		t.Fatal(err)
+	}
+	return m
 }

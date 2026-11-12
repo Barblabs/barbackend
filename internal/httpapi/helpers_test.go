@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"slices"
 	"strings"
 	"sync"
@@ -26,6 +27,7 @@ import (
 	"barbackend/internal/cognito/cognitotest"
 	"barbackend/internal/encryption"
 	"barbackend/internal/finding"
+	"barbackend/internal/findings"
 	"barbackend/internal/httpapi"
 	"barbackend/internal/inventory"
 	"barbackend/internal/postgres"
@@ -71,6 +73,8 @@ var customerAdminOperations = []struct{ method, path string }{
 	{http.MethodPatch, "/users/" + uuid.Nil.String()},
 	{http.MethodPost, "/users/" + uuid.Nil.String() + "/disable"},
 	{http.MethodPut, "/areas/0/owner"},
+	{http.MethodPut, "/assets/0/exposure"},
+	{http.MethodDelete, "/assets/0/exposure"},
 }
 
 // businessContextEdits are those only a Customer Admin may call on the
@@ -115,7 +119,7 @@ func newEnv(t *testing.T) env {
 	llm := claudetest.New(t)
 	agentService := agents.NewService(db, agents.NewCrew(claude.New(llm.URL), agents.DefaultModels()))
 	router := httpapi.New(httpapi.Config{
-		Agents: agentService, Areas: areas.New(db), Assets: assets.New(db), BusinessContext: businesscontext.New(db), CMDB: svc,
+		Agents: agentService, Areas: areas.New(db), Assets: assets.New(db, findings.New(db, scoring.Model1, time.Hour)), BusinessContext: businesscontext.New(db), CMDB: svc,
 		Users: users.New(db, pool.Verifier(t), admin), AllowedOrigins: []string{allowedOrigin},
 	})
 	e := env{db: db, conn: pgtest.Conn(t, url), pool: pool, provider: p, admin: admin, cmdb: svc, llm: llm, agents: agentService, router: router}
@@ -505,4 +509,31 @@ type findingBody struct {
 func lunaReply(t *testing.T) claudetest.Reply {
 	t.Helper()
 	return claudetest.JSON(t, assessment.ActionPlan{Summary: "Revisa.", Steps: []string{"Confirma si aplica."}, Verification: "Confirma con el fabricante."})
+}
+
+// assetNamed is the Customer's Asset with that record id, Active or not.
+func (e env) assetNamed(t *testing.T, recordID string) asset {
+	t.Helper()
+	return e.assetOf(t, "Bearer "+e.token, recordID)
+}
+
+// assetOf is the Asset with that record id of the Customer authorization
+// signs in to.
+func (e env) assetOf(t *testing.T, authorization, recordID string) asset {
+	t.Helper()
+	page := decode[assetList](t, e.asUser(authorization, http.MethodGet, "/assets?"+url.Values{"active": {"all"}}.Encode(), nil), http.StatusOK)
+	i := slices.IndexFunc(page.Assets, func(a asset) bool { return a.RecordID == recordID })
+	if i < 0 {
+		t.Fatalf("no asset %q in %+v", recordID, page.Assets)
+	}
+	return page.Assets[i]
+}
+
+func (e env) userEmail(t *testing.T, id string) string {
+	t.Helper()
+	var email string
+	if err := e.conn.QueryRow(context.Background(), "SELECT email FROM users WHERE id = $1", id).Scan(&email); err != nil {
+		t.Fatal(err)
+	}
+	return email
 }

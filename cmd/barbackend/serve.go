@@ -92,7 +92,7 @@ func serve(ctx context.Context, _ []string) error {
 		return listen(ctx, backgroundDone, httpapi.New(httpapi.Config{
 			Agents:          agentService,
 			Areas:           areas.New(db),
-			Assets:          assets.New(db),
+			Assets:          assets.New(db, found),
 			BusinessContext: businessContext,
 			CMDB:            sources,
 			Users:           userService,

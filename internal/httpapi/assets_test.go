@@ -7,33 +7,45 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"testing"
+	"time"
 
 	"barbackend/internal/inventory"
 )
 
 type assetList struct {
-	Assets []struct {
-		SourceID string                          `json:"source_id"`
-		RecordID string                          `json:"record_id"`
-		Name     string                          `json:"name"`
-		Kind     string                          `json:"kind"`
-		Hardware *struct{ Vendor, Model string } `json:"hardware"`
-		Software []struct {
-			Role    string                         `json:"role"`
-			Name    string                         `json:"name"`
-			Version string                         `json:"version"`
-			Product *struct{ Vendor, Name string } `json:"product"`
-		} `json:"software"`
-		Criticality   *string                         `json:"criticality"`
-		Exposure      *string                         `json:"exposure"`
-		Owner         *struct{ Email, Source string } `json:"owner"`
-		Area          *areaRef                        `json:"area"`
-		Retired       bool                            `json:"retired"`
-		Active        bool                            `json:"active"`
-		InactiveSince *string                         `json:"inactive_since"`
-	} `json:"assets"`
+	Assets     []asset `json:"assets"`
 	NextCursor *string `json:"next_cursor"`
 	Total      int     `json:"total"`
+}
+
+type asset struct {
+	ID       int64                           `json:"id"`
+	SourceID string                          `json:"source_id"`
+	RecordID string                          `json:"record_id"`
+	Name     string                          `json:"name"`
+	Kind     string                          `json:"kind"`
+	Hardware *struct{ Vendor, Model string } `json:"hardware"`
+	Software []struct {
+		Role    string                         `json:"role"`
+		Name    string                         `json:"name"`
+		Version string                         `json:"version"`
+		Product *struct{ Vendor, Name string } `json:"product"`
+	} `json:"software"`
+	Criticality   *string                         `json:"criticality"`
+	Exposure      assetExposure                   `json:"exposure"`
+	Owner         *struct{ Email, Source string } `json:"owner"`
+	Area          *areaRef                        `json:"area"`
+	Retired       bool                            `json:"retired"`
+	Active        bool                            `json:"active"`
+	InactiveSince *string                         `json:"inactive_since"`
+}
+
+type assetExposure struct {
+	Value      *string    `json:"value"`
+	Source     string     `json:"source"`
+	Imported   *string    `json:"imported"`
+	DeclaredBy *string    `json:"declared_by"`
+	DeclaredAt *time.Time `json:"declared_at"`
 }
 
 type areaRef struct {
@@ -207,7 +219,7 @@ func TestListAssetsShape(t *testing.T) {
 	e := newEnv(t)
 	owner, _ := inventory.NewOwnerEmail("imported@example.com")
 	physical := imported(t, inventory.ImportedAssetParams{
-		Name: "phys", Kind: inventory.Server, Criticality: inventory.CriticalityHigh, Owner: owner, Area: "7",
+		Name: "phys", Kind: inventory.Server, Criticality: inventory.CriticalityHigh, Exposure: inventory.InternetFacing, Owner: owner, Area: "7",
 		Hardware: inventory.Hardware{Vendor: "Dell", Model: "R640"},
 		Software: []inventory.SoftwareComponent{
 			{Role: inventory.OperatingSystem, Name: "Ubuntu", Version: "22.04", Product: inventory.Product{Vendor: "Canonical", Name: "Ubuntu"}},
@@ -221,7 +233,7 @@ func TestListAssetsShape(t *testing.T) {
 	e.connect(t, e.customer)
 	if _, err := e.conn.Exec(context.Background(), `
 		WITH owner AS (INSERT INTO asset_owners (customer_id, email) VALUES ($1, 'declared@example.com') RETURNING id)
-		UPDATE assets SET declared_owner_id = (SELECT id FROM owner), declared_exposure_id = 1 WHERE record_id = 'P'`, [16]byte(e.customer)); err != nil {
+		UPDATE assets SET declared_owner_id = (SELECT id FROM owner) WHERE record_id = 'P'`, [16]byte(e.customer)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -231,11 +243,14 @@ func TestListAssetsShape(t *testing.T) {
 	if phys.RecordID != "P" {
 		phys, virt = virt, phys
 	}
-	if phys.Kind != "server" || phys.Hardware == nil || *phys.Criticality != "high" || *phys.Exposure != "internet_facing" || !phys.Active || phys.InactiveSince != nil {
+	if phys.ID == 0 || phys.ID == virt.ID || phys.Kind != "server" || phys.Hardware == nil || *phys.Criticality != "high" || !phys.Active || phys.InactiveSince != nil {
 		t.Errorf("physical = %+v", phys)
 	}
 	if phys.Owner == nil || *phys.Owner != (struct{ Email, Source string }{"declared@example.com", "declared"}) {
 		t.Errorf("owner = %+v, want the declared one", phys.Owner)
+	}
+	if x := phys.Exposure; x.Value == nil || *x.Value != "internet_facing" || x.Source != "imported" || x.Imported == nil || *x.Imported != "internet_facing" || x.DeclaredBy != nil || x.DeclaredAt != nil {
+		t.Errorf("exposure = %+v, want the imported internet_facing", x)
 	}
 	if phys.Area == nil || phys.Area.Name != "IT" || phys.Area.ID != e.areaID(t, "7") {
 		t.Errorf("area = %+v, want IT", phys.Area)
@@ -243,8 +258,11 @@ func TestListAssetsShape(t *testing.T) {
 	if len(phys.Software) != 2 || phys.Software[0].Role != "operating_system" || phys.Software[0].Product == nil || phys.Software[1].Product != nil {
 		t.Errorf("software = %+v, want an identified OS then an unidentified application", phys.Software)
 	}
-	if virt.Hardware != nil || virt.Owner != nil || virt.Area != nil || virt.Criticality != nil || virt.Exposure != nil || virt.Software == nil || len(virt.Software) != 0 {
-		t.Errorf("virtual = %+v, want null hardware, owner, area, criticality and exposure and an empty software array", virt)
+	if virt.Hardware != nil || virt.Owner != nil || virt.Area != nil || virt.Criticality != nil || virt.Software == nil || len(virt.Software) != 0 {
+		t.Errorf("virtual = %+v, want null hardware, owner, area and criticality and an empty software array", virt)
+	}
+	if virt.Exposure != (assetExposure{Source: "imported"}) {
+		t.Errorf("virtual exposure = %+v, want an imported Unknown: null value and imported", virt.Exposure)
 	}
 }
 

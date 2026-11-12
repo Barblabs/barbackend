@@ -172,6 +172,24 @@ func TestAssetRejectedExposureKeepsPrevious(t *testing.T) {
 	}
 }
 
+func TestAnInactiveAssetCannotBeDeclaredButKeepsItsDeclaration(t *testing.T) {
+	a := newAsset(t, validParams())
+	if err := a.DeclareExposure(inventory.Internal); err != nil {
+		t.Fatal(err)
+	}
+	a.MarkInactive()
+	if err := a.DeclareExposure(inventory.InternetFacing); !errors.Is(err, inventory.ErrAssetInactive) {
+		t.Fatalf("err = %v, want ErrAssetInactive", err)
+	}
+	if a.Exposure() != inventory.Internal {
+		t.Errorf("Exposure() = %v, want the Internal declared while Active", a.Exposure())
+	}
+	a.ClearExposureDeclaration()
+	if a.DeclaredExposure() != inventory.ExposureUnknown {
+		t.Errorf("DeclaredExposure() = %v, want a cleared Declaration", a.DeclaredExposure())
+	}
+}
+
 func TestAssetRetiredDoesNotAffectActive(t *testing.T) {
 	p := validParams()
 	p.Retired = true

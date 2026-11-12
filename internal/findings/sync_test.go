@@ -55,12 +55,8 @@ func TestAfterSyncRescoresWhenTheExposureChanges(t *testing.T) {
 	payments := server(t, "payments", inventory.CriticalityHigh, app("Nginx", "f5", "nginx", "1.18.0"))
 	multiplier := func() (m float64, scores int) {
 		t.Helper()
-		if err := w.conn.QueryRow(context.Background(), `
-			SELECT exposure_multiplier, (SELECT count(*) FROM finding_scores WHERE finding_id = $1)
-			FROM finding_scores WHERE finding_id = $1 ORDER BY scored_at DESC LIMIT 1`, f.id).Scan(&m, &scores); err != nil {
-			t.Fatal(err)
-		}
-		return m, scores
+		_, _, _, scores = w.latestScore(t, f.id)
+		return w.latestExposureMultiplier(t, f.id), scores
 	}
 
 	w.afterSync(t, exposedTo(t, payments, inventory.Internal))
@@ -71,7 +67,7 @@ func TestAfterSyncRescoresWhenTheExposureChanges(t *testing.T) {
 		t.Errorf("gaps = %v, want no exposure_undeclared once the CMDB gives the Exposure", gaps)
 	}
 
-	w.exec(t, `UPDATE assets SET declared_exposure_id = $1 WHERE record_id = 'payments'`, int16(inventory.InternetFacing))
+	w.declareExposure(t, "payments", inventory.InternetFacing)
 	w.afterSync(t, exposedTo(t, payments, inventory.Internal))
 	if m, scores := multiplier(); m != 1 || scores != 3 {
 		t.Errorf("after declaring it Internet-facing: multiplier %v in %d scores, want the Declaration's 1 in a third score", m, scores)

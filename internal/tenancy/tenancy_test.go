@@ -147,10 +147,11 @@ func TestOnlyAPlatformAdminManagesCustomers(t *testing.T) {
 	}
 }
 
-func TestOnlyACustomerAdminManagesUsersAreasAndTheBusinessContext(t *testing.T) {
+func TestOnlyACustomerAdminManagesUsersAreasAssetValuesAndTheBusinessContext(t *testing.T) {
 	actions := map[string]func(tenancy.User) (tenancy.CustomerID, error){
 		"ManageUsers":         tenancy.User.ManageUsers,
 		"ManageAreas":         tenancy.User.ManageAreas,
+		"DeclareAssetValues":  tenancy.User.DeclareAssetValues,
 		"EditBusinessContext": tenancy.User.EditBusinessContext,
 	}
 	tests := []struct {

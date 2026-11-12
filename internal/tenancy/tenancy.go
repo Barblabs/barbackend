@@ -17,7 +17,8 @@ var (
 	// ErrNotPlatformAdmin is a User of a Customer asking to manage Customers.
 	ErrNotPlatformAdmin = errors.New("only a platform admin manages customers")
 	// ErrNotCustomerAdmin is a Viewer or a Platform Admin asking to manage the
-	// Users or Areas of a Customer or to edit its Business Context.
+	// Users or Areas of a Customer, to declare values on its Assets or to edit
+	// its Business Context.
 	ErrNotCustomerAdmin = errors.New("only a customer admin can do this")
 	// ErrLastCustomerAdmin is a change that would leave a Customer without an
 	// active Customer Admin.
@@ -216,25 +217,30 @@ func (u User) ManageCustomers() error {
 // ManageUsers returns the Customer whose Users u manages. It fails with
 // ErrNotCustomerAdmin for anyone but a Customer Admin.
 func (u User) ManageUsers() (CustomerID, error) {
-	if u.role != CustomerAdmin {
-		return CustomerID{}, ErrNotCustomerAdmin
-	}
-	return u.customer, nil
+	return u.customerAdmin()
 }
 
 // EditBusinessContext returns the Customer whose Business Context u edits. It
 // fails with ErrNotCustomerAdmin for anyone but a Customer Admin.
 func (u User) EditBusinessContext() (CustomerID, error) {
-	if u.role != CustomerAdmin {
-		return CustomerID{}, ErrNotCustomerAdmin
-	}
-	return u.customer, nil
+	return u.customerAdmin()
 }
 
 // ManageAreas returns the Customer whose Areas u manages, such as stating
 // their owners. It fails with ErrNotCustomerAdmin for anyone but a Customer
 // Admin.
 func (u User) ManageAreas() (CustomerID, error) {
+	return u.customerAdmin()
+}
+
+// DeclareAssetValues returns the Customer whose Assets u declares values on,
+// such as their Exposure. It fails with ErrNotCustomerAdmin for anyone but a
+// Customer Admin.
+func (u User) DeclareAssetValues() (CustomerID, error) {
+	return u.customerAdmin()
+}
+
+func (u User) customerAdmin() (CustomerID, error) {
 	if u.role != CustomerAdmin {
 		return CustomerID{}, ErrNotCustomerAdmin
 	}

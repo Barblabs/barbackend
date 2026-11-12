@@ -46,15 +46,17 @@ SET inactive_since = NULL
 WHERE cmdb_source_id = @cmdb_source_id AND record_id = ANY(@record_ids::text[]);
 
 -- name: ListAssets :many
-SELECT a.cmdb_source_id, a.record_id, a.name, a.description, a.kind_id,
+SELECT a.id, a.cmdb_source_id, a.record_id, a.name, a.description, a.kind_id,
        a.hardware_vendor, a.hardware_model, a.criticality_id,
        imported_owner.email AS imported_owner, declared_owner.email AS declared_owner,
        a.imported_exposure_id, a.declared_exposure_id, a.area_record_id, a.retired, a.inactive_since,
-       area.id AS area_id, area.name AS area_name
+       area.id AS area_id, area.name AS area_name,
+       exposure_declarer.email AS exposure_declared_by, a.exposure_declared_at
 FROM assets a
 LEFT JOIN asset_owners imported_owner ON imported_owner.id = a.imported_owner_id
 LEFT JOIN asset_owners declared_owner ON declared_owner.id = a.declared_owner_id
 LEFT JOIN customer_areas area ON area.cmdb_source_id = a.cmdb_source_id AND area.record_id = a.area_record_id
+LEFT JOIN users exposure_declarer ON exposure_declarer.id = a.exposure_declared_by
 WHERE a.cmdb_source_id = @cmdb_source_id
 ORDER BY a.record_id;
 
@@ -81,16 +83,18 @@ WHERE cmdb_source_id = @cmdb_source_id;
 -- The keyset condition and the ORDER BY both use (name, cmdb_source_id,
 -- record_id), so a page boundary is exact even between equal names.
 -- name: ListCustomerAssets :many
-SELECT a.cmdb_source_id, a.record_id, a.name, a.description, a.kind_id,
+SELECT a.id, a.cmdb_source_id, a.record_id, a.name, a.description, a.kind_id,
        a.hardware_vendor, a.hardware_model, a.criticality_id,
        imported_owner.email AS imported_owner, declared_owner.email AS declared_owner,
        a.imported_exposure_id, a.declared_exposure_id, a.area_record_id, a.retired, a.inactive_since,
-       area.id AS area_id, area.name AS area_name
+       area.id AS area_id, area.name AS area_name,
+       exposure_declarer.email AS exposure_declared_by, a.exposure_declared_at
 FROM assets a
 JOIN cmdb_sources s ON s.id = a.cmdb_source_id
 LEFT JOIN asset_owners imported_owner ON imported_owner.id = a.imported_owner_id
 LEFT JOIN asset_owners declared_owner ON declared_owner.id = a.declared_owner_id
 LEFT JOIN customer_areas area ON area.cmdb_source_id = a.cmdb_source_id AND area.record_id = a.area_record_id
+LEFT JOIN users exposure_declarer ON exposure_declarer.id = a.exposure_declared_by
 WHERE s.customer_id = @customer_id
   AND (sqlc.narg(active)::boolean IS NULL OR (a.inactive_since IS NULL) = sqlc.narg(active)::boolean)
   AND (sqlc.narg(kind_id)::smallint IS NULL OR a.kind_id = sqlc.narg(kind_id)::smallint)
@@ -113,15 +117,17 @@ WHERE s.customer_id = @customer_id
 -- Assets by their references, as ListAssets reads them. The two arrays are
 -- parallel: element i of each names one Asset.
 -- name: ListAssetsByReference :many
-SELECT a.cmdb_source_id, a.record_id, a.name, a.description, a.kind_id,
+SELECT a.id, a.cmdb_source_id, a.record_id, a.name, a.description, a.kind_id,
        a.hardware_vendor, a.hardware_model, a.criticality_id,
        imported_owner.email AS imported_owner, declared_owner.email AS declared_owner,
        a.imported_exposure_id, a.declared_exposure_id, a.area_record_id, a.retired, a.inactive_since,
-       area.id AS area_id, area.name AS area_name
+       area.id AS area_id, area.name AS area_name,
+       exposure_declarer.email AS exposure_declared_by, a.exposure_declared_at
 FROM assets a
 LEFT JOIN asset_owners imported_owner ON imported_owner.id = a.imported_owner_id
 LEFT JOIN asset_owners declared_owner ON declared_owner.id = a.declared_owner_id
 LEFT JOIN customer_areas area ON area.cmdb_source_id = a.cmdb_source_id AND area.record_id = a.area_record_id
+LEFT JOIN users exposure_declarer ON exposure_declarer.id = a.exposure_declared_by
 WHERE (a.cmdb_source_id, a.record_id) IN (
     SELECT s.id, r.id
     FROM unnest(@source_ids::uuid[]) WITH ORDINALITY AS s (id, n)
@@ -139,3 +145,24 @@ WHERE (cmdb_source_id, record_id) IN (
     JOIN unnest(@record_ids::text[]) WITH ORDINALITY AS r (id, n) USING (n)
 )
 ORDER BY cmdb_source_id, record_id, position;
+
+-- The reference of the Customer's Asset with that id, locked until the
+-- transaction ends so a Declaration and a Sync of it take turns.
+-- name: LockCustomerAsset :one
+SELECT a.cmdb_source_id, a.record_id
+FROM assets a
+JOIN cmdb_sources s ON s.id = a.cmdb_source_id
+WHERE a.id = @id AND s.customer_id = @customer_id
+FOR UPDATE OF a;
+
+-- name: DeclareAssetExposure :exec
+UPDATE assets
+SET declared_exposure_id = @declared_exposure_id::smallint,
+    exposure_declared_by = @declared_by::uuid,
+    exposure_declared_at = now()
+WHERE cmdb_source_id = @cmdb_source_id AND record_id = @record_id;
+
+-- name: ClearAssetExposure :exec
+UPDATE assets
+SET declared_exposure_id = NULL, exposure_declared_by = NULL, exposure_declared_at = NULL
+WHERE cmdb_source_id = @cmdb_source_id AND record_id = @record_id;

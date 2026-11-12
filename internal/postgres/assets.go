@@ -267,11 +267,22 @@ func importedColumns(source inventory.CMDBSourceID, a *inventory.Asset, owners o
 
 // StoredAsset is an Asset with what only the database records about it.
 type StoredAsset struct {
+	// ID is the handle the HTTP API uses for the Asset (ADR 0021).
+	ID    int64
 	Asset *inventory.Asset
 	// Area is the Asset's Area, nil when it has none.
 	Area *AreaSummary
 	// InactiveSince is when the Asset became Inactive, nil while it is Active.
 	InactiveSince *time.Time
+	// ExposureAudit is who declared the Asset's Exposure and when, set exactly
+	// when Asset.DeclaredExposure is not Unknown.
+	ExposureAudit DeclarationAudit
+}
+
+// DeclarationAudit is who stated a declared value and when.
+type DeclarationAudit struct {
+	By string
+	At time.Time
 }
 
 func restoreAsset(row sqlcgen.ListAssetsRow, software map[inventory.SourceReference][]inventory.SoftwareComponent) (StoredAsset, error) {
@@ -280,9 +291,15 @@ func restoreAsset(row sqlcgen.ListAssetsRow, software map[inventory.SourceRefere
 	if err != nil {
 		return StoredAsset{}, fmt.Errorf("restore asset %v: %w", ref, err)
 	}
-	stored := StoredAsset{Asset: a, InactiveSince: row.InactiveSince}
+	stored := StoredAsset{ID: row.ID, Asset: a, InactiveSince: row.InactiveSince}
 	if row.AreaID != nil {
 		stored.Area = &AreaSummary{ID: *row.AreaID, Name: valueOrZero(row.AreaName)}
+	}
+	if row.DeclaredExposureID != nil {
+		if row.ExposureDeclaredBy == nil || row.ExposureDeclaredAt == nil {
+			return StoredAsset{}, fmt.Errorf("restore asset %v: declared exposure without who declared it and when", ref)
+		}
+		stored.ExposureAudit = DeclarationAudit{By: *row.ExposureDeclaredBy, At: *row.ExposureDeclaredAt}
 	}
 	return stored, nil
 }

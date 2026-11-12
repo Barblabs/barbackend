@@ -131,3 +131,31 @@ func mustOwner(t *testing.T, email string) inventory.OwnerEmail {
 	}
 	return o
 }
+
+// onlyAsset is the one Asset of the Customer, as the Asset list reads it.
+func onlyAsset(t *testing.T, db *postgres.DB, customer tenancy.CustomerID) postgres.StoredAsset {
+	t.Helper()
+	var page postgres.AssetPage
+	inTx(t, db, func(tx *postgres.Tx) (err error) {
+		page, err = tx.ListAssets(context.Background(), postgres.AssetListQuery{Customer: customer, Limit: 10})
+		return err
+	})
+	if len(page.Assets) != 1 {
+		t.Fatalf("assets = %d, want 1", len(page.Assets))
+	}
+	return page.Assets[0]
+}
+
+func declareInternal(t *testing.T, db *postgres.DB, customer tenancy.CustomerID, id int64, by tenancy.UserID) {
+	t.Helper()
+	inTx(t, db, func(tx *postgres.Tx) error {
+		stored, err := tx.CustomerAsset(context.Background(), customer, id)
+		if err != nil {
+			return err
+		}
+		if err := stored.Asset.DeclareExposure(inventory.Internal); err != nil {
+			return err
+		}
+		return tx.DeclareExposure(context.Background(), stored.Asset, by)
+	})
+}

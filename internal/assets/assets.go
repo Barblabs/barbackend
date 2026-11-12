@@ -1,5 +1,5 @@
 // Package assets holds the use cases on a Customer's Assets: listing them
-// across all its CMDB Sources (ADR 0008).
+// across all its CMDB Sources and declaring their Exposure (ADR 0008).
 package assets
 
 import (
@@ -24,14 +24,24 @@ const (
 // cursor, including a cursor reused with other filters.
 var ErrInvalidQuery = errors.New("invalid asset query")
 
+// ErrAssetNotFound is an Asset the Customer does not have.
+var ErrAssetNotFound = errors.New("asset not found")
+
 type StoredAsset = postgres.StoredAsset
 
-type Service struct {
-	db *postgres.DB
+// Rescorer rescores the open Findings of an Asset from its effective
+// Criticality and Exposure.
+type Rescorer interface {
+	RescoreAsset(ctx context.Context, asset inventory.SourceReference) error
 }
 
-func New(db *postgres.DB) *Service {
-	return &Service{db: db}
+type Service struct {
+	db       *postgres.DB
+	rescorer Rescorer
+}
+
+func New(db *postgres.DB, rescorer Rescorer) *Service {
+	return &Service{db: db, rescorer: rescorer}
 }
 
 // Query selects a page of a Customer's Assets. A zero Limit takes

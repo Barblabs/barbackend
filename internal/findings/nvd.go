@@ -87,11 +87,7 @@ func storeAndRead(ctx context.Context, tx *postgres.Tx, cve string, v *stix2.Vul
 	if err := tx.StoreVulnerability(ctx, postgres.StoredVulnerability{CVE: cve, Object: object, Modified: modified(n, v)}); err != nil {
 		return nil, err
 	}
-	withFeeds, err := tx.Vulnerability(ctx, cve)
-	if err != nil {
-		return nil, err
-	}
-	return stored(withFeeds)
+	return storedVulnerability(ctx, tx, cve)
 }
 
 // save saves and scores every match of v, and returns the Keys it saved.
