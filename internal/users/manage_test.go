@@ -62,3 +62,20 @@ func TestDisablingTheLastCustomerAdminIsRefused(t *testing.T) {
 		t.Errorf("err = %v, want ErrLastCustomerAdmin and the admin still able to sign in", err)
 	}
 }
+
+func TestAPendingCustomerAdminDoesNotKeepTheCustomerManaged(t *testing.T) {
+	t.Parallel()
+	admin := &fakeAdmin{}
+	svc, db := newService(t, admin)
+	caller := customerAdmin(t, svc, db, admin)
+	admin.err = errors.New("cognito unreachable")
+	if _, err := svc.InviteUser(context.Background(), caller, "second@example.com", tenancy.CustomerAdmin); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := svc.DisableUser(context.Background(), caller, caller.ID())
+
+	if !errors.Is(err, tenancy.ErrLastCustomerAdmin) {
+		t.Errorf("err = %v, want ErrLastCustomerAdmin while the other Customer Admin is pending", err)
+	}
+}

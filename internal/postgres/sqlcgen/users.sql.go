@@ -54,7 +54,7 @@ func (q *Queries) ClaimDueUserInvitation(ctx context.Context, arg ClaimDueUserIn
 const countActiveUsersWithRole = `-- name: CountActiveUsersWithRole :one
 SELECT count(*)
 FROM users
-WHERE customer_id = $1 AND role_id = $2 AND disabled_at IS NULL
+WHERE customer_id = $1 AND role_id = $2 AND disabled_at IS NULL AND cognito_sub IS NOT NULL
 `
 
 type CountActiveUsersWithRoleParams struct {

@@ -200,6 +200,8 @@ func (t *Tx) LockCustomer(ctx context.Context, customer tenancy.CustomerID) erro
 	return nil
 }
 
+// ActiveCustomerAdmins counts the Customer Admins who can sign in: neither
+// disabled nor pending.
 func (t *Tx) ActiveCustomerAdmins(ctx context.Context, customer tenancy.CustomerID) (int, error) {
 	n, err := t.q.CountActiveUsersWithRole(ctx, sqlcgen.CountActiveUsersWithRoleParams{
 		CustomerID: customerUUID(customer),
