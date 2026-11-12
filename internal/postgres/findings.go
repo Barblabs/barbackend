@@ -189,6 +189,20 @@ func (t *Tx) OpenFindingsOfSource(ctx context.Context, source inventory.CMDBSour
 	return out, nil
 }
 
+// OpenFindingsOfAsset is the open Findings of one Asset, with its effective
+// Criticality and Exposure, which a Declaration rescores (ADR 0021).
+func (t *Tx) OpenFindingsOfAsset(ctx context.Context, asset inventory.SourceReference) ([]OpenFinding, error) {
+	rows, err := t.q.ListOpenFindingsOfAsset(ctx, sqlcgen.ListOpenFindingsOfAssetParams{CmdbSourceID: uuid.UUID(asset.Source), RecordID: asset.RecordID})
+	if err != nil {
+		return nil, fmt.Errorf("list open findings of asset %v: %w", asset, err)
+	}
+	out := make([]OpenFinding, len(rows))
+	for i, row := range rows {
+		out[i] = openFinding(sqlcgen.ListOpenFindingsOfVulnerabilityRow(row))
+	}
+	return out, nil
+}
+
 // SaveScoreIfChanged stores s as the Finding's newest Score unless its latest
 // Score has the same Scoring Model, value and Data Gaps (ADR 0020). It
 // reports whether it stored one.

@@ -94,6 +94,16 @@ JOIN assets a USING (cmdb_source_id, record_id)
 WHERE f.closed_at IS NULL AND f.cmdb_source_id = @cmdb_source_id
 ORDER BY f.cmdb_source_id, f.record_id, f.product_vendor, f.product_name, f.cve_id;
 
+-- The open Findings of one Asset, with what scoring needs of it.
+-- name: ListOpenFindingsOfAsset :many
+SELECT f.id, f.cmdb_source_id, f.record_id, f.product_vendor, f.product_name, f.cve_id,
+       f.component_name, f.component_version, a.criticality_id,
+       coalesce(a.declared_exposure_id, a.imported_exposure_id) AS exposure_id
+FROM findings f
+JOIN assets a USING (cmdb_source_id, record_id)
+WHERE f.cmdb_source_id = @cmdb_source_id AND f.record_id = @record_id AND f.closed_at IS NULL
+ORDER BY f.product_vendor, f.product_name, f.cve_id;
+
 -- name: DeleteFindingMatchFlags :exec
 DELETE FROM finding_match_flags
 WHERE finding_id = @finding_id;

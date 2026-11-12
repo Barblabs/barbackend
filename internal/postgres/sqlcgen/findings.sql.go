@@ -385,6 +385,66 @@ func (q *Queries) ListFindingMatchFlags(ctx context.Context, findingID uuid.UUID
 	return items, nil
 }
 
+const listOpenFindingsOfAsset = `-- name: ListOpenFindingsOfAsset :many
+SELECT f.id, f.cmdb_source_id, f.record_id, f.product_vendor, f.product_name, f.cve_id,
+       f.component_name, f.component_version, a.criticality_id,
+       coalesce(a.declared_exposure_id, a.imported_exposure_id) AS exposure_id
+FROM findings f
+JOIN assets a USING (cmdb_source_id, record_id)
+WHERE f.cmdb_source_id = $1 AND f.record_id = $2 AND f.closed_at IS NULL
+ORDER BY f.product_vendor, f.product_name, f.cve_id
+`
+
+type ListOpenFindingsOfAssetParams struct {
+	CmdbSourceID uuid.UUID
+	RecordID     string
+}
+
+type ListOpenFindingsOfAssetRow struct {
+	ID               uuid.UUID
+	CmdbSourceID     uuid.UUID
+	RecordID         string
+	ProductVendor    string
+	ProductName      string
+	CveID            string
+	ComponentName    string
+	ComponentVersion string
+	CriticalityID    *int16
+	ExposureID       *int16
+}
+
+// The open Findings of one Asset, with what scoring needs of it.
+func (q *Queries) ListOpenFindingsOfAsset(ctx context.Context, arg ListOpenFindingsOfAssetParams) ([]ListOpenFindingsOfAssetRow, error) {
+	rows, err := q.db.Query(ctx, listOpenFindingsOfAsset, arg.CmdbSourceID, arg.RecordID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOpenFindingsOfAssetRow
+	for rows.Next() {
+		var i ListOpenFindingsOfAssetRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.CmdbSourceID,
+			&i.RecordID,
+			&i.ProductVendor,
+			&i.ProductName,
+			&i.CveID,
+			&i.ComponentName,
+			&i.ComponentVersion,
+			&i.CriticalityID,
+			&i.ExposureID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOpenFindingsOfCustomer = `-- name: ListOpenFindingsOfCustomer :many
 SELECT f.id, f.cmdb_source_id, f.record_id, f.cve_id, f.component_name, f.component_version,
        v.object AS vulnerability_object,

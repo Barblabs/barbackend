@@ -10,6 +10,7 @@ import (
 	"barbackend/internal/inventory"
 	"barbackend/internal/postgres"
 	"barbackend/internal/postgres/pgtest"
+	"barbackend/internal/tenancy"
 	"github.com/google/uuid"
 )
 
@@ -107,16 +108,21 @@ func TestImportedUpdateKeepsDeclarations(t *testing.T) {
 	t.Parallel()
 	db, conn := newDBWithConn(t)
 	src := newSource(t, db, newCustomer(t, db))
-	syncRecords(t, db, src.ID(), record(t, "1", fullParams(t)))
+	admin := storeUser(t, db, "admin@example.com", tenancy.CustomerAdmin, src.Customer())
+	active := fullParams(t)
+	active.Retired = false
+	syncRecords(t, db, src.ID(), record(t, "1", active))
 	_, err := conn.Exec(context.Background(), `
 		WITH owner AS (
 			INSERT INTO asset_owners (customer_id, email) VALUES ($1, 'declared@example.com') RETURNING id
 		)
-		UPDATE assets SET declared_owner_id = (SELECT id FROM owner), declared_exposure_id = $2`,
-		src.Customer().String(), int16(inventory.Internal))
+		UPDATE assets SET declared_owner_id = (SELECT id FROM owner)`,
+		src.Customer().String())
 	if err != nil {
 		t.Fatal(err)
 	}
+	declareExposure(t, db, src.Customer(), onlyAsset(t, db, src.Customer()).ID, inventory.Internal, admin.ID())
+	declaration := onlyAsset(t, db, src.Customer()).ExposureDeclaration
 
 	changed := inventory.ImportedAssetParams{
 		Name:     "srv-01-renamed",
@@ -135,6 +141,9 @@ func TestImportedUpdateKeepsDeclarations(t *testing.T) {
 	}
 	if got := assets(t, db, src.ID()); len(got) != 1 || !reflect.DeepEqual(got[0], want) {
 		t.Errorf("assets = %+v, want [%+v]", got, want)
+	}
+	if got := onlyAsset(t, db, src.Customer()).ExposureDeclaration; got == nil || *got != *declaration {
+		t.Errorf("ExposureDeclaration after the Sync = %+v, want %+v", got, declaration)
 	}
 }
 

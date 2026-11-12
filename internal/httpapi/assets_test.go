@@ -207,7 +207,7 @@ func TestListAssetsShape(t *testing.T) {
 	e := newEnv(t)
 	owner, _ := inventory.NewOwnerEmail("imported@example.com")
 	physical := imported(t, inventory.ImportedAssetParams{
-		Name: "phys", Kind: inventory.Server, Criticality: inventory.CriticalityHigh, Owner: owner, Area: "7",
+		Name: "phys", Kind: inventory.Server, Criticality: inventory.CriticalityHigh, Exposure: inventory.InternetFacing, Owner: owner, Area: "7",
 		Hardware: inventory.Hardware{Vendor: "Dell", Model: "R640"},
 		Software: []inventory.SoftwareComponent{
 			{Role: inventory.OperatingSystem, Name: "Ubuntu", Version: "22.04", Product: inventory.Product{Vendor: "Canonical", Name: "Ubuntu"}},
@@ -221,7 +221,7 @@ func TestListAssetsShape(t *testing.T) {
 	e.connect(t, e.customer)
 	if _, err := e.conn.Exec(context.Background(), `
 		WITH owner AS (INSERT INTO asset_owners (customer_id, email) VALUES ($1, 'declared@example.com') RETURNING id)
-		UPDATE assets SET declared_owner_id = (SELECT id FROM owner), declared_exposure_id = 1 WHERE record_id = 'P'`, [16]byte(e.customer)); err != nil {
+		UPDATE assets SET declared_owner_id = (SELECT id FROM owner) WHERE record_id = 'P'`, [16]byte(e.customer)); err != nil {
 		t.Fatal(err)
 	}
 

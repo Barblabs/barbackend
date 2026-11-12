@@ -13,6 +13,25 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const clearAssetExposure = `-- name: ClearAssetExposure :execrows
+UPDATE assets
+SET declared_exposure_id = NULL, exposure_declared_by = NULL, exposure_declared_at = NULL
+WHERE cmdb_source_id = $1 AND record_id = $2
+`
+
+type ClearAssetExposureParams struct {
+	CmdbSourceID uuid.UUID
+	RecordID     string
+}
+
+func (q *Queries) ClearAssetExposure(ctx context.Context, arg ClearAssetExposureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, clearAssetExposure, arg.CmdbSourceID, arg.RecordID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const countCustomerAssets = `-- name: CountCustomerAssets :one
 SELECT count(*)
 FROM assets a
@@ -72,6 +91,34 @@ func (q *Queries) DeactivateSourceAssets(ctx context.Context, cmdbSourceID uuid.
 	return err
 }
 
+const declareAssetExposure = `-- name: DeclareAssetExposure :execrows
+UPDATE assets
+SET declared_exposure_id = $1::smallint,
+    exposure_declared_by = $2::uuid,
+    exposure_declared_at = now()
+WHERE cmdb_source_id = $3 AND record_id = $4
+`
+
+type DeclareAssetExposureParams struct {
+	DeclaredExposureID int16
+	DeclaredBy         uuid.UUID
+	CmdbSourceID       uuid.UUID
+	RecordID           string
+}
+
+func (q *Queries) DeclareAssetExposure(ctx context.Context, arg DeclareAssetExposureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, declareAssetExposure,
+		arg.DeclaredExposureID,
+		arg.DeclaredBy,
+		arg.CmdbSourceID,
+		arg.RecordID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteSoftwareComponents = `-- name: DeleteSoftwareComponents :exec
 DELETE FROM software_components
 WHERE cmdb_source_id = $1 AND record_id = ANY($2::text[])
@@ -115,20 +162,23 @@ type InsertSoftwareComponentsParams struct {
 }
 
 const listAssets = `-- name: ListAssets :many
-SELECT a.cmdb_source_id, a.record_id, a.name, a.description, a.kind_id,
+SELECT a.id, a.cmdb_source_id, a.record_id, a.name, a.description, a.kind_id,
        a.hardware_vendor, a.hardware_model, a.criticality_id,
        imported_owner.email AS imported_owner, declared_owner.email AS declared_owner,
        a.imported_exposure_id, a.declared_exposure_id, a.area_record_id, a.retired, a.inactive_since,
-       area.id AS area_id, area.name AS area_name
+       area.id AS area_id, area.name AS area_name,
+       exposure_declarer.email AS exposure_declared_by, a.exposure_declared_at
 FROM assets a
 LEFT JOIN asset_owners imported_owner ON imported_owner.id = a.imported_owner_id
 LEFT JOIN asset_owners declared_owner ON declared_owner.id = a.declared_owner_id
 LEFT JOIN customer_areas area ON area.cmdb_source_id = a.cmdb_source_id AND area.record_id = a.area_record_id
+LEFT JOIN users exposure_declarer ON exposure_declarer.id = a.exposure_declared_by
 WHERE a.cmdb_source_id = $1
 ORDER BY a.record_id
 `
 
 type ListAssetsRow struct {
+	ID                 int64
 	CmdbSourceID       uuid.UUID
 	RecordID           string
 	Name               string
@@ -146,6 +196,8 @@ type ListAssetsRow struct {
 	InactiveSince      *time.Time
 	AreaID             *int64
 	AreaName           *string
+	ExposureDeclaredBy *string
+	ExposureDeclaredAt *time.Time
 }
 
 func (q *Queries) ListAssets(ctx context.Context, cmdbSourceID uuid.UUID) ([]ListAssetsRow, error) {
@@ -158,6 +210,7 @@ func (q *Queries) ListAssets(ctx context.Context, cmdbSourceID uuid.UUID) ([]Lis
 	for rows.Next() {
 		var i ListAssetsRow
 		if err := rows.Scan(
+			&i.ID,
 			&i.CmdbSourceID,
 			&i.RecordID,
 			&i.Name,
@@ -175,6 +228,8 @@ func (q *Queries) ListAssets(ctx context.Context, cmdbSourceID uuid.UUID) ([]Lis
 			&i.InactiveSince,
 			&i.AreaID,
 			&i.AreaName,
+			&i.ExposureDeclaredBy,
+			&i.ExposureDeclaredAt,
 		); err != nil {
 			return nil, err
 		}
@@ -187,15 +242,17 @@ func (q *Queries) ListAssets(ctx context.Context, cmdbSourceID uuid.UUID) ([]Lis
 }
 
 const listAssetsByReference = `-- name: ListAssetsByReference :many
-SELECT a.cmdb_source_id, a.record_id, a.name, a.description, a.kind_id,
+SELECT a.id, a.cmdb_source_id, a.record_id, a.name, a.description, a.kind_id,
        a.hardware_vendor, a.hardware_model, a.criticality_id,
        imported_owner.email AS imported_owner, declared_owner.email AS declared_owner,
        a.imported_exposure_id, a.declared_exposure_id, a.area_record_id, a.retired, a.inactive_since,
-       area.id AS area_id, area.name AS area_name
+       area.id AS area_id, area.name AS area_name,
+       exposure_declarer.email AS exposure_declared_by, a.exposure_declared_at
 FROM assets a
 LEFT JOIN asset_owners imported_owner ON imported_owner.id = a.imported_owner_id
 LEFT JOIN asset_owners declared_owner ON declared_owner.id = a.declared_owner_id
 LEFT JOIN customer_areas area ON area.cmdb_source_id = a.cmdb_source_id AND area.record_id = a.area_record_id
+LEFT JOIN users exposure_declarer ON exposure_declarer.id = a.exposure_declared_by
 WHERE (a.cmdb_source_id, a.record_id) IN (
     SELECT s.id, r.id
     FROM unnest($1::uuid[]) WITH ORDINALITY AS s (id, n)
@@ -210,6 +267,7 @@ type ListAssetsByReferenceParams struct {
 }
 
 type ListAssetsByReferenceRow struct {
+	ID                 int64
 	CmdbSourceID       uuid.UUID
 	RecordID           string
 	Name               string
@@ -227,6 +285,8 @@ type ListAssetsByReferenceRow struct {
 	InactiveSince      *time.Time
 	AreaID             *int64
 	AreaName           *string
+	ExposureDeclaredBy *string
+	ExposureDeclaredAt *time.Time
 }
 
 // Assets by their references, as ListAssets reads them. The two arrays are
@@ -241,6 +301,7 @@ func (q *Queries) ListAssetsByReference(ctx context.Context, arg ListAssetsByRef
 	for rows.Next() {
 		var i ListAssetsByReferenceRow
 		if err := rows.Scan(
+			&i.ID,
 			&i.CmdbSourceID,
 			&i.RecordID,
 			&i.Name,
@@ -258,6 +319,8 @@ func (q *Queries) ListAssetsByReference(ctx context.Context, arg ListAssetsByRef
 			&i.InactiveSince,
 			&i.AreaID,
 			&i.AreaName,
+			&i.ExposureDeclaredBy,
+			&i.ExposureDeclaredAt,
 		); err != nil {
 			return nil, err
 		}
@@ -270,16 +333,18 @@ func (q *Queries) ListAssetsByReference(ctx context.Context, arg ListAssetsByRef
 }
 
 const listCustomerAssets = `-- name: ListCustomerAssets :many
-SELECT a.cmdb_source_id, a.record_id, a.name, a.description, a.kind_id,
+SELECT a.id, a.cmdb_source_id, a.record_id, a.name, a.description, a.kind_id,
        a.hardware_vendor, a.hardware_model, a.criticality_id,
        imported_owner.email AS imported_owner, declared_owner.email AS declared_owner,
        a.imported_exposure_id, a.declared_exposure_id, a.area_record_id, a.retired, a.inactive_since,
-       area.id AS area_id, area.name AS area_name
+       area.id AS area_id, area.name AS area_name,
+       exposure_declarer.email AS exposure_declared_by, a.exposure_declared_at
 FROM assets a
 JOIN cmdb_sources s ON s.id = a.cmdb_source_id
 LEFT JOIN asset_owners imported_owner ON imported_owner.id = a.imported_owner_id
 LEFT JOIN asset_owners declared_owner ON declared_owner.id = a.declared_owner_id
 LEFT JOIN customer_areas area ON area.cmdb_source_id = a.cmdb_source_id AND area.record_id = a.area_record_id
+LEFT JOIN users exposure_declarer ON exposure_declarer.id = a.exposure_declared_by
 WHERE s.customer_id = $1
   AND ($2::boolean IS NULL OR (a.inactive_since IS NULL) = $2::boolean)
   AND ($3::smallint IS NULL OR a.kind_id = $3::smallint)
@@ -303,6 +368,7 @@ type ListCustomerAssetsParams struct {
 }
 
 type ListCustomerAssetsRow struct {
+	ID                 int64
 	CmdbSourceID       uuid.UUID
 	RecordID           string
 	Name               string
@@ -320,6 +386,8 @@ type ListCustomerAssetsRow struct {
 	InactiveSince      *time.Time
 	AreaID             *int64
 	AreaName           *string
+	ExposureDeclaredBy *string
+	ExposureDeclaredAt *time.Time
 }
 
 // The keyset condition and the ORDER BY both use (name, cmdb_source_id,
@@ -343,6 +411,7 @@ func (q *Queries) ListCustomerAssets(ctx context.Context, arg ListCustomerAssets
 	for rows.Next() {
 		var i ListCustomerAssetsRow
 		if err := rows.Scan(
+			&i.ID,
 			&i.CmdbSourceID,
 			&i.RecordID,
 			&i.Name,
@@ -360,6 +429,8 @@ func (q *Queries) ListCustomerAssets(ctx context.Context, arg ListCustomerAssets
 			&i.InactiveSince,
 			&i.AreaID,
 			&i.AreaName,
+			&i.ExposureDeclaredBy,
+			&i.ExposureDeclaredAt,
 		); err != nil {
 			return nil, err
 		}
@@ -451,6 +522,81 @@ func (q *Queries) ListSoftwareComponentsOf(ctx context.Context, arg ListSoftware
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockCustomerAsset = `-- name: LockCustomerAsset :one
+SELECT a.id, a.cmdb_source_id, a.record_id, a.name, a.description, a.kind_id,
+       a.hardware_vendor, a.hardware_model, a.criticality_id,
+       imported_owner.email AS imported_owner, declared_owner.email AS declared_owner,
+       a.imported_exposure_id, a.declared_exposure_id, a.area_record_id, a.retired, a.inactive_since,
+       area.id AS area_id, area.name AS area_name,
+       exposure_declarer.email AS exposure_declared_by, a.exposure_declared_at
+FROM assets a
+JOIN cmdb_sources s ON s.id = a.cmdb_source_id
+LEFT JOIN asset_owners imported_owner ON imported_owner.id = a.imported_owner_id
+LEFT JOIN asset_owners declared_owner ON declared_owner.id = a.declared_owner_id
+LEFT JOIN customer_areas area ON area.cmdb_source_id = a.cmdb_source_id AND area.record_id = a.area_record_id
+LEFT JOIN users exposure_declarer ON exposure_declarer.id = a.exposure_declared_by
+WHERE a.id = $1 AND s.customer_id = $2
+FOR UPDATE OF a
+`
+
+type LockCustomerAssetParams struct {
+	ID         int64
+	CustomerID uuid.UUID
+}
+
+type LockCustomerAssetRow struct {
+	ID                 int64
+	CmdbSourceID       uuid.UUID
+	RecordID           string
+	Name               string
+	Description        string
+	KindID             int16
+	HardwareVendor     *string
+	HardwareModel      *string
+	CriticalityID      *int16
+	ImportedOwner      *string
+	DeclaredOwner      *string
+	ImportedExposureID *int16
+	DeclaredExposureID *int16
+	AreaRecordID       *string
+	Retired            bool
+	InactiveSince      *time.Time
+	AreaID             *int64
+	AreaName           *string
+	ExposureDeclaredBy *string
+	ExposureDeclaredAt *time.Time
+}
+
+// One Asset of the Customer by its id, as ListAssets reads it, locked until
+// the transaction ends so a Declaration and a Sync of it take turns.
+func (q *Queries) LockCustomerAsset(ctx context.Context, arg LockCustomerAssetParams) (LockCustomerAssetRow, error) {
+	row := q.db.QueryRow(ctx, lockCustomerAsset, arg.ID, arg.CustomerID)
+	var i LockCustomerAssetRow
+	err := row.Scan(
+		&i.ID,
+		&i.CmdbSourceID,
+		&i.RecordID,
+		&i.Name,
+		&i.Description,
+		&i.KindID,
+		&i.HardwareVendor,
+		&i.HardwareModel,
+		&i.CriticalityID,
+		&i.ImportedOwner,
+		&i.DeclaredOwner,
+		&i.ImportedExposureID,
+		&i.DeclaredExposureID,
+		&i.AreaRecordID,
+		&i.Retired,
+		&i.InactiveSince,
+		&i.AreaID,
+		&i.AreaName,
+		&i.ExposureDeclaredBy,
+		&i.ExposureDeclaredAt,
+	)
+	return i, err
 }
 
 const reactivateAssets = `-- name: ReactivateAssets :execrows

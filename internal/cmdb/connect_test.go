@@ -274,11 +274,18 @@ func TestUpdateLoginKeepsAssetsAndDeclarations(t *testing.T) {
 	e := newEnv(t)
 	e.provider.Snapshot = inventory.Snapshot{Records: []inventory.Record{record(t, "a", "vm-a")}}
 	customer, src := e.connect(t)
-	if _, err := e.conn.Exec(context.Background(), "UPDATE assets SET declared_exposure_id = $1", int16(inventory.Internal)); err != nil {
+	if _, err := e.conn.Exec(context.Background(), `
+		WITH admin AS (
+			INSERT INTO users (id, cognito_sub, email, customer_id, role_id)
+			VALUES (gen_random_uuid(), gen_random_uuid()::text, 'admin@example.com', $2, 2)
+			RETURNING id
+		)
+		UPDATE assets SET declared_exposure_id = $1, exposure_declared_by = (SELECT id FROM admin), exposure_declared_at = now()`,
+		int16(inventory.Internal), customer.String()); err != nil {
 		t.Fatal(err)
 	}
 	assets := func() [][]string {
-		return e.rows(t, "SELECT record_id, name, declared_exposure_id FROM assets WHERE cmdb_source_id = $1 ORDER BY record_id", src.String())
+		return e.rows(t, "SELECT record_id, name, declared_exposure_id, exposure_declared_by, exposure_declared_at FROM assets WHERE cmdb_source_id = $1 ORDER BY record_id", src.String())
 	}
 	before := assets()
 
