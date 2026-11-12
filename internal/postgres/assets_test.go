@@ -121,7 +121,7 @@ func TestImportedUpdateKeepsDeclarations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	declareExposure(t, db, src.Customer(), onlyAsset(t, db, src.Customer()).ID, inventory.Internal, admin.ID())
+	declareInternal(t, db, src.Customer(), onlyAsset(t, db, src.Customer()).ID, admin.ID())
 	declaration := onlyAsset(t, db, src.Customer()).ExposureAudit
 
 	changed := inventory.ImportedAssetParams{

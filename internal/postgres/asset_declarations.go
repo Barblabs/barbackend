@@ -33,21 +33,24 @@ func (t *Tx) CustomerAsset(ctx context.Context, customer tenancy.CustomerID, id 
 	return restoreAsset(sqlcgen.ListAssetsRow(row), softwareByAsset(components))
 }
 
-// DeclareExposure stores e as by's Declaration of the Asset's Exposure,
-// made now.
-func (t *Tx) DeclareExposure(ctx context.Context, asset inventory.SourceReference, e inventory.Exposure, by tenancy.UserID) error {
+// DeclareExposure stores the Asset's declared Exposure as by's Declaration,
+// made now. The caller has read the Asset with CustomerAsset in the same
+// transaction and declared it there; a missing Asset is not reported.
+func (t *Tx) DeclareExposure(ctx context.Context, a *inventory.Asset, by tenancy.UserID) error {
+	ref := a.Ref()
 	err := t.q.DeclareAssetExposure(ctx, sqlcgen.DeclareAssetExposureParams{
-		DeclaredExposureID: int16(e), DeclaredBy: uuid.UUID(by),
-		CmdbSourceID: uuid.UUID(asset.Source), RecordID: asset.RecordID,
+		DeclaredExposureID: int16(a.DeclaredExposure()), DeclaredBy: uuid.UUID(by),
+		CmdbSourceID: uuid.UUID(ref.Source), RecordID: ref.RecordID,
 	})
 	if err != nil {
-		return fmt.Errorf("declare exposure of %v: %w", asset, err)
+		return fmt.Errorf("declare exposure of %v: %w", ref, err)
 	}
 	return nil
 }
 
 // ClearExposureDeclaration clears the Asset's declared Exposure with who
-// declared it and when.
+// declared it and when. The caller has read the Asset with CustomerAsset in
+// the same transaction; a missing Asset is not reported.
 func (t *Tx) ClearExposureDeclaration(ctx context.Context, asset inventory.SourceReference) error {
 	err := t.q.ClearAssetExposure(ctx, sqlcgen.ClearAssetExposureParams{CmdbSourceID: uuid.UUID(asset.Source), RecordID: asset.RecordID})
 	if err != nil {

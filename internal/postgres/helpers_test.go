@@ -146,16 +146,16 @@ func onlyAsset(t *testing.T, db *postgres.DB, customer tenancy.CustomerID) postg
 	return page.Assets[0]
 }
 
-func declareExposure(t *testing.T, db *postgres.DB, customer tenancy.CustomerID, id int64, e inventory.Exposure, by tenancy.UserID) {
+func declareInternal(t *testing.T, db *postgres.DB, customer tenancy.CustomerID, id int64, by tenancy.UserID) {
 	t.Helper()
 	inTx(t, db, func(tx *postgres.Tx) error {
 		stored, err := tx.CustomerAsset(context.Background(), customer, id)
 		if err != nil {
 			return err
 		}
-		if e == inventory.ExposureUnknown {
-			return tx.ClearExposureDeclaration(context.Background(), stored.Asset.Ref())
+		if err := stored.Asset.DeclareExposure(inventory.Internal); err != nil {
+			return err
 		}
-		return tx.DeclareExposure(context.Background(), stored.Asset.Ref(), e, by)
+		return tx.DeclareExposure(context.Background(), stored.Asset, by)
 	})
 }

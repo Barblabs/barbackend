@@ -22,7 +22,7 @@ func (s *Service) DeclareExposure(ctx context.Context, caller tenancy.User, id i
 		if err := a.DeclareExposure(exposure); err != nil {
 			return err
 		}
-		return tx.DeclareExposure(ctx, a.Ref(), exposure, caller.ID())
+		return tx.DeclareExposure(ctx, a, caller.ID())
 	})
 }
 
