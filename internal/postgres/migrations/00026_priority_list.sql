@@ -3,9 +3,7 @@
 -- The Prioritizations stored until now ordered Dossiers read from files, whose
 -- Findings were ids nothing references (ADR 0016), so they cannot be linked to
 -- stored Findings.
-DELETE FROM prioritization_feedback;
-DELETE FROM action_plans;
-DELETE FROM prioritizations;
+TRUNCATE prioritization_feedback, action_plans, prioritizations;
 
 -- A Customer's Prioritizations are one chain (ADR 0026): each is built from
 -- the one before it, so a Prioritization is the previous one of at most one,

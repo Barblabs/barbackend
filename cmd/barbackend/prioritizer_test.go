@@ -26,6 +26,7 @@ func runPrioritizer(t *testing.T, ctx context.Context, w wakeup, fn func(context
 
 func TestABurstOfChangesMakesOneRun(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	w := newWakeup()
 	var runs atomic.Int32
 	for range 50 {
@@ -70,6 +71,7 @@ func TestChangesThatKeepComingRunOnceMaxWaitPassed(t *testing.T) {
 
 func TestWithoutChangesItRunsEveryIntervalAndAFailureDoesNotStopIt(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	var runs atomic.Int32
 
 	runPrioritizer(t, ctx, newWakeup(), func(context.Context) error {
