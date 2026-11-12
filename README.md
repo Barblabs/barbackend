@@ -30,7 +30,7 @@ export CORS_ALLOWED_ORIGINS=http://localhost:5173
 ./barbackend create-platform-admin <email>   # invite the first Platform Admin
 ```
 
-`create-platform-admin` creates the user in Cognito, which emails the invitation, so it needs AWS credentials allowed to call `AdminCreateUser` and `AdminDeleteUser` on the pool, from the default AWS credential chain. The pool itself is created by Terraform outside this repo.
+`create-platform-admin` stores the Platform Admin and has Cognito email their Invitation, so it needs AWS credentials allowed to call `AdminCreateUser` and `AdminGetUser` on the pool, from the default AWS credential chain. The pool itself is created by Terraform outside this repo.
 
 ### Container image
 
@@ -48,7 +48,7 @@ docker run --rm --env-file barbackend.env barbackend create-platform-admin <emai
 
 `barbackend.env` holds the variables above as plain `KEY=value` lines: Docker reads no `export` and no quotes. Health checks go to `GET /ping`, as the image has no shell for a `HEALTHCHECK`.
 
-On EC2, give the instance a role allowed to call `AdminCreateUser` and `AdminDeleteUser` on the pool, and leave AWS keys out of the env file: the SDK falls back to the instance role. With IMDSv2, the container is one network hop further from the metadata service, so set the instance's metadata hop limit to at least 2 (`http_put_response_hop_limit = 2` in Terraform), or Cognito admin calls fail to get credentials.
+On EC2, give the instance a role allowed to call `AdminCreateUser` and `AdminGetUser` on the pool, and leave AWS keys out of the env file: the SDK falls back to the instance role. With IMDSv2, the container is one network hop further from the metadata service, so set the instance's metadata hop limit to at least 2 (`http_put_response_hop_limit = 2` in Terraform), or Cognito admin calls fail to get credentials.
 
 ### HTTP API
 
