@@ -154,3 +154,29 @@ func TestDeclaringExposureIsRefused(t *testing.T) {
 		t.Errorf("exposure = %+v, want nothing declared", x)
 	}
 }
+
+func TestAnExposureDeclarationOutlivesDeactivationAndIsClearedWhileInactive(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	e.provider.Snapshot = inventory.Snapshot{Records: []inventory.Record{virtualMachine(t, "vm", false)}}
+	e.connect(t, e.customer)
+	_, admin := e.customerAdmin(t, e.customer)
+	vm := e.assetNamed(t, "vm").ID
+	declared := decode[asset](t, e.asUser(admin, http.MethodPut, exposurePath(vm), map[string]string{"exposure": "internal"}), http.StatusOK)
+
+	e.syncRecords(t, virtualMachine(t, "vm", true))
+	if after := e.assetNamed(t, "vm"); after.Active || !reflect.DeepEqual(after.Exposure, declared.Exposure) {
+		t.Errorf("after deactivation: active %v, exposure %+v; want Inactive with the Declaration kept %+v", after.Active, after.Exposure, declared.Exposure)
+	}
+	e.syncRecords(t, virtualMachine(t, "vm", false))
+	if after := e.assetNamed(t, "vm"); !after.Active || !reflect.DeepEqual(after.Exposure, declared.Exposure) {
+		t.Errorf("after reactivation: active %v, exposure %+v; want Active with the Declaration kept %+v", after.Active, after.Exposure, declared.Exposure)
+	}
+	e.syncRecords(t, virtualMachine(t, "vm", true))
+
+	cleared := decode[asset](t, e.asUser(admin, http.MethodDelete, exposurePath(vm), nil), http.StatusOK)
+
+	if cleared.Active || cleared.Exposure != (assetExposure{Source: "imported"}) {
+		t.Errorf("cleared while Inactive: active %v, exposure %+v; want the imported Unknown", cleared.Active, cleared.Exposure)
+	}
+}
