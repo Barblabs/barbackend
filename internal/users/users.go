@@ -36,10 +36,11 @@ type Service struct {
 	db       *postgres.DB
 	verifier *cognito.Verifier
 	admin    Admin
+	now      func() time.Time
 }
 
 func New(db *postgres.DB, verifier *cognito.Verifier, admin Admin) *Service {
-	return &Service{db: db, verifier: verifier, admin: admin}
+	return &Service{db: db, verifier: verifier, admin: admin, now: time.Now}
 }
 
 // Authenticate resolves a Cognito access token to the User it signs in. A
@@ -118,7 +119,6 @@ func (s *Service) Create(ctx context.Context, email string, role tenancy.Role, c
 // and then sends their Invitation. before runs first, so a row it cannot
 // store, such as a Customer with a taken name, stores no User.
 func (s *Service) invite(ctx context.Context, u tenancy.User, before func(*postgres.Tx) error) (StoredUser, error) {
-	now := time.Now()
 	var (
 		stored     StoredUser
 		invitation postgres.Invitation
@@ -129,13 +129,13 @@ func (s *Service) invite(ctx context.Context, u tenancy.User, before func(*postg
 				return err
 			}
 		}
-		stored, invitation, err = tx.CreatePendingUser(ctx, u, now.Add(invitationClaim))
+		stored, invitation, err = tx.CreatePendingUser(ctx, u, s.now().Add(invitationClaim))
 		return err
 	})
 	if err != nil {
 		return StoredUser{}, err
 	}
-	sub, err := s.send(context.WithoutCancel(ctx), invitation, now)
+	sub, err := s.send(context.WithoutCancel(ctx), invitation)
 	if err != nil {
 		log.Printf("users: %v", err)
 		return stored, nil

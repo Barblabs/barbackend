@@ -13,10 +13,20 @@ import (
 	"github.com/google/uuid"
 )
 
+// clock is a time that only moves when a test moves it.
+type clock struct{ now time.Time }
+
+func newClock(svc *users.Service) *clock {
+	c := &clock{now: time.Date(2026, 11, 11, 12, 0, 0, 0, time.UTC)}
+	users.SetClock(svc, func() time.Time { return c.now })
+	return c
+}
+
 func TestAnInvitationCognitoFailsIsSentByALaterPass(t *testing.T) {
 	t.Parallel()
 	admin := &fakeAdmin{}
 	svc, db := newService(t, admin)
+	clock := newClock(svc)
 	caller := customerAdmin(t, svc, db, admin)
 	admin.err = errors.New("cognito unreachable")
 
@@ -28,8 +38,7 @@ func TestAnInvitationCognitoFailsIsSentByALaterPass(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	isInvited := func(u users.StoredUser) bool { return u.User.ID() == invited.User.ID() }
-	if !invited.User.Pending() || !slices.ContainsFunc(listed, func(u users.StoredUser) bool { return isInvited(u) && u.User.Pending() }) {
+	if !invited.User.Pending() || !slices.ContainsFunc(listed, func(u users.StoredUser) bool { return u.User.ID() == invited.User.ID() && u.User.Pending() }) {
 		t.Errorf("invited = %+v, listed = %+v, want the User pending in both", invited, listed)
 	}
 	if _, err := svc.ByEmail(context.Background(), "viewer@example.com"); !errors.Is(err, tenancy.ErrUserPending) {
@@ -37,13 +46,8 @@ func TestAnInvitationCognitoFailsIsSentByALaterPass(t *testing.T) {
 	}
 
 	admin.err = nil
-	if err := svc.SendDueInvitations(context.Background(), time.Now()); err != nil {
-		t.Fatal(err)
-	}
-	if len(admin.created) != 1 {
-		t.Errorf("invited %d before the retry delay, want only the Customer Admin", len(admin.created))
-	}
-	if err := svc.SendDueInvitations(context.Background(), time.Now().Add(time.Hour)); err != nil {
+	clock.now = clock.now.Add(time.Hour)
+	if err := svc.SendDueInvitations(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	if len(admin.created) != 2 || userBySub(t, db, admin.created[1]).SignIn() != nil {
@@ -55,11 +59,12 @@ func TestAnInterruptedInviteIsSentOnceItsClaimEnds(t *testing.T) {
 	t.Parallel()
 	admin := &fakeAdmin{}
 	svc, db := newService(t, admin)
+	clock := newClock(svc)
 	u, err := tenancy.NewUser(tenancy.UserID(uuid.New()), "admin@example.com", tenancy.PlatformAdmin, tenancy.CustomerID{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	claimedUntil := time.Now().Add(time.Minute)
+	claimedUntil := clock.now.Add(time.Minute)
 	if err := db.InTx(context.Background(), func(tx *postgres.Tx) error {
 		_, _, err := tx.CreatePendingUser(context.Background(), u, claimedUntil)
 		return err
@@ -67,13 +72,15 @@ func TestAnInterruptedInviteIsSentOnceItsClaimEnds(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := svc.SendDueInvitations(context.Background(), claimedUntil.Add(-time.Second)); err != nil {
+	clock.now = claimedUntil.Add(-time.Second)
+	if err := svc.SendDueInvitations(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	if len(admin.created) != 0 {
 		t.Fatalf("invited %d while claimed, want none", len(admin.created))
 	}
-	if err := svc.SendDueInvitations(context.Background(), claimedUntil); err != nil {
+	clock.now = claimedUntil
+	if err := svc.SendDueInvitations(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	if len(admin.created) != 1 || userBySub(t, db, admin.created[0]).ID() != u.ID() {
@@ -85,6 +92,7 @@ func TestDisablingAPendingUserCancelsTheirInvitation(t *testing.T) {
 	t.Parallel()
 	admin := &fakeAdmin{}
 	svc, db := newService(t, admin)
+	clock := newClock(svc)
 	caller := customerAdmin(t, svc, db, admin)
 	admin.err = errors.New("cognito unreachable")
 	invited, err := svc.InviteUser(context.Background(), caller, "viewer@example.com", tenancy.Viewer)
@@ -100,7 +108,8 @@ func TestDisablingAPendingUserCancelsTheirInvitation(t *testing.T) {
 	}
 
 	admin.err = nil
-	if err := svc.SendDueInvitations(context.Background(), time.Now().Add(time.Hour)); err != nil {
+	clock.now = clock.now.Add(time.Hour)
+	if err := svc.SendDueInvitations(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -112,32 +121,23 @@ func TestDisablingAPendingUserCancelsTheirInvitation(t *testing.T) {
 func TestAFailingInvitationWaitsTwiceAsLongEachTimeUpToAnHour(t *testing.T) {
 	t.Parallel()
 	admin := &fakeAdmin{err: errors.New("cognito unreachable")}
-	svc, db := newService(t, admin)
-	u, err := tenancy.NewUser(tenancy.UserID(uuid.New()), "admin@example.com", tenancy.PlatformAdmin, tenancy.CustomerID{})
-	if err != nil {
+	svc, _ := newService(t, admin)
+	clock := newClock(svc)
+	if _, err := svc.Create(context.Background(), "admin@example.com", tenancy.PlatformAdmin, tenancy.CustomerID{}); err != nil {
 		t.Fatal(err)
-	}
-	now := time.Date(2026, 11, 11, 12, 0, 0, 0, time.UTC)
-	if err := db.InTx(context.Background(), func(tx *postgres.Tx) error {
-		_, _, err := tx.CreatePendingUser(context.Background(), u, now)
-		return err
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if err := svc.SendDueInvitations(context.Background(), now); err == nil {
-		t.Fatal("first attempt succeeded, want Cognito's failure")
 	}
 
-	// The invite's own attempt is the first, so the worker's first failure is
-	// the second.
-	for _, delay := range []time.Duration{time.Minute, 2 * time.Minute, 4 * time.Minute, 8 * time.Minute, 16 * time.Minute, 32 * time.Minute, time.Hour, time.Hour} {
+	start := clock.now
+	for _, delay := range []time.Duration{30 * time.Second, time.Minute, 2 * time.Minute, 4 * time.Minute, 8 * time.Minute, 16 * time.Minute, 32 * time.Minute, time.Hour, time.Hour} {
 		calls := admin.calls
-		_ = svc.SendDueInvitations(context.Background(), now.Add(delay-time.Second))
+		clock.now = start.Add(delay - time.Second)
+		_ = svc.SendDueInvitations(context.Background())
 		if admin.calls != calls {
 			t.Fatalf("retried %s after the last failure, want %s", delay-time.Second, delay)
 		}
-		now = now.Add(delay)
-		_ = svc.SendDueInvitations(context.Background(), now)
+		start = start.Add(delay)
+		clock.now = start
+		_ = svc.SendDueInvitations(context.Background())
 		if admin.calls != calls+1 {
 			t.Fatalf("not retried %s after the last failure", delay)
 		}
