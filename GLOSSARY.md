@@ -141,7 +141,7 @@ An input that was missing when a Score was computed and was replaced by the Scor
 _Avoid_: Missing data, warning, flag
 
 **Exposure**:
-Whether an Asset as a whole is reachable from the public internet: Internet-facing, Internal, or Unknown. It is imported from the iTop Location (`exposed` or `not exposed`) and can be declared over it; the Declaration wins. It is Unknown when neither gives it, as for every Virtual Machine until declared (ADR 0021).
+Whether an Asset as a whole is reachable from the public internet: Internet-facing, Internal, or Unknown. It is imported from the iTop Location (`exposed` or `not exposed`), and a Customer Admin can declare it Internet-facing or Internal over it; the Declaration wins. It is Unknown when neither gives it, as for every Virtual Machine until declared (ADR 0021).
 _Avoid_: Public/private, external, DMZ
 
 **Criticality**:
