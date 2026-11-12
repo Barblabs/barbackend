@@ -147,3 +147,36 @@ func TestARetriedInvitationIsDueAtItsNextAttempt(t *testing.T) {
 		t.Errorf("claimed at the next attempt = %+v, want the invitation", due)
 	}
 }
+
+func TestAnInvitationBeingClaimedIsSkippedByAnotherClaim(t *testing.T) {
+	t.Parallel()
+	db, _ := newDBWithConn(t)
+	createPending(t, db, newCustomer(t, db), invitedAt)
+	firstClaimed := make(chan struct{})
+	secondDue := make(chan bool)
+	secondErr := make(chan error, 1)
+	go func() {
+		<-firstClaimed
+		var due bool
+		secondErr <- db.InTx(context.Background(), func(tx *postgres.Tx) (err error) {
+			_, due, err = tx.ClaimInvitation(context.Background(), invitedAt, invitedAt.Add(time.Minute))
+			return err
+		})
+		secondDue <- due
+	}()
+
+	var firstDue, secondWasDue bool
+	inTx(t, db, func(tx *postgres.Tx) (err error) {
+		_, firstDue, err = tx.ClaimInvitation(context.Background(), invitedAt, invitedAt.Add(time.Minute))
+		close(firstClaimed)
+		secondWasDue = <-secondDue
+		return err
+	})
+
+	if err := <-secondErr; err != nil {
+		t.Fatal(err)
+	}
+	if !firstDue || secondWasDue {
+		t.Errorf("first claim found one = %t, second while the first is open found one = %t, want only the first", firstDue, secondWasDue)
+	}
+}
