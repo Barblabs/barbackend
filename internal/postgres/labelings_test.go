@@ -142,9 +142,13 @@ func TestUnlabeledVulnerabilitiesAreThoseWithAttemptsLeft(t *testing.T) {
 
 func TestUnlabeledVulnerabilitiesAreTheNewestFirstUpToTheLimit(t *testing.T) {
 	t.Parallel()
-	db := storedCVEs(t, "CVE-2026-0001")
-	time.Sleep(10 * time.Millisecond) // stored_at is the database's now()
-	storeVulnerability(t, db, "CVE-2026-0002", may, vulnerabilityObject("CVE-2026-0002", "Analyzed", `[]`))
+	db, conn := newDBWithConn(t)
+	for _, cve := range []string{"CVE-2026-0001", "CVE-2026-0002"} {
+		storeVulnerability(t, db, cve, may, vulnerabilityObject(cve, "Analyzed", `[]`))
+	}
+	if _, err := conn.Exec(context.Background(), `UPDATE vulnerabilities SET stored_at = stored_at - interval '1 hour' WHERE cve_id = 'CVE-2026-0001'`); err != nil {
+		t.Fatal(err)
+	}
 
 	if got := unlabeled(t, db, 1, 3); !slices.Equal(got, []string{"CVE-2026-0002"}) {
 		t.Errorf("unlabeled = %v, want only the newest one", got)
