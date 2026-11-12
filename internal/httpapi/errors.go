@@ -110,8 +110,6 @@ func apiError(err error) *codedError {
 		return &codedError{status: http.StatusNotFound, Code: assetNotFound, Message: "asset not found"}
 	case errors.Is(err, inventory.ErrAssetInactive):
 		return &codedError{status: http.StatusConflict, Code: assetInactive, Message: "an inactive asset cannot be declared"}
-	case errors.Is(err, inventory.ErrInvalidExposure):
-		return &codedError{status: http.StatusBadRequest, Code: invalidRequest, Message: err.Error()}
 	case errors.Is(err, assets.ErrInvalidQuery):
 		return &codedError{status: http.StatusBadRequest, Code: invalidRequest, Message: err.Error()}
 	case errors.Is(err, inventory.ErrNotConnected):
