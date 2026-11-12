@@ -45,7 +45,7 @@ internal/
 
 ## Consequences
 
-- **The Prioritizer does not read it yet.** Handing the Brief to it, telling it how to weigh it, and having its verifier check what a reason cites is the rest of item 1 of `docs/agents-pending.md`.
+- **The Prioritizer reads it** as its `business_context/1` document, each Dossier names the Critical Services that run its Asset, a reason cites it by JSON pointer, and each Prioritization records the version it read (ADR 0026).
 - A new field that a reader of `business_context/1` can ignore keeps the schema name; one that changes the meaning of an existing field takes a new name and a reader of both.
 - There is no history endpoint yet, though every version is kept.
 

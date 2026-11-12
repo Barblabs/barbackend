@@ -185,12 +185,16 @@ The Agents that answer in one call, checked against what they were given: the Pr
 _Avoid_: Team, pipeline
 
 **Dossier**:
-All that an Agent knows about a Finding: its Asset, its Software Component, its Vulnerability as the Feeds describe it and its Score, as the Findings pipeline gives them. An Agent's output may rely on nothing outside it.
+All that an Agent knows about a Finding: its Asset and the Critical Services that run it, its Software Component, its Vulnerability as the Feeds describe it, its Advisories and ATT&CK Techniques, and its Score, as barbattack stored them. An Agent's output may rely on nothing outside it.
 _Avoid_: Context, expediente, prompt data
 
 **Prioritization**:
-The order the Prioritizer gave a Customer's open Findings at one moment, as Priority Groups, with the Dossiers it read. It is kept as history: the newest is the one to follow.
+One version of the order of a Customer's open Findings, as Priority Groups, with the Dossier of each Finding as it was placed. Each is built from the one before it and never changed: the newest is the one to follow (ADR 0026).
 _Avoid_: Ranking, triage list
+
+**Round**:
+One request of the Prioritizer: it places, in the order that stands, the open Findings that have no place yet and those that changed since they were placed, and stores the next Prioritization. The rest keep their place.
+_Avoid_: Run, batch, reprioritization
 
 **Priority Group**:
 Findings of a Prioritization to attend at the same time, such as those one update fixes together. The first group is attended first.
@@ -201,7 +205,7 @@ Luna's output: the steps to remediate a Finding on its Asset, what mitigates it 
 _Avoid_: Recommendation, remediation plan
 
 **Feedback**:
-What a User says about a Finding of a Prioritization: that its Vulnerability applies, does not apply or was remediated, or that it should be attended earlier or later. It changes no Score and no order.
+What a User says about a Finding of a Prioritization: that its Vulnerability applies, does not apply or was remediated, or that it should be attended earlier or later. It changes no Score. That it should be attended earlier or later, said by the User directly and not through the Analista, has the Prioritizer place the Finding again (ADR 0026).
 _Avoid_: Label, correction, comment
 
 ### People
