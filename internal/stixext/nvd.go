@@ -16,6 +16,9 @@ type NVD struct {
 	CNAAffected []CNAAffected `json:"cna_affected,omitempty"`
 }
 
+// Rejected reports whether NVD withdrew the CVE.
+func (n NVD) Rejected() bool { return n.VulnStatus == "Rejected" }
+
 // CVSS is one metric NVD reports for a Vulnerability.
 type CVSS struct {
 	Version   string  `json:"version"`

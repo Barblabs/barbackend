@@ -19,9 +19,6 @@ import (
 	"github.com/TcM1911/stix2"
 )
 
-// rejected is the vuln_status NVD gives a CVE it withdrew.
-const rejected = "Rejected"
-
 // Service reacts to Feeds and Syncs. It keeps no Feed data in memory: a
 // Vulnerability first matched between two KEV or EPSS pulls is scored without
 // them until the next pull sets them (ADR 0020). It only remembers when KEV
