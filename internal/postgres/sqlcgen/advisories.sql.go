@@ -29,6 +29,51 @@ func (q *Queries) LinkAdvisory(ctx context.Context, arg LinkAdvisoryParams) erro
 	return err
 }
 
+const listAdvisoriesOfVulnerabilities = `-- name: ListAdvisoriesOfVulnerabilities :many
+SELECT va.cve_id, a.id, a.feed, a.published_at, a.object, a.modified_at
+FROM vulnerability_advisories va
+JOIN advisories a ON a.id = va.advisory_id
+WHERE va.cve_id = ANY($1::text[])
+ORDER BY va.cve_id, a.published_at DESC, a.id
+`
+
+type ListAdvisoriesOfVulnerabilitiesRow struct {
+	CveID       string
+	ID          string
+	Feed        string
+	PublishedAt time.Time
+	Object      []byte
+	ModifiedAt  time.Time
+}
+
+// The Advisories of some stored Vulnerabilities, each newest first.
+func (q *Queries) ListAdvisoriesOfVulnerabilities(ctx context.Context, cveIds []string) ([]ListAdvisoriesOfVulnerabilitiesRow, error) {
+	rows, err := q.db.Query(ctx, listAdvisoriesOfVulnerabilities, cveIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAdvisoriesOfVulnerabilitiesRow
+	for rows.Next() {
+		var i ListAdvisoriesOfVulnerabilitiesRow
+		if err := rows.Scan(
+			&i.CveID,
+			&i.ID,
+			&i.Feed,
+			&i.PublishedAt,
+			&i.Object,
+			&i.ModifiedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAdvisoriesOfVulnerability = `-- name: ListAdvisoriesOfVulnerability :many
 SELECT a.id, a.feed, a.published_at, a.object, a.modified_at
 FROM vulnerability_advisories va

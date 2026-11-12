@@ -6,7 +6,6 @@ package techniques
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -15,10 +14,6 @@ import (
 	"barbackend/internal/postgres"
 	"github.com/TcM1911/stix2"
 )
-
-// maxReplacements is how many revoked-by steps a read follows: a revoked
-// Technique can be replaced by one that was revoked later.
-const maxReplacements = 5
 
 // Service stores the ATT&CK catalog and reads it.
 type Service struct {
@@ -135,15 +130,15 @@ func mitigation(c *stix2.CourseOfAction) (postgres.AttackMitigation, error) {
 	}, nil
 }
 
-// Technique reads the Technique of attackID with its Mitigations. A revoked
-// Technique is read as its current replacement, following revoked-by for at
-// most maxReplacements steps; one with no replacement stored is read as it
-// is, marked revoked. It fails with postgres.ErrNotFound for an unknown id.
+// Technique reads the Technique of attackID with its Mitigations, as
+// postgres.Tx.CurrentTechnique reads it: a revoked Technique as its current
+// replacement, and one with no replacement stored as it is, marked revoked.
+// It fails with postgres.ErrNotFound for an unknown id.
 func (s *Service) Technique(ctx context.Context, attackID string) (Resolved, error) {
 	asked := strings.ToUpper(strings.TrimSpace(attackID))
 	var out Resolved
 	err := s.db.InTx(ctx, func(tx *postgres.Tx) error {
-		t, err := current(ctx, tx, asked)
+		t, err := tx.CurrentTechnique(ctx, asked)
 		if err != nil {
 			return err
 		}
@@ -161,25 +156,6 @@ func (s *Service) Technique(ctx context.Context, attackID string) (Resolved, err
 		return nil
 	})
 	return out, err
-}
-
-// current is the Technique of attackID, or the one that replaced it.
-func current(ctx context.Context, tx *postgres.Tx, attackID string) (postgres.AttackTechnique, error) {
-	t, err := tx.AttackTechnique(ctx, attackID)
-	if err != nil {
-		return postgres.AttackTechnique{}, err
-	}
-	for step := 0; t.Revoked && step < maxReplacements; step++ {
-		next, err := tx.RevokingTechnique(ctx, t.ID)
-		if errors.Is(err, postgres.ErrNotFound) {
-			break
-		}
-		if err != nil {
-			return postgres.AttackTechnique{}, err
-		}
-		t = next
-	}
-	return t, nil
 }
 
 // attackID is the ATT&CK id among refs, such as T1190 or M1051.

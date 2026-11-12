@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"barbackend/internal/assessment"
 	"barbackend/internal/postgres"
 	"barbackend/internal/postgres/pgtest"
 )
@@ -65,7 +66,7 @@ func TestStoreLabelingKeepsItsTechniquesInTheOrderOfAnAttack(t *testing.T) {
 	if len(got) != 2 || got[0].AttackID != "T1190" || got[1].AttackID != "T1059" {
 		t.Errorf("techniques = %+v, want T1190 (exploitation) before T1059 (primary_impact)", got)
 	}
-	if l := labelingOf(t, db, "CVE-2026-0001"); l.Outcome != postgres.LabelingLabeled || l.Attempts != 1 || l.Model != cartografo || l.PromptHash != promptHash {
+	if l := labelingOf(t, db, "CVE-2026-0001"); l.Outcome != assessment.LabelingLabeled || l.Attempts != 1 || l.Model != cartografo || l.PromptHash != promptHash {
 		t.Errorf("labeling = %+v, want labeled on the first attempt, with its model and prompt hash", l)
 	}
 }
@@ -77,7 +78,7 @@ func TestALabelingWithNoTechniquesIsNone(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if l := labelingOf(t, db, "CVE-2026-0001"); l.Outcome != postgres.LabelingNone {
+	if l := labelingOf(t, db, "CVE-2026-0001"); l.Outcome != assessment.LabelingNone {
 		t.Errorf("outcome = %s, want none", l.Outcome)
 	}
 }
@@ -105,14 +106,14 @@ func TestAFailedLabelingCountsItsAttemptsUntilOneSucceeds(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if l := labelingOf(t, db, "CVE-2026-0001"); l.Outcome != postgres.LabelingFailed || l.Attempts != 2 {
+	if l := labelingOf(t, db, "CVE-2026-0001"); l.Outcome != assessment.LabelingFailed || l.Attempts != 2 {
 		t.Errorf("labeling = %+v, want failed after 2 attempts", l)
 	}
 
 	if err := storeLabeling(db, "CVE-2026-0001", postgres.TechniqueLabel{AttackID: "T1190", Role: "exploitation", Evidence: "remote", Rationale: "Remote."}); err != nil {
 		t.Fatal(err)
 	}
-	if l := labelingOf(t, db, "CVE-2026-0001"); l.Outcome != postgres.LabelingLabeled || l.Attempts != 3 {
+	if l := labelingOf(t, db, "CVE-2026-0001"); l.Outcome != assessment.LabelingLabeled || l.Attempts != 3 {
 		t.Errorf("labeling = %+v, want labeled on the third attempt", l)
 	}
 }

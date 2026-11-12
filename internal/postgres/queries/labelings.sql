@@ -48,3 +48,16 @@ ORDER BY array_position(ARRAY['exploitation', 'primary_impact', 'secondary_impac
 SELECT count(*)::integer
 FROM vulnerability_labelings
 WHERE labeled_at >= @since;
+
+-- name: ListLabelingsOfVulnerabilities :many
+SELECT cve_id, outcome, attempts, model, prompt_hash, labeled_at
+FROM vulnerability_labelings
+WHERE cve_id = ANY(@cve_ids::text[])
+ORDER BY cve_id;
+
+-- The Techniques of some Vulnerabilities, each how it is exploited first.
+-- name: ListTechniquesOfVulnerabilities :many
+SELECT cve_id, attack_id, role, evidence, rationale
+FROM vulnerability_techniques
+WHERE cve_id = ANY(@cve_ids::text[])
+ORDER BY cve_id, array_position(ARRAY['exploitation', 'primary_impact', 'secondary_impact'], role), attack_id;

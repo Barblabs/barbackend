@@ -150,6 +150,47 @@ func (q *Queries) ListMitigationsOfTechnique(ctx context.Context, techniqueID st
 	return items, nil
 }
 
+const listMitigationsOfTechniques = `-- name: ListMitigationsOfTechniques :many
+SELECT r.target_id AS technique_id, m.attack_id, m.name, r.description
+FROM attack_relationships r
+JOIN attack_mitigations m ON m.id = r.source_id
+WHERE r.type = 'mitigates' AND r.target_id = ANY($1::text[])
+ORDER BY r.target_id, m.attack_id
+`
+
+type ListMitigationsOfTechniquesRow struct {
+	TechniqueID string
+	AttackID    string
+	Name        string
+	Description string
+}
+
+// The Mitigations of some Techniques, each with its advice for it.
+func (q *Queries) ListMitigationsOfTechniques(ctx context.Context, techniqueIds []string) ([]ListMitigationsOfTechniquesRow, error) {
+	rows, err := q.db.Query(ctx, listMitigationsOfTechniques, techniqueIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMitigationsOfTechniquesRow
+	for rows.Next() {
+		var i ListMitigationsOfTechniquesRow
+		if err := rows.Scan(
+			&i.TechniqueID,
+			&i.AttackID,
+			&i.Name,
+			&i.Description,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const upsertAttackMitigation = `-- name: UpsertAttackMitigation :exec
 INSERT INTO attack_mitigations (id, attack_id, name, object, modified_at)
 VALUES ($1, $2, $3, $4, $5)

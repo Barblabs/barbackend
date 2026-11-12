@@ -3,21 +3,79 @@ package assessment
 import (
 	"errors"
 	"fmt"
+	"slices"
+	"strings"
 )
 
-// PriorityList is the Prioritizer's output: every Finding it was given, in
-// Priority Groups, in the order to attend them. It carries no number and
-// changes no Score.
+// PriorityList is the order a Prioritization gives a Customer's open
+// Findings: Priority Groups, in the order to attend them, each Finding in
+// exactly one. It carries no number and changes no Score.
 type PriorityList struct {
 	Groups []PriorityGroup `json:"groups"`
 }
 
-// PriorityGroup is Findings to attend at the same time, by their ids.
+// PriorityGroup is Findings to attend at the same time, with why they go
+// there: one Part for the Findings the group was made with, and one for those
+// each later round added to it, oldest first (ADR 0026).
 type PriorityGroup struct {
-	Title    string            `json:"title"`
-	Findings []string          `json:"findings"`
-	Reason   string            `json:"reason"`
-	Evidence []FindingEvidence `json:"evidence"`
+	Title string      `json:"title"`
+	Parts []GroupPart `json:"parts"`
+}
+
+// GroupPart is Findings a round put in a Priority Group, by their ids, with
+// the reason and evidence it gave.
+type GroupPart struct {
+	Findings        []string          `json:"findings"`
+	Reason          string            `json:"reason"`
+	Evidence        []FindingEvidence `json:"evidence"`
+	ContextEvidence []ContextEvidence `json:"context_evidence"`
+}
+
+// Findings are the ids of the group's Findings, part by part.
+func (g PriorityGroup) Findings() []string {
+	var out []string
+	for _, p := range g.Parts {
+		out = append(out, p.Findings...)
+	}
+	return out
+}
+
+// Reason is the reasons of its parts, oldest first, a blank line apart.
+func (g PriorityGroup) Reason() string {
+	reasons := make([]string, len(g.Parts))
+	for i, p := range g.Parts {
+		reasons[i] = p.Reason
+	}
+	return strings.Join(reasons, "\n\n")
+}
+
+// Evidence is what its parts cite of their Findings.
+func (g PriorityGroup) Evidence() []FindingEvidence {
+	var out []FindingEvidence
+	for _, p := range g.Parts {
+		out = append(out, p.Evidence...)
+	}
+	return out
+}
+
+// ContextEvidence is what its parts cite of the Business Context.
+func (g PriorityGroup) ContextEvidence() []ContextEvidence {
+	var out []ContextEvidence
+	for _, p := range g.Parts {
+		out = append(out, p.ContextEvidence...)
+	}
+	return out
+}
+
+// GroupOf is the position, from 1, of the Priority Group holding the Finding
+// of that id, or 0 when none does.
+func (l PriorityList) GroupOf(finding string) int {
+	for i, g := range l.Groups {
+		if slices.Contains(g.Findings(), finding) {
+			return i + 1
+		}
+	}
+	return 0
 }
 
 // FindingEvidence cites one value of a Finding's Brief: Path is an RFC 6901
@@ -30,6 +88,14 @@ type FindingEvidence struct {
 	Value   string `json:"value"`
 }
 
+// ContextEvidence cites one value of the Customer's Business Context: Path is
+// an RFC 6901 JSON pointer into its business_context/1 document, and Value is
+// as FindingEvidence's.
+type ContextEvidence struct {
+	Path  string `json:"path"`
+	Value string `json:"value"`
+}
+
 // ActionPlan is Luna's output.
 type ActionPlan struct {
 	Summary string   `json:"summary"`
@@ -40,6 +106,17 @@ type ActionPlan struct {
 	Mitigation   *string  `json:"mitigation"`
 	Verification string   `json:"verification"`
 	Sources      []string `json:"sources"`
+	// AttackMitigations are MITRE's Mitigations of the Techniques the
+	// Dossier holds, those against its exploitation first.
+	AttackMitigations []PlanMitigation `json:"attack_mitigations"`
+}
+
+// PlanMitigation is one of MITRE's Mitigations of a Technique of the Dossier,
+// by their ATT&CK ids, with what to do about it on this Asset.
+type PlanMitigation struct {
+	Mitigation string `json:"mitigation"`
+	Technique  string `json:"technique"`
+	Step       string `json:"step"`
 }
 
 // Verdict is what a User says about a Finding: whether its Vulnerability

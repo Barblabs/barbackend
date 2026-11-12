@@ -171,10 +171,13 @@ linters:
           deny:
             - pkg: barbackend/internal
               desc: the Claude adapter imports no other layer; the agents use case calls it (ADR 0016)
+        # Tests are exempt: they store Findings and their Scores as the
+        # Findings pipeline does, for the Agents to read.
         agents:
           list-mode: lax
           files:
             - "**/internal/agents/**"
+            - "!$test"
           allow:
             - barbackend/internal/agents
             - barbackend/internal/assessment
@@ -182,7 +185,6 @@ linters:
             - barbackend/internal/claude
             - barbackend/internal/inventory
             - barbackend/internal/postgres
-            - barbackend/internal/stixext
             - barbackend/internal/tenancy
           deny:
             - pkg: barbackend/internal/businesscontext

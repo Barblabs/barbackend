@@ -65,6 +65,78 @@ func (q *Queries) DeleteFindingMatchFlags(ctx context.Context, findingID uuid.UU
 	return err
 }
 
+const getFindingOfCustomer = `-- name: GetFindingOfCustomer :one
+SELECT f.id, f.cmdb_source_id, f.record_id, f.cve_id, f.component_name, f.component_version,
+       v.object AS vulnerability_object,
+       s.model, s.value, s.alpha, s.beta, s.gamma, s.vulnerability,
+       s.criticality_multiplier, s.exposure_multiplier, s.gaps
+FROM findings f
+JOIN cmdb_sources src ON src.id = f.cmdb_source_id
+JOIN vulnerabilities v ON v.cve_id = f.cve_id
+JOIN LATERAL (
+    SELECT sc.model, sc.value, sc.alpha, sc.beta, sc.gamma, sc.vulnerability,
+           sc.criticality_multiplier, sc.exposure_multiplier,
+           coalesce(array_agg(g.gap_id ORDER BY g.gap_id) FILTER (WHERE g.gap_id IS NOT NULL), '{}')::smallint[] AS gaps
+    FROM finding_scores sc
+    LEFT JOIN finding_score_data_gaps g USING (finding_id, scored_at)
+    WHERE sc.finding_id = f.id
+    GROUP BY sc.finding_id, sc.scored_at
+    ORDER BY sc.scored_at DESC
+    LIMIT 1
+) s ON true
+WHERE src.customer_id = $1 AND f.id = $2
+`
+
+type GetFindingOfCustomerParams struct {
+	CustomerID uuid.UUID
+	ID         uuid.UUID
+}
+
+type GetFindingOfCustomerRow struct {
+	ID                    uuid.UUID
+	CmdbSourceID          uuid.UUID
+	RecordID              string
+	CveID                 string
+	ComponentName         string
+	ComponentVersion      string
+	VulnerabilityObject   []byte
+	Model                 int16
+	Value                 float64
+	Alpha                 float64
+	Beta                  float64
+	Gamma                 float64
+	Vulnerability         float64
+	CriticalityMultiplier float64
+	ExposureMultiplier    float64
+	Gaps                  []int16
+}
+
+// One Finding of a Customer's Assets, open or closed, as
+// ListOpenFindingsOfCustomer reads it.
+func (q *Queries) GetFindingOfCustomer(ctx context.Context, arg GetFindingOfCustomerParams) (GetFindingOfCustomerRow, error) {
+	row := q.db.QueryRow(ctx, getFindingOfCustomer, arg.CustomerID, arg.ID)
+	var i GetFindingOfCustomerRow
+	err := row.Scan(
+		&i.ID,
+		&i.CmdbSourceID,
+		&i.RecordID,
+		&i.CveID,
+		&i.ComponentName,
+		&i.ComponentVersion,
+		&i.VulnerabilityObject,
+		&i.Model,
+		&i.Value,
+		&i.Alpha,
+		&i.Beta,
+		&i.Gamma,
+		&i.Vulnerability,
+		&i.CriticalityMultiplier,
+		&i.ExposureMultiplier,
+		&i.Gaps,
+	)
+	return i, err
+}
+
 type InsertFindingMatchFlagsParams struct {
 	FindingID uuid.UUID
 	FlagID    int16
@@ -306,6 +378,88 @@ func (q *Queries) ListFindingMatchFlags(ctx context.Context, findingID uuid.UUID
 			return nil, err
 		}
 		items = append(items, flag_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOpenFindingsOfCustomer = `-- name: ListOpenFindingsOfCustomer :many
+SELECT f.id, f.cmdb_source_id, f.record_id, f.cve_id, f.component_name, f.component_version,
+       v.object AS vulnerability_object,
+       s.model, s.value, s.alpha, s.beta, s.gamma, s.vulnerability,
+       s.criticality_multiplier, s.exposure_multiplier, s.gaps
+FROM findings f
+JOIN cmdb_sources src ON src.id = f.cmdb_source_id
+JOIN vulnerabilities v ON v.cve_id = f.cve_id
+JOIN LATERAL (
+    SELECT sc.model, sc.value, sc.alpha, sc.beta, sc.gamma, sc.vulnerability,
+           sc.criticality_multiplier, sc.exposure_multiplier,
+           coalesce(array_agg(g.gap_id ORDER BY g.gap_id) FILTER (WHERE g.gap_id IS NOT NULL), '{}')::smallint[] AS gaps
+    FROM finding_scores sc
+    LEFT JOIN finding_score_data_gaps g USING (finding_id, scored_at)
+    WHERE sc.finding_id = f.id
+    GROUP BY sc.finding_id, sc.scored_at
+    ORDER BY sc.scored_at DESC
+    LIMIT 1
+) s ON true
+WHERE src.customer_id = $1 AND f.closed_at IS NULL
+ORDER BY f.id
+`
+
+type ListOpenFindingsOfCustomerRow struct {
+	ID                    uuid.UUID
+	CmdbSourceID          uuid.UUID
+	RecordID              string
+	CveID                 string
+	ComponentName         string
+	ComponentVersion      string
+	VulnerabilityObject   []byte
+	Model                 int16
+	Value                 float64
+	Alpha                 float64
+	Beta                  float64
+	Gamma                 float64
+	Vulnerability         float64
+	CriticalityMultiplier float64
+	ExposureMultiplier    float64
+	Gaps                  []int16
+}
+
+// The open Findings of a Customer's Assets, with their Vulnerability and their
+// latest Score, which is what their Dossiers are built from (ADR 0026). A
+// Finding not scored yet is left out.
+func (q *Queries) ListOpenFindingsOfCustomer(ctx context.Context, customerID uuid.UUID) ([]ListOpenFindingsOfCustomerRow, error) {
+	rows, err := q.db.Query(ctx, listOpenFindingsOfCustomer, customerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOpenFindingsOfCustomerRow
+	for rows.Next() {
+		var i ListOpenFindingsOfCustomerRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.CmdbSourceID,
+			&i.RecordID,
+			&i.CveID,
+			&i.ComponentName,
+			&i.ComponentVersion,
+			&i.VulnerabilityObject,
+			&i.Model,
+			&i.Value,
+			&i.Alpha,
+			&i.Beta,
+			&i.Gamma,
+			&i.Vulnerability,
+			&i.CriticalityMultiplier,
+			&i.ExposureMultiplier,
+			&i.Gaps,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

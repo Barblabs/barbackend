@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const advanceAnalistaConversation = `-- name: AdvanceAnalistaConversation :execrows
@@ -92,8 +93,38 @@ func (q *Queries) ClaimAnalistaConversation(ctx context.Context, arg ClaimAnalis
 	return i, err
 }
 
+const getNewestPrioritization = `-- name: GetNewestPrioritization :one
+SELECT p.id, p.previous_id, p.business_context_version, p.content, p.created_at
+FROM prioritizations p
+WHERE p.customer_id = $1
+  AND NOT EXISTS (SELECT 1 FROM prioritizations n WHERE n.previous_id = p.id)
+`
+
+type GetNewestPrioritizationRow struct {
+	ID                     uuid.UUID
+	PreviousID             pgtype.UUID
+	BusinessContextVersion *int32
+	Content                []byte
+	CreatedAt              time.Time
+}
+
+// The newest of a Customer's Prioritizations is the one no other was built
+// from, since they form one chain.
+func (q *Queries) GetNewestPrioritization(ctx context.Context, customerID uuid.UUID) (GetNewestPrioritizationRow, error) {
+	row := q.db.QueryRow(ctx, getNewestPrioritization, customerID)
+	var i GetNewestPrioritizationRow
+	err := row.Scan(
+		&i.ID,
+		&i.PreviousID,
+		&i.BusinessContextVersion,
+		&i.Content,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getPrioritization = `-- name: GetPrioritization :one
-SELECT id, content, created_at
+SELECT id, previous_id, business_context_version, content, created_at
 FROM prioritizations
 WHERE id = $1 AND customer_id = $2
 `
@@ -104,21 +135,29 @@ type GetPrioritizationParams struct {
 }
 
 type GetPrioritizationRow struct {
-	ID        uuid.UUID
-	Content   []byte
-	CreatedAt time.Time
+	ID                     uuid.UUID
+	PreviousID             pgtype.UUID
+	BusinessContextVersion *int32
+	Content                []byte
+	CreatedAt              time.Time
 }
 
 func (q *Queries) GetPrioritization(ctx context.Context, arg GetPrioritizationParams) (GetPrioritizationRow, error) {
 	row := q.db.QueryRow(ctx, getPrioritization, arg.ID, arg.CustomerID)
 	var i GetPrioritizationRow
-	err := row.Scan(&i.ID, &i.Content, &i.CreatedAt)
+	err := row.Scan(
+		&i.ID,
+		&i.PreviousID,
+		&i.BusinessContextVersion,
+		&i.Content,
+		&i.CreatedAt,
+	)
 	return i, err
 }
 
 const insertActionPlan = `-- name: InsertActionPlan :one
 INSERT INTO action_plans (id, prioritization_id, finding_id, content)
-SELECT $1::uuid, p.id, $2::text, $3::jsonb
+SELECT $1::uuid, p.id, $2::uuid, $3::jsonb
 FROM prioritizations p
 WHERE p.id = $4 AND p.customer_id = $5
 RETURNING created_at
@@ -126,7 +165,7 @@ RETURNING created_at
 
 type InsertActionPlanParams struct {
 	ID               uuid.UUID
-	FindingID        string
+	FindingID        uuid.UUID
 	Content          []byte
 	PrioritizationID uuid.UUID
 	CustomerID       uuid.UUID
@@ -167,24 +206,35 @@ func (q *Queries) InsertAnalistaConversation(ctx context.Context, arg InsertAnal
 	return err
 }
 
+type InsertFindingPlacementsParams struct {
+	ID        uuid.UUID
+	FindingID uuid.UUID
+	PlacedAt  time.Time
+	Dossier   []byte
+}
+
 const insertPrioritization = `-- name: InsertPrioritization :one
-INSERT INTO prioritizations (id, customer_id, finding_count, group_count, content)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO prioritizations (id, customer_id, previous_id, business_context_version, finding_count, group_count, content)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 RETURNING created_at
 `
 
 type InsertPrioritizationParams struct {
-	ID           uuid.UUID
-	CustomerID   uuid.UUID
-	FindingCount int32
-	GroupCount   int32
-	Content      []byte
+	ID                     uuid.UUID
+	CustomerID             uuid.UUID
+	PreviousID             pgtype.UUID
+	BusinessContextVersion *int32
+	FindingCount           int32
+	GroupCount             int32
+	Content                []byte
 }
 
 func (q *Queries) InsertPrioritization(ctx context.Context, arg InsertPrioritizationParams) (time.Time, error) {
 	row := q.db.QueryRow(ctx, insertPrioritization,
 		arg.ID,
 		arg.CustomerID,
+		arg.PreviousID,
+		arg.BusinessContextVersion,
 		arg.FindingCount,
 		arg.GroupCount,
 		arg.Content,
@@ -196,7 +246,7 @@ func (q *Queries) InsertPrioritization(ctx context.Context, arg InsertPrioritiza
 
 const insertPrioritizationFeedback = `-- name: InsertPrioritizationFeedback :one
 INSERT INTO prioritization_feedback (id, prioritization_id, finding_id, author_id, verdict_id, note, via_analista)
-SELECT $1::uuid, p.id, $2::text, $3::uuid, $4::smallint, $5::text, $6::boolean
+SELECT $1::uuid, p.id, $2::uuid, $3::uuid, $4::smallint, $5::text, $6::boolean
 FROM prioritizations p
 WHERE p.id = $7 AND p.customer_id = $8
 RETURNING created_at
@@ -204,7 +254,7 @@ RETURNING created_at
 
 type InsertPrioritizationFeedbackParams struct {
 	ID               uuid.UUID
-	FindingID        string
+	FindingID        uuid.UUID
 	AuthorID         uuid.UUID
 	VerdictID        int16
 	Note             string
@@ -229,11 +279,20 @@ func (q *Queries) InsertPrioritizationFeedback(ctx context.Context, arg InsertPr
 	return created_at, err
 }
 
+type InsertPrioritizationFindingsParams struct {
+	PrioritizationID uuid.UUID
+	FindingID        uuid.UUID
+	PlacementID      uuid.UUID
+	GroupPosition    int32
+	ScoreRank        int32
+}
+
 const listLatestActionPlans = `-- name: ListLatestActionPlans :many
 SELECT DISTINCT ON (a.finding_id) a.id, a.finding_id, a.content, a.created_at
-FROM action_plans a
-JOIN prioritizations p ON p.id = a.prioritization_id
-WHERE a.prioritization_id = $1 AND p.customer_id = $2
+FROM prioritization_findings pf
+JOIN prioritizations p ON p.id = pf.prioritization_id
+JOIN action_plans a ON a.finding_id = pf.finding_id
+WHERE pf.prioritization_id = $1 AND p.customer_id = $2
 ORDER BY a.finding_id, a.created_at DESC, a.id
 `
 
@@ -244,11 +303,13 @@ type ListLatestActionPlansParams struct {
 
 type ListLatestActionPlansRow struct {
 	ID        uuid.UUID
-	FindingID string
+	FindingID uuid.UUID
 	Content   []byte
 	CreatedAt time.Time
 }
 
+// The newest Action Plan of each Finding of a Prioritization, whichever
+// Prioritization of the chain it was asked from.
 func (q *Queries) ListLatestActionPlans(ctx context.Context, arg ListLatestActionPlansParams) ([]ListLatestActionPlansRow, error) {
 	rows, err := q.db.Query(ctx, listLatestActionPlans, arg.PrioritizationID, arg.CustomerID)
 	if err != nil {
@@ -276,9 +337,10 @@ func (q *Queries) ListLatestActionPlans(ctx context.Context, arg ListLatestActio
 
 const listPrioritizationFeedback = `-- name: ListPrioritizationFeedback :many
 SELECT f.id, f.finding_id, f.author_id, f.verdict_id, f.note, f.via_analista, f.created_at
-FROM prioritization_feedback f
-JOIN prioritizations p ON p.id = f.prioritization_id
-WHERE f.prioritization_id = $1 AND p.customer_id = $2
+FROM prioritization_findings pf
+JOIN prioritizations p ON p.id = pf.prioritization_id
+JOIN prioritization_feedback f ON f.finding_id = pf.finding_id
+WHERE pf.prioritization_id = $1 AND p.customer_id = $2
 ORDER BY f.created_at, f.id
 `
 
@@ -289,7 +351,7 @@ type ListPrioritizationFeedbackParams struct {
 
 type ListPrioritizationFeedbackRow struct {
 	ID          uuid.UUID
-	FindingID   string
+	FindingID   uuid.UUID
 	AuthorID    uuid.UUID
 	VerdictID   int16
 	Note        string
@@ -297,6 +359,8 @@ type ListPrioritizationFeedbackRow struct {
 	CreatedAt   time.Time
 }
 
+// What Users said about the Findings of a Prioritization, whichever
+// Prioritization of the chain they said it on.
 func (q *Queries) ListPrioritizationFeedback(ctx context.Context, arg ListPrioritizationFeedbackParams) ([]ListPrioritizationFeedbackRow, error) {
 	rows, err := q.db.Query(ctx, listPrioritizationFeedback, arg.PrioritizationID, arg.CustomerID)
 	if err != nil {
@@ -314,6 +378,57 @@ func (q *Queries) ListPrioritizationFeedback(ctx context.Context, arg ListPriori
 			&i.Note,
 			&i.ViaAnalista,
 			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPrioritizationFindings = `-- name: ListPrioritizationFindings :many
+SELECT pf.finding_id, pf.placement_id, fp.placed_at, fp.dossier, f.closed_at
+FROM prioritization_findings pf
+JOIN prioritizations p ON p.id = pf.prioritization_id
+JOIN finding_placements fp ON fp.id = pf.placement_id
+JOIN findings f ON f.id = pf.finding_id
+WHERE pf.prioritization_id = $1 AND p.customer_id = $2
+ORDER BY pf.group_position, pf.score_rank
+`
+
+type ListPrioritizationFindingsParams struct {
+	PrioritizationID uuid.UUID
+	CustomerID       uuid.UUID
+}
+
+type ListPrioritizationFindingsRow struct {
+	FindingID   uuid.UUID
+	PlacementID uuid.UUID
+	PlacedAt    time.Time
+	Dossier     []byte
+	ClosedAt    *time.Time
+}
+
+// The Findings of a Prioritization with their placements, and when each was
+// closed, null while it is open.
+func (q *Queries) ListPrioritizationFindings(ctx context.Context, arg ListPrioritizationFindingsParams) ([]ListPrioritizationFindingsRow, error) {
+	rows, err := q.db.Query(ctx, listPrioritizationFindings, arg.PrioritizationID, arg.CustomerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPrioritizationFindingsRow
+	for rows.Next() {
+		var i ListPrioritizationFindingsRow
+		if err := rows.Scan(
+			&i.FindingID,
+			&i.PlacementID,
+			&i.PlacedAt,
+			&i.Dossier,
+			&i.ClosedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -371,13 +486,16 @@ func (q *Queries) ListPrioritizations(ctx context.Context, arg ListPrioritizatio
 }
 
 const prioritizationHolds = `-- name: PrioritizationHolds :one
-SELECT (content -> 'findings' @> jsonb_build_array(jsonb_build_object('finding', $1::text)))::boolean AS holds
-FROM prioritizations
-WHERE id = $2 AND customer_id = $3
+SELECT EXISTS (
+    SELECT 1 FROM prioritization_findings pf
+    WHERE pf.prioritization_id = p.id AND pf.finding_id = $1
+)::boolean AS holds
+FROM prioritizations p
+WHERE p.id = $2 AND p.customer_id = $3
 `
 
 type PrioritizationHoldsParams struct {
-	FindingID  string
+	FindingID  uuid.UUID
 	ID         uuid.UUID
 	CustomerID uuid.UUID
 }

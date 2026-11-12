@@ -186,6 +186,89 @@ func (q *Queries) ListAssets(ctx context.Context, cmdbSourceID uuid.UUID) ([]Lis
 	return items, nil
 }
 
+const listAssetsByReference = `-- name: ListAssetsByReference :many
+SELECT a.cmdb_source_id, a.record_id, a.name, a.description, a.kind_id,
+       a.hardware_vendor, a.hardware_model, a.criticality_id,
+       imported_owner.email AS imported_owner, declared_owner.email AS declared_owner,
+       a.imported_exposure_id, a.declared_exposure_id, a.area_record_id, a.retired, a.inactive_since,
+       area.id AS area_id, area.name AS area_name
+FROM assets a
+LEFT JOIN asset_owners imported_owner ON imported_owner.id = a.imported_owner_id
+LEFT JOIN asset_owners declared_owner ON declared_owner.id = a.declared_owner_id
+LEFT JOIN customer_areas area ON area.cmdb_source_id = a.cmdb_source_id AND area.record_id = a.area_record_id
+WHERE (a.cmdb_source_id, a.record_id) IN (
+    SELECT s.id, r.id
+    FROM unnest($1::uuid[]) WITH ORDINALITY AS s (id, n)
+    JOIN unnest($2::text[]) WITH ORDINALITY AS r (id, n) USING (n)
+)
+ORDER BY a.cmdb_source_id, a.record_id
+`
+
+type ListAssetsByReferenceParams struct {
+	SourceIds []uuid.UUID
+	RecordIds []string
+}
+
+type ListAssetsByReferenceRow struct {
+	CmdbSourceID       uuid.UUID
+	RecordID           string
+	Name               string
+	Description        string
+	KindID             int16
+	HardwareVendor     *string
+	HardwareModel      *string
+	CriticalityID      *int16
+	ImportedOwner      *string
+	DeclaredOwner      *string
+	ImportedExposureID *int16
+	DeclaredExposureID *int16
+	AreaRecordID       *string
+	Retired            bool
+	InactiveSince      *time.Time
+	AreaID             *int64
+	AreaName           *string
+}
+
+// Assets by their references, as ListAssets reads them. The two arrays are
+// parallel: element i of each names one Asset.
+func (q *Queries) ListAssetsByReference(ctx context.Context, arg ListAssetsByReferenceParams) ([]ListAssetsByReferenceRow, error) {
+	rows, err := q.db.Query(ctx, listAssetsByReference, arg.SourceIds, arg.RecordIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAssetsByReferenceRow
+	for rows.Next() {
+		var i ListAssetsByReferenceRow
+		if err := rows.Scan(
+			&i.CmdbSourceID,
+			&i.RecordID,
+			&i.Name,
+			&i.Description,
+			&i.KindID,
+			&i.HardwareVendor,
+			&i.HardwareModel,
+			&i.CriticalityID,
+			&i.ImportedOwner,
+			&i.DeclaredOwner,
+			&i.ImportedExposureID,
+			&i.DeclaredExposureID,
+			&i.AreaRecordID,
+			&i.Retired,
+			&i.InactiveSince,
+			&i.AreaID,
+			&i.AreaName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listCustomerAssets = `-- name: ListCustomerAssets :many
 SELECT a.cmdb_source_id, a.record_id, a.name, a.description, a.kind_id,
        a.hardware_vendor, a.hardware_model, a.criticality_id,

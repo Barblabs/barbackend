@@ -24,3 +24,11 @@ FROM vulnerability_advisories va
 JOIN advisories a ON a.id = va.advisory_id
 WHERE va.cve_id = @cve_id
 ORDER BY a.published_at DESC, a.id;
+
+-- The Advisories of some stored Vulnerabilities, each newest first.
+-- name: ListAdvisoriesOfVulnerabilities :many
+SELECT va.cve_id, a.id, a.feed, a.published_at, a.object, a.modified_at
+FROM vulnerability_advisories va
+JOIN advisories a ON a.id = va.advisory_id
+WHERE va.cve_id = ANY(@cve_ids::text[])
+ORDER BY va.cve_id, a.published_at DESC, a.id;

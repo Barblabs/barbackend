@@ -22,6 +22,7 @@ var errNotACVE = errors.New("not a CVE")
 // are closed, and all of them when NVD rejected it. Each Vulnerability is one
 // transaction; a failure is logged and the rest of the batch still runs.
 func (s *Service) HandleNVD(ctx context.Context, batch []stix2.STIXObject) error {
+	defer s.changed()
 	return each(ctx, "nvd", batch, func(v *stix2.Vulnerability) error { return s.matchVulnerability(ctx, v) })
 }
 
