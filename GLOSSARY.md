@@ -125,7 +125,7 @@ A reason a Finding's match is uncertain, such as a version that could not be com
 _Avoid_: Dudoso, warning, uncertain boolean
 
 **Score**:
-A deterministic number from 0 to 1 that ranks how urgently a Finding should be remediated, computed from its Vulnerability's CVSS base score, EPSS probability and presence in the CISA KEV catalog, and its Asset's Criticality and Exposure.
+A deterministic number from 0 to 1 that ranks how urgently a Finding should be remediated, computed from its Vulnerability's CVSS base score, EPSS probability and presence in the CISA KEV catalog, and its Asset's Criticality, Exposure and Lifecycle Stage.
 _Avoid_: Risk score, priority, rating
 
 **Score Band**:
@@ -147,6 +147,10 @@ _Avoid_: Public/private, external, DMZ
 **Criticality**:
 How important an Asset is to the Customer's business: High, Medium, Low, or Unknown. It is only imported, never declared.
 _Avoid_: Priority, severity, business criticity
+
+**Lifecycle Stage**:
+Where an Asset is in its life: Production, Implementation, Stock, or Unknown. It is only imported, from the iTop `status`; an obsolete record is Retired instead and has no Lifecycle Stage (ADR 0028).
+_Avoid_: Status, environment, state
 
 ### Business
 

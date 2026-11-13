@@ -9,7 +9,7 @@ We score the Finding, not the Vulnerability: the same CVE matters very different
 A Score is computed in two layers by pure functions, so the same inputs always give the same Score:
 
 1. **Vulnerability**: `S = c1·α + c2·β + c3·γ`, with α = CVSS base score / 10, β = the raw EPSS probability, γ = 1 if the CVE is in the CISA KEV catalog, else 0. Scoring Model 1 uses c = (0.3, 0.3, 0.4). β is the probability, not the percentile, because a percentile only ranks a CVE against all others and moves when they change.
-2. **Asset**: `S_f = S × m_criticality × m_exposure`, with Criticality High 1.0, Medium 0.7, Low 0.4 and Exposure Internet-facing 1.0, Internal 0.6. These multipliers are provisional.
+2. **Asset**: `S_f = S × m_criticality × m_exposure`, with Criticality High 1.0, Medium 0.7, Low 0.4 and Exposure Internet-facing 1.0, Internal 0.6. These multipliers are provisional. Scoring Model 2 adds a third, `m_lifecycle`, from the Asset's Lifecycle Stage (ADR 0028).
 
 Weights, multipliers, the aggregation function and the Data Gap defaults together form a Scoring Model. Scoring Models are immutable and defined in Go, like catalog values (ADR 0006), so a stored Score can always be recomputed. Each Score stores its Scoring Model version, the value of every factor and its Data Gaps. Changing any number means a new Scoring Model, never editing an old one. Like threat matching (ADR 0008), scoring is a pure domain package that imports `inventory`.
 
