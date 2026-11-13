@@ -78,8 +78,10 @@ func serve(ctx context.Context, _ []string) error {
 			}
 			return run, err
 		}
-		// The Feeds, the Cartógrafo, the Prioritizer and the Invitations run
-		// in the background, and all stop before the database closes.
+		// The Feeds, the Cartógrafo, the Prioritizer, the Invitations and the
+		// Slack deliveries run in the background, and all stop before the
+		// database closes.
+		slackService := slack.New(db, slackAPI, key)
 		backgroundDone := make(chan struct{})
 		go func() {
 			defer close(backgroundDone)
@@ -90,6 +92,7 @@ func serve(ctx context.Context, _ []string) error {
 				prioritizeOnChange(ctx, changed, agentService.PrioritizeAll, prioritizeQuiet, prioritizeMaxWait, prioritizeInterval)
 			})
 			wg.Go(func() { userService.SendInvitations(ctx, invitationInterval) })
+			wg.Go(func() { slackService.RunDeliveries(ctx) })
 			wg.Wait()
 		}()
 		sources := cmdb.New(db, providers(), key, ctx, syncTimeout)
@@ -100,7 +103,7 @@ func serve(ctx context.Context, _ []string) error {
 			Assets:          assets.New(db, found),
 			BusinessContext: businessContext,
 			CMDB:            sources,
-			Slack:           slack.New(db, slackAPI, key),
+			Slack:           slackService,
 			Users:           userService,
 			AllowedOrigins:  allowedOrigins(),
 		}))

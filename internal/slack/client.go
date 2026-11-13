@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -37,10 +38,12 @@ var (
 )
 
 // APIError is Slack answering ok false, such as invalid_auth or
-// channel_not_found. Slack answers these with HTTP 200.
+// channel_not_found. Slack answers these with HTTP 200. A 429 carries how
+// long to wait before trying again.
 type APIError struct {
-	Code   string
-	Status int
+	Code       string
+	Status     int
+	RetryAfter time.Duration
 }
 
 func (e *APIError) Error() string {
@@ -174,6 +177,26 @@ func (c *Client) Channels(ctx context.Context, token string) ([]Channel, error) 
 	return nil, fmt.Errorf("%w: conversations.list did not stop paging", ErrUnavailable)
 }
 
+// LookupByEmail resolves an Asset Owner's email to a Slack user id, which is
+// what a DM is addressed to. users.lookupByEmail answers users_not_found as
+// an *APIError when the workspace knows no such person.
+func (c *Client) LookupByEmail(ctx context.Context, token, email string) (string, error) {
+	var resp struct {
+		envelope
+		User struct {
+			ID string `json:"id"`
+		} `json:"user"`
+	}
+	q := url.Values{"email": {email}}
+	if err := c.get(ctx, token, "users.lookupByEmail", q, &resp); err != nil {
+		return "", err
+	}
+	if resp.User.ID == "" {
+		return "", fmt.Errorf("%w: users.lookupByEmail returned no user", ErrUnavailable)
+	}
+	return resp.User.ID, nil
+}
+
 // Message is one chat.postMessage call. Blocks is raw Block Kit, rendered by
 // the worker from a delivery's payload (ADR 0030).
 type Message struct {
@@ -225,6 +248,15 @@ func (c *Client) post(ctx context.Context, token, method string, form url.Values
 	return c.do(req, out)
 }
 
+// retryAfter reads Slack's Retry-After, which is a number of seconds.
+func retryAfter(header string) time.Duration {
+	seconds, err := strconv.Atoi(strings.TrimSpace(header))
+	if err != nil || seconds <= 0 {
+		return 0
+	}
+	return time.Duration(seconds) * time.Second
+}
+
 func (c *Client) do(req *http.Request, out any) error {
 	resp, err := c.http.Do(req)
 	if err != nil {
@@ -236,7 +268,7 @@ func (c *Client) do(req *http.Request, out any) error {
 		return fmt.Errorf("%w: read response: %v", ErrUnavailable, err)
 	}
 	if resp.StatusCode == http.StatusTooManyRequests {
-		return &APIError{Code: "rate_limited", Status: resp.StatusCode}
+		return &APIError{Code: "rate_limited", Status: resp.StatusCode, RetryAfter: retryAfter(resp.Header.Get("Retry-After"))}
 	}
 	var env envelope
 	if err := json.Unmarshal(body, &env); err != nil {

@@ -330,12 +330,16 @@ func TestSlackViewerReadsButCannotManage(t *testing.T) {
 	if rec := e.as(viewer, httptest.NewRequest(http.MethodGet, "/slack/channels", nil)); rec.Code != http.StatusOK {
 		t.Errorf("viewer channels = %d %s, want 200", rec.Code, rec.Body)
 	}
+	if got := e.failedDeliveries(t, viewer); len(got) != 0 {
+		t.Errorf("viewer failed deliveries = %+v, want none", got)
+	}
 
 	for _, req := range []*http.Request{
 		httptest.NewRequest(http.MethodPost, "/slack/install/start", nil),
 		httptest.NewRequest(http.MethodPut, "/slack/installation", strings.NewReader(`{"channel_id":"C1","channel_name":"general"}`)),
 		httptest.NewRequest(http.MethodPost, "/slack/installation/test", nil),
 		httptest.NewRequest(http.MethodDelete, "/slack/installation", nil),
+		httptest.NewRequest(http.MethodPost, "/slack/deliveries/retry", nil),
 	} {
 		rec := e.as(viewer, req)
 		if rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), `"code":"forbidden"`) {
@@ -358,6 +362,8 @@ func TestSlackPlatformAdminIsForbidden(t *testing.T) {
 		httptest.NewRequest(http.MethodPut, "/slack/installation", strings.NewReader(`{"channel_id":"C1","channel_name":"general"}`)),
 		httptest.NewRequest(http.MethodPost, "/slack/installation/test", nil),
 		httptest.NewRequest(http.MethodDelete, "/slack/installation", nil),
+		httptest.NewRequest(http.MethodGet, "/slack/deliveries/failed", nil),
+		httptest.NewRequest(http.MethodPost, "/slack/deliveries/retry", nil),
 	} {
 		rec := e.as(platform, req)
 		if rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), `"code":"forbidden"`) {
@@ -391,5 +397,120 @@ func TestSlackSetChannelRejectsAnEmptyChannel(t *testing.T) {
 		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), `"code":"invalid_request"`) {
 			t.Errorf("body %s = %d %s, want 400 invalid_request", body, rec.Code, rec.Body)
 		}
+	}
+}
+
+type failedDelivery struct {
+	Kind        string `json:"kind"`
+	TargetKind  string `json:"target_kind"`
+	Target      string `json:"target"`
+	Attempts    int    `json:"attempts"`
+	FailureCode string `json:"failure_code"`
+	LastError   string `json:"last_error"`
+	CreatedAt   string `json:"created_at"`
+}
+
+func (e env) queueDelivery(t *testing.T, customer tenancy.CustomerID, targetKind, target, status, failureCode string) {
+	t.Helper()
+	_, err := e.conn.Exec(context.Background(), `
+		INSERT INTO slack_deliveries (customer_id, kind, target_kind, target, payload, status, attempts, failure_code, last_error)
+		VALUES ($1, 'finding', $2, $3, '{"cve":"CVE-2026-0001","asset":"web-01"}', $4, 3, $5, 'slack said no')`,
+		[16]byte(customer), targetKind, target, status, failureCode)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func (e env) failedDeliveries(t *testing.T, token string) []failedDelivery {
+	t.Helper()
+	rec := e.as(token, httptest.NewRequest(http.MethodGet, "/slack/deliveries/failed", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /slack/deliveries/failed = %d %s, want 200", rec.Code, rec.Body)
+	}
+	return decode[struct {
+		Deliveries []failedDelivery `json:"deliveries"`
+	}](t, rec, http.StatusOK).Deliveries
+}
+
+func (e env) retryDeliveries(t *testing.T, token string) *httptest.ResponseRecorder {
+	t.Helper()
+	return e.as(token, httptest.NewRequest(http.MethodPost, "/slack/deliveries/retry", nil))
+}
+
+func TestSlackFailedDeliveriesAreListed(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	e.queueDelivery(t, e.customer, "email", "owner@example.com", "failed", "owner_unreachable")
+	e.queueDelivery(t, e.customer, "channel", "C-security", "failed", "channel_unreachable")
+	e.queueDelivery(t, e.customer, "channel", "C-security", "pending", "")
+
+	got := e.failedDeliveries(t, "Bearer "+e.token)
+
+	if len(got) != 2 {
+		t.Fatalf("failed deliveries = %d %+v, want the two failed rows", len(got), got)
+	}
+	byTarget := map[string]failedDelivery{}
+	for _, d := range got {
+		byTarget[d.Target] = d
+	}
+	if d := byTarget["owner@example.com"]; d.TargetKind != "email" || d.Kind != "finding" || d.FailureCode != "owner_unreachable" || d.Attempts != 3 || d.LastError == "" || d.CreatedAt == "" {
+		t.Errorf("DM row = %+v, want the failed DM with its code and error", d)
+	}
+	if d := byTarget["C-security"]; d.TargetKind != "channel" || d.FailureCode != "channel_unreachable" {
+		t.Errorf("channel row = %+v, want the failed channel copy", d)
+	}
+}
+
+func TestSlackRetryReturnsFailedRowsToPending(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	admin := e.adminToken(t)
+	e.queueDelivery(t, e.customer, "channel", "C-security", "failed", "channel_unreachable")
+	e.queueDelivery(t, e.customer, "channel", "C-other", "failed", "malformed_payload")
+
+	rec := e.retryDeliveries(t, admin)
+
+	got := decode[struct {
+		Retried int64 `json:"retried"`
+	}](t, rec, http.StatusOK)
+	if got.Retried != 1 {
+		t.Errorf("retried = %d, want only the row a retry can fix", got.Retried)
+	}
+	if left := e.failedDeliveries(t, admin); len(left) != 1 || left[0].FailureCode != "malformed_payload" {
+		t.Errorf("failed after retry = %+v, want only the malformed payload", left)
+	}
+	var status string
+	var attempts int
+	if err := e.conn.QueryRow(context.Background(),
+		"SELECT status, attempts FROM slack_deliveries WHERE target = 'C-security'").Scan(&status, &attempts); err != nil {
+		t.Fatal(err)
+	}
+	if status != "pending" || attempts != 0 {
+		t.Errorf("retried row = %s/%d, want pending/0", status, attempts)
+	}
+}
+
+func TestSlackFailedDeliveriesStayInsideTheCustomer(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	other := e.newCustomer(t)
+	e.queueDelivery(t, other, "channel", "C-theirs", "failed", "channel_unreachable")
+
+	if got := e.failedDeliveries(t, "Bearer "+e.token); len(got) != 0 {
+		t.Errorf("failed deliveries = %+v, want none of another customer's", got)
+	}
+	rec := e.retryDeliveries(t, e.adminToken(t))
+	if got := decode[struct {
+		Retried int64 `json:"retried"`
+	}](t, rec, http.StatusOK); got.Retried != 0 {
+		t.Errorf("retried = %d, want none of another customer's", got.Retried)
+	}
+	var status string
+	if err := e.conn.QueryRow(context.Background(),
+		"SELECT status FROM slack_deliveries WHERE target = 'C-theirs'").Scan(&status); err != nil {
+		t.Fatal(err)
+	}
+	if status != "failed" {
+		t.Errorf("other customer's row = %s, want it untouched", status)
 	}
 }
