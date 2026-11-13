@@ -41,7 +41,7 @@ var (
 	ErrInvalidChannel = errors.New("invalid slack channel")
 )
 
-// State is the lifecycle of an installation (ADR 0025). It is stored as the
+// State is the lifecycle of an installation (ADR 0029). It is stored as the
 // plain text the database column holds.
 type State string
 
@@ -69,7 +69,7 @@ type TestResult struct {
 }
 
 // Service connects a Customer's Slack workspace and sends what the pipeline
-// queues (ADR 0025). It seals the bot token with key, so only this package
+// queues (ADR 0029). It seals the bot token with key, so only this package
 // ever sees it decrypted (ADR 0012).
 type Service struct {
 	db       *postgres.DB
@@ -233,7 +233,7 @@ func (s *Service) Disconnect(ctx context.Context, caller tenancy.User) error {
 }
 
 // needsReauthorisation flips the installation after Slack revoked the token
-// (ADR 0025). A failure to record it is not worth hiding the send's result.
+// (ADR 0029). A failure to record it is not worth hiding the send's result.
 func (s *Service) needsReauthorisation(ctx context.Context, customer tenancy.CustomerID) {
 	_ = s.db.InTx(ctx, func(tx *postgres.Tx) error {
 		return tx.SetSlackState(ctx, customer, string(NeedsReauthorisation))

@@ -329,7 +329,7 @@ linters:
             - barbackend/internal/tenancy
           deny:
             - pkg: barbackend/internal
-              desc: the slack use case calls only encryption, postgres and tenancy (ADR 0008, ADR 0025)
+              desc: the slack use case calls only encryption, postgres and tenancy (ADR 0008, ADR 0029)
         postgres:
           list-mode: lax
           files:

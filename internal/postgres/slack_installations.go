@@ -14,7 +14,7 @@ import (
 
 // StoredSlackInstallation is a Customer's Slack installation as the database
 // holds it: the bot token is still sealed (ADR 0012) and the state is the
-// plain text ADR 0025 gives it.
+// plain text ADR 0029 gives it.
 type StoredSlackInstallation struct {
 	Customer    tenancy.CustomerID
 	TeamID      string
@@ -86,7 +86,7 @@ func (t *Tx) SetSlackChannel(ctx context.Context, customer tenancy.CustomerID, c
 }
 
 // SetSlackState changes the installation's state, such as to
-// needs re-authorisation after Slack revoked the token (ADR 0025).
+// needs re-authorisation after Slack revoked the token (ADR 0029).
 func (t *Tx) SetSlackState(ctx context.Context, customer tenancy.CustomerID, state string) error {
 	n, err := t.q.SetSlackInstallationState(ctx, sqlcgen.SetSlackInstallationStateParams{
 		CustomerID: uuid.UUID(customer),

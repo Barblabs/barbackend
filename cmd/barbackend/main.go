@@ -21,7 +21,7 @@ type command struct {
 var commands = []command{
 	{name: "serve", summary: "run the HTTP server", needsDB: true, run: serve},
 	{name: "feed", summary: "pull threat-intelligence Feeds", synopsis: feedSynopsis, run: feed},
-	{name: "agent", summary: "run the Prioritizer, Luna and the Analista", synopsis: agentSynopsis, run: agent},
+	{name: "agent", summary: "run the Prioritizer, Luna, the Analista and the Cartógrafo", synopsis: agentSynopsis, run: agent},
 	{name: "migrate", summary: "apply database migrations", needsDB: true, run: migrate},
 	{name: "create-platform-admin", summary: "invite a Platform Admin through Cognito", synopsis: "<email>", needsDB: true, run: createPlatformAdmin},
 }
