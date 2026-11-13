@@ -502,11 +502,13 @@ type findingBody struct {
 		Asset       struct {
 			Name             string `json:"name"`
 			Criticality      string `json:"criticality"`
+			LifecycleStage   string `json:"lifecycle_stage"`
 			CriticalServices []any  `json:"critical_services"`
 		} `json:"asset"`
 		ScoreDetails struct {
-			Value    float64  `json:"value"`
-			DataGaps []string `json:"data_gaps"`
+			Value               float64  `json:"value"`
+			LifecycleMultiplier float64  `json:"lifecycle_multiplier"`
+			DataGaps            []string `json:"data_gaps"`
 		} `json:"score_details"`
 		KEV *struct {
 			DateAdded string `json:"date_added"`

@@ -49,6 +49,9 @@ func TestPrioritizationLifecycle(t *testing.T) {
 	if details.Description != "PostgreSQL is affected." || details.Asset.Name != "pg-prod-01" || details.Asset.Criticality != "high" || details.ScoreDetails.Value != 0.3 {
 		t.Errorf("details = %+v", details)
 	}
+	if details.Asset.LifecycleStage != "unknown" || details.ScoreDetails.LifecycleMultiplier != 1 {
+		t.Errorf("details = %+v, want the unknown stage of an Asset the CMDB gave none and its multiplier 1", details)
+	}
 	if details.KEV == nil || details.KEV.DateAdded != "2025-02-13" || details.Labeling.Outcome != "not_tried" {
 		t.Errorf("details = %+v, want its KEV listing and no Labeling yet", details)
 	}

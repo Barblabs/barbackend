@@ -33,6 +33,7 @@ type asset struct {
 	} `json:"software"`
 	Criticality   *string                         `json:"criticality"`
 	Exposure      assetExposure                   `json:"exposure"`
+	Lifecycle     *string                         `json:"lifecycle_stage"`
 	Owner         *struct{ Email, Source string } `json:"owner"`
 	Area          *areaRef                        `json:"area"`
 	Retired       bool                            `json:"retired"`
@@ -220,7 +221,7 @@ func TestListAssetsShape(t *testing.T) {
 	owner, _ := inventory.NewOwnerEmail("imported@example.com")
 	physical := imported(t, inventory.ImportedAssetParams{
 		Name: "phys", Kind: inventory.Server, Criticality: inventory.CriticalityHigh, Exposure: inventory.InternetFacing, Owner: owner, Area: "7",
-		Hardware: inventory.Hardware{Vendor: "Dell", Model: "R640"},
+		Lifecycle: inventory.LifecycleStock, Hardware: inventory.Hardware{Vendor: "Dell", Model: "R640"},
 		Software: []inventory.SoftwareComponent{
 			{Role: inventory.OperatingSystem, Name: "Ubuntu", Version: "22.04", Product: inventory.Product{Vendor: "Canonical", Name: "Ubuntu"}},
 			{Role: inventory.Application, Name: "mystery", Version: "1"},
@@ -251,6 +252,9 @@ func TestListAssetsShape(t *testing.T) {
 	}
 	if x := phys.Exposure; x.Value == nil || *x.Value != "internet_facing" || x.Source != "imported" || x.Imported == nil || *x.Imported != "internet_facing" || x.DeclaredBy != nil || x.DeclaredAt != nil {
 		t.Errorf("exposure = %+v, want the imported internet_facing", x)
+	}
+	if phys.Lifecycle == nil || *phys.Lifecycle != "stock" || virt.Lifecycle != nil {
+		t.Errorf("lifecycle stages = %v, %v, want stock and null for Unknown", phys.Lifecycle, virt.Lifecycle)
 	}
 	if phys.Area == nil || phys.Area.Name != "IT" || phys.Area.ID != e.areaID(t, "7") {
 		t.Errorf("area = %+v, want IT", phys.Area)

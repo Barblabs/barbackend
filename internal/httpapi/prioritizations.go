@@ -129,6 +129,7 @@ type findingAssetResponse struct {
 	Kind             string                    `json:"kind"`
 	Criticality      string                    `json:"criticality" enum:"high,medium,low,unknown"`
 	Exposure         string                    `json:"exposure" enum:"internet_facing,internal,unknown"`
+	LifecycleStage   string                    `json:"lifecycle_stage" enum:"production,implementation,stock,unknown"`
 	CriticalServices []criticalServiceResponse `json:"critical_services" doc:"The Critical Services of the Business Context that name the Asset"`
 }
 
@@ -148,6 +149,7 @@ type scoreResponse struct {
 	Vulnerability         float64  `json:"vulnerability" doc:"The Vulnerability's score before the Asset's multipliers"`
 	CriticalityMultiplier float64  `json:"criticality_multiplier"`
 	ExposureMultiplier    float64  `json:"exposure_multiplier"`
+	LifecycleMultiplier   float64  `json:"lifecycle_multiplier" doc:"1 in a Scoring Model without a lifecycle factor"`
 	DataGaps              []string `json:"data_gaps" doc:"Inputs a default replaced: the Score is estimated, not measured"`
 }
 
