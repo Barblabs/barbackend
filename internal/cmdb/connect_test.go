@@ -124,7 +124,9 @@ func TestConnectWithFirstSyncExceedingTheTimeLimit(t *testing.T) {
 	e := newEnv(t)
 	e.provider.Hanging = make(chan struct{})
 
-	got, err := e.withSyncLimits(context.Background(), 50*time.Millisecond).Connect(context.Background(), viewerOf(e.newCustomer(t)), providertest.Name, providertest.Login)
+	// The limit covers checking the login and storing the source before the
+	// Sync hangs, so it leaves room for a slow run, such as under -race.
+	got, err := e.withSyncLimits(context.Background(), time.Second).Connect(context.Background(), viewerOf(e.newCustomer(t)), providertest.Name, providertest.Login)
 
 	if err != nil {
 		t.Fatal(err)

@@ -341,7 +341,9 @@ func TestSyncExceedingTheTimeLimitFails(t *testing.T) {
 	customer, _ := e.connect(t)
 	e.provider.Hanging = make(chan struct{})
 
-	_, err := e.withSyncLimits(context.Background(), 50*time.Millisecond).SyncConnected(context.Background(), viewerOf(customer))
+	// The limit covers reading the source before the Sync hangs, so it leaves
+	// room for a slow run, such as under -race.
+	_, err := e.withSyncLimits(context.Background(), time.Second).SyncConnected(context.Background(), viewerOf(customer))
 
 	e.wantFailedSync(t, customer, err, context.DeadlineExceeded)
 }
