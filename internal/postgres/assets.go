@@ -133,6 +133,7 @@ func (t *sourceTx) insertCreated(ctx context.Context, created []*inventory.Asset
 			HardwareModel:      imported.HardwareModel,
 			CriticalityID:      imported.CriticalityID,
 			ImportedExposureID: imported.ImportedExposureID,
+			LifecycleStageID:   imported.LifecycleStageID,
 			ImportedOwnerID:    imported.ImportedOwnerID,
 			AreaRecordID:       imported.AreaRecordID,
 			Retired:            imported.Retired,
@@ -253,6 +254,7 @@ func importedColumns(source inventory.CMDBSourceID, a *inventory.Asset, owners o
 		KindID:             int16(imported.Kind()),
 		CriticalityID:      nullableID(imported.Criticality(), inventory.CriticalityUnknown),
 		ImportedExposureID: nullableID(imported.Exposure(), inventory.ExposureUnknown),
+		LifecycleStageID:   nullableID(imported.Lifecycle(), inventory.LifecycleUnknown),
 		ImportedOwnerID:    owners.ref(imported.Owner()),
 		Retired:            imported.Retired(),
 	}
@@ -321,6 +323,7 @@ func restoreAssetValues(ref inventory.SourceReference, row sqlcgen.ListAssetsRow
 		Software:    software,
 		Criticality: inventory.Criticality(valueOrZero(row.CriticalityID)),
 		Exposure:    inventory.Exposure(valueOrZero(row.ImportedExposureID)),
+		Lifecycle:   inventory.LifecycleStage(valueOrZero(row.LifecycleStageID)),
 		Owner:       importedOwner,
 		Area:        valueOrZero(row.AreaRecordID),
 		Retired:     row.Retired,

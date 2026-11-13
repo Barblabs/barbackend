@@ -16,8 +16,8 @@ SELECT now()::timestamptz;
 -- name: InsertAssets :copyfrom
 INSERT INTO assets (
     cmdb_source_id, record_id, name, description, kind_id, hardware_vendor, hardware_model,
-    criticality_id, imported_exposure_id, imported_owner_id, area_record_id, retired, inactive_since
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13);
+    criticality_id, imported_exposure_id, lifecycle_stage_id, imported_owner_id, area_record_id, retired, inactive_since
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14);
 
 -- name: UpdateAssetImported :batchone
 UPDATE assets
@@ -28,6 +28,7 @@ SET name = @name,
     hardware_model = @hardware_model,
     criticality_id = @criticality_id,
     imported_exposure_id = @imported_exposure_id,
+    lifecycle_stage_id = @lifecycle_stage_id,
     imported_owner_id = @imported_owner_id,
     area_record_id = @area_record_id,
     retired = @retired,
@@ -49,7 +50,7 @@ WHERE cmdb_source_id = @cmdb_source_id AND record_id = ANY(@record_ids::text[]);
 SELECT a.id, a.cmdb_source_id, a.record_id, a.name, a.description, a.kind_id,
        a.hardware_vendor, a.hardware_model, a.criticality_id,
        imported_owner.email AS imported_owner, declared_owner.email AS declared_owner,
-       a.imported_exposure_id, a.declared_exposure_id, a.area_record_id, a.retired, a.inactive_since,
+       a.imported_exposure_id, a.declared_exposure_id, a.lifecycle_stage_id, a.area_record_id, a.retired, a.inactive_since,
        area.id AS area_id, area.name AS area_name,
        exposure_declarer.email AS exposure_declared_by, a.exposure_declared_at
 FROM assets a
@@ -86,7 +87,7 @@ WHERE cmdb_source_id = @cmdb_source_id;
 SELECT a.id, a.cmdb_source_id, a.record_id, a.name, a.description, a.kind_id,
        a.hardware_vendor, a.hardware_model, a.criticality_id,
        imported_owner.email AS imported_owner, declared_owner.email AS declared_owner,
-       a.imported_exposure_id, a.declared_exposure_id, a.area_record_id, a.retired, a.inactive_since,
+       a.imported_exposure_id, a.declared_exposure_id, a.lifecycle_stage_id, a.area_record_id, a.retired, a.inactive_since,
        area.id AS area_id, area.name AS area_name,
        exposure_declarer.email AS exposure_declared_by, a.exposure_declared_at
 FROM assets a
@@ -120,7 +121,7 @@ WHERE s.customer_id = @customer_id
 SELECT a.id, a.cmdb_source_id, a.record_id, a.name, a.description, a.kind_id,
        a.hardware_vendor, a.hardware_model, a.criticality_id,
        imported_owner.email AS imported_owner, declared_owner.email AS declared_owner,
-       a.imported_exposure_id, a.declared_exposure_id, a.area_record_id, a.retired, a.inactive_since,
+       a.imported_exposure_id, a.declared_exposure_id, a.lifecycle_stage_id, a.area_record_id, a.retired, a.inactive_since,
        area.id AS area_id, area.name AS area_name,
        exposure_declarer.email AS exposure_declared_by, a.exposure_declared_at
 FROM assets a
