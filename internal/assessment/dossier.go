@@ -28,7 +28,7 @@ const unknown = "unknown"
 
 var dataGaps = []string{
 	scoring.CVSSEstimated.String(), scoring.EPSSPending.String(), scoring.KEVStale.String(),
-	scoring.CriticalityUnknown.String(), scoring.ExposureUndeclared.String(),
+	scoring.CriticalityUnknown.String(), scoring.ExposureUndeclared.String(), scoring.LifecycleUnknown.String(),
 }
 
 // ErrInvalidDossier is a Dossier that names no Finding, no real CVE or no
@@ -69,6 +69,7 @@ type Asset struct {
 	Kind        string     `json:"kind"`
 	Criticality string     `json:"criticality"`
 	Exposure    string     `json:"exposure"`
+	Lifecycle   string     `json:"lifecycle_stage"`
 	Software    []Software `json:"software"`
 	// CriticalServices are those of the Customer's Business Context that name
 	// the Asset among the Assets that run them (ADR 0017).
@@ -160,6 +161,7 @@ type Score struct {
 	Vulnerability         float64  `json:"vulnerability"`
 	CriticalityMultiplier float64  `json:"criticality_multiplier"`
 	ExposureMultiplier    float64  `json:"exposure_multiplier"`
+	LifecycleMultiplier   float64  `json:"lifecycle_multiplier"`
 	DataGaps              []string `json:"data_gaps"`
 }
 
@@ -280,6 +282,9 @@ func (a Asset) problems() []string {
 	if _, err := inventory.ParseExposure(a.Exposure); err != nil && a.Exposure != unknown {
 		problems = append(problems, fmt.Sprintf("asset exposure %q is not internet_facing, internal or unknown", a.Exposure))
 	}
+	if _, err := inventory.ParseLifecycleStage(a.Lifecycle); err != nil && a.Lifecycle != unknown {
+		problems = append(problems, fmt.Sprintf("asset lifecycle stage %q is not production, implementation, stock or unknown", a.Lifecycle))
+	}
 	for _, s := range a.Software {
 		if _, err := inventory.ParseSoftwareRole(s.Role); err != nil {
 			problems = append(problems, fmt.Sprintf("software %q has role %q, not operating_system or application", s.Name, s.Role))
@@ -351,6 +356,7 @@ type AssetContext struct {
 	Kind             string            `json:"kind"`
 	Criticality      string            `json:"criticality"`
 	Exposure         string            `json:"exposure"`
+	Lifecycle        string            `json:"lifecycle_stage"`
 	CriticalServices []CriticalService `json:"critical_services"`
 }
 
@@ -385,7 +391,7 @@ func (d Dossier) Brief() Brief {
 		Description: d.Description,
 		Asset: AssetContext{
 			Name: d.Asset.Name, Kind: d.Asset.Kind, Criticality: d.Asset.Criticality, Exposure: d.Asset.Exposure,
-			CriticalServices: nonNil(d.Asset.CriticalServices),
+			Lifecycle: d.Asset.Lifecycle, CriticalServices: nonNil(d.Asset.CriticalServices),
 		},
 		Component:        d.Component,
 		Score:            d.Score,
@@ -447,6 +453,7 @@ func NewAsset(a *inventory.Asset) Asset {
 		Kind:        imported.Kind().Code(),
 		Criticality: codeOrUnknown(imported.Criticality().Code()),
 		Exposure:    codeOrUnknown(a.Exposure().Code()),
+		Lifecycle:   codeOrUnknown(imported.Lifecycle().Code()),
 		Software:    software,
 	}
 }
@@ -472,6 +479,7 @@ func newScore(s scoring.Score) Score {
 		Vulnerability:         rounded(s.Factors.Vulnerability),
 		CriticalityMultiplier: rounded(s.Factors.CriticalityMultiplier),
 		ExposureMultiplier:    rounded(s.Factors.ExposureMultiplier),
+		LifecycleMultiplier:   rounded(s.Factors.LifecycleMultiplier),
 		DataGaps:              gaps,
 	}
 }

@@ -23,7 +23,7 @@ The user message holds four parts:
 
 ` + dataRules + `
 
-Each Finding carries its score, from 0 to 1, computed by a deterministic Scoring Model from the CVSS base score, the EPSS probability, the CISA KEV catalog and the asset's criticality and exposure. Never change, recompute or propose a score: start from it, and use judgment on top of it. Weigh, for each Finding to place:
+Each Finding carries its score, from 0 to 1, computed by a deterministic Scoring Model from the CVSS base score, the EPSS probability, the CISA KEV catalog and the asset's criticality, exposure and lifecycle stage. Never change, recompute or propose a score: start from it, and use judgment on top of it. Weigh, for each Finding to place:
 - whether attackers exploit it now: kev lists it, and known_ransomware_campaign_use says whether ransomware uses it;
 - how likely it is to be exploited soon: epss.probability;
 - how severe it is: nvd.cvss;
@@ -32,6 +32,7 @@ Each Finding carries its score, from 0 to 1, computed by a deterministic Scoring
 - how much the asset matters to the business: asset.criticality, the kind of asset, what its name and the component's role say it does, and asset.critical_services, the customer's critical services that run on this asset, with how badly losing each hurts (impact) and how long it can be down (max_downtime);
 - what the customer said of its business in <business_context>: the data it holds, the regulations it falls under, its risk appetite, the risks that worry it and what constrains its remediation;
 - how reachable it is: asset.exposure, where internet_facing is reachable by anyone;
+- where the asset is in its life: asset.lifecycle_stage, where production carries the customer's real data and traffic, implementation is being built and will reach production, often less hardened, and stock is not running yet. Fixing a Finding before its asset reaches production is cheaper than after;
 - what the customer's users said in <feedback>: that a Finding should be attended earlier or later, and why. Weigh it as the word of someone who knows the business, not as an order;
 - how sure the score is: each entry of score.data_gaps replaced a missing input with a default. Never move a Finding later only because its data is missing.
 

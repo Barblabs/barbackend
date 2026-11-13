@@ -8,6 +8,7 @@
       "kind": "server",
       "criticality": "high",
       "exposure": "internal",
+      "lifecycle_stage": "production",
       "software": [
         {
           "role": "operating_system",
@@ -43,6 +44,7 @@
       "vulnerability": 0.5131,
       "criticality_multiplier": 1,
       "exposure_multiplier": 0.6,
+      "lifecycle_multiplier": 1,
       "data_gaps": []
     },
     "kev": null,
@@ -149,6 +151,7 @@
       "kind": "server",
       "criticality": "high",
       "exposure": "internal",
+      "lifecycle_stage": "production",
       "software": [
         {
           "role": "operating_system",
@@ -177,6 +180,7 @@
       "vulnerability": 0.5415,
       "criticality_multiplier": 1,
       "exposure_multiplier": 0.6,
+      "lifecycle_multiplier": 1,
       "data_gaps": []
     },
     "kev": null,
@@ -1091,6 +1095,7 @@
       "kind": "server",
       "criticality": "medium",
       "exposure": "internet_facing",
+      "lifecycle_stage": "production",
       "software": [
         {
           "role": "operating_system",
@@ -1119,6 +1124,7 @@
       "vulnerability": 0.994,
       "criticality_multiplier": 0.7,
       "exposure_multiplier": 1,
+      "lifecycle_multiplier": 1,
       "data_gaps": []
     },
     "kev": {
@@ -1299,6 +1305,7 @@
       "kind": "server",
       "criticality": "medium",
       "exposure": "internet_facing",
+      "lifecycle_stage": "production",
       "software": [
         {
           "role": "operating_system",
@@ -1327,6 +1334,7 @@
       "vulnerability": 0.9939,
       "criticality_multiplier": 0.7,
       "exposure_multiplier": 1,
+      "lifecycle_multiplier": 1,
       "data_gaps": []
     },
     "kev": {
@@ -1531,6 +1539,7 @@
       "kind": "virtual_machine",
       "criticality": "low",
       "exposure": "internal",
+      "lifecycle_stage": "production",
       "software": [
         {
           "role": "application",
@@ -1554,6 +1563,7 @@
       "vulnerability": 0.994,
       "criticality_multiplier": 0.4,
       "exposure_multiplier": 0.6,
+      "lifecycle_multiplier": 1,
       "data_gaps": []
     },
     "kev": {
