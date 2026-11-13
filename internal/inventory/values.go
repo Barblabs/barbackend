@@ -15,6 +15,7 @@ var (
 	ErrMultipleOperatingSystems = errors.New("asset has more than one operating system")
 	ErrInvalidCriticality       = errors.New("invalid criticality")
 	ErrInvalidExposure          = errors.New("invalid exposure")
+	ErrInvalidLifecycleStage    = errors.New("invalid lifecycle stage")
 	ErrEmptyOwnerEmail          = errors.New("owner email is empty")
 	ErrZeroImportedAsset        = errors.New("imported asset is the zero value")
 	// ErrAssetInactive is a Declaration asked of an Asset barbattack no longer
@@ -163,6 +164,35 @@ func (e Exposure) String() string {
 	}
 }
 
+// LifecycleStage is where an Asset is in its life (ADR 0028). A retired Asset
+// has none: being retired is ImportedAsset.Retired.
+type LifecycleStage int
+
+// Stored as catalog ids (ADR 0006): never renumber.
+const (
+	LifecycleUnknown        LifecycleStage = 0
+	LifecycleProduction     LifecycleStage = 1
+	LifecycleImplementation LifecycleStage = 2
+	LifecycleStock          LifecycleStage = 3
+)
+
+func (s LifecycleStage) valid() bool { return s >= LifecycleUnknown && s <= LifecycleStock }
+
+func (s LifecycleStage) String() string {
+	switch s {
+	case LifecycleUnknown:
+		return "Unknown"
+	case LifecycleProduction:
+		return "Production"
+	case LifecycleImplementation:
+		return "Implementation"
+	case LifecycleStock:
+		return "Stock"
+	default:
+		return fmt.Sprintf("LifecycleStage(%d)", int(s))
+	}
+}
+
 // OwnerEmail identifies an Asset Owner. Emails differing only in case or
 // surrounding space name the same person (ADR 0003), so every edge gets the
 // same canonical form from here. The zero value means no owner.
@@ -189,6 +219,7 @@ var (
 	assetKindCodes    = map[AssetKind]string{Server: "server", VirtualMachine: "virtual_machine", Workstation: "workstation", NetworkDevice: "network_device"}
 	criticalityCodes  = map[Criticality]string{CriticalityHigh: "high", CriticalityMedium: "medium", CriticalityLow: "low"}
 	exposureCodes     = map[Exposure]string{InternetFacing: "internet_facing", Internal: "internal"}
+	lifecycleCodes    = map[LifecycleStage]string{LifecycleProduction: "production", LifecycleImplementation: "implementation", LifecycleStock: "stock"}
 	softwareRoleCodes = map[SoftwareRole]string{OperatingSystem: "operating_system", Application: "application"}
 )
 
@@ -226,6 +257,19 @@ func ParseExposure(code string) (Exposure, error) {
 		return e, nil
 	}
 	return 0, fmt.Errorf("%w: %q", ErrInvalidExposure, code)
+}
+
+// Code is the stable lowercase snake_case name clients use for the lifecycle
+// stage, or empty for Unknown.
+func (s LifecycleStage) Code() string { return lifecycleCodes[s] }
+
+// ParseLifecycleStage is the inverse of LifecycleStage.Code. Unknown has no
+// code.
+func ParseLifecycleStage(code string) (LifecycleStage, error) {
+	if s, ok := parseCode(lifecycleCodes, code); ok {
+		return s, nil
+	}
+	return 0, fmt.Errorf("%w: %q", ErrInvalidLifecycleStage, code)
 }
 
 // Code is the stable lowercase snake_case name clients use for the role.
