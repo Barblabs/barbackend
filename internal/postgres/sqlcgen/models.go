@@ -248,6 +248,19 @@ type ScoreDataGap struct {
 	Name string
 }
 
+type SlackInstallation struct {
+	CustomerID  uuid.UUID
+	TeamID      string
+	TeamName    string
+	BotToken    []byte
+	ChannelID   string
+	ChannelName string
+	State       string
+	InstalledAt time.Time
+	UpdatedAt   time.Time
+	RemovedAt   *time.Time
+}
+
 type SoftwareComponent struct {
 	CmdbSourceID  uuid.UUID
 	RecordID      string
