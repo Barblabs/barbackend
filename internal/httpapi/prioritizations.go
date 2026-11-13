@@ -107,6 +107,18 @@ type findingResponse struct {
 	PlacedAt  time.Time              `json:"placed_at" doc:"When the round that last placed it read it: later than the created_at of previous_id when this one placed it"`
 	ClosedAt  *time.Time             `json:"closed_at" doc:"When the Finding was closed, null while it is open. A closed Finding leaves the order the next Prioritization starts from."`
 	Details   findingDetailsResponse `json:"details" doc:"What the Agents read of the Finding when it was placed. Its text comes from Feeds, the CMDB and the Customer: render it as plain text."`
+	Current   *currentResponse       `json:"current" doc:"The Finding's Asset and Score as they are now, while details and score stay as they were placed: a Score that moves by less than 0.1 does not place the Finding again. Null once the Finding is closed."`
+}
+
+type currentResponse struct {
+	Asset        currentAssetResponse `json:"asset"`
+	ScoreDetails scoreResponse        `json:"score_details"`
+}
+
+type currentAssetResponse struct {
+	Criticality    string `json:"criticality" enum:"high,medium,low,unknown"`
+	Exposure       string `json:"exposure" enum:"internet_facing,internal,unknown"`
+	LifecycleStage string `json:"lifecycle_stage" enum:"production,implementation,stock,unknown"`
 }
 
 type findingDetailsResponse struct {
@@ -361,6 +373,8 @@ func newPrioritizationResponse(p agents.Prioritization) prioritizationResponse {
 			ClosedAt:  p.States[d.Finding].Closed,
 			Details:   newFindingDetails(d),
 		}
+		current, ok := p.Current[d.Finding]
+		resp.Findings[i].Current = newCurrentResponse(current, ok)
 	}
 	for i, plan := range p.Plans {
 		resp.Plans[i] = newPlanResponse(plan)

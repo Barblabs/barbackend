@@ -521,6 +521,16 @@ type findingBody struct {
 		Techniques []any `json:"techniques"`
 		Advisories []any `json:"advisories"`
 	} `json:"details"`
+	Current *struct {
+		Asset struct {
+			Criticality    string `json:"criticality"`
+			LifecycleStage string `json:"lifecycle_stage"`
+		} `json:"asset"`
+		ScoreDetails struct {
+			Value               float64 `json:"value"`
+			LifecycleMultiplier float64 `json:"lifecycle_multiplier"`
+		} `json:"score_details"`
+	} `json:"current"`
 }
 
 func lunaReply(t *testing.T) claudetest.Reply {
