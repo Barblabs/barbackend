@@ -20,7 +20,7 @@ internal/
   stixext/             barbattack's STIX conventions    -> nothing internal (stix2, uuid)
 ```
 
-`internal/stixext` is pure, with no I/O. It holds everything in this ADR that more than one package needs: the identifier helpers, the `extension-definition` objects, the typed Go structs for each extension and their decode helpers, and the barbattack Identity and TLP marking constants. Feed adapters write with it, and threat matching (ADR 0008) reads with it. Only `feeds/...` and `stixext` construct STIX objects. Other packages read them through `stixext`, so a change of library touches only these two places.
+`internal/stixext` is pure, with no I/O. It holds everything in this ADR that more than one package needs: the identifier helpers, the `extension-definition` objects, the typed Go structs for each extension and their decode helpers, and the barbattack Identity and TLP marking constants. Feed adapters write with it, and threat matching (ADR 0008) reads with it. Only `feeds/...` and `stixext` construct STIX objects. Other packages read them through `stixext`, so a change of library touches only these two places. What an Agent states about a Feed's object, such as the Reader's reading of a News Item (ADR 0025), is stored as that Agent's output, never written back into the object.
 
 `internal/feeds/httpx` holds the shared HTTP client setup (client, URL, headers, 200 check). It sits under `feeds/` because only Feed adapters use it, but it is not part of the seam: the seam itself stays transport-free.
 
@@ -33,10 +33,14 @@ internal/
 | barbattack itself | `identity` SDO, `identity_class: "system"` | `created_by_ref` of every object we mint. |
 | Feed (provenance) | `external_references` entry + its extension | Not an Identity: the Feed is a source, not the producer of the normalized object. |
 | ATT&CK technique, tactic, group, etc. | MITRE's own objects, unchanged | Do not re-mint IDs or translate `x_mitre_*` properties. |
-| Advisory or news item (later) | `report` SDO with `object_refs` to Vulnerabilities | Its text is untrusted data. |
+| Advisory, such as an AWS Security Bulletin (ADR 0022) | `report` SDO with `object_refs` to Vulnerabilities | Its text is untrusted data. |
+| News Item: an article or leak-site post (ADR 0025) | `report` SDO with `object_refs` to the Vulnerabilities and victims it names | Its text is untrusted data. `news/1` says which Feed published it and what kind of post it is. |
+| Victim of a Reported Attack, when a Feed names it | `identity` SDO, `identity_class: "organization"`, with `sectors` | Only structured Feeds, such as leak-site trackers, name one. Its countries and domain go in `victim/1`. |
 | Asset, Software Component, Finding, Score | none for now | These belong to the Customer and live in Postgres. Exporting them to STIX (e.g. `infrastructure`, `software`, `sighting`) is a separate decision. |
 
-An advisory's `object_refs` point at the deterministic Vulnerability IDs for the CVE IDs its text mentions. STIX requires at least one `object_ref`, so a bulletin that mentions none is skipped and logged.
+An Advisory's `object_refs` point at the deterministic Vulnerability IDs for the CVE IDs its text mentions. STIX requires at least one `object_ref`, so a bulletin that mentions none is skipped and logged.
+
+A News Item's `object_refs` point the same way at the CVE IDs its text mentions, and at the `identity` of each victim its Feed names. A News Item that names neither, as most articles do, refers only to the barbattack `identity`, its `created_by_ref`, which says nothing about it and keeps it valid. It is stored all the same: an attack on a Peer rarely names a CVE (ADR 0025).
 
 Do not create `software` SCOs or `relationship` objects for affected products in this version. A `software` object holds a single version, but NVD says "every version from 2.4.0 up to but not including 2.4.58". The affected ranges go in the NVD extension instead, where filters can compare them with a Software Component's version.
 
@@ -60,6 +64,8 @@ func VulnerabilityID(cveID string) stix2.Identifier { return ID(stix2.TypeVulner
 - `vulnerability`: key is the CVE ID, trimmed and upper-cased (`CVE-2024-3094`). Reject anything that does not match `^CVE-\d{4}-\d{4,}$`.
 - barbattack `identity`: `ID(stix2.TypeIdentity, "barbattack")`.
 - `extension-definition`: `ID(stix2.TypeExtensionDefinition, "<feed>/<major version>")`, e.g. `"nvd/1"`.
+- `report` of a News Item: key is the item's guid, or its link when the Feed gives none.
+- Victim `identity`: key is `victim:` and its canonical domain (ADR 0017), or `victim:<feed>:<the Feed's id for the post>` when the Feed gives no domain, so two posts claiming the same domain name one victim.
 - SCOs, if any are ever created, keep the library's IDs. Those are already UUIDv5s defined by the spec.
 - Foreign objects (ATT&CK) keep their own IDs.
 
@@ -107,6 +113,26 @@ NVD configurations can say "vulnerable only when running on X" (AND nodes). `nvd
 
 Having the extension means the CVE is in the catalog. If a later catalog read no longer lists it, the KEV adapter removes the extension. Whether the catalog itself is stale (`kev_stale`, ADR 0009) is a property of the Feed's last successful read, not of any CVE. The ingestion records it, not the STIX objects.
 
+### `news/1`: on a News Item's `report`
+
+| Field | Type | Meaning |
+|---|---|---|
+| `feed` | string | The Feed that published it, as registered (`bleepingcomputer`, `ransomwarelive`) |
+| `kind` | string | `article` or `leak_post`. A `leak_post` is the attacker's own claim. |
+| `language` | string, optional | BCP 47 (`en`, `es`), when the Feed says |
+| `attacker` | string, optional | The attacker a structured Feed names, as written |
+
+Unlike the extensions on a `vulnerability`, every news Feed writes `news/1`: each `report` is written only by the Feed that published it, so no two Feeds share one.
+
+### `victim/1`: on a victim's `identity`
+
+| Field | Type | Meaning |
+|---|---|---|
+| `countries` | list of string | ISO 3166-1 alpha-2 (`MX`) |
+| `domain` | string, optional | Canonical, as a Customer's domains are (ADR 0017) |
+
+The victim's sectors go in the `identity`'s own `sectors`: STIX 2.1's `industry-sector-ov` and the few industries ADR 0017 adds to it, so they compare with a Business Context as they are. A Feed's own sector names are mapped in its adapter, and one it cannot map is left out, never guessed.
+
 ### Writing and reading an extension
 
 ```go
@@ -142,7 +168,7 @@ When a bundle is parsed, the library returns any extension it does not know as a
 
 The schema is not decided by this ADR and comes with the first Feed's migration. The intended shape is one row per STIX object ID, holding its type, `modified` and the object as `jsonb`. Each adapter updates only its own extension key, in one statement, so two Feeds writing the same `vulnerability` at once cannot lose each other's data. Columns that filters need often (the CVE ID, the affected `vendor`/`product` pairs) may be extracted next to the `jsonb` when the filters need them.
 
-ADR 0015 replaces this shape for Vulnerabilities: Feed objects are not stored on receipt. A Vulnerability is kept only when it opens a Finding, and KEV and EPSS objects only rescore the Findings of their CVE.
+ADR 0015 replaces this shape for Vulnerabilities: Feed objects are not stored on receipt. A Vulnerability is kept only when it opens a Finding, and KEV and EPSS objects only rescore the Findings of their CVE. News Items are the exception: each is stored on receipt, with its Feed, published date and CVE IDs extracted, because what makes one relevant is known only once it is read (ADR 0025).
 
 ## Open questions
 

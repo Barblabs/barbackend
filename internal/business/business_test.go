@@ -221,3 +221,23 @@ func strs[T ~string](codes []T) []string {
 	}
 	return out
 }
+
+func TestServicesOfAreThoseThatNameTheAsset(t *testing.T) {
+	t.Parallel()
+	f := full()
+	f.Operations.CriticalServices = append(f.Operations.CriticalServices, business.CriticalService{Name: "Payroll", Assets: []string{"srv-hr-01"}})
+	c := mustNew(t, f)
+
+	got := c.ServicesOf("  SRV-PAY-01 ")
+
+	if len(got) != 1 || got[0].Name != "Card payments" || got[0].Impact != "critical" {
+		t.Errorf("services = %+v, want Card payments, matched ignoring case and spaces", got)
+	}
+	got[0].Assets[0] = "changed"
+	if c.ServicesOf("srv-pay-01") == nil {
+		t.Error("ServicesOf handed out the Context's own list")
+	}
+	if c.ServicesOf("srv-db-01") != nil {
+		t.Error("a service that does not name the Asset was returned")
+	}
+}

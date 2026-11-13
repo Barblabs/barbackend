@@ -83,6 +83,6 @@ The Cartógrafo is an Agent, so it lives in `internal/agents`, which already imp
 
 - Two migrations and their queries, the Cartógrafo and its verifier, the job, and tests of each with `claudetest`.
 - `GLOSSARY.md` gains **Cartógrafo**.
-- The Dossier does not carry labels yet. Adding a Vulnerability's Techniques and Advisories to it, so the Prioritizer and Luna read them, is for the owner of the Agents; what to add, from where, and how the Prioritizer and Luna use it is in `docs/agents-pending.md` §6.
+- The Dossier carries a Vulnerability's Labeling and Techniques, with their Mitigations, and a Labeling that labels something has the Prioritizer place its Findings again (ADR 0026).
 - One request per stored Vulnerability, paid once. There is no quota yet.
 - Two runs over the same Vulnerability can pick different Techniques. A Labeling is stored once and not rerun, so what a reader sees does not change.

@@ -61,7 +61,9 @@ func (t *Tx) UpdateConnectedLogin(ctx context.Context, id inventory.CMDBSourceID
 }
 
 // DisconnectCMDBSource makes the Customer's Connected CMDB Source a
-// Disconnected one and its Assets and Areas Inactive, deleting nothing. It
+// Disconnected one and its Assets and Areas Inactive, deleting nothing, and
+// closes the open Findings of those Assets as asset_inactive, since a
+// Disconnected source is never synced again to close them (ADR 0020). It
 // locks the source as CommitSync does, so it fails at once with
 // ErrSyncInProgress while a Sync commits, and with inventory.ErrNotConnected
 // when nothing is connected.
@@ -79,7 +81,8 @@ func (t *Tx) DisconnectCMDBSource(ctx context.Context, customer tenancy.Customer
 	if err := t.q.DeactivateSourceAreas(ctx, id); err != nil {
 		return fmt.Errorf("deactivate areas of %s: %w", id, err)
 	}
-	return nil
+	_, err = t.CloseFindingsOfInactiveAssets(ctx, inventory.CMDBSourceID(id))
+	return err
 }
 
 const connectedCustomerIndex = "cmdb_sources_connected_customer_idx"

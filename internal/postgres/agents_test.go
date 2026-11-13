@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"barbackend/internal/assessment"
+	"barbackend/internal/finding"
 	"barbackend/internal/postgres"
 	"barbackend/internal/tenancy"
 	"github.com/google/uuid"
@@ -89,88 +90,195 @@ func TestConversationHistoryAndClaim(t *testing.T) {
 	}
 }
 
-func TestPrioritizationsStayWithTheirCustomer(t *testing.T) {
-	t.Parallel()
+// readAt is when the rounds of chain read what they placed.
+var readAt = []time.Time{time.Date(2026, 11, 1, 9, 0, 0, 0, time.UTC), time.Date(2026, 11, 2, 9, 0, 0, 0, time.UTC)}
+
+// chain stores two Prioritizations of the Customer of w, the second built
+// from the first, over a Finding on the payments server and one on the lab
+// server. The second keeps the first's placement of the payments one and
+// places the lab one.
+func chain(t *testing.T, w findingWorld) (first, second postgres.StoredPrioritization, payments, lab uuid.UUID) {
+	t.Helper()
 	ctx := context.Background()
-	db, _ := newDBWithConn(t)
-	customer, other := newCustomer(t, db), newCustomer(t, db)
-	author, err := tenancy.NewUser(tenancy.UserID(uuid.New()), "viewer@example.com", tenancy.Viewer, customer)
-	if err != nil {
-		t.Fatal(err)
-	}
-	inTx(t, db, func(tx *postgres.Tx) error {
-		_, err := tx.CreateUser(ctx, author, uuid.NewString())
+	p, _ := saveMatch(t, w.db, match(t, w.payments, "1.18.0"))
+	l, _ := saveMatch(t, w.db, match(t, w.lab, "1.18.0"))
+	payments, lab = uuid.UUID(p), uuid.UUID(l)
+	content := json.RawMessage(`{"list":{"groups":[]}}`)
+	first = postgres.StoredPrioritization{ID: uuid.New(), Content: content, Findings: 1, Groups: 1}
+	inTx(t, w.db, func(tx *postgres.Tx) (err error) {
+		first.Created, err = tx.CreatePrioritization(ctx, w.customer, first, readAt[0], []postgres.Placement{
+			{Finding: payments, Group: 1, ScoreRank: 1, Dossier: json.RawMessage(`{"finding":"payments"}`)},
+		})
 		return err
 	})
-	older, newer := uuid.New(), uuid.New()
-	content := json.RawMessage(`{"findings":[{"finding":"f-1"},{"finding":"f-2"}]}`)
-	for _, id := range []uuid.UUID{older, newer} {
-		inTx(t, db, func(tx *postgres.Tx) error {
-			_, err := tx.CreatePrioritization(ctx, customer, postgres.StoredPrioritization{ID: id, Content: content, Findings: 2, Groups: 1})
+	kept := inTxValue(t, w.db, func(tx *postgres.Tx) ([]postgres.PlacedFinding, error) {
+		return tx.PrioritizationFindings(ctx, w.customer, first.ID)
+	})[0].Placement
+	second = postgres.StoredPrioritization{ID: uuid.New(), Previous: &first.ID, Content: content, Findings: 2, Groups: 2}
+	inTx(t, w.db, func(tx *postgres.Tx) (err error) {
+		second.Created, err = tx.CreatePrioritization(ctx, w.customer, second, readAt[1], []postgres.Placement{
+			{Finding: payments, Group: 1, ScoreRank: 1, Kept: kept},
+			{Finding: lab, Group: 2, ScoreRank: 2, Dossier: json.RawMessage(`{"finding":"lab"}`)},
+		})
+		return err
+	})
+	return first, second, payments, lab
+}
+
+func TestPrioritizationsFormOneChainPerCustomer(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	w := newFindingWorld(t)
+	first, second, payments, lab := chain(t, w)
+	other := newCustomer(t, w.db)
+	create := func(customer tenancy.CustomerID, previous *uuid.UUID) error {
+		return w.db.InTx(ctx, func(tx *postgres.Tx) error {
+			_, err := tx.CreatePrioritization(ctx, customer, postgres.StoredPrioritization{ID: uuid.New(), Previous: previous, Content: json.RawMessage(`{}`)}, time.Now(), nil)
 			return err
 		})
 	}
 
-	list := inTxValue(t, db, func(tx *postgres.Tx) ([]postgres.PrioritizationSummary, error) {
-		return tx.ListPrioritizations(ctx, customer, 10)
+	newest := inTxValue(t, w.db, func(tx *postgres.Tx) (postgres.StoredPrioritization, error) {
+		return tx.NewestPrioritization(ctx, w.customer)
 	})
-	if len(list) != 2 || list[0].ID != newer || list[0].Findings != 2 || list[0].Groups != 1 {
-		t.Errorf("list = %+v, want the newer first", list)
+	if newest.ID != second.ID || newest.Previous == nil || *newest.Previous != first.ID {
+		t.Errorf("newest = %+v, want the second, built from the first", newest)
 	}
-	if got := inTxValue(t, db, func(tx *postgres.Tx) ([]postgres.PrioritizationSummary, error) {
-		return tx.ListPrioritizations(ctx, other, 10)
-	}); len(got) != 0 {
-		t.Errorf("another Customer's list = %+v", got)
+	if err := create(w.customer, nil); !errors.Is(err, postgres.ErrNotNewest) {
+		t.Errorf("a second first prioritization: err = %v, want ErrNotNewest", err)
+	}
+	if err := create(w.customer, &first.ID); !errors.Is(err, postgres.ErrNotNewest) {
+		t.Errorf("another built from the first: err = %v, want ErrNotNewest", err)
+	}
+	if err := create(other, nil); err != nil {
+		t.Errorf("another Customer's first: %v", err)
+	}
+	err := w.db.InTx(ctx, func(tx *postgres.Tx) error {
+		_, err := tx.Prioritization(ctx, other, second.ID)
+		return err
+	})
+	if !errors.Is(err, postgres.ErrNotFound) {
+		t.Errorf("another Customer reading it: err = %v, want ErrNotFound", err)
+	}
+	list := inTxValue(t, w.db, func(tx *postgres.Tx) ([]postgres.PrioritizationSummary, error) {
+		return tx.ListPrioritizations(ctx, w.customer, 10)
+	})
+	if len(list) != 2 || list[0].ID != second.ID || list[0].Findings != 2 || list[0].Groups != 2 {
+		t.Errorf("list = %+v, want the second first", list)
 	}
 
-	holds := func(customer tenancy.CustomerID, finding string) (bool, error) {
-		return postgres.InTxValue(ctx, db, func(tx *postgres.Tx) (bool, error) { return tx.PrioritizationHolds(ctx, customer, newer, finding) })
+	inTx(t, w.db, func(tx *postgres.Tx) error {
+		_, err := tx.CloseFinding(ctx, finding.ID(lab), finding.NoLongerAffected)
+		return err
+	})
+	placed := inTxValue(t, w.db, func(tx *postgres.Tx) ([]postgres.PlacedFinding, error) {
+		return tx.PrioritizationFindings(ctx, w.customer, second.ID)
+	})
+	if len(placed) != 2 || placed[0].Finding != payments || !placed[0].Placed.Equal(readAt[0]) || string(placed[0].Dossier) != `{"finding": "payments"}` || placed[0].Closed != nil {
+		t.Errorf("kept finding = %+v, want it with the placement of the first, open", placed)
 	}
-	if ok, err := holds(customer, "f-2"); err != nil || !ok {
-		t.Errorf("holds f-2 = %v, %v", ok, err)
+	if placed[1].Finding != lab || !placed[1].Placed.Equal(readAt[1]) || string(placed[1].Dossier) != `{"finding": "lab"}` || placed[1].Closed == nil {
+		t.Errorf("placed finding = %+v, want it placed by the second, closed", placed[1])
 	}
-	if ok, err := holds(customer, "f-9"); err != nil || ok {
-		t.Errorf("holds f-9 = %v, %v", ok, err)
+	if err := w.db.InTx(ctx, func(tx *postgres.Tx) error {
+		_, err := tx.CreatePrioritization(ctx, w.customer, postgres.StoredPrioritization{ID: uuid.New(), Previous: &second.ID, Content: json.RawMessage(`{}`)}, time.Now(), []postgres.Placement{
+			{Finding: lab, Group: 1, ScoreRank: 1, Kept: placed[0].Placement},
+		})
+		return err
+	}); err == nil {
+		t.Error("a Finding kept another Finding's placement")
 	}
-	if _, err := holds(other, "f-2"); !errors.Is(err, postgres.ErrNotFound) {
+}
+
+func TestPlansAndFeedbackHoldForAFindingAcrossTheChain(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	w := newFindingWorld(t)
+	first, second, payments, lab := chain(t, w)
+	other := newCustomer(t, w.db)
+	author, err := tenancy.NewUser(tenancy.UserID(uuid.New()), "viewer@example.com", tenancy.Viewer, w.customer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inTx(t, w.db, func(tx *postgres.Tx) error {
+		_, err := tx.CreateUser(ctx, author, uuid.NewString())
+		return err
+	})
+
+	holds := func(customer tenancy.CustomerID, finding uuid.UUID) (bool, error) {
+		return postgres.InTxValue(ctx, w.db, func(tx *postgres.Tx) (bool, error) { return tx.PrioritizationHolds(ctx, customer, first.ID, finding) })
+	}
+	if ok, err := holds(w.customer, payments); err != nil || !ok {
+		t.Errorf("holds the payments finding = %v, %v", ok, err)
+	}
+	if ok, err := holds(w.customer, lab); err != nil || ok {
+		t.Errorf("holds the lab finding, which only the second placed = %v, %v", ok, err)
+	}
+	if _, err := holds(other, payments); !errors.Is(err, postgres.ErrNotFound) {
 		t.Errorf("another Customer: err = %v, want ErrNotFound", err)
 	}
 
 	for _, plan := range []string{`{"n":1}`, `{"n":2}`} {
-		inTx(t, db, func(tx *postgres.Tx) error {
-			_, err := tx.CreatePlan(ctx, customer, newer, postgres.StoredPlan{ID: uuid.New(), Finding: "f-1", Content: json.RawMessage(plan)})
+		inTx(t, w.db, func(tx *postgres.Tx) error {
+			_, err := tx.CreatePlan(ctx, w.customer, first.ID, postgres.StoredPlan{ID: uuid.New(), Finding: payments, Content: json.RawMessage(plan)})
 			return err
 		})
 	}
-	err = db.InTx(ctx, func(tx *postgres.Tx) error {
-		_, err := tx.CreatePlan(ctx, other, newer, postgres.StoredPlan{ID: uuid.New(), Finding: "f-1", Content: json.RawMessage(`{}`)})
+	err = w.db.InTx(ctx, func(tx *postgres.Tx) error {
+		_, err := tx.CreatePlan(ctx, other, first.ID, postgres.StoredPlan{ID: uuid.New(), Finding: payments, Content: json.RawMessage(`{}`)})
 		return err
 	})
 	if !errors.Is(err, postgres.ErrNotFound) {
 		t.Errorf("a plan on another Customer's prioritization: err = %v, want ErrNotFound", err)
 	}
-	plans := inTxValue(t, db, func(tx *postgres.Tx) ([]postgres.StoredPlan, error) { return tx.LatestPlans(ctx, customer, newer) })
-	if len(plans) != 1 || plans[0].Finding != "f-1" || string(plans[0].Content) != `{"n": 2}` {
-		t.Errorf("plans = %+v, want only the newest", plans)
+	if err := w.db.InTx(ctx, func(tx *postgres.Tx) error {
+		_, err := tx.CreatePlan(ctx, w.customer, first.ID, postgres.StoredPlan{ID: uuid.New(), Finding: lab, Content: json.RawMessage(`{}`)})
+		return err
+	}); err == nil {
+		t.Error("a plan for a Finding the Prioritization does not hold was stored")
+	}
+	plans := inTxValue(t, w.db, func(tx *postgres.Tx) ([]postgres.StoredPlan, error) {
+		return tx.LatestPlans(ctx, w.customer, second.ID)
+	})
+	if len(plans) != 1 || plans[0].Finding != payments || string(plans[0].Content) != `{"n": 2}` {
+		t.Errorf("plans read from the second = %+v, want the newest asked from the first", plans)
 	}
 
-	feedback := postgres.StoredFeedback{ID: uuid.New(), Finding: "f-2", Author: author.ID(), Verdict: assessment.VerdictShouldBeEarlier, Note: "es el de pagos"}
-	stored := inTxValue(t, db, func(tx *postgres.Tx) (postgres.StoredFeedback, error) {
-		return tx.AddFeedback(ctx, customer, newer, feedback)
-	})
-	if stored.Created.IsZero() {
-		t.Error("feedback has no creation time")
+	earlier := postgres.StoredFeedback{ID: uuid.New(), Finding: lab, Author: author.ID(), Verdict: assessment.VerdictShouldBeEarlier, Note: "es el de pagos"}
+	applies := postgres.StoredFeedback{ID: uuid.New(), Finding: payments, Author: author.ID(), Verdict: assessment.VerdictApplies}
+	for _, f := range []postgres.StoredFeedback{earlier, applies} {
+		stored := inTxValue(t, w.db, func(tx *postgres.Tx) (postgres.StoredFeedback, error) {
+			return tx.AddFeedback(ctx, w.customer, second.ID, f)
+		})
+		if stored.Created.IsZero() {
+			t.Error("feedback has no creation time")
+		}
 	}
-	err = db.InTx(ctx, func(tx *postgres.Tx) error {
-		_, err := tx.AddFeedback(ctx, other, newer, postgres.StoredFeedback{ID: uuid.New(), Finding: "f-2", Author: author.ID(), Verdict: assessment.VerdictApplies})
+	err = w.db.InTx(ctx, func(tx *postgres.Tx) error {
+		_, err := tx.AddFeedback(ctx, other, second.ID, applies)
 		return err
 	})
 	if !errors.Is(err, postgres.ErrNotFound) {
 		t.Errorf("feedback on another Customer's prioritization: err = %v, want ErrNotFound", err)
 	}
-	got := inTxValue(t, db, func(tx *postgres.Tx) ([]postgres.StoredFeedback, error) { return tx.Feedback(ctx, customer, newer) })
-	if len(got) != 1 || got[0].Finding != "f-2" || got[0].Verdict != assessment.VerdictShouldBeEarlier || got[0].Note != feedback.Note {
-		t.Errorf("feedback = %+v", got)
+	got := inTxValue(t, w.db, func(tx *postgres.Tx) ([]postgres.StoredFeedback, error) {
+		return tx.Feedback(ctx, w.customer, first.ID)
+	})
+	if len(got) != 1 || got[0].Finding != payments || got[0].Verdict != assessment.VerdictApplies {
+		t.Errorf("feedback read from the first = %+v, want what was said of its Finding", got)
+	}
+}
+
+func TestDisconnectingASourceClosesTheFindingsOfItsAssets(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	w := newFindingWorld(t)
+	saveMatch(t, w.db, match(t, w.payments, "1.18.0"))
+
+	inTx(t, w.db, func(tx *postgres.Tx) error { return tx.DisconnectCMDBSource(ctx, w.customer) })
+
+	if open := openFindingsOf(t, w.db, "CVE-2021-23017"); len(open) != 0 {
+		t.Errorf("open findings = %+v, want none of a Disconnected source", open)
 	}
 }
 

@@ -4,7 +4,7 @@ status: proposed
 
 # Findings are scored by a versioned, deterministic two-layer model
 
-We score the Finding, not the Vulnerability: the same CVE matters very differently on an internet-facing production server and on an internal lab machine. Threat context (ATT&CK techniques, advisories, news) is not scored in this version: no Feed links a CVE to an ATT&CK technique, so it stays as evidence for people and agents.
+We score the Finding, not the Vulnerability: the same CVE matters very differently on an internet-facing production server and on an internal lab machine. Threat context (ATT&CK techniques, advisories, news) is not scored in this version: no Feed links a CVE to an ATT&CK technique, so it stays as evidence for people and agents. News Items reach them as ADR 0025 describes, in a Finding's Dossier and in the News Digest, and never move a Score.
 
 A Score is computed in two layers by pure functions, so the same inputs always give the same Score:
 

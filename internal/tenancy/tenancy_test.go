@@ -63,6 +63,9 @@ func TestSignIn(t *testing.T) {
 		{"disabled", tenancy.UserState{Disabled: true}, tenancy.ErrUserDisabled},
 		{"deactivated customer", tenancy.UserState{CustomerDeactivated: true}, tenancy.ErrCustomerDeactivated},
 		{"disabled in a deactivated customer", tenancy.UserState{Disabled: true, CustomerDeactivated: true}, tenancy.ErrUserDisabled},
+		{"pending", tenancy.UserState{Pending: true}, tenancy.ErrUserPending},
+		{"pending and disabled", tenancy.UserState{Pending: true, Disabled: true}, tenancy.ErrUserDisabled},
+		{"pending in a deactivated customer", tenancy.UserState{Pending: true, CustomerDeactivated: true}, tenancy.ErrUserPending},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -144,10 +147,11 @@ func TestOnlyAPlatformAdminManagesCustomers(t *testing.T) {
 	}
 }
 
-func TestOnlyACustomerAdminManagesUsersAreasAndTheBusinessContext(t *testing.T) {
+func TestOnlyACustomerAdminManagesUsersAreasAssetValuesAndTheBusinessContext(t *testing.T) {
 	actions := map[string]func(tenancy.User) (tenancy.CustomerID, error){
 		"ManageUsers":         tenancy.User.ManageUsers,
 		"ManageAreas":         tenancy.User.ManageAreas,
+		"DeclareAssetValues":  tenancy.User.DeclareAssetValues,
 		"EditBusinessContext": tenancy.User.EditBusinessContext,
 	}
 	tests := []struct {

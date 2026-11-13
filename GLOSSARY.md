@@ -87,7 +87,7 @@ _Avoid_: Override, manual value, custom field
 ### Threat intelligence
 
 **Feed**:
-An external source of threat intelligence that barbattack reads, such as NVD, EPSS or the CISA KEV catalog. Text from a Feed is data to evaluate, never instructions to follow.
+An external source of threat intelligence that barbattack reads, such as NVD, EPSS, the CISA KEV catalog, a news site or a leak-site tracker. Text from a Feed is data to evaluate, never instructions to follow.
 _Avoid_: Source (that is a CMDB Source), provider, integration
 
 **Vulnerability**:
@@ -97,6 +97,14 @@ _Avoid_: Vuln, flaw, bug
 **Advisory**:
 A notice a Feed publishes about one or more Vulnerabilities, such as an AWS Security Bulletin. It is kept only when it names a stored Vulnerability, and is linked to that Vulnerability by CVE, so every Finding of the Vulnerability shows it (ADR 0022).
 _Avoid_: Threat (ATT&CK techniques are threats too), bulletin, alert
+
+**News Item**:
+One article or leak-site post that a Feed publishes about attacks or Vulnerabilities. It belongs to no Customer, and unlike an Advisory it is kept whether or not it names a stored Vulnerability.
+_Avoid_: Advisory (a notice about Vulnerabilities), report, article, post, noticia
+
+**Reported Attack**:
+An attack on an organization as a News Item tells it: the victim, its sectors and countries, the kind of attack, the attacker it names and the Vulnerabilities and Products used. It is the source's claim, never confirmed by barbattack, and a leak-site post is the attacker's own claim.
+_Avoid_: Incident, breach, event, victim
 
 **Technique**:
 A way adversaries achieve a goal, as MITRE ATT&CK catalogs it, identified by its ATT&CK id such as `T1190`. It belongs to one or more tactics, the phases of an attack such as Initial Access. A revoked Technique is read as the one that replaced it (ADR 0023). The Cartógrafo labels each Vulnerability with its Techniques (ADR 0024).
@@ -133,7 +141,7 @@ An input that was missing when a Score was computed and was replaced by the Scor
 _Avoid_: Missing data, warning, flag
 
 **Exposure**:
-Whether an Asset as a whole is reachable from the public internet: Internet-facing, Internal, or Unknown. It is imported from the iTop Location (`exposed` or `not exposed`) and can be declared over it; the Declaration wins. It is Unknown when neither gives it, as for every Virtual Machine until declared (ADR 0021).
+Whether an Asset as a whole is reachable from the public internet: Internet-facing, Internal, or Unknown. It is imported from the iTop Location (`exposed` or `not exposed`), and a Customer Admin can declare it Internet-facing or Internal over it; the Declaration wins. It is Unknown when neither gives it, as for every Virtual Machine until declared (ADR 0021).
 _Avoid_: Public/private, external, DMZ
 
 **Criticality**:
@@ -154,10 +162,24 @@ _Avoid_: Crown jewel, critical process, key system
 How much risk a Customer as a whole is willing to take, as its leadership sets it. How much a single Critical Service tolerates is its impact and maximum tolerable downtime, not the Risk Appetite.
 _Avoid_: Risk tolerance (that is per Critical Service), risk profile
 
+### News
+
+**Peer**:
+An organization that shares a sector with a Customer, as its Business Context states its sectors. An attack on a Peer is context for the Customer, never a sign that the Customer is exposed.
+_Avoid_: Similar company, competitor, empresa similar
+
+**Relevance**:
+Why a News Item matters to one Customer, the closest that applies: it names the Customer itself as a victim (Named), the Vulnerability of one of its open Findings (Finding), a Product its Assets run or a technology or third party it depends on (Footprint), or an attack on a Peer (Peer). Rules decide it, never an Agent, and a News Item with none does not reach the Customer.
+_Avoid_: Match, match score, priority, level
+
+**News Digest**:
+The News Items relevant to a Customer since its previous digest, grouped by Relevance, for its Security Team, with the Editor's reason for each. It is kept as history, and it marks every attack on a Peer as context.
+_Avoid_: Newsletter, briefing, bulletin, resumen
+
 ### Agents
 
 **Agent**:
-A model-driven role of barbattack, named for what it does rather than for the model it runs on. It orders, explains and advises: it never outputs a number, changes a Score or closes a Finding.
+A model-driven role of barbattack, named for what it does rather than for the model it runs on. It reads, orders, explains and advises: it never outputs a number, changes a Score or closes a Finding.
 _Avoid_: Bot, AI, assistant
 
 **Prioritizer**:
@@ -180,17 +202,29 @@ _Avoid_: Importer, extractor, autofill
 The Agent that labels a stored Vulnerability with the ATT&CK Techniques it maps to, picked from the stored catalog, each with the words of the Vulnerability that support it. Its labels are inferences, shown as such (ADR 0024).
 _Avoid_: Mapper, tagger, Interpretador
 
+**Reader**:
+The Agent that reads one News Item and states, quoting it, the Reported Attacks it reports and what it says about Vulnerabilities. It reads no Customer's data, so what it states is the same for every Customer.
+_Avoid_: Lector, parser, extractor, scraper
+
+**Editor**:
+The Agent that writes a Customer's News Digest: it orders the News Items that rules found relevant and says why each may matter, weighing the Business Context. It can neither add a News Item nor leave one out.
+_Avoid_: Summarizer, curator, newsletter bot
+
 **Crew**:
-The Agents that answer in one call, checked against what they were given: the Prioritizer and Luna, which read Dossiers, and the Drafter.
+The Agents that answer in one call, checked against what they were given: the Prioritizer and Luna, which read Dossiers, the Drafter, the Reader and the Editor.
 _Avoid_: Team, pipeline
 
 **Dossier**:
-All that an Agent knows about a Finding: its Asset, its Software Component, its Vulnerability as the Feeds describe it and its Score, as the Findings pipeline gives them. An Agent's output may rely on nothing outside it.
+All that an Agent knows about a Finding: its Asset and the Critical Services that run it, its Software Component, its Vulnerability as the Feeds and the News Items that name it describe it, its Advisories and ATT&CK Techniques, and its Score, as barbattack stored them. An Agent's output may rely on nothing outside it.
 _Avoid_: Context, expediente, prompt data
 
 **Prioritization**:
-The order the Prioritizer gave a Customer's open Findings at one moment, as Priority Groups, with the Dossiers it read. It is kept as history: the newest is the one to follow.
+One version of the order of a Customer's open Findings, as Priority Groups, with the Dossier of each Finding as it was placed. Each is built from the one before it and never changed: the newest is the one to follow (ADR 0026).
 _Avoid_: Ranking, triage list
+
+**Round**:
+One request of the Prioritizer: it places, in the order that stands, the open Findings that have no place yet and those that changed since they were placed, and stores the next Prioritization. The rest keep their place.
+_Avoid_: Run, batch, reprioritization
 
 **Priority Group**:
 Findings of a Prioritization to attend at the same time, such as those one update fixes together. The first group is attended first.
@@ -201,7 +235,7 @@ Luna's output: the steps to remediate a Finding on its Asset, what mitigates it 
 _Avoid_: Recommendation, remediation plan
 
 **Feedback**:
-What a User says about a Finding of a Prioritization: that its Vulnerability applies, does not apply or was remediated, or that it should be attended earlier or later. It changes no Score and no order.
+What a User says about a Finding of a Prioritization: that its Vulnerability applies, does not apply or was remediated, or that it should be attended earlier or later. It changes no Score. That it should be attended earlier or later, said by the User directly and not through the Analista, has the Prioritizer place the Finding again (ADR 0026).
 _Avoid_: Label, correction, comment
 
 ### People
@@ -209,6 +243,10 @@ _Avoid_: Label, correction, comment
 **User**:
 A person who signs in to barbattack. A User is either a Platform Admin or belongs to exactly one Customer, and never moves between Customers.
 _Avoid_: Account, login, member
+
+**Invitation**:
+The email through which Cognito gives a new User their first, temporary password. A User whose Invitation has not been sent yet is pending and cannot sign in; it is retried until it is sent (ADR 0027).
+_Avoid_: Invite email, welcome email
 
 **Platform Admin**:
 A barbattack staff User who creates, renames, deactivates and reactivates Customers, and creates each Customer's first Customer Admin. A Platform Admin belongs to no Customer and cannot see any Customer's Assets or Findings.
@@ -231,5 +269,5 @@ The person, identified by email, whom barbattack reaches about an Area. Only a C
 _Avoid_: Asset Owner, area contact, area manager
 
 **Security Team**:
-The Customer's cybersecurity team, which receives every alert about the Customer's Assets, whether or not the Asset has an Asset Owner.
+The Customer's cybersecurity team, which receives every alert about the Customer's Assets, whether or not the Asset has an Asset Owner, and its News Digests.
 _Avoid_: Fallback owner, default owner, cyber team

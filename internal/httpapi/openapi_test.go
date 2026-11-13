@@ -25,6 +25,8 @@ func TestOpenAPIListsEveryRoute(t *testing.T) {
 		{http.MethodPost, "/analista/conversations"},
 		{http.MethodPost, "/analista/conversations/{id}/messages"},
 		{http.MethodPut, "/areas/{id}/owner"},
+		{http.MethodPut, "/assets/{id}/exposure"},
+		{http.MethodDelete, "/assets/{id}/exposure"},
 	}
 	for _, r := range slices.Concat(operations, businessContextEdits, everyRoleOperations, templated) {
 		if op, ok := spec.Paths[r.path][strings.ToLower(r.method)]; !ok || op.OperationID == "" {

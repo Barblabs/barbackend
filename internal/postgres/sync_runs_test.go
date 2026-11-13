@@ -95,8 +95,7 @@ func TestSyncRunRoundTrip(t *testing.T) {
 			}
 			got.Started, got.Finished = got.Started.UTC(), got.Finished.UTC()
 			want := tt.want
-			// Postgres keeps microseconds; CommitSync reads the finish time from the clock.
-			want.Started, want.Finished = run.Started().UTC().Truncate(time.Microsecond), run.Finished().UTC().Truncate(time.Microsecond)
+			want.Started, want.Finished = run.Started().UTC(), run.Finished().UTC()
 			if !reflect.DeepEqual(got, want) {
 				t.Errorf("row = %+v, want %+v", got, want)
 			}

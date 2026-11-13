@@ -17,13 +17,16 @@ var (
 	// ErrNotPlatformAdmin is a User of a Customer asking to manage Customers.
 	ErrNotPlatformAdmin = errors.New("only a platform admin manages customers")
 	// ErrNotCustomerAdmin is a Viewer or a Platform Admin asking to manage the
-	// Users or Areas of a Customer or to edit its Business Context.
+	// Users or Areas of a Customer, to declare values on its Assets or to edit
+	// its Business Context.
 	ErrNotCustomerAdmin = errors.New("only a customer admin can do this")
 	// ErrLastCustomerAdmin is a change that would leave a Customer without an
 	// active Customer Admin.
 	ErrLastCustomerAdmin = errors.New("a customer keeps at least one active customer admin")
 	// ErrUserDisabled is a User disabled by a Customer Admin.
 	ErrUserDisabled = errors.New("user is disabled")
+	// ErrUserPending is a User whose Invitation has not been sent yet.
+	ErrUserPending = errors.New("user has not been invited yet")
 	// ErrCustomerDeactivated is a Customer that is no longer served: its Users
 	// cannot sign in and its CMDB Source does not sync.
 	ErrCustomerDeactivated = errors.New("customer is deactivated")
@@ -117,6 +120,7 @@ type User struct {
 	customer CustomerID
 
 	disabled            bool
+	pending             bool
 	customerDeactivated bool
 }
 
@@ -147,6 +151,7 @@ func CanonicalEmail(email string) string { return strings.ToLower(strings.TrimSp
 // UserState is what can stop a stored User from signing in.
 type UserState struct {
 	Disabled            bool
+	Pending             bool
 	CustomerDeactivated bool
 }
 
@@ -156,6 +161,7 @@ func RestoreUser(id UserID, email string, role Role, customer CustomerID, state 
 		return User{}, err
 	}
 	u.disabled = state.Disabled
+	u.pending = state.Pending
 	u.customerDeactivated = state.CustomerDeactivated
 	return u, nil
 }
@@ -166,17 +172,22 @@ func (u User) Email() string { return u.email }
 
 func (u User) Role() Role { return u.role }
 
+// Pending is a User whose Invitation has not been sent yet.
+func (u User) Pending() bool { return u.pending }
+
 // Customer is the Customer the User belongs to; a Platform Admin belongs to
 // none.
 func (u User) Customer() (CustomerID, bool) { return u.customer, u.role != PlatformAdmin }
 
-// SignIn fails with ErrUserDisabled before ErrCustomerDeactivated: a disabled
-// User is told to sign in again whatever their Customer's state, and learns
-// nothing about it.
+// SignIn fails with ErrUserDisabled, then ErrUserPending, before
+// ErrCustomerDeactivated: a User who cannot sign in for their own sake
+// learns nothing about their Customer's state.
 func (u User) SignIn() error {
 	switch {
 	case u.disabled:
 		return fmt.Errorf("user %s: %w", u.id, ErrUserDisabled)
+	case u.pending:
+		return fmt.Errorf("user %s: %w", u.id, ErrUserPending)
 	case u.customerDeactivated:
 		return fmt.Errorf("user %s: %w", u.id, ErrCustomerDeactivated)
 	}
@@ -205,25 +216,30 @@ func (u User) ManageCustomers() error {
 // ManageUsers returns the Customer whose Users u manages. It fails with
 // ErrNotCustomerAdmin for anyone but a Customer Admin.
 func (u User) ManageUsers() (CustomerID, error) {
-	if u.role != CustomerAdmin {
-		return CustomerID{}, ErrNotCustomerAdmin
-	}
-	return u.customer, nil
+	return u.customerAdmin()
 }
 
 // EditBusinessContext returns the Customer whose Business Context u edits. It
 // fails with ErrNotCustomerAdmin for anyone but a Customer Admin.
 func (u User) EditBusinessContext() (CustomerID, error) {
-	if u.role != CustomerAdmin {
-		return CustomerID{}, ErrNotCustomerAdmin
-	}
-	return u.customer, nil
+	return u.customerAdmin()
 }
 
 // ManageAreas returns the Customer whose Areas u manages, such as stating
 // their owners. It fails with ErrNotCustomerAdmin for anyone but a Customer
 // Admin.
 func (u User) ManageAreas() (CustomerID, error) {
+	return u.customerAdmin()
+}
+
+// DeclareAssetValues returns the Customer whose Assets u declares values on,
+// such as their Exposure. It fails with ErrNotCustomerAdmin for anyone but a
+// Customer Admin.
+func (u User) DeclareAssetValues() (CustomerID, error) {
+	return u.customerAdmin()
+}
+
+func (u User) customerAdmin() (CustomerID, error) {
 	if u.role != CustomerAdmin {
 		return CustomerID{}, ErrNotCustomerAdmin
 	}

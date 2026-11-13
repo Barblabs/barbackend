@@ -29,18 +29,21 @@ var (
 	ErrInvalidHistory = errors.New("conversation history is invalid")
 )
 
-// Client finds its credentials as the SDK does, such as in ANTHROPIC_API_KEY.
-// Calling without any fails with the SDK's error naming what it tried.
+// Client calls the Messages API. Calling without credentials fails with the
+// SDK's error naming what it tried.
 type Client struct {
 	api anthropic.Client
 }
 
-// New returns a Client of the API at baseURL, or of the SDK's default when it
-// is empty.
-func New(baseURL string) *Client {
+// New returns a Client of the API at baseURL with apiKey. Either one, when
+// empty, is found as the SDK does, such as the key in ANTHROPIC_API_KEY.
+func New(baseURL, apiKey string) *Client {
 	var options []option.RequestOption
 	if baseURL != "" {
 		options = append(options, option.WithBaseURL(baseURL))
+	}
+	if apiKey != "" {
+		options = append(options, option.WithAPIKey(apiKey))
 	}
 	return &Client{api: anthropic.NewClient(options...)}
 }

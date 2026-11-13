@@ -94,6 +94,16 @@ JOIN assets a USING (cmdb_source_id, record_id)
 WHERE f.closed_at IS NULL AND f.cmdb_source_id = @cmdb_source_id
 ORDER BY f.cmdb_source_id, f.record_id, f.product_vendor, f.product_name, f.cve_id;
 
+-- The open Findings of one Asset, with what scoring needs of it.
+-- name: ListOpenFindingsOfAsset :many
+SELECT f.id, f.cmdb_source_id, f.record_id, f.product_vendor, f.product_name, f.cve_id,
+       f.component_name, f.component_version, a.criticality_id,
+       coalesce(a.declared_exposure_id, a.imported_exposure_id) AS exposure_id
+FROM findings f
+JOIN assets a USING (cmdb_source_id, record_id)
+WHERE f.cmdb_source_id = @cmdb_source_id AND f.record_id = @record_id AND f.closed_at IS NULL
+ORDER BY f.product_vendor, f.product_name, f.cve_id;
+
 -- name: DeleteFindingMatchFlags :exec
 DELETE FROM finding_match_flags
 WHERE finding_id = @finding_id;
@@ -133,3 +143,51 @@ RETURNING scored_at;
 
 -- name: InsertFindingScoreDataGaps :copyfrom
 INSERT INTO finding_score_data_gaps (finding_id, scored_at, gap_id) VALUES ($1, $2, $3);
+
+-- The open Findings of a Customer's Assets, with their Vulnerability and their
+-- latest Score, which is what their Dossiers are built from (ADR 0026). A
+-- Finding not scored yet is left out.
+-- name: ListOpenFindingsOfCustomer :many
+SELECT f.id, f.cmdb_source_id, f.record_id, f.cve_id, f.component_name, f.component_version,
+       v.object AS vulnerability_object,
+       s.model, s.value, s.alpha, s.beta, s.gamma, s.vulnerability,
+       s.criticality_multiplier, s.exposure_multiplier, s.gaps
+FROM findings f
+JOIN cmdb_sources src ON src.id = f.cmdb_source_id
+JOIN vulnerabilities v ON v.cve_id = f.cve_id
+JOIN LATERAL (
+    SELECT sc.model, sc.value, sc.alpha, sc.beta, sc.gamma, sc.vulnerability,
+           sc.criticality_multiplier, sc.exposure_multiplier,
+           coalesce(array_agg(g.gap_id ORDER BY g.gap_id) FILTER (WHERE g.gap_id IS NOT NULL), '{}')::smallint[] AS gaps
+    FROM finding_scores sc
+    LEFT JOIN finding_score_data_gaps g USING (finding_id, scored_at)
+    WHERE sc.finding_id = f.id
+    GROUP BY sc.finding_id, sc.scored_at
+    ORDER BY sc.scored_at DESC
+    LIMIT 1
+) s ON true
+WHERE src.customer_id = @customer_id AND f.closed_at IS NULL
+ORDER BY f.id;
+
+-- One Finding of a Customer's Assets, open or closed, as
+-- ListOpenFindingsOfCustomer reads it.
+-- name: GetFindingOfCustomer :one
+SELECT f.id, f.cmdb_source_id, f.record_id, f.cve_id, f.component_name, f.component_version,
+       v.object AS vulnerability_object,
+       s.model, s.value, s.alpha, s.beta, s.gamma, s.vulnerability,
+       s.criticality_multiplier, s.exposure_multiplier, s.gaps
+FROM findings f
+JOIN cmdb_sources src ON src.id = f.cmdb_source_id
+JOIN vulnerabilities v ON v.cve_id = f.cve_id
+JOIN LATERAL (
+    SELECT sc.model, sc.value, sc.alpha, sc.beta, sc.gamma, sc.vulnerability,
+           sc.criticality_multiplier, sc.exposure_multiplier,
+           coalesce(array_agg(g.gap_id ORDER BY g.gap_id) FILTER (WHERE g.gap_id IS NOT NULL), '{}')::smallint[] AS gaps
+    FROM finding_scores sc
+    LEFT JOIN finding_score_data_gaps g USING (finding_id, scored_at)
+    WHERE sc.finding_id = f.id
+    GROUP BY sc.finding_id, sc.scored_at
+    ORDER BY sc.scored_at DESC
+    LIMIT 1
+) s ON true
+WHERE src.customer_id = @customer_id AND f.id = @id;

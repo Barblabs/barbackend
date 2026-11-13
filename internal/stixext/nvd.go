@@ -16,6 +16,9 @@ type NVD struct {
 	CNAAffected []CNAAffected `json:"cna_affected,omitempty"`
 }
 
+// Rejected reports whether NVD withdrew the CVE.
+func (n NVD) Rejected() bool { return n.VulnStatus == "Rejected" }
+
 // CVSS is one metric NVD reports for a Vulnerability.
 type CVSS struct {
 	Version   string  `json:"version"`
@@ -58,13 +61,11 @@ type CNAVersion struct {
 	Status          string `json:"status"`
 }
 
-// NewNVD returns n as a property extension.
 func NewNVD(n NVD) NVD {
 	n.ExtensionType = "property-extension"
 	return n
 }
 
-// NVDOf decodes the nvd/1 extension of v.
 func NVDOf(v *stix2.Vulnerability) (NVD, bool) {
 	return decodeExtension[NVD](v, NVDDefinitionID)
 }

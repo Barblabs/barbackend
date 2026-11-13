@@ -8,6 +8,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
+	"time"
 
 	"barbackend/internal/cognito"
 	"barbackend/internal/postgres"
@@ -23,22 +25,22 @@ var (
 
 type StoredUser = postgres.StoredUser
 
-// Admin creates, disables and deletes users in the user pool.
-// *cognito.Admin is the real one.
+// Admin creates users in the user pool. *cognito.Admin is the real one.
 type Admin interface {
+	// CreateUser has Cognito send the Invitation and returns the user's sub.
+	// It is retried with the same email until it succeeds once.
 	CreateUser(ctx context.Context, email string) (sub string, err error)
-	DisableUser(ctx context.Context, sub string) error
-	DeleteUser(ctx context.Context, sub string) error
 }
 
 type Service struct {
 	db       *postgres.DB
 	verifier *cognito.Verifier
 	admin    Admin
+	now      func() time.Time
 }
 
 func New(db *postgres.DB, verifier *cognito.Verifier, admin Admin) *Service {
-	return &Service{db: db, verifier: verifier, admin: admin}
+	return &Service{db: db, verifier: verifier, admin: admin, now: time.Now}
 }
 
 // Authenticate resolves a Cognito access token to the User it signs in. A
@@ -101,9 +103,10 @@ func (s *Service) Profile(ctx context.Context, caller tenancy.User) (Profile, er
 	return Profile{User: caller, Customer: stored.Customer}, nil
 }
 
-// Create invites a User through Cognito and stores them. It does not check
-// who asks: callers that act for a User must check their role and Customer
-// first.
+// Create stores a User and has Cognito send their Invitation once the User
+// is stored. It does not check who asks: callers that act for a User must
+// check their role and Customer first. When Cognito fails, the User is
+// returned pending and SendInvitations retries.
 func (s *Service) Create(ctx context.Context, email string, role tenancy.Role, customer tenancy.CustomerID) (StoredUser, error) {
 	u, err := tenancy.NewUser(tenancy.UserID(uuid.New()), email, role, customer)
 	if err != nil {
@@ -112,40 +115,30 @@ func (s *Service) Create(ctx context.Context, email string, role tenancy.Role, c
 	return s.invite(ctx, u, nil)
 }
 
-// invite stores u in one transaction with whatever before stores, and has
-// Cognito send their invitation. before runs first, so a row it cannot store,
-// such as a Customer with a taken name, sends no invitation. When storing
-// fails after Cognito created the user, the Cognito user is deleted again, so
-// the email stays free.
+// invite stores u, pending, in one transaction with whatever before stores,
+// and then sends their Invitation. before runs first, so a row it cannot
+// store, such as a Customer with a taken name, stores no User.
 func (s *Service) invite(ctx context.Context, u tenancy.User, before func(*postgres.Tx) error) (StoredUser, error) {
 	var (
-		sub    string
-		stored StoredUser
+		stored     StoredUser
+		invitation postgres.Invitation
 	)
-	err := s.db.InTx(ctx, func(tx *postgres.Tx) error {
+	err := s.db.InTx(ctx, func(tx *postgres.Tx) (err error) {
 		if before != nil {
 			if err := before(tx); err != nil {
 				return err
 			}
 		}
-		var err error
-		if sub, err = s.admin.CreateUser(ctx, u.Email()); err != nil {
-			return err
-		}
-		stored, err = tx.CreateUser(ctx, u, sub)
+		stored, invitation, err = tx.CreatePendingUser(ctx, u, s.now().Add(invitationClaim))
 		return err
 	})
-	// Cognito and Postgres disagree when a Cognito user is deleted by hand.
-	if errors.Is(err, cognito.ErrUsernameExists) {
-		err = fmt.Errorf("%w: %w", tenancy.ErrEmailTaken, err)
-	}
-	if err != nil && sub != "" {
-		if delErr := s.admin.DeleteUser(context.WithoutCancel(ctx), sub); delErr != nil {
-			err = errors.Join(err, delErr)
-		}
-	}
 	if err != nil {
 		return StoredUser{}, err
 	}
-	return stored, nil
+	sub, err := s.send(context.WithoutCancel(ctx), invitation)
+	if err != nil {
+		log.Printf("users: %v", err)
+		return stored, nil
+	}
+	return StoredUser{User: u, Sub: sub, Created: stored.Created}, nil
 }

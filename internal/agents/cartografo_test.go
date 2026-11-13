@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"barbackend/internal/agents"
+	"barbackend/internal/assessment"
 	"barbackend/internal/claude/claudetest"
 	"barbackend/internal/postgres"
 )
@@ -22,7 +23,6 @@ const (
 	accountsQ   = "against any internal account, including the administrator's"
 )
 
-// storeCVE stores a Vulnerability of that CVE ID with the description.
 func storeCVE(ctx context.Context, tx *postgres.Tx, cve string) error {
 	object := `{"type":"vulnerability","spec_version":"2.1","id":"vulnerability--48ddf16e-0c34-5fd4-aeeb-1f1fc8027213",` +
 		`"created":"2026-11-10T03:52:06.164Z","modified":"2026-11-10T03:52:06.164Z","name":"` + cve + `","description":"` + description + `"}`
@@ -111,7 +111,7 @@ func TestTheCartografoLabelsAStoredVulnerability(t *testing.T) {
 	if len(got) != 2 || got[0].AttackID != "T1110.001" || got[0].Evidence != guessQuote || got[1].AttackID != "T1078" {
 		t.Errorf("techniques = %+v, want T1110.001 then T1078 with their quotes", got)
 	}
-	if l := labelingOf(t, e); l.Outcome != postgres.LabelingLabeled || l.Model != "claude-haiku-5-5" || l.PromptHash == "" {
+	if l := labelingOf(t, e); l.Outcome != assessment.LabelingLabeled || l.Model != "claude-haiku-5-5" || l.PromptHash == "" {
 		t.Errorf("labeling = %+v, want labeled by claude-haiku-5-5 with its prompt hash", l)
 	}
 }
@@ -168,7 +168,7 @@ func TestTheCartografoIsToldWhatFailedAndARejectedAnswerIsAFailedAttempt(t *test
 	if prompt := retry[len(retry)-1].(map[string]any)["text"].(string); !strings.Contains(prompt, "<rejected>") || !strings.Contains(prompt, "not a technique of the catalog") {
 		t.Errorf("retry prompt = %s, want what was wrong in <rejected>", prompt)
 	}
-	if l := labelingOf(t, e); l.Outcome != postgres.LabelingFailed || l.Attempts != 1 {
+	if l := labelingOf(t, e); l.Outcome != assessment.LabelingFailed || l.Attempts != 1 {
 		t.Errorf("labeling = %+v, want one failed attempt", l)
 	}
 }
@@ -184,7 +184,7 @@ func TestAFailedLabelingIsTriedInLaterRunsUpToThreeTimes(t *testing.T) {
 	if run := runCartografo(t, e); run != (agents.LabelingRun{}) {
 		t.Errorf("fourth run = %+v, want nothing: no attempts left", run)
 	}
-	if l := labelingOf(t, e); l.Outcome != postgres.LabelingFailed || l.Attempts != 3 || len(e.llm.Requests()) != 3 {
+	if l := labelingOf(t, e); l.Outcome != assessment.LabelingFailed || l.Attempts != 3 || len(e.llm.Requests()) != 3 {
 		t.Errorf("labeling = %+v after %d requests, want 3 failed attempts", l, len(e.llm.Requests()))
 	}
 }
@@ -274,7 +274,7 @@ func TestAVulnerabilityThatCannotBeReadIsAFailedAttemptAndTheRunGoesOn(t *testin
 	if run := runCartografo(t, e); run != (agents.LabelingRun{Failed: 1}) || len(e.llm.Requests()) != 0 {
 		t.Errorf("run = %+v after %d requests, want a failed attempt and nothing asked", run, len(e.llm.Requests()))
 	}
-	if l := labelingOf(t, e); l.Outcome != postgres.LabelingFailed || l.Attempts != 1 {
+	if l := labelingOf(t, e); l.Outcome != assessment.LabelingFailed || l.Attempts != 1 {
 		t.Errorf("labeling = %+v, want one failed attempt", l)
 	}
 }

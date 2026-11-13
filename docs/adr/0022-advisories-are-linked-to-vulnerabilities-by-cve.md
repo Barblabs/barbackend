@@ -28,7 +28,7 @@ The Findings of a Vulnerability get its Advisories by a join on `cve_id`. A Find
 ## Who reads them
 
 - **The dashboard** shows a Finding's Advisories: title, publication date, link, Feed. Text from a Feed is shown as plain text (GLOSSARY: Feed).
-- **The Prioritizer** gets them in each Dossier as untrusted data beside the Finding (ADR 0016): title, publication date and Feed, never as instructions. How it weighs them is the Agents' decision; the `docs/agents-pending.md` item that hands stored Findings to the Agents adds them.
+- **The Prioritizer** gets them in each Dossier as untrusted data beside the Finding (ADR 0016): title, publication date and Feed, never as instructions. Luna reads their text too (ADR 0026).
 - **The Score does not change.** No Scoring Model reads Advisories (ADR 0009).
 
 ## How it runs
@@ -38,7 +38,7 @@ A `HandleAWS` handler plugs into `ingest.Feed.Handle`, as `HandleNVD`, `HandleKE
 ## Out of scope
 
 - **Threats that reach an Asset without a CVE**, such as indicators of compromise matched to an Asset's address, or advisories that name a Product but no CVE: no Feed gives them today. The AWS adapter already drops bulletins without a CVE.
-- **News about attacks on a Customer's industry**: a separate Feed, built by the Agents' owner, that weighs news against the Customer's Business Context.
+- **News about attacks on a Customer's industry**: a separate Feed, built by the Agents' owner, that weighs news against the Customer's Business Context (ADR 0025).
 - **Alerts**: whether a new Advisory on an open Finding notifies anyone, for example on Slack, is not decided here.
 
 ## Considered Options
@@ -53,5 +53,5 @@ A `HandleAWS` handler plugs into `ingest.Feed.Handle`, as `HandleNVD`, `HandleKE
 
 - Two migrations and their queries. `vulnerability_advisories` references `vulnerabilities`, which is never deleted (ADR 0020), so no link is orphaned.
 - `GLOSSARY.md` gains **Advisory**: a notice a Feed publishes about one or more Vulnerabilities, such as an AWS Security Bulletin.
-- The Dossier gains a list of Advisories, which changes what the Prioritizer reads. This has to be agreed with the Agents' owner before the Dossier changes; `docs/agents-pending.md` §6 proposes how.
+- The Dossier gains a list of Advisories, which changes what the Prioritizer reads (ADR 0026).
 - A bulletin whose CVE NVD publishes after the bulletin leaves the RSS Feed is never linked. This gap is accepted.

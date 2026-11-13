@@ -213,7 +213,7 @@ func (s *Service) analistaTools(caller tenancy.User, pending *[]pendingFeedback)
 		newTool("list_assets", "List the customer's active assets, optionally only those of one criticality, with their software components.",
 			map[string]any{"criticality": nullable(oneOf(inventory.CriticalityHigh.Code(), inventory.CriticalityMedium.Code(), inventory.CriticalityLow.Code()))},
 			func(ctx context.Context, in assetsInput) (any, error) { return s.assets(ctx, caller, in) }),
-		newTool("record_feedback", "Store what the User said about a Finding of a prioritization: whether its vulnerability really affects its asset, that it was remediated, or that it should be attended earlier or later. It changes no score and no order.",
+		newTool("record_feedback", "Store what the User said about a Finding of a prioritization: whether its vulnerability really affects its asset, that it was remediated, or that it should be attended earlier or later. It changes no score and no order: the Prioritizer does not read what you record.",
 			map[string]any{"prioritization_id": text(), "finding_id": text(), "verdict": oneOf(assessment.VerdictCodes()...), "note": text()},
 			func(ctx context.Context, in feedbackInput) (any, error) {
 				return s.holdFeedback(ctx, caller, in, pending)
@@ -274,6 +274,7 @@ type findingSummary struct {
 	Score     float64 `json:"score"`
 	ScoreRank int     `json:"score_rank"`
 	HasPlan   bool    `json:"has_plan"`
+	Closed    bool    `json:"closed"`
 }
 
 type feedbackView struct {
@@ -297,18 +298,15 @@ func (s *Service) prioritizationView(ctx context.Context, caller tenancy.User, i
 		return prioritizationView{}, err
 	}
 	view := prioritizationView{ID: p.ID, Created: p.Created, Groups: []groupView{}, Feedback: feedbackViews(p.Feedback, "")}
-	if p.Prioritizer.Output == nil {
-		return view, nil
-	}
 	ranks := p.ScoreRanks()
-	for i, g := range p.Prioritizer.Output.Groups {
-		group := groupView{Position: i + 1, Title: g.Title, Reason: g.Reason, Findings: make([]findingSummary, 0, len(g.Findings))}
-		for _, id := range g.Findings {
+	for i, g := range p.List.Groups {
+		group := groupView{Position: i + 1, Title: g.Title, Reason: g.Reason(), Findings: []findingSummary{}}
+		for _, id := range g.Findings() {
 			d, _ := p.Finding(id)
 			_, hasPlan := p.PlanOf(id)
 			group.Findings = append(group.Findings, findingSummary{
 				Finding: id, CVE: d.CVE, Asset: d.Asset.Name, Component: d.Component.Name, Version: d.Component.Version,
-				Score: d.Score.Value, ScoreRank: ranks[id], HasPlan: hasPlan,
+				Score: d.Score.Value, ScoreRank: ranks[id], HasPlan: hasPlan, Closed: p.States[id].Closed != nil,
 			})
 		}
 		view.Groups = append(view.Groups, group)
@@ -338,8 +336,8 @@ func parseID(field, value string) (uuid.UUID, error) {
 func feedbackViews(feedback []Feedback, finding string) []feedbackView {
 	views := []feedbackView{}
 	for _, f := range feedback {
-		if finding == "" || f.Finding == finding {
-			views = append(views, feedbackView{Finding: f.Finding, Verdict: f.Verdict.Code(), Note: f.Note, ViaAnalista: f.ViaAnalista, Created: f.Created})
+		if finding == "" || f.Finding.String() == finding {
+			views = append(views, feedbackView{Finding: f.Finding.String(), Verdict: f.Verdict.Code(), Note: f.Note, ViaAnalista: f.ViaAnalista, Created: f.Created})
 		}
 	}
 	return views
@@ -443,5 +441,5 @@ func (s *Service) holdFeedback(ctx context.Context, caller tenancy.User, in feed
 	if !slices.ContainsFunc(*pending, said) {
 		*pending = append(*pending, pendingFeedback{prioritization: id, feedback: f})
 	}
-	return "recorded " + f.Verdict.Code() + " on " + f.Finding + "; it is saved when you finish answering, so get_finding does not show it yet", nil
+	return "recorded " + f.Verdict.Code() + " on " + f.Finding.String() + "; it is saved when you finish answering, so get_finding does not show it yet", nil
 }

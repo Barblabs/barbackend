@@ -32,6 +32,9 @@ var (
 	// ErrConversationClaimed is a conversation another message is being
 	// answered in, or was answered in first.
 	ErrConversationClaimed = errors.New("conversation is claimed by another message")
+	// ErrNotNewest is a Prioritization built from one that another was built
+	// from first, so the Customer's chain stays one (ADR 0026).
+	ErrNotNewest = errors.New("the prioritization it was built from is no longer the newest")
 )
 
 const (

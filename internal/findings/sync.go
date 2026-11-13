@@ -27,6 +27,7 @@ type productOn struct {
 // otherwise. Each Vulnerability is one transaction; one that fails leaves its
 // Findings as they were and is returned, joined with the others.
 func (s *Service) AfterSync(ctx context.Context, source inventory.CMDBSourceID) error {
+	defer s.changed()
 	if err := s.db.InTx(ctx, func(tx *postgres.Tx) error {
 		_, err := tx.CloseFindingsOfInactiveAssets(ctx, source)
 		return err

@@ -14,9 +14,9 @@ This departs from ADR 0006 and the Asset columns: its closed sets are string cod
 
 ## Its vocabularies are threat intelligence's own
 
-- **Sectors are STIX 2.1's `industry-sector-ov`**, as written there (`financial-services`, `government-local`), followed by a few industries it leaves out in the same style (`logistics`, `oil-gas`), and **countries are ISO 3166-1 alpha-2** (`MX`), so a Feed's report targeting a sector or a country matches a Customer without a mapping table (ADR 0010).
+- **Sectors are STIX 2.1's `industry-sector-ov`**, as written there (`financial-services`, `government-local`), followed by a few industries it leaves out in the same style (`logistics`, `oil-gas`), and **countries are ISO 3166-1 alpha-2** (`MX`), so a Feed's report targeting a sector or a country matches a Customer without a mapping table outside that Feed's adapter (ADR 0010). An attack on an organization that shares a sector is an attack on a Peer (ADR 0025).
 - **Domains are canonical**: lowercased, without scheme, path or `www.`, since lookalike domains and leaks are matched against them.
-- Organization type, employee and revenue ranges (US dollars), data categories, regulations (Mexico's LFPDPPP, CNBV, Banxico and Ley Fintech among them), technology environments, concerns, risk appetite, impact and downtime are closed sets in `internal/business/vocabulary.go`. A blank code or an empty list is "not stated", never a value.
+- Organization type, employee and revenue ranges (US dollars), data categories, regulations (Mexico's LFPDPPP, CNBV, Banxico and Ley Fintech among them), technology environments, concerns, risk appetite, impact and downtime are closed sets in `internal/business/vocabulary.go`. A blank code or an empty list is "not stated", never a value. Concerns are also the kinds of attack a Reported Attack is classified by (ADR 0025), so what worries a Customer compares with what happened to a Peer.
 - **Risk appetite is the Customer's, tolerance each Critical Service's.** Appetite is what leadership sets for the whole organization, on the five levels risk frameworks use, from averse to eager. What the Prioritizer can act on is per service, as a business impact analysis states it: how badly losing it hurts (its impact) and how long it can be down (its maximum tolerable downtime). An Asset inherits them from the services that name it, beside the Criticality its CMDB Source gives it.
 - A **Critical Service** names its Assets by the name their CMDB Source gives them, which is how a Dossier names an Asset. The name is free text: it is not checked against the inventory and survives an Asset's renaming as stale text.
 
@@ -45,7 +45,7 @@ internal/
 
 ## Consequences
 
-- **The Prioritizer does not read it yet.** Handing the Brief to it, telling it how to weigh it, and having its verifier check what a reason cites is the rest of item 1 of `docs/agents-pending.md`.
+- **The Prioritizer reads it** as its `business_context/1` document, each Dossier names the Critical Services that run its Asset, a reason cites it by JSON pointer, and each Prioritization records the version it read (ADR 0026).
 - A new field that a reader of `business_context/1` can ignore keeps the schema name; one that changes the meaning of an existing field takes a new name and a reader of both.
 - There is no history endpoint yet, though every version is kept.
 

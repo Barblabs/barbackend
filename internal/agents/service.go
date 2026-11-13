@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -40,6 +41,9 @@ var (
 // Feedback is what a User said about a Finding of a Prioritization.
 type Feedback = postgres.StoredFeedback
 
+// Dossier is all that an Agent knows about a Finding (ADR 0016).
+type Dossier = assessment.Dossier
+
 // Summary is a stored Prioritization without its Findings.
 type Summary = postgres.PrioritizationSummary
 
@@ -49,39 +53,19 @@ func FeedbackVerdicts() []string { return assessment.VerdictCodes() }
 type Service struct {
 	db   *postgres.DB
 	crew *Crew
+
+	onOrderFeedback func()
 }
 
 func NewService(db *postgres.DB, crew *Crew) *Service {
 	return &Service{db: db, crew: crew}
 }
 
-// Prioritize runs the Prioritizer on the Customer's open Findings and stores
-// the Prioritization, holding no transaction while it runs. It fails as
-// Crew.Prioritize does, and with ErrRefused, ErrRejected or ErrUnavailable,
-// storing nothing, when the Prioritizer has no verified answer: the newest
-// stored Prioritization stays the one to follow.
-func (s *Service) Prioritize(ctx context.Context, customer tenancy.CustomerID, findings []assessment.Dossier) (Prioritization, error) {
-	p, err := s.crew.Prioritize(ctx, findings)
-	if err != nil {
-		return Prioritization{}, err
-	}
-	if p.Prioritizer.Output == nil {
-		return Prioritization{}, failure(p.Prioritizer.Status, p.Prioritizer.Violations)
-	}
-	content, err := json.Marshal(p)
-	if err != nil {
-		return Prioritization{}, fmt.Errorf("write prioritization: %w", err)
-	}
-	p.ID = uuid.New()
-	stored := postgres.StoredPrioritization{ID: p.ID, Content: content, Findings: len(p.Findings), Groups: len(p.Prioritizer.Output.Groups)}
-	err = s.db.InTx(ctx, func(tx *postgres.Tx) (err error) {
-		p.Created, err = tx.CreatePrioritization(ctx, customer, stored)
-		return err
-	})
-	if err != nil {
-		return Prioritization{}, err
-	}
-	return p, nil
+// OnOrderFeedback has fn called after a User records that a Finding should be
+// attended earlier or later, which places it again (ADR 0026). fn must return
+// at once. It is meant to be set once, before the Service is used.
+func (s *Service) OnOrderFeedback(fn func()) {
+	s.onOrderFeedback = fn
 }
 
 func failure(status Status, violations []string) error {
@@ -113,25 +97,31 @@ func (s *Service) List(ctx context.Context, caller tenancy.User, limit int) ([]S
 	})
 }
 
-// Get is one of the Customer's Prioritizations with the newest Action Plan of
-// each Finding that has one and its Feedback. It fails with
+// Get is one of the Customer's Prioritizations with the Dossier and state of
+// each of its Findings, and the newest Action Plan and the Feedback of each,
+// whichever Prioritization of the chain they were given on. It fails with
 // ErrPrioritizationNotFound.
 func (s *Service) Get(ctx context.Context, caller tenancy.User, id uuid.UUID) (Prioritization, error) {
 	customer, err := caller.ActsFor()
 	if err != nil {
 		return Prioritization{}, err
 	}
-	var stored postgres.StoredPrioritization
-	var plans []postgres.StoredPlan
-	var feedback []Feedback
-	err = s.db.InTx(ctx, func(tx *postgres.Tx) (err error) {
-		if stored, err = tx.Prioritization(ctx, customer, id); err != nil {
+	var (
+		p     Prioritization
+		plans []postgres.StoredPlan
+	)
+	err = s.db.InTx(ctx, func(tx *postgres.Tx) error {
+		stored, err := tx.Prioritization(ctx, customer, id)
+		if err != nil {
+			return err
+		}
+		if p, err = load(ctx, tx, customer, stored); err != nil {
 			return err
 		}
 		if plans, err = tx.LatestPlans(ctx, customer, id); err != nil {
 			return err
 		}
-		feedback, err = tx.Feedback(ctx, customer, id)
+		p.Feedback, err = tx.Feedback(ctx, customer, id)
 		return err
 	})
 	if errors.Is(err, postgres.ErrNotFound) {
@@ -140,17 +130,12 @@ func (s *Service) Get(ctx context.Context, caller tenancy.User, id uuid.UUID) (P
 	if err != nil {
 		return Prioritization{}, err
 	}
-	p, err := restore(stored)
-	if err != nil {
-		return Prioritization{}, err
-	}
-	p.Feedback = feedback
 	p.Plans = make([]Plan, len(plans))
 	for i, stored := range plans {
-		p.Plans[i] = Plan{Finding: stored.Finding, Created: stored.Created}
-		if err := json.Unmarshal(stored.Content, &p.Plans[i].Luna); err != nil {
+		if err := json.Unmarshal(stored.Content, &p.Plans[i]); err != nil {
 			return Prioritization{}, fmt.Errorf("read plan %s: %w", stored.ID, err)
 		}
+		p.Plans[i].Finding, p.Plans[i].Created = stored.Finding.String(), stored.Created
 	}
 	return p, nil
 }
@@ -168,44 +153,45 @@ func (s *Service) Latest(ctx context.Context, caller tenancy.User) (Prioritizati
 	return s.Get(ctx, caller, newest[0].ID)
 }
 
-// Plan runs Luna on a Finding of one of the Customer's Prioritizations and
-// stores its Action Plan, holding no transaction while it runs. It fails with
-// ErrPrioritizationNotFound or ErrFindingNotFound before calling the model,
-// and with ErrRefused, ErrRejected or ErrUnavailable, storing nothing, when
-// Luna has no verified answer.
+// Plan runs Luna on a Finding of one of the Customer's Prioritizations, on its
+// Dossier as it is now, and stores its Action Plan with that Dossier, so the
+// plan can be traced to what Luna read. It holds no transaction
+// while it runs. It fails with ErrPrioritizationNotFound or
+// ErrFindingNotFound before calling the model, and with ErrRefused,
+// ErrRejected or ErrUnavailable, storing nothing, when Luna has no verified
+// answer.
 func (s *Service) Plan(ctx context.Context, caller tenancy.User, id uuid.UUID, finding string) (Plan, error) {
 	customer, err := caller.ActsFor()
 	if err != nil {
 		return Plan{}, err
 	}
-	stored, err := postgres.InTxValue(ctx, s.db, func(tx *postgres.Tx) (postgres.StoredPrioritization, error) {
-		return tx.Prioritization(ctx, customer, id)
+	findingID, err := parseFinding(finding)
+	if err != nil {
+		return Plan{}, err
+	}
+	d, err := postgres.InTxValue(ctx, s.db, func(tx *postgres.Tx) (assessment.Dossier, error) {
+		if err := holdsFinding(ctx, tx, customer, id, findingID); err != nil {
+			return assessment.Dossier{}, err
+		}
+		return dossierOfFinding(ctx, tx, customer, findingID)
 	})
-	if errors.Is(err, postgres.ErrNotFound) {
-		return Plan{}, fmt.Errorf("%w: %w", ErrPrioritizationNotFound, err)
-	}
 	if err != nil {
 		return Plan{}, err
 	}
-	p, err := restore(stored)
-	if err != nil {
-		return Plan{}, err
-	}
-	finding = strings.TrimSpace(finding)
-	run, err := s.crew.Plan(ctx, p, finding)
+	run, err := s.crew.Plan(ctx, d)
 	if err != nil {
 		return Plan{}, err
 	}
 	if run.Output == nil {
 		return Plan{}, failure(run.Status, run.Violations)
 	}
-	content, err := json.Marshal(run)
+	plan := Plan{Finding: findingID.String(), Dossier: d, Luna: run}
+	content, err := json.Marshal(plan)
 	if err != nil {
 		return Plan{}, fmt.Errorf("write plan of %s: %w", finding, err)
 	}
-	plan := Plan{Finding: finding, Luna: run}
 	err = s.db.InTx(ctx, func(tx *postgres.Tx) (err error) {
-		plan.Created, err = tx.CreatePlan(ctx, customer, id, postgres.StoredPlan{ID: uuid.New(), Finding: finding, Content: content})
+		plan.Created, err = tx.CreatePlan(ctx, customer, id, postgres.StoredPlan{ID: uuid.New(), Finding: findingID, Content: content})
 		return err
 	})
 	if err != nil {
@@ -226,15 +212,19 @@ func (s *Service) RecordFeedback(ctx context.Context, caller tenancy.User, id uu
 	if err != nil {
 		return Feedback{}, err
 	}
-	return postgres.InTxValue(ctx, s.db, func(tx *postgres.Tx) (Feedback, error) {
+	stored, err := postgres.InTxValue(ctx, s.db, func(tx *postgres.Tx) (Feedback, error) {
 		if err := holdsFinding(ctx, tx, customer, id, f.Finding); err != nil {
 			return Feedback{}, err
 		}
 		return tx.AddFeedback(ctx, customer, id, f)
 	})
+	if err == nil && slices.Contains(orderVerdicts, f.Verdict) && s.onOrderFeedback != nil {
+		s.onOrderFeedback()
+	}
+	return stored, err
 }
 
-func holdsFinding(ctx context.Context, tx *postgres.Tx, customer tenancy.CustomerID, id uuid.UUID, finding string) error {
+func holdsFinding(ctx context.Context, tx *postgres.Tx, customer tenancy.CustomerID, id, finding uuid.UUID) error {
 	holds, err := tx.PrioritizationHolds(ctx, customer, id, finding)
 	if errors.Is(err, postgres.ErrNotFound) {
 		return fmt.Errorf("%w: %w", ErrPrioritizationNotFound, err)
@@ -243,9 +233,19 @@ func holdsFinding(ctx context.Context, tx *postgres.Tx, customer tenancy.Custome
 		return err
 	}
 	if !holds {
-		return fmt.Errorf("%w: %q", ErrFindingNotFound, finding)
+		return fmt.Errorf("%w: %s", ErrFindingNotFound, finding)
 	}
 	return nil
+}
+
+// parseFinding reads a Finding's id, which only a stored Finding has. It
+// fails with ErrFindingNotFound for any other text.
+func parseFinding(finding string) (uuid.UUID, error) {
+	id, err := uuid.Parse(strings.TrimSpace(finding))
+	if err != nil {
+		return uuid.UUID{}, fmt.Errorf("%w: %q is not the id of a Finding", ErrFindingNotFound, finding)
+	}
+	return id, nil
 }
 
 func newFeedback(caller tenancy.User, finding, verdictCode, note string) (Feedback, error) {
@@ -256,13 +256,9 @@ func newFeedback(caller tenancy.User, finding, verdictCode, note string) (Feedba
 	if utf8.RuneCountInString(note) > MaxNoteLength {
 		return Feedback{}, fmt.Errorf("%w: note is longer than %d characters", ErrInvalidFeedback, MaxNoteLength)
 	}
-	return Feedback{ID: uuid.New(), Finding: strings.TrimSpace(finding), Author: caller.ID(), Verdict: verdict, Note: note}, nil
-}
-
-func restore(stored postgres.StoredPrioritization) (Prioritization, error) {
-	p := Prioritization{ID: stored.ID, Created: stored.Created}
-	if err := json.Unmarshal(stored.Content, &p); err != nil {
-		return Prioritization{}, fmt.Errorf("read prioritization %s: %w", stored.ID, err)
+	id, err := parseFinding(finding)
+	if err != nil {
+		return Feedback{}, err
 	}
-	return p, nil
+	return Feedback{ID: uuid.New(), Finding: id, Author: caller.ID(), Verdict: verdict, Note: note}, nil
 }

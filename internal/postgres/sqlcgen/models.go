@@ -14,7 +14,7 @@ import (
 type ActionPlan struct {
 	ID               uuid.UUID
 	PrioritizationID uuid.UUID
-	FindingID        string
+	FindingID        uuid.UUID
 	Content          []byte
 	CreatedAt        time.Time
 }
@@ -57,6 +57,9 @@ type Asset struct {
 	InactiveSince      *time.Time
 	AreaRecordID       *string
 	ImportedExposureID *int16
+	ID                 int64
+	ExposureDeclaredBy pgtype.UUID
+	ExposureDeclaredAt *time.Time
 }
 
 type AssetKind struct {
@@ -179,6 +182,13 @@ type FindingMatchFlag struct {
 	FlagID    int16
 }
 
+type FindingPlacement struct {
+	ID        uuid.UUID
+	FindingID uuid.UUID
+	PlacedAt  time.Time
+	Dossier   []byte
+}
+
 type FindingScore struct {
 	FindingID             uuid.UUID
 	ScoredAt              time.Time
@@ -204,23 +214,33 @@ type MatchFlag struct {
 }
 
 type Prioritization struct {
-	ID           uuid.UUID
-	CustomerID   uuid.UUID
-	FindingCount int32
-	GroupCount   int32
-	Content      []byte
-	CreatedAt    time.Time
+	ID                     uuid.UUID
+	CustomerID             uuid.UUID
+	FindingCount           int32
+	GroupCount             int32
+	Content                []byte
+	CreatedAt              time.Time
+	PreviousID             pgtype.UUID
+	BusinessContextVersion *int32
 }
 
 type PrioritizationFeedback struct {
 	ID               uuid.UUID
 	PrioritizationID uuid.UUID
-	FindingID        string
+	FindingID        uuid.UUID
 	AuthorID         uuid.UUID
 	VerdictID        int16
 	Note             string
 	ViaAnalista      bool
 	CreatedAt        time.Time
+}
+
+type PrioritizationFinding struct {
+	PrioritizationID uuid.UUID
+	FindingID        uuid.UUID
+	PlacementID      uuid.UUID
+	GroupPosition    int32
+	ScoreRank        int32
 }
 
 type ScoreDataGap struct {
@@ -266,12 +286,19 @@ type SyncRun struct {
 
 type User struct {
 	ID         uuid.UUID
-	CognitoSub string
+	CognitoSub *string
 	Email      string
 	CustomerID pgtype.UUID
 	RoleID     int16
 	CreatedAt  time.Time
 	DisabledAt *time.Time
+}
+
+type UserInvitation struct {
+	UserID        uuid.UUID
+	Attempts      int32
+	NextAttemptAt time.Time
+	LastError     *string
 }
 
 type UserRole struct {

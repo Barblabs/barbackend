@@ -51,7 +51,6 @@ func TestUsersOfACustomerCannotManageCustomers(t *testing.T) {
 	}
 }
 
-// The new Customer Admin signs in with the sub the fake user pool gave them.
 func TestDeactivatedCustomerLosesAccessAndSyncUntilReactivated(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)

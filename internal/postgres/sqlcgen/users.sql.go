@@ -13,10 +13,48 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const claimDueUserInvitation = `-- name: ClaimDueUserInvitation :one
+WITH due AS (
+    SELECT i.user_id
+    FROM user_invitations i
+    JOIN users u ON u.id = i.user_id
+    LEFT JOIN customers c ON c.id = u.customer_id
+    WHERE i.next_attempt_at <= $2
+      AND u.disabled_at IS NULL
+      AND c.deactivated_at IS NULL
+    ORDER BY i.next_attempt_at
+    LIMIT 1
+    FOR UPDATE OF i SKIP LOCKED
+)
+UPDATE user_invitations i
+SET attempts = i.attempts + 1, next_attempt_at = $1
+FROM due, users u
+WHERE i.user_id = due.user_id AND u.id = i.user_id
+RETURNING i.user_id, u.email, i.attempts
+`
+
+type ClaimDueUserInvitationParams struct {
+	ClaimedUntil time.Time
+	Now          time.Time
+}
+
+type ClaimDueUserInvitationRow struct {
+	UserID   uuid.UUID
+	Email    string
+	Attempts int32
+}
+
+func (q *Queries) ClaimDueUserInvitation(ctx context.Context, arg ClaimDueUserInvitationParams) (ClaimDueUserInvitationRow, error) {
+	row := q.db.QueryRow(ctx, claimDueUserInvitation, arg.ClaimedUntil, arg.Now)
+	var i ClaimDueUserInvitationRow
+	err := row.Scan(&i.UserID, &i.Email, &i.Attempts)
+	return i, err
+}
+
 const countActiveUsersWithRole = `-- name: CountActiveUsersWithRole :one
 SELECT count(*)
 FROM users
-WHERE customer_id = $1 AND role_id = $2 AND disabled_at IS NULL
+WHERE customer_id = $1 AND role_id = $2 AND disabled_at IS NULL AND cognito_sub IS NOT NULL
 `
 
 type CountActiveUsersWithRoleParams struct {
@@ -29,6 +67,16 @@ func (q *Queries) CountActiveUsersWithRole(ctx context.Context, arg CountActiveU
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const deleteUserInvitation = `-- name: DeleteUserInvitation :exec
+DELETE FROM user_invitations
+WHERE user_id = $1
+`
+
+func (q *Queries) DeleteUserInvitation(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserInvitation, userID)
+	return err
 }
 
 const disableCustomerUser = `-- name: DisableCustomerUser :execrows
@@ -123,7 +171,7 @@ type GetUserBySubRow struct {
 	CustomerDeactivated bool
 }
 
-func (q *Queries) GetUserBySub(ctx context.Context, cognitoSub string) (GetUserBySubRow, error) {
+func (q *Queries) GetUserBySub(ctx context.Context, cognitoSub *string) (GetUserBySubRow, error) {
 	row := q.db.QueryRow(ctx, getUserBySub, cognitoSub)
 	var i GetUserBySubRow
 	err := row.Scan(
@@ -147,7 +195,7 @@ RETURNING created_at
 
 type InsertUserParams struct {
 	ID         uuid.UUID
-	CognitoSub string
+	CognitoSub *string
 	Email      string
 	CustomerID pgtype.UUID
 	RoleID     int16
@@ -164,6 +212,24 @@ func (q *Queries) InsertUser(ctx context.Context, arg InsertUserParams) (time.Ti
 	var created_at time.Time
 	err := row.Scan(&created_at)
 	return created_at, err
+}
+
+const insertUserInvitation = `-- name: InsertUserInvitation :one
+INSERT INTO user_invitations (user_id, attempts, next_attempt_at)
+VALUES ($1, 1, $2)
+RETURNING attempts
+`
+
+type InsertUserInvitationParams struct {
+	UserID        uuid.UUID
+	NextAttemptAt time.Time
+}
+
+func (q *Queries) InsertUserInvitation(ctx context.Context, arg InsertUserInvitationParams) (int32, error) {
+	row := q.db.QueryRow(ctx, insertUserInvitation, arg.UserID, arg.NextAttemptAt)
+	var attempts int32
+	err := row.Scan(&attempts)
+	return attempts, err
 }
 
 const listCustomerUsers = `-- name: ListCustomerUsers :many
@@ -217,6 +283,26 @@ func (q *Queries) LockCustomer(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
+const retryUserInvitation = `-- name: RetryUserInvitation :execrows
+UPDATE user_invitations
+SET next_attempt_at = $2, last_error = $3
+WHERE user_id = $1
+`
+
+type RetryUserInvitationParams struct {
+	UserID        uuid.UUID
+	NextAttemptAt time.Time
+	LastError     *string
+}
+
+func (q *Queries) RetryUserInvitation(ctx context.Context, arg RetryUserInvitationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, retryUserInvitation, arg.UserID, arg.NextAttemptAt, arg.LastError)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setUserRole = `-- name: SetUserRole :exec
 UPDATE users
 SET role_id = $2
@@ -231,4 +317,23 @@ type SetUserRoleParams struct {
 func (q *Queries) SetUserRole(ctx context.Context, arg SetUserRoleParams) error {
 	_, err := q.db.Exec(ctx, setUserRole, arg.ID, arg.RoleID)
 	return err
+}
+
+const setUserSub = `-- name: SetUserSub :execrows
+UPDATE users
+SET cognito_sub = $2
+WHERE id = $1 AND cognito_sub IS NULL
+`
+
+type SetUserSubParams struct {
+	ID         uuid.UUID
+	CognitoSub *string
+}
+
+func (q *Queries) SetUserSub(ctx context.Context, arg SetUserSubParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setUserSub, arg.ID, arg.CognitoSub)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

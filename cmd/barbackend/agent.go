@@ -7,32 +7,22 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"strings"
-	"time"
 
 	"barbackend/internal/agents"
 	"barbackend/internal/assessment"
 	"barbackend/internal/claude"
-	"barbackend/internal/feeds"
-	"barbackend/internal/feeds/epss"
-	"barbackend/internal/feeds/kev"
-	"barbackend/internal/feeds/nvd"
 	"barbackend/internal/postgres"
-	"barbackend/internal/stixext"
 	"barbackend/internal/tenancy"
 	"barbackend/internal/users"
-	"github.com/TcM1911/stix2"
 	"github.com/google/uuid"
 )
 
-const agentSynopsis = "finding --asset <file> --component <name> --cve <id> [--id <finding>] | run --findings <file> [--plans] | prioritize --as <email> --findings <file> | plan --as <email> --prioritization <id> --finding <id> | ask --as <email> [--conversation <id>] <message> | label"
-
-const lookupTimeout = 30 * time.Second
+const agentSynopsis = "run --findings <file> [--plans] | prioritize --as <email> | plan --as <email> --prioritization <id> --finding <id> | ask --as <email> [--conversation <id>] <message> | label"
 
 func newCrew() *agents.Crew {
-	return agents.NewCrew(claude.New(""), agents.ModelsFrom(os.Getenv))
+	return agents.NewCrew(claude.New("", ""), agents.ModelsFrom(os.Getenv))
 }
 
 func agent(ctx context.Context, args []string) error {
@@ -40,8 +30,6 @@ func agent(ctx context.Context, args []string) error {
 		return errors.New("usage: barbackend agent " + agentSynopsis)
 	}
 	switch args[0] {
-	case "finding":
-		return agentFinding(ctx, os.Stdout, args[1:])
 	case "run":
 		return agentRun(ctx, os.Stdout, args[1:])
 	case "prioritize":
@@ -57,67 +45,6 @@ func agent(ctx context.Context, args []string) error {
 	}
 }
 
-// agentFinding stands in for the Findings pipeline until it exists: it builds
-// the Dossier of one Finding from the live Feeds, for files that agent run and
-// agent prioritize read. The Agents themselves never read a Feed.
-func agentFinding(ctx context.Context, out io.Writer, args []string) error {
-	flags := flag.NewFlagSet("agent finding", flag.ExitOnError)
-	file := flags.String("asset", "", "JSON `file` describing the Asset, as docs/examples/asset.json")
-	component := flags.String("component", "", "`name` of the Asset's affected Software Component")
-	cve := flags.String("cve", "", "`id` of the CVE")
-	id := flags.String("id", "", "`id` of the Finding; the Asset, Component and CVE when empty")
-	_ = flags.Parse(args)
-	cveID, ok := stixext.CVEID(*cve)
-	if *file == "" || *component == "" || !ok {
-		return errors.New("usage: barbackend agent finding --asset <file> --component <name> --cve <id> [--id <finding>]")
-	}
-	raw, err := os.ReadFile(*file) //nolint:gosec // the operator names the file on their own command line
-	if err != nil {
-		return err
-	}
-	asset, err := agents.ParseAsset(raw)
-	if err != nil {
-		return fmt.Errorf("%s: %w", *file, err)
-	}
-	read := readFeeds(ctx, cveID)
-	if !read.Listed() {
-		return fmt.Errorf("no Feed lists %s (unavailable: %v)", cveID, read.Unavailable)
-	}
-	if *id == "" {
-		*id = strings.Join([]string{asset.Imported().Name(), *component, cveID}, "/")
-	}
-	d, err := assessment.NewDossier(*id, cveID, asset, *component, read)
-	if err != nil {
-		return err
-	}
-	return writeJSON(out, d)
-}
-
-func readFeeds(ctx context.Context, cveID string) assessment.Feeds {
-	var read assessment.Feeds
-	sources := []struct {
-		name   string
-		lookup feeds.Lookup
-		into   **stix2.Vulnerability
-	}{
-		{assessment.FeedKEV, kev.New(nil, "").Lookup, &read.KEV},
-		{assessment.FeedEPSS, epss.New(nil, "", "").Lookup, &read.EPSS},
-		{assessment.FeedNVD, nvd.New(nil, "", os.Getenv("NVD_API_KEY")).Lookup, &read.NVD},
-	}
-	for _, source := range sources {
-		ctx, cancel := context.WithTimeout(ctx, lookupTimeout)
-		v, err := source.lookup(ctx, cveID)
-		cancel()
-		if err != nil {
-			log.Printf("agent finding: %s: read %s: %v", cveID, source.name, err)
-			read.Unavailable = append(read.Unavailable, source.name)
-			continue
-		}
-		*source.into = v
-	}
-	return read
-}
-
 func readFindings(file string) ([]assessment.Dossier, error) {
 	raw, err := os.ReadFile(file) //nolint:gosec // the operator names the file on their own command line
 	if err != nil {
@@ -130,9 +57,10 @@ func readFindings(file string) ([]assessment.Dossier, error) {
 	return findings, nil
 }
 
-// agentRun prioritizes the Findings of a file, and with plans also has Luna
-// write the Action Plan of each, in the order to attend them. It stores
-// nothing.
+// agentRun orders the Findings of a file anew, as a Customer's first round
+// does without a Business Context, and with plans also has Luna write the
+// Action Plan of each, in the order to attend them. It stores nothing, so
+// prompts and models can be compared on the same Findings.
 func agentRun(ctx context.Context, out io.Writer, args []string) error {
 	flags := flag.NewFlagSet("agent run", flag.ExitOnError)
 	file := flags.String("findings", "", "JSON `file` of Findings, as docs/examples/findings.json")
@@ -146,7 +74,7 @@ func agentRun(ctx context.Context, out io.Writer, args []string) error {
 		return err
 	}
 	crew := newCrew()
-	p, err := crew.Prioritize(ctx, findings)
+	p, err := crew.Prioritize(ctx, agents.Round{Findings: findings})
 	if err != nil {
 		return err
 	}
@@ -170,33 +98,28 @@ func agentRun(ctx context.Context, out io.Writer, args []string) error {
 
 // planEach runs Luna on every Finding of p, in the order to attend them.
 func planEach(ctx context.Context, crew *agents.Crew, p agents.Prioritization) ([]agents.Plan, error) {
-	if p.Prioritizer.Output == nil {
-		return nil, nil
-	}
 	var plans []agents.Plan
-	for _, g := range p.Prioritizer.Output.Groups {
-		for _, id := range g.Findings {
-			run, err := crew.Plan(ctx, p, id)
+	for _, g := range p.List.Groups {
+		for _, id := range g.Findings() {
+			d, _ := p.Finding(id)
+			run, err := crew.Plan(ctx, d)
 			if err != nil {
 				return nil, err
 			}
-			plans = append(plans, agents.Plan{Finding: id, Luna: run})
+			plans = append(plans, agents.Plan{Finding: id, Dossier: d, Luna: run})
 		}
 	}
 	return plans, nil
 }
 
+// agentPrioritize runs the rounds the Customer of a User needs, as serve does
+// when Findings change, and writes its newest Prioritization.
 func agentPrioritize(ctx context.Context, out io.Writer, args []string) error {
 	flags := flag.NewFlagSet("agent prioritize", flag.ExitOnError)
-	email := flags.String("as", "", "`email` of a User of the Customer whose Findings these are")
-	file := flags.String("findings", "", "JSON `file` of Findings, as docs/examples/findings.json")
+	email := flags.String("as", "", "`email` of a User of the Customer to prioritize")
 	_ = flags.Parse(args)
-	if *email == "" || *file == "" {
-		return errors.New("usage: barbackend agent prioritize --as <email> --findings <file>")
-	}
-	findings, err := readFindings(*file)
-	if err != nil {
-		return err
+	if *email == "" {
+		return errors.New("usage: barbackend agent prioritize --as <email>")
 	}
 	return withDB(ctx, func(db *postgres.DB) error {
 		caller, err := users.New(db, nil, nil).ByEmail(ctx, *email)
@@ -207,11 +130,19 @@ func agentPrioritize(ctx context.Context, out io.Writer, args []string) error {
 		if err != nil {
 			return err
 		}
-		p, err := agents.NewService(db, newCrew()).Prioritize(ctx, customer, findings)
+		svc := agents.NewService(db, newCrew())
+		stored, err := svc.Prioritize(ctx, customer)
 		if err != nil {
 			return err
 		}
-		return writeJSON(out, map[string]any{"id": p.ID, "prioritization": p})
+		p, err := svc.Latest(ctx, caller)
+		if errors.Is(err, agents.ErrPrioritizationNotFound) {
+			return errors.New("the Customer has no open Finding with a Score to prioritize")
+		}
+		if err != nil {
+			return err
+		}
+		return writeJSON(out, map[string]any{"stored": stored, "id": p.ID, "prioritization": p})
 	})
 }
 
