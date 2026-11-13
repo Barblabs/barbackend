@@ -23,6 +23,7 @@ Every round, Action Plan and Analista turn is a paid model request. Rounds run o
 
 - **Show the newest Prioritization as the order to follow**, with its closed Findings marked or hidden, and which Findings it placed: those whose `placed_at` is later than the `created_at` of its `previous_id`.
 - **Show each Finding's Advisories, Techniques and Mitigations** from its `dossier` as plain text, labeling the Techniques as inferred by the Cartógrafo (ADR 0024), and the Business Context a reason cites.
+- **Show each open Finding's `current`** (its Asset's Criticality, Exposure and Lifecycle Stage and its Score as they are now) as the Finding's state, and `score` and `details` only as what it was placed with: a Score that moves by less than 0.1 does not place it again.
 - Slack (#96) can send the order, its reasons, and the Findings each round placed.
 
 ## 4. Simpler code, from the review
