@@ -4,6 +4,7 @@
 package assessment
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -163,6 +164,44 @@ type Score struct {
 	ExposureMultiplier    float64  `json:"exposure_multiplier"`
 	LifecycleMultiplier   float64  `json:"lifecycle_multiplier"`
 	DataGaps              []string `json:"data_gaps"`
+}
+
+// UnmarshalJSON reads a Score stored before Scoring Model 2 had a lifecycle
+// factor with a lifecycle multiplier of 1, as Model 1 scored it (ADR 0028).
+func (s *Score) UnmarshalJSON(data []byte) error {
+	type plain Score
+	p := plain{LifecycleMultiplier: 1}
+	if err := json.Unmarshal(data, &p); err != nil {
+		return err
+	}
+	*s = Score(p)
+	return nil
+}
+
+// UnmarshalJSON reads an Asset stored before it had a Lifecycle Stage with an
+// unknown one (ADR 0028).
+func (a *Asset) UnmarshalJSON(data []byte) error {
+	type plain Asset
+	p := plain{Lifecycle: unknown}
+	if err := json.Unmarshal(data, &p); err != nil {
+		return err
+	}
+	*a = Asset(p)
+	return nil
+}
+
+// Current is what may have changed of a placed Finding: its Asset and its
+// Score as they are now. A Prioritization keeps each Dossier as it was placed
+// (ADR 0026), which a Score that moves by less than ScoreShift never
+// replaces.
+type Current struct {
+	Asset Asset
+	Score Score
+}
+
+// NewCurrent is the Current of a Finding on a with Score s.
+func NewCurrent(a *inventory.Asset, s scoring.Score) Current {
+	return Current{Asset: NewAsset(a), Score: newScore(s)}
 }
 
 // NVD is what the NVD Feed says about a Vulnerability.

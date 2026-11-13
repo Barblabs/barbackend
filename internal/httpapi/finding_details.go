@@ -9,13 +9,8 @@ func newFindingDetails(d agents.Dossier) findingDetailsResponse {
 			Name: d.Asset.Name, Kind: d.Asset.Kind, Criticality: d.Asset.Criticality, Exposure: d.Asset.Exposure,
 			LifecycleStage: d.Asset.Lifecycle, CriticalServices: make([]criticalServiceResponse, len(d.Asset.CriticalServices)),
 		},
-		ComponentRole: d.Component.Role,
-		ScoreDetails: scoreResponse{
-			ScoringModel: d.Score.ScoringModel, Value: d.Score.Value,
-			Alpha: d.Score.Alpha, Beta: d.Score.Beta, Gamma: d.Score.Gamma, Vulnerability: d.Score.Vulnerability,
-			CriticalityMultiplier: d.Score.CriticalityMultiplier, ExposureMultiplier: d.Score.ExposureMultiplier,
-			LifecycleMultiplier: d.Score.LifecycleMultiplier, DataGaps: nonNil(d.Score.DataGaps),
-		},
+		ComponentRole:    d.Component.Role,
+		ScoreDetails:     newScoreResponse(d.Score),
 		CVSS:             []cvssResponse{},
 		References:       []string{},
 		UnavailableFeeds: nonNil(d.UnavailableFeeds),
@@ -52,4 +47,24 @@ func newFindingDetails(d agents.Dossier) findingDetailsResponse {
 		out.Techniques[i] = technique
 	}
 	return out
+}
+
+func newScoreResponse(s agents.Score) scoreResponse {
+	return scoreResponse{
+		ScoringModel: s.ScoringModel, Value: s.Value,
+		Alpha: s.Alpha, Beta: s.Beta, Gamma: s.Gamma, Vulnerability: s.Vulnerability,
+		CriticalityMultiplier: s.CriticalityMultiplier, ExposureMultiplier: s.ExposureMultiplier,
+		LifecycleMultiplier: s.LifecycleMultiplier, DataGaps: nonNil(s.DataGaps),
+	}
+}
+
+// newCurrentResponse is c, nil for a Finding with none.
+func newCurrentResponse(c agents.Current, ok bool) *currentResponse {
+	if !ok {
+		return nil
+	}
+	return &currentResponse{
+		Asset:        currentAssetResponse{Criticality: c.Asset.Criticality, Exposure: c.Asset.Exposure, LifecycleStage: c.Asset.Lifecycle},
+		ScoreDetails: newScoreResponse(c.Score),
+	}
 }

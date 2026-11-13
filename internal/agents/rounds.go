@@ -302,6 +302,22 @@ func openDossiers(ctx context.Context, tx *postgres.Tx, customer tenancy.Custome
 	return out, nil
 }
 
+// currentOf is the Current of each open Finding of p that has a Score.
+func currentOf(ctx context.Context, tx *postgres.Tx, customer tenancy.CustomerID, p Prioritization) (map[string]Current, error) {
+	found, err := tx.OpenFindingsOfCustomer(ctx, customer)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]Current, len(found))
+	for _, f := range found {
+		id := f.ID.String()
+		if _, ok := p.States[id]; ok {
+			out[id] = assessment.NewCurrent(f.Asset, f.Score)
+		}
+	}
+	return out, nil
+}
+
 // dossierOfFinding reads one Finding of the Customer, open or closed, and
 // builds its Dossier as it is now. It fails with ErrFindingNotFound when the
 // Customer has no such Finding with a Score.

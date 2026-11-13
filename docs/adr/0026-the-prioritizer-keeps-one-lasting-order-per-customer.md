@@ -44,6 +44,7 @@ The Dossier now carries what ADR 0022 to 0024 store: its Vulnerability's Advisor
 ## Consequences
 
 - The order can differ from what a full reorder would give, since it keeps what stands. A User who disagrees says so with Feedback, which places the Finding again.
+- A Dossier a Score moved by less than 0.1 is never replaced, so `GET /prioritizations/{id}` gives each open Finding `current` beside its `details`: its Asset's Criticality, Exposure and Lifecycle Stage and its Score as they are now. The order and its reasons stay those of the Dossier as placed.
 - A Customer's first round, or the first after a Business Context save, with more than 100 open Findings orders the 100 highest Scores first and places the rest in the rounds that follow.
 - The Cartógrafo labels a Customer's Vulnerabilities after their Findings were first placed, so its first runs place most of them again, as many rounds as a full reorder costs, though each sees the order that stands.
 - Disconnecting a CMDB Source now closes the open Findings of its Assets as `asset_inactive`, since a Disconnected source is never synced again to close them (ADR 0020), so the Prioritizer does not keep ordering them.
