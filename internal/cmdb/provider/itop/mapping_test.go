@@ -48,7 +48,7 @@ func TestSnapshotMapsRecords(t *testing.T) {
 			name: "server",
 			ci:   mapped("Server", nil),
 			want: inventory.ImportedAssetParams{
-				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server,
+				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server, Lifecycle: inventory.LifecycleProduction,
 				Hardware: hpe, Software: redHat(), Criticality: inventory.CriticalityLow,
 			},
 		},
@@ -56,7 +56,7 @@ func TestSnapshotMapsRecords(t *testing.T) {
 			name: "virtual machine has no hardware",
 			ci:   mapped("VirtualMachine", nil),
 			want: inventory.ImportedAssetParams{
-				Name: "Server1", Description: "  Billing database\n", Kind: inventory.VirtualMachine,
+				Name: "Server1", Description: "  Billing database\n", Kind: inventory.VirtualMachine, Lifecycle: inventory.LifecycleProduction,
 				Software: redHat(), Criticality: inventory.CriticalityLow,
 			},
 		},
@@ -64,12 +64,12 @@ func TestSnapshotMapsRecords(t *testing.T) {
 			name: "pc is a workstation",
 			ci:   mapped("PC", nil),
 			want: inventory.ImportedAssetParams{
-				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Workstation,
+				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Workstation, Lifecycle: inventory.LifecycleProduction,
 				Hardware: hpe, Software: redHat(), Criticality: inventory.CriticalityLow,
 			},
 		},
 		{
-			name: "obsolete is retired",
+			name: "obsolete is retired, with no lifecycle stage",
 			ci:   mapped("Server", func(c *ci) { c.Status = "obsolete" }),
 			want: inventory.ImportedAssetParams{
 				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server,
@@ -80,6 +80,30 @@ func TestSnapshotMapsRecords(t *testing.T) {
 			name: "implementation is not retired",
 			ci:   mapped("Server", func(c *ci) { c.Status = "implementation" }),
 			want: inventory.ImportedAssetParams{
+				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server, Lifecycle: inventory.LifecycleImplementation,
+				Hardware: hpe, Software: redHat(), Criticality: inventory.CriticalityLow,
+			},
+		},
+		{
+			name: "stock is not retired",
+			ci:   mapped("Server", func(c *ci) { c.Status = "stock" }),
+			want: inventory.ImportedAssetParams{
+				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server, Lifecycle: inventory.LifecycleStock,
+				Hardware: hpe, Software: redHat(), Criticality: inventory.CriticalityLow,
+			},
+		},
+		{
+			name: "status is matched ignoring case and spaces",
+			ci:   mapped("Server", func(c *ci) { c.Status = " Stock " }),
+			want: inventory.ImportedAssetParams{
+				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server, Lifecycle: inventory.LifecycleStock,
+				Hardware: hpe, Software: redHat(), Criticality: inventory.CriticalityLow,
+			},
+		},
+		{
+			name: "other status is unknown lifecycle stage",
+			ci:   mapped("Server", func(c *ci) { c.Status = "test" }),
+			want: inventory.ImportedAssetParams{
 				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server,
 				Hardware: hpe, Software: redHat(), Criticality: inventory.CriticalityLow,
 			},
@@ -88,7 +112,7 @@ func TestSnapshotMapsRecords(t *testing.T) {
 			name: "high criticality",
 			ci:   mapped("Server", func(c *ci) { c.Criticality = ptr("high") }),
 			want: inventory.ImportedAssetParams{
-				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server,
+				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server, Lifecycle: inventory.LifecycleProduction,
 				Hardware: hpe, Software: redHat(), Criticality: inventory.CriticalityHigh,
 			},
 		},
@@ -96,7 +120,7 @@ func TestSnapshotMapsRecords(t *testing.T) {
 			name: "medium criticality",
 			ci:   mapped("Server", func(c *ci) { c.Criticality = ptr("medium") }),
 			want: inventory.ImportedAssetParams{
-				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server,
+				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server, Lifecycle: inventory.LifecycleProduction,
 				Hardware: hpe, Software: redHat(), Criticality: inventory.CriticalityMedium,
 			},
 		},
@@ -104,7 +128,7 @@ func TestSnapshotMapsRecords(t *testing.T) {
 			name: "blank criticality is unknown",
 			ci:   mapped("Server", func(c *ci) { c.Criticality = nil }),
 			want: inventory.ImportedAssetParams{
-				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server,
+				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server, Lifecycle: inventory.LifecycleProduction,
 				Hardware: hpe, Software: redHat(), Criticality: inventory.CriticalityUnknown,
 			},
 		},
@@ -112,7 +136,7 @@ func TestSnapshotMapsRecords(t *testing.T) {
 			name: "exposed location is internet facing",
 			ci:   mapped("Server", func(c *ci) { c.Location = "exposed" }),
 			want: inventory.ImportedAssetParams{
-				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server,
+				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server, Lifecycle: inventory.LifecycleProduction,
 				Hardware: hpe, Software: redHat(), Criticality: inventory.CriticalityLow, Exposure: inventory.InternetFacing,
 			},
 		},
@@ -120,7 +144,7 @@ func TestSnapshotMapsRecords(t *testing.T) {
 			name: "not exposed location is internal",
 			ci:   mapped("Server", func(c *ci) { c.Location = "not exposed" }),
 			want: inventory.ImportedAssetParams{
-				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server,
+				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server, Lifecycle: inventory.LifecycleProduction,
 				Hardware: hpe, Software: redHat(), Criticality: inventory.CriticalityLow, Exposure: inventory.Internal,
 			},
 		},
@@ -128,7 +152,7 @@ func TestSnapshotMapsRecords(t *testing.T) {
 			name: "location is matched ignoring case and spaces",
 			ci:   mapped("Server", func(c *ci) { c.Location = " Not Exposed " }),
 			want: inventory.ImportedAssetParams{
-				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server,
+				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server, Lifecycle: inventory.LifecycleProduction,
 				Hardware: hpe, Software: redHat(), Criticality: inventory.CriticalityLow, Exposure: inventory.Internal,
 			},
 		},
@@ -136,7 +160,7 @@ func TestSnapshotMapsRecords(t *testing.T) {
 			name: "blank location is unknown exposure",
 			ci:   mapped("Server", func(c *ci) { c.Location = "" }),
 			want: inventory.ImportedAssetParams{
-				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server,
+				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server, Lifecycle: inventory.LifecycleProduction,
 				Hardware: hpe, Software: redHat(), Criticality: inventory.CriticalityLow, Exposure: inventory.ExposureUnknown,
 			},
 		},
@@ -144,7 +168,7 @@ func TestSnapshotMapsRecords(t *testing.T) {
 			name: "other location is unknown exposure",
 			ci:   mapped("Server", func(c *ci) { c.Location = "Guadalajara" }),
 			want: inventory.ImportedAssetParams{
-				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server,
+				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server, Lifecycle: inventory.LifecycleProduction,
 				Hardware: hpe, Software: redHat(), Criticality: inventory.CriticalityLow, Exposure: inventory.ExposureUnknown,
 			},
 		},
@@ -152,7 +176,7 @@ func TestSnapshotMapsRecords(t *testing.T) {
 			name: "pc takes exposure from its location",
 			ci:   mapped("PC", func(c *ci) { c.Location = "exposed" }),
 			want: inventory.ImportedAssetParams{
-				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Workstation,
+				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Workstation, Lifecycle: inventory.LifecycleProduction,
 				Hardware: hpe, Software: redHat(), Criticality: inventory.CriticalityLow, Exposure: inventory.InternetFacing,
 			},
 		},
@@ -160,7 +184,7 @@ func TestSnapshotMapsRecords(t *testing.T) {
 			name: "hardware with only a vendor",
 			ci:   mapped("Server", func(c *ci) { c.Model = "" }),
 			want: inventory.ImportedAssetParams{
-				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server,
+				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server, Lifecycle: inventory.LifecycleProduction,
 				Hardware: inventory.Hardware{Vendor: "HPE"}, Software: redHat(), Criticality: inventory.CriticalityLow,
 			},
 		},
@@ -168,7 +192,7 @@ func TestSnapshotMapsRecords(t *testing.T) {
 			name: "no hardware when vendor and model are blank",
 			ci:   mapped("PC", func(c *ci) { c.Brand, c.Model = "", " " }),
 			want: inventory.ImportedAssetParams{
-				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Workstation,
+				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Workstation, Lifecycle: inventory.LifecycleProduction,
 				Software: redHat(), Criticality: inventory.CriticalityLow,
 			},
 		},
@@ -176,7 +200,7 @@ func TestSnapshotMapsRecords(t *testing.T) {
 			name: "no operating system when its name is blank",
 			ci:   mapped("Server", func(c *ci) { c.OSFamily = "" }),
 			want: inventory.ImportedAssetParams{
-				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server,
+				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server, Lifecycle: inventory.LifecycleProduction,
 				Hardware: hpe, Criticality: inventory.CriticalityLow,
 			},
 		},
@@ -190,7 +214,7 @@ func TestSnapshotMapsRecords(t *testing.T) {
 				"7": {Name: "Internal portal", Version: "3.1"},
 			}},
 			want: inventory.ImportedAssetParams{
-				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server, Hardware: hpe,
+				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server, Lifecycle: inventory.LifecycleProduction, Hardware: hpe,
 				Software: append(redHat(),
 					inventory.SoftwareComponent{
 						Role: inventory.Application, Name: "db", Version: "19c",
@@ -208,7 +232,7 @@ func TestSnapshotMapsRecords(t *testing.T) {
 			}),
 			lk: cisco,
 			want: inventory.ImportedAssetParams{
-				Name: "Server1", Description: "  Billing database\n", Kind: inventory.NetworkDevice,
+				Name: "Server1", Description: "  Billing database\n", Kind: inventory.NetworkDevice, Lifecycle: inventory.LifecycleProduction,
 				Hardware:    inventory.Hardware{Vendor: "Cisco", Model: "Cisco 6500"},
 				Software:    []inventory.SoftwareComponent{{Role: inventory.OperatingSystem, Name: "Cisco", Version: "15.2(7)E"}},
 				Criticality: inventory.CriticalityLow,
@@ -221,7 +245,7 @@ func TestSnapshotMapsRecords(t *testing.T) {
 			}),
 			lk: cisco,
 			want: inventory.ImportedAssetParams{
-				Name: "Server1", Description: "  Billing database\n", Kind: inventory.NetworkDevice,
+				Name: "Server1", Description: "  Billing database\n", Kind: inventory.NetworkDevice, Lifecycle: inventory.LifecycleProduction,
 				Hardware: hpe, Criticality: inventory.CriticalityLow,
 			},
 		},
