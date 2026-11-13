@@ -101,7 +101,7 @@ func serve(ctx context.Context, _ []string) error {
 			BusinessContext: businessContext,
 			CMDB:            sources,
 			Slack:           slack.New(db, slackAPI, key),
-			Users:           users.New(db, verifier, admin),
+			Users:           userService,
 			AllowedOrigins:  allowedOrigins(),
 		}))
 	})

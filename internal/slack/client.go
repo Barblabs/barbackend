@@ -1,5 +1,5 @@
 // Package slack installs the Slack app into a Customer's workspace and sends
-// the messages the pipeline queues (ADR 0025). It talks to the Slack Web API
+// the messages the pipeline queues (ADR 0029). It talks to the Slack Web API
 // through Client, so tests can stand in a fake server.
 package slack
 
@@ -18,7 +18,7 @@ import (
 const (
 	defaultBaseURL      = "https://slack.com/api"
 	defaultAuthorizeURL = "https://slack.com/oauth/v2/authorize"
-	// Scopes is what the app asks for at consent (ADR 0025): post messages,
+	// Scopes is what the app asks for at consent (ADR 0029): post messages,
 	// resolve an email to a Slack user, post to a channel by id, list channels
 	// for the portal's picker, and read the private channels the app has been
 	// added to. users:read rides along because Slack rejects the consent
@@ -175,7 +175,7 @@ func (c *Client) Channels(ctx context.Context, token string) ([]Channel, error) 
 }
 
 // Message is one chat.postMessage call. Blocks is raw Block Kit, rendered by
-// the worker from a delivery's payload (ADR 0026).
+// the worker from a delivery's payload (ADR 0030).
 type Message struct {
 	Channel string
 	Text    string

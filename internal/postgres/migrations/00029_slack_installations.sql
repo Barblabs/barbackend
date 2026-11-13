@@ -1,6 +1,6 @@
 -- +goose Up
 
--- One Slack installation per Customer (ADR 0025). The bot token is sealed
+-- One Slack installation per Customer (ADR 0029). The bot token is sealed
 -- like CMDB credentials (ADR 0012), so it is bytea. It is nullable because a
 -- disconnected installation keeps its row as removed and holds no token.
 CREATE TABLE slack_installations (
