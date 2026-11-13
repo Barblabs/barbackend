@@ -132,8 +132,12 @@ type Prioritization struct {
 	// 0 when the Customer had stated none.
 	BusinessContext int `json:"-"`
 	// States are what is known of each of its Findings since it was stored.
-	States   map[string]FindingState `json:"-"`
-	Plans    []Plan                  `json:"-"`
+	States map[string]FindingState `json:"-"`
+	// Current is, by open Finding with a Score, its Asset and Score as they
+	// are now, which its Dossier keeps as they were when placed. Only Get
+	// reads it.
+	Current  map[string]Current `json:"-"`
+	Plans    []Plan             `json:"-"`
 	Feedback []Feedback              `json:"-"`
 
 	Findings    []assessment.Dossier      `json:"findings"`

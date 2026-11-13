@@ -8,6 +8,8 @@ import (
 
 	"barbackend/internal/agents"
 	"barbackend/internal/claude/claudetest"
+	"barbackend/internal/finding"
+	"barbackend/internal/postgres"
 	"github.com/google/uuid"
 )
 
@@ -38,6 +40,38 @@ func TestListShowsTheCustomersNewestFirst(t *testing.T) {
 	for _, limit := range []int{-1, agents.MaxLimit + 1} {
 		_, err := e.svc.List(context.Background(), e.user, limit)
 		wantErr(t, err, agents.ErrInvalidLimit)
+	}
+}
+
+func TestGetShowsEachOpenFindingAsItIsNow(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	p := e.prioritize(t)
+	moved := score(0.85)
+	moved.Factors.LifecycleMultiplier = 0.8
+	e.rescore(t, e.pg(), moved)
+	err := e.db.InTx(context.Background(), func(tx *postgres.Tx) error {
+		_, err := tx.CloseFinding(context.Background(), finding.ID(uuid.MustParse(e.os())), finding.ComponentRemoved)
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := e.svc.Get(context.Background(), e.user, p.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	placed, _ := got.Finding(e.pg())
+	current, ok := got.Current[e.pg()]
+	if !ok || current.Score.Value != 0.85 || current.Score.LifecycleMultiplier != 0.8 || current.Asset.Name != "pg-prod-01" {
+		t.Errorf("current = %+v, %v, want the Score as it is now", current, ok)
+	}
+	if placed.Score.Value != 0.9 {
+		t.Errorf("placed score = %+v, want it as it was placed", placed.Score)
+	}
+	if _, ok := got.Current[e.os()]; ok {
+		t.Error("a closed Finding has a Current")
 	}
 }
 

@@ -44,6 +44,12 @@ type Feedback = postgres.StoredFeedback
 // Dossier is all that an Agent knows about a Finding (ADR 0016).
 type Dossier = assessment.Dossier
 
+// Score is a Score as a Dossier holds it.
+type Score = assessment.Score
+
+// Current is a placed Finding's Asset and Score as they are now.
+type Current = assessment.Current
+
 // Summary is a stored Prioritization without its Findings.
 type Summary = postgres.PrioritizationSummary
 
@@ -98,9 +104,9 @@ func (s *Service) List(ctx context.Context, caller tenancy.User, limit int) ([]S
 }
 
 // Get is one of the Customer's Prioritizations with the Dossier and state of
-// each of its Findings, and the newest Action Plan and the Feedback of each,
-// whichever Prioritization of the chain they were given on. It fails with
-// ErrPrioritizationNotFound.
+// each of its Findings, the Current of each that is open, and the newest
+// Action Plan and the Feedback of each, whichever Prioritization of the chain
+// they were given on. It fails with ErrPrioritizationNotFound.
 func (s *Service) Get(ctx context.Context, caller tenancy.User, id uuid.UUID) (Prioritization, error) {
 	customer, err := caller.ActsFor()
 	if err != nil {
@@ -116,6 +122,9 @@ func (s *Service) Get(ctx context.Context, caller tenancy.User, id uuid.UUID) (P
 			return err
 		}
 		if p, err = load(ctx, tx, customer, stored); err != nil {
+			return err
+		}
+		if p.Current, err = currentOf(ctx, tx, customer, p); err != nil {
 			return err
 		}
 		if plans, err = tx.LatestPlans(ctx, customer, id); err != nil {
