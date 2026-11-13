@@ -24,6 +24,11 @@ export COGNITO_USER_POOL_ID=<pool-id>
 export COGNITO_CLIENT_ID=<app-client-id>
 # browser origins allowed to call the HTTP API, comma-separated
 export CORS_ALLOWED_ORIGINS=http://localhost:5173
+# the Slack app Customers install from the portal (ADR 0025); the redirect
+# URI must be registered in the Slack app and end in /slack/install/callback
+export SLACK_CLIENT_ID=<client-id>
+export SLACK_CLIENT_SECRET=<client-secret>
+export SLACK_REDIRECT_URI=https://api.example.com/slack/install/callback
 
 ./barbackend migrate   # apply migrations in internal/postgres/migrations
 ./barbackend serve     # HTTP server (gin, :8080 unless PORT is set)
@@ -54,7 +59,7 @@ On EC2, give the instance a role allowed to call `AdminCreateUser` and `AdminGet
 
 Every error answers `{code, error}`: `code` is stable for the dashboard to translate, and `error` is readable on its own.
 
-Every endpoint below except `/ping` needs `Authorization: Bearer <Cognito access token>`, and acts for the Customer of the User it signs in. A missing or invalid token, or one of a disabled User, answers 401 `unauthenticated`: the dashboard should send the User to sign in again. A valid token of a User of a Deactivated Customer answers 403 `customer_deactivated`, as does a request that finds its Customer deactivated while it runs: signing in again would not help. A Platform Admin, who belongs to no Customer, answers 403 `forbidden`.
+Every endpoint below except `/ping` and the Slack install callback (`/slack/install/callback`, where Slack redirects the popup) needs `Authorization: Bearer <Cognito access token>`, and acts for the Customer of the User it signs in. A missing or invalid token, or one of a disabled User, answers 401 `unauthenticated`: the dashboard should send the User to sign in again. A valid token of a User of a Deactivated Customer answers 403 `customer_deactivated`, as does a request that finds its Customer deactivated while it runs: signing in again would not help. A Platform Admin, who belongs to no Customer, answers 403 `forbidden`.
 
 The OpenAPI 3.1 spec is served at `/openapi.json` and `/openapi.yaml`, with a browsable reference at `/docs`.
 

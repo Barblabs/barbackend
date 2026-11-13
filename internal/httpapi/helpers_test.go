@@ -32,6 +32,8 @@ import (
 	"barbackend/internal/postgres"
 	"barbackend/internal/postgres/pgtest"
 	"barbackend/internal/scoring"
+	"barbackend/internal/slack"
+	"barbackend/internal/slack/slacktest"
 	"barbackend/internal/stixext"
 	"barbackend/internal/tenancy"
 	"barbackend/internal/users"
@@ -54,6 +56,8 @@ var operations = []struct{ method, path string }{
 	{http.MethodGet, "/prioritizations"},
 	{http.MethodGet, "/business-context"},
 	{http.MethodGet, "/business-context/brief"},
+	{http.MethodGet, "/slack/installation"},
+	{http.MethodGet, "/slack/channels"},
 }
 
 // platformOperations are those only a Platform Admin may call.
@@ -74,6 +78,10 @@ var customerAdminOperations = []struct{ method, path string }{
 	{http.MethodPut, "/areas/0/owner"},
 	{http.MethodPut, "/assets/0/exposure"},
 	{http.MethodDelete, "/assets/0/exposure"},
+	{http.MethodPost, "/slack/install/start"},
+	{http.MethodPut, "/slack/installation"},
+	{http.MethodPost, "/slack/installation/test"},
+	{http.MethodDelete, "/slack/installation"},
 }
 
 // businessContextEdits are those only a Customer Admin may call on the
@@ -98,6 +106,9 @@ type env struct {
 	provider *providertest.Provider
 	admin    *fakeAdmin
 	cmdb     *cmdb.Service
+	key      encryption.Key
+	slack    *slack.Service
+	slackAPI *slacktest.Server
 	llm      *claudetest.Server
 	agents   *agents.Service
 	router   http.Handler
@@ -113,15 +124,18 @@ func newEnv(t *testing.T) env {
 	t.Cleanup(db.Close)
 	p := &providertest.Provider{}
 	pool := cognitotest.New(t)
-	svc := cmdb.New(db, p.Providers(), newKey(t), context.Background(), time.Minute)
+	key := newKey(t)
+	svc := cmdb.New(db, p.Providers(), key, context.Background(), time.Minute)
 	admin := &fakeAdmin{}
+	slackAPI := slacktest.New(t)
+	slackService := slack.New(db, slackAPI.Client, key)
 	llm := claudetest.New(t)
 	agentService := agents.NewService(db, agents.NewCrew(llm.Client(), agents.DefaultModels()))
 	router := httpapi.New(httpapi.Config{
 		Agents: agentService, Areas: areas.New(db), Assets: assets.New(db, findings.New(db, scoring.Model1, time.Hour)), BusinessContext: businesscontext.New(db), CMDB: svc,
-		Users: users.New(db, pool.Verifier(t), admin), AllowedOrigins: []string{allowedOrigin},
+		Slack: slackService, Users: users.New(db, pool.Verifier(t), admin), AllowedOrigins: []string{allowedOrigin},
 	})
-	e := env{db: db, conn: pgtest.Conn(t, url), pool: pool, provider: p, admin: admin, cmdb: svc, llm: llm, agents: agentService, router: router}
+	e := env{db: db, conn: pgtest.Conn(t, url), pool: pool, provider: p, admin: admin, cmdb: svc, key: key, slack: slackService, slackAPI: slackAPI, llm: llm, agents: agentService, router: router}
 	e.customer = e.newCustomer(t)
 	e.token = e.signIn(t, e.newUser(t, tenancy.Viewer, e.customer))
 	return e

@@ -318,6 +318,18 @@ linters:
           deny:
             - pkg: barbackend/internal
               desc: the users use case calls only cognito, postgres and tenancy (ADR 0008)
+        slack:
+          list-mode: lax
+          files:
+            - "**/internal/slack/**"
+          allow:
+            - barbackend/internal/slack
+            - barbackend/internal/encryption
+            - barbackend/internal/postgres
+            - barbackend/internal/tenancy
+          deny:
+            - pkg: barbackend/internal
+              desc: the slack use case calls only encryption, postgres and tenancy (ADR 0008, ADR 0025)
         postgres:
           list-mode: lax
           files:
@@ -354,6 +366,7 @@ linters:
             - barbackend/internal/assets
             - barbackend/internal/businesscontext
             - barbackend/internal/cmdb
+            - barbackend/internal/slack
             - barbackend/internal/users
           deny:
             - pkg: barbackend/internal

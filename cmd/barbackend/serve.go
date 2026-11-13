@@ -21,6 +21,7 @@ import (
 	"barbackend/internal/ingest"
 	"barbackend/internal/postgres"
 	"barbackend/internal/scoring"
+	"barbackend/internal/slack"
 	"barbackend/internal/techniques"
 	"barbackend/internal/users"
 )
@@ -46,6 +47,10 @@ func serve(ctx context.Context, _ []string) error {
 		return err
 	}
 	admin, err := pool.admin(ctx)
+	if err != nil {
+		return err
+	}
+	slackAPI, err := newSlackClient()
 	if err != nil {
 		return err
 	}
@@ -95,7 +100,8 @@ func serve(ctx context.Context, _ []string) error {
 			Assets:          assets.New(db, found),
 			BusinessContext: businessContext,
 			CMDB:            sources,
-			Users:           userService,
+			Slack:           slack.New(db, slackAPI, key),
+			Users:           users.New(db, verifier, admin),
 			AllowedOrigins:  allowedOrigins(),
 		}))
 	})

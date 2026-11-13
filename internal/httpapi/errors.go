@@ -12,6 +12,7 @@ import (
 	"barbackend/internal/business"
 	"barbackend/internal/cmdb"
 	"barbackend/internal/inventory"
+	"barbackend/internal/slack"
 	"barbackend/internal/tenancy"
 	"barbackend/internal/users"
 	"github.com/danielgtaylor/huma/v2"
@@ -48,6 +49,13 @@ const (
 	lastCustomerAdmin   = "last_customer_admin"
 	internalError       = "internal_error"
 
+	invalidState              = "invalid_state"
+	slackNotInstalled         = "slack_not_installed"
+	slackNeedsReauthorisation = "slack_needs_reauthorisation"
+	slackChannelNotSet        = "slack_channel_not_set"
+	slackUnavailable          = "slack_unavailable"
+	slackError                = "slack_error"
+
 	prioritizationNotFound = "prioritization_not_found"
 	findingNotFound        = "finding_not_found"
 	conversationNotFound   = "conversation_not_found"
@@ -73,6 +81,7 @@ func apiError(err error) *codedError {
 		return &codedError{status: http.StatusBadGateway, cause: err, Code: failureCode(failed), Message: failed.Error()}
 	}
 	var failure *cmdb.Failure
+	var slackAPI *slack.APIError
 	switch {
 	case errors.Is(err, users.ErrUnauthenticated), errors.Is(err, tenancy.ErrUserDisabled):
 		return &codedError{status: http.StatusUnauthorized, cause: err, Code: unauthenticated, Message: "a valid access token of a user who can sign in is required"}
@@ -112,6 +121,22 @@ func apiError(err error) *codedError {
 		return &codedError{status: http.StatusConflict, Code: assetInactive, Message: "an inactive asset cannot be declared"}
 	case errors.Is(err, assets.ErrInvalidQuery):
 		return &codedError{status: http.StatusBadRequest, Code: invalidRequest, Message: err.Error()}
+	case errors.Is(err, slack.ErrInvalidState):
+		return &codedError{status: http.StatusBadRequest, Code: invalidState, Message: "the Slack authorization state is invalid or has expired"}
+	case errors.Is(err, slack.ErrInvalidChannel):
+		return &codedError{status: http.StatusBadRequest, Code: invalidRequest, Message: slack.ErrInvalidChannel.Error()}
+	case errors.Is(err, slack.ErrOAuth):
+		return &codedError{status: http.StatusBadGateway, cause: err, Code: slackError, Message: "Slack refused the authorization"}
+	case errors.Is(err, slack.ErrNotInstalled):
+		return &codedError{status: http.StatusNotFound, Code: slackNotInstalled, Message: "Slack is not connected"}
+	case errors.Is(err, slack.ErrNeedsReauthorisation):
+		return &codedError{status: http.StatusConflict, Code: slackNeedsReauthorisation, Message: "Slack needs re-authorisation"}
+	case errors.Is(err, slack.ErrNoChannel):
+		return &codedError{status: http.StatusConflict, Code: slackChannelNotSet, Message: "set the Security Team channel first"}
+	case errors.Is(err, slack.ErrUnavailable):
+		return &codedError{status: http.StatusBadGateway, cause: err, Code: slackUnavailable, Message: "Slack is unavailable"}
+	case errors.As(err, &slackAPI):
+		return &codedError{status: http.StatusBadGateway, cause: err, Code: slackError, Message: slackAPI.Error()}
 	case errors.Is(err, inventory.ErrNotConnected):
 		return &codedError{status: http.StatusNotFound, Code: notConnected, Message: err.Error()}
 	case errors.Is(err, inventory.ErrAlreadyConnected):
