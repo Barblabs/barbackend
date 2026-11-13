@@ -11,8 +11,7 @@ import (
 // candidateMatch is a Match with what scoring needs of its Asset.
 type candidateMatch struct {
 	finding.Match
-	criticality inventory.Criticality
-	exposure    inventory.Exposure
+	asset finding.AssetValues
 }
 
 // bestMatches matches the Vulnerability cve, described by n, against every
@@ -32,7 +31,7 @@ func bestMatches(candidates []postgres.Candidate, cve string, n stixext.NVD) []c
 		if err != nil {
 			continue
 		}
-		next := candidateMatch{Match: m, criticality: c.Criticality, exposure: c.Exposure}
+		next := candidateMatch{Match: m, asset: c.Values}
 		i, seen := at[m.Key]
 		switch {
 		case !seen:

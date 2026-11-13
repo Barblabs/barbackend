@@ -7,14 +7,14 @@ func newFindingDetails(d agents.Dossier) findingDetailsResponse {
 		Description: d.Description,
 		Asset: findingAssetResponse{
 			Name: d.Asset.Name, Kind: d.Asset.Kind, Criticality: d.Asset.Criticality, Exposure: d.Asset.Exposure,
-			CriticalServices: make([]criticalServiceResponse, len(d.Asset.CriticalServices)),
+			LifecycleStage: d.Asset.Lifecycle, CriticalServices: make([]criticalServiceResponse, len(d.Asset.CriticalServices)),
 		},
 		ComponentRole: d.Component.Role,
 		ScoreDetails: scoreResponse{
 			ScoringModel: d.Score.ScoringModel, Value: d.Score.Value,
 			Alpha: d.Score.Alpha, Beta: d.Score.Beta, Gamma: d.Score.Gamma, Vulnerability: d.Score.Vulnerability,
 			CriticalityMultiplier: d.Score.CriticalityMultiplier, ExposureMultiplier: d.Score.ExposureMultiplier,
-			DataGaps: nonNil(d.Score.DataGaps),
+			LifecycleMultiplier: d.Score.LifecycleMultiplier, DataGaps: nonNil(d.Score.DataGaps),
 		},
 		CVSS:             []cvssResponse{},
 		References:       []string{},

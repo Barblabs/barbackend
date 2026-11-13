@@ -101,3 +101,72 @@ func TestModel1ComputeRejectsOutOfRange(t *testing.T) {
 		})
 	}
 }
+
+func TestModel1IgnoresLifecycleStage(t *testing.T) {
+	in := scoring.Inputs{CVSS: ptr(10), EPSS: ptr(1), KEVListed: true, Criticality: inventory.CriticalityHigh, Exposure: inventory.InternetFacing}
+	for _, stage := range []inventory.LifecycleStage{inventory.LifecycleUnknown, inventory.LifecycleStock, 42} {
+		in.Lifecycle = stage
+		got, err := scoring.Model1.Compute(in)
+		if err != nil {
+			t.Fatalf("Compute with %v: %v", stage, err)
+		}
+		if got.Value != 1 || got.Factors.LifecycleMultiplier != 1 || len(got.Gaps) != 0 {
+			t.Errorf("Compute with %v = %+v, want Value 1, lifecycle multiplier 1 and no gaps", stage, got)
+		}
+	}
+}
+
+func TestModel2Compute(t *testing.T) {
+	worst := scoring.Inputs{CVSS: ptr(10), EPSS: ptr(1), KEVListed: true, Criticality: inventory.CriticalityHigh, Exposure: inventory.InternetFacing}
+	tests := []struct {
+		name           string
+		stage          inventory.LifecycleStage
+		wantMultiplier float64
+		wantGaps       []scoring.DataGap
+	}{
+		{"production", inventory.LifecycleProduction, 1, nil},
+		{"implementation", inventory.LifecycleImplementation, 0.8, nil},
+		{"stock", inventory.LifecycleStock, 0.3, nil},
+		{"unknown takes the highest and is a gap", inventory.LifecycleUnknown, 1, []scoring.DataGap{scoring.LifecycleUnknown}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			in := worst
+			in.Lifecycle = tt.stage
+			got, err := scoring.Model2.Compute(in)
+			if err != nil {
+				t.Fatalf("Compute: %v", err)
+			}
+			if got.Factors.LifecycleMultiplier != tt.wantMultiplier || math.Abs(got.Value-tt.wantMultiplier) > 1e-9 {
+				t.Errorf("multiplier, Value = %v, %v, want %v for both", got.Factors.LifecycleMultiplier, got.Value, tt.wantMultiplier)
+			}
+			if !slices.Equal(got.Gaps, tt.wantGaps) {
+				t.Errorf("Gaps = %v, want %v", got.Gaps, tt.wantGaps)
+			}
+			if got.Model != 2 {
+				t.Errorf("Model = %v, want 2", got.Model)
+			}
+		})
+	}
+}
+
+func TestModel2MultipliesEveryLayer(t *testing.T) {
+	in := scoring.Inputs{
+		CVSS: ptr(5), EPSS: ptr(0.002), Criticality: inventory.CriticalityMedium, Exposure: inventory.Internal,
+		Lifecycle: inventory.LifecycleImplementation,
+	}
+	got, err := scoring.Model2.Compute(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := 0.1506 * 0.7 * 0.6 * 0.8; math.Abs(got.Value-want) > 1e-9 {
+		t.Errorf("Value = %v, want %v", got.Value, want)
+	}
+}
+
+func TestModel2RejectsOutOfRangeLifecycleStage(t *testing.T) {
+	in := scoring.Inputs{CVSS: ptr(5), EPSS: ptr(0.5), Criticality: inventory.CriticalityHigh, Exposure: inventory.Internal, Lifecycle: 42}
+	if _, err := scoring.Model2.Compute(in); !errors.Is(err, inventory.ErrInvalidLifecycleStage) {
+		t.Errorf("err = %v, want %v", err, inventory.ErrInvalidLifecycleStage)
+	}
+}

@@ -107,7 +107,7 @@ func TestComponentsWithProductsReadsActiveAssetsIgnoringCase(t *testing.T) {
 	if len(got) != 2 || got[0].Asset != w.payments || got[1].Asset != w.lab {
 		t.Fatalf("candidates = %+v, want nginx of payments and of lab", got)
 	}
-	if got[0].Component != nginx || got[0].Criticality != inventory.CriticalityHigh || got[0].Position != 0 {
+	if got[0].Component != nginx || got[0].Values.Criticality != inventory.CriticalityHigh || got[0].Position != 0 {
 		t.Errorf("payments candidate = %+v", got[0])
 	}
 
@@ -153,7 +153,7 @@ func TestSaveMatchOpensUpdatesAndReopensTheSameFinding(t *testing.T) {
 		t.Fatalf("second match = %v %v, want updated %v", outcome, again, id)
 	}
 	open := openFindingsOf(t, w.db, "CVE-2021-23017")
-	if len(open) != 1 || open[0].ComponentVersion != "1.19.0" || open[0].Key.Vendor != "f5" || open[0].Criticality != inventory.CriticalityHigh {
+	if len(open) != 1 || open[0].ComponentVersion != "1.19.0" || open[0].Key.Vendor != "f5" || open[0].Values.Criticality != inventory.CriticalityHigh {
 		t.Fatalf("open findings = %+v, want payments at 1.19.0", open)
 	}
 	inTx(t, w.db, func(tx *postgres.Tx) error {
@@ -244,10 +244,15 @@ func TestSaveScoreIfChangedStoresOnlyAChangedScore(t *testing.T) {
 	id, _ := saveMatch(t, w.db, match(t, w.payments, "1.18.0"))
 	score := scoring.Score{
 		Model: 1, Value: 0.308,
-		Factors: scoring.Factors{Alpha: 0.81, Beta: 0.9, Gamma: 0, Vulnerability: 0.513, CriticalityMultiplier: 1, ExposureMultiplier: 0.6},
+		Factors: scoring.Factors{
+			Alpha: 0.81, Beta: 0.9, Gamma: 0, Vulnerability: 0.513,
+			CriticalityMultiplier: 1, ExposureMultiplier: 0.6, LifecycleMultiplier: 1,
+		},
 	}
-	withGap := score
-	withGap.Gaps = []scoring.DataGap{scoring.ExposureUndeclared}
+	nextModel := score
+	nextModel.Model = 2
+	withGap := nextModel
+	withGap.Gaps = []scoring.DataGap{scoring.ExposureUndeclared, scoring.LifecycleUnknown}
 
 	for i, step := range []struct {
 		score  scoring.Score
@@ -255,6 +260,8 @@ func TestSaveScoreIfChangedStoresOnlyAChangedScore(t *testing.T) {
 	}{
 		{score, true},
 		{score, false},
+		{nextModel, true},
+		{nextModel, false},
 		{withGap, true},
 		{withGap, false},
 	} {

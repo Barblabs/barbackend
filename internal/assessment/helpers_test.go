@@ -25,6 +25,7 @@ func newAsset(t *testing.T, criticality inventory.Criticality) *inventory.Asset 
 		Name:        "pg-prod-01",
 		Kind:        inventory.Server,
 		Criticality: criticality,
+		Lifecycle:   inventory.LifecycleProduction,
 		Owner:       mustOwner(t, "owner@example.com"),
 		Software: []inventory.SoftwareComponent{
 			{Role: inventory.OperatingSystem, Name: "Ubuntu Server", Version: "22.04"},
@@ -92,8 +93,8 @@ func stored(t *testing.T) assessment.Stored {
 		Asset:         newAsset(t, inventory.CriticalityHigh),
 		ComponentName: "PostgreSQL", ComponentVersion: "15.6",
 		Score: scoring.Score{
-			Model: 1, Value: 0.91312,
-			Factors: scoring.Factors{Alpha: 0.81, Beta: 0.9003, Gamma: 1, Vulnerability: 0.9131, CriticalityMultiplier: 1, ExposureMultiplier: 1},
+			Model: 2, Value: 0.91312,
+			Factors: scoring.Factors{Alpha: 0.81, Beta: 0.9003, Gamma: 1, Vulnerability: 0.9131, CriticalityMultiplier: 1, ExposureMultiplier: 1, LifecycleMultiplier: 1},
 			Gaps:    []scoring.DataGap{scoring.ExposureUndeclared},
 		},
 		Advisories: []assessment.Advisory{{Title: "PostgreSQL security update", Published: "2025-02-13", Feed: "aws", Description: "Amazon RDS for PostgreSQL applied the fix."}},
@@ -130,7 +131,7 @@ func osDossier(t *testing.T) assessment.Dossier {
 		ComponentName: "Ubuntu Server", ComponentVersion: "22.04",
 		Score: scoring.Score{
 			Model: 1, Value: 0.5,
-			Factors: scoring.Factors{Alpha: 0.81, Beta: 0.1, Gamma: 0, Vulnerability: 0.5, CriticalityMultiplier: 1, ExposureMultiplier: 1},
+			Factors: scoring.Factors{Alpha: 0.81, Beta: 0.1, Gamma: 0, Vulnerability: 0.5, CriticalityMultiplier: 1, ExposureMultiplier: 1, LifecycleMultiplier: 1},
 			Gaps:    []scoring.DataGap{scoring.EPSSPending, scoring.ExposureUndeclared},
 		},
 		Labeling: assessment.Labeling{Outcome: assessment.LabelingNotTried},

@@ -23,10 +23,11 @@ func TestNewDossierReadsTheStoredFinding(t *testing.T) {
 		t.Errorf("dossier = %+v", d)
 	}
 	want := assessment.Score{
-		ScoringModel: 1, Value: 0.9131, Alpha: 0.81, Beta: 0.9003, Gamma: 1, Vulnerability: 0.9131,
-		CriticalityMultiplier: 1, ExposureMultiplier: 1, DataGaps: []string{"exposure_undeclared"},
+		ScoringModel: 2, Value: 0.9131, Alpha: 0.81, Beta: 0.9003, Gamma: 1, Vulnerability: 0.9131,
+		CriticalityMultiplier: 1, ExposureMultiplier: 1, LifecycleMultiplier: 1, DataGaps: []string{"exposure_undeclared"},
 	}
-	if d.Score.Value != want.Value || d.Score.Alpha != want.Alpha || !slices.Equal(d.Score.DataGaps, want.DataGaps) {
+	if d.Score.Value != want.Value || d.Score.Alpha != want.Alpha || d.Score.LifecycleMultiplier != want.LifecycleMultiplier ||
+		!slices.Equal(d.Score.DataGaps, want.DataGaps) {
 		t.Errorf("score = %+v, want the stored one rounded, %+v", d.Score, want)
 	}
 	if d.KEV == nil || d.KEV.DateAdded != "2025-09-29" || d.EPSS == nil || d.EPSS.Probability != 0.9003 || len(d.NVD.References) != 1 || d.NVD.References[0] != advisory {
@@ -37,6 +38,9 @@ func TestNewDossierReadsTheStoredFinding(t *testing.T) {
 	}
 	if len(d.Advisories) != 1 || d.Labeling.Outcome != assessment.LabelingLabeled || len(d.Techniques) != 1 || d.Techniques[0].Mitigations[0].AttackID != "M1051" {
 		t.Errorf("threats = %+v %+v %+v", d.Advisories, d.Labeling, d.Techniques)
+	}
+	if d.Asset.Lifecycle != "production" || d.Brief().Asset.Lifecycle != "production" {
+		t.Errorf("lifecycle stage = %q, brief %q, want production in both", d.Asset.Lifecycle, d.Brief().Asset.Lifecycle)
 	}
 	if len(d.Asset.CriticalServices) != 1 || d.Asset.CriticalServices[0].Impact != "critical" {
 		t.Errorf("critical services = %+v", d.Asset.CriticalServices)
@@ -135,6 +139,7 @@ func TestValidateRejectsADossierBuiltWrong(t *testing.T) {
 		{"blank asset", func(d *assessment.Dossier) { d.Asset.Name = "" }, "asset name"},
 		{"unknown criticality code", func(d *assessment.Dossier) { d.Asset.Criticality = "critical" }, "criticality"},
 		{"unknown exposure code", func(d *assessment.Dossier) { d.Asset.Exposure = "public" }, "exposure"},
+		{"unknown lifecycle stage code", func(d *assessment.Dossier) { d.Asset.Lifecycle = "obsolete" }, "lifecycle stage"},
 		{"unknown kind", func(d *assessment.Dossier) { d.Asset.Kind = "toaster" }, "kind"},
 		{"unknown role", func(d *assessment.Dossier) { d.Asset.Software[0].Role = "x" }, "role"},
 		{"blank data gap", func(d *assessment.Dossier) { d.Score.DataGaps = []string{""} }, "data gap"},

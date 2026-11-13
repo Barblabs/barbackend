@@ -39,7 +39,7 @@ func newWorld(t *testing.T) world {
 	customer := uuid.New()
 	w.exec(t, `INSERT INTO customers (id, name) VALUES ($1, $2)`, customer, customer.String())
 	w.exec(t, `INSERT INTO cmdb_sources (id, customer_id, provider, settings, credentials) VALUES ($1, $2, 'itop', '{}', '')`, uuid.UUID(w.source), customer)
-	w.findings = findings.New(db, scoring.Model1, time.Hour)
+	w.findings = findings.New(db, scoring.Model2, time.Hour)
 	return w
 }
 
@@ -212,12 +212,15 @@ func (w world) count(t *testing.T, sql string, args ...any) int {
 	return n
 }
 
-// latestExposureMultiplier is the exposure multiplier of the Finding's newest Score.
-func (w world) latestExposureMultiplier(t *testing.T, id uuid.UUID) float64 {
+// multipliers are the Asset multipliers of a Finding's newest Score.
+type multipliers struct{ exposure, lifecycle float64 }
+
+func (w world) latestMultipliers(t *testing.T, id uuid.UUID) multipliers {
 	t.Helper()
-	var m float64
-	if err := w.conn.QueryRow(context.Background(),
-		`SELECT exposure_multiplier FROM finding_scores WHERE finding_id = $1 ORDER BY scored_at DESC LIMIT 1`, id).Scan(&m); err != nil {
+	var m multipliers
+	if err := w.conn.QueryRow(context.Background(), `
+		SELECT exposure_multiplier, lifecycle_multiplier
+		FROM finding_scores WHERE finding_id = $1 ORDER BY scored_at DESC LIMIT 1`, id).Scan(&m.exposure, &m.lifecycle); err != nil {
 		t.Fatal(err)
 	}
 	return m

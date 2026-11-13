@@ -34,19 +34,53 @@ func TestAfterSyncMatchesANewAssetAgainstStoredVulnerabilities(t *testing.T) {
 	}
 }
 
-// exposedTo is the record with that imported Exposure, as a Location in the
-// CMDB gives it (ADR 0021).
-func exposedTo(t *testing.T, r inventory.Record, e inventory.Exposure) inventory.Record {
+// reimported is the record as a later Sync imports it, with change applied:
+// an Exposure from a Location (ADR 0021) or a Lifecycle Stage from the iTop
+// status (ADR 0028).
+func reimported(t *testing.T, r inventory.Record, change func(*inventory.ImportedAssetParams)) inventory.Record {
 	t.Helper()
 	p := inventory.ImportedAssetParams{
 		Name: r.Imported.Name(), Kind: r.Imported.Kind(), Software: r.Imported.Software(),
-		Criticality: r.Imported.Criticality(), Exposure: e,
+		Criticality: r.Imported.Criticality(), Exposure: r.Imported.Exposure(), Lifecycle: r.Imported.Lifecycle(),
 	}
+	change(&p)
 	imported, err := inventory.NewImportedAsset(p)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return inventory.Record{RecordID: r.RecordID, Imported: imported}
+}
+
+func inStage(s inventory.LifecycleStage) func(*inventory.ImportedAssetParams) {
+	return func(p *inventory.ImportedAssetParams) { p.Lifecycle = s }
+}
+
+func exposedTo(e inventory.Exposure) func(*inventory.ImportedAssetParams) {
+	return func(p *inventory.ImportedAssetParams) { p.Exposure = e }
+}
+
+func TestAfterSyncRescoresWhenTheLifecycleStageChanges(t *testing.T) {
+	t.Parallel()
+	w, f := matchedPayments(t)
+	payments := server(t, "payments", inventory.CriticalityHigh, app("Nginx", "f5", "nginx", "1.18.0"))
+	multiplier := func() (m float64, scores int) {
+		t.Helper()
+		_, _, _, scores = w.latestScore(t, f.id)
+		return w.latestMultipliers(t, f.id).lifecycle, scores
+	}
+
+	w.afterSync(t, reimported(t, payments, inStage(inventory.LifecycleStock)))
+	if m, scores := multiplier(); m != 0.3 || scores != 2 {
+		t.Errorf("in stock: multiplier %v in %d scores, want 0.3 in a second score", m, scores)
+	}
+	if _, _, gaps, _ := w.latestScore(t, f.id); slices.Contains(gaps, "lifecycle_unknown") {
+		t.Errorf("gaps = %v, want no lifecycle_unknown once the CMDB gives the stage", gaps)
+	}
+
+	w.afterSync(t, reimported(t, payments, inStage(inventory.LifecycleProduction)))
+	if m, scores := multiplier(); m != 1 || scores != 3 {
+		t.Errorf("deployed to production: multiplier %v in %d scores, want 1 in a third score", m, scores)
+	}
 }
 
 func TestAfterSyncRescoresWhenTheExposureChanges(t *testing.T) {
@@ -56,10 +90,10 @@ func TestAfterSyncRescoresWhenTheExposureChanges(t *testing.T) {
 	multiplier := func() (m float64, scores int) {
 		t.Helper()
 		_, _, _, scores = w.latestScore(t, f.id)
-		return w.latestExposureMultiplier(t, f.id), scores
+		return w.latestMultipliers(t, f.id).exposure, scores
 	}
 
-	w.afterSync(t, exposedTo(t, payments, inventory.Internal))
+	w.afterSync(t, reimported(t, payments, exposedTo(inventory.Internal)))
 	if m, scores := multiplier(); m != 0.6 || scores != 2 {
 		t.Errorf("after the CMDB made it Internal: multiplier %v in %d scores, want 0.6 in a second score", m, scores)
 	}
@@ -68,7 +102,7 @@ func TestAfterSyncRescoresWhenTheExposureChanges(t *testing.T) {
 	}
 
 	w.declareExposure(t, "payments", inventory.InternetFacing)
-	w.afterSync(t, exposedTo(t, payments, inventory.Internal))
+	w.afterSync(t, reimported(t, payments, exposedTo(inventory.Internal)))
 	if m, scores := multiplier(); m != 1 || scores != 3 {
 		t.Errorf("after declaring it Internet-facing: multiplier %v in %d scores, want the Declaration's 1 in a third score", m, scores)
 	}

@@ -88,6 +88,7 @@ func (t *Tx) customerFindings(ctx context.Context, rows []sqlcgen.ListOpenFindin
 				Factors: scoring.Factors{
 					Alpha: row.Alpha, Beta: row.Beta, Gamma: row.Gamma, Vulnerability: row.Vulnerability,
 					CriticalityMultiplier: row.CriticalityMultiplier, ExposureMultiplier: row.ExposureMultiplier,
+					LifecycleMultiplier: row.LifecycleMultiplier,
 				},
 				Gaps: gaps,
 			},

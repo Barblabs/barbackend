@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"barbackend/internal/finding"
-	"barbackend/internal/inventory"
 	"barbackend/internal/postgres"
 	"barbackend/internal/scoring"
 	"github.com/TcM1911/stix2"
@@ -67,10 +66,10 @@ func (s *Service) kevReceived() {
 	s.lastKEV = s.now()
 }
 
-// score stores the Score of a Finding of v on an Asset of that Criticality
-// and Exposure, unless it equals the latest one.
-func (s *Service) score(ctx context.Context, tx *postgres.Tx, id finding.ID, v *stix2.Vulnerability, criticality inventory.Criticality, exposure inventory.Exposure) error {
-	score, err := s.model.Compute(finding.ScoreInputs(v, criticality, exposure, s.kevStale()))
+// score stores the Score of a Finding of v on an Asset with those values,
+// unless it equals the latest one.
+func (s *Service) score(ctx context.Context, tx *postgres.Tx, id finding.ID, v *stix2.Vulnerability, asset finding.AssetValues) error {
+	score, err := s.model.Compute(finding.ScoreInputs(v, asset, s.kevStale()))
 	if err != nil {
 		return fmt.Errorf("score finding %s: %w", id, err)
 	}

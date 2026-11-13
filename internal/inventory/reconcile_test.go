@@ -39,6 +39,7 @@ func TestReconcile(t *testing.T) {
 	})
 	otherHardware := with(base, func(p *inventory.ImportedAssetParams) { p.Hardware = inventory.Hardware{Vendor: "HP", Model: "R740"} })
 	exposed := with(base, func(p *inventory.ImportedAssetParams) { p.Exposure = inventory.InternetFacing })
+	deployed := with(base, func(p *inventory.ImportedAssetParams) { p.Lifecycle = inventory.LifecycleProduction })
 
 	tests := []struct {
 		name     string
@@ -56,6 +57,7 @@ func TestReconcile(t *testing.T) {
 		{"identified product is a change", []stored{{"1", software, true}}, recs("1", identifiedSoftware), nil, outcome{updated: ids("1")}},
 		{"hardware vendor is a change", []stored{{"1", hardware, true}}, recs("1", otherHardware), nil, outcome{updated: ids("1")}},
 		{"exposure is a change", []stored{{"1", base, true}}, recs("1", exposed), nil, outcome{updated: ids("1")}},
+		{"lifecycle stage is a change", []stored{{"1", base, true}}, recs("1", deployed), nil, outcome{updated: ids("1")}},
 		{"retired", []stored{{"1", base, true}}, recs("1", retired), nil,
 			outcome{updated: ids("1"), deactivated: ids("1"), inactive: ids("1")}},
 		{"missing", []stored{{"1", base, true}}, nil, nil, outcome{deactivated: ids("1"), inactive: ids("1")}},

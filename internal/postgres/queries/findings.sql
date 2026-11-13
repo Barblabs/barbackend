@@ -5,7 +5,7 @@
 -- name: ListActiveComponentsWithProducts :many
 SELECT c.cmdb_source_id, c.record_id, c.position, c.role_id, c.name, c.version,
        c.product_vendor, c.product_name, a.criticality_id,
-       coalesce(a.declared_exposure_id, a.imported_exposure_id) AS exposure_id
+       coalesce(a.declared_exposure_id, a.imported_exposure_id) AS exposure_id, a.lifecycle_stage_id
 FROM software_components c
 JOIN assets a USING (cmdb_source_id, record_id)
 WHERE a.inactive_since IS NULL
@@ -21,7 +21,7 @@ ORDER BY c.cmdb_source_id, c.record_id, c.position;
 -- name: ListActiveComponentsOfSource :many
 SELECT c.cmdb_source_id, c.record_id, c.position, c.role_id, c.name, c.version,
        c.product_vendor, c.product_name, a.criticality_id,
-       coalesce(a.declared_exposure_id, a.imported_exposure_id) AS exposure_id
+       coalesce(a.declared_exposure_id, a.imported_exposure_id) AS exposure_id, a.lifecycle_stage_id
 FROM software_components c
 JOIN assets a USING (cmdb_source_id, record_id)
 WHERE a.inactive_since IS NULL AND c.cmdb_source_id = @cmdb_source_id
@@ -77,7 +77,7 @@ WHERE a.cmdb_source_id = f.cmdb_source_id AND a.record_id = f.record_id
 -- name: ListOpenFindingsOfVulnerability :many
 SELECT f.id, f.cmdb_source_id, f.record_id, f.product_vendor, f.product_name, f.cve_id,
        f.component_name, f.component_version, a.criticality_id,
-       coalesce(a.declared_exposure_id, a.imported_exposure_id) AS exposure_id
+       coalesce(a.declared_exposure_id, a.imported_exposure_id) AS exposure_id, a.lifecycle_stage_id
 FROM findings f
 JOIN assets a USING (cmdb_source_id, record_id)
 WHERE f.cve_id = @cve_id AND f.closed_at IS NULL
@@ -88,7 +88,7 @@ ORDER BY f.cmdb_source_id, f.record_id, f.product_vendor, f.product_name;
 -- name: ListOpenFindingsOfSource :many
 SELECT f.id, f.cmdb_source_id, f.record_id, f.product_vendor, f.product_name, f.cve_id,
        f.component_name, f.component_version, a.criticality_id,
-       coalesce(a.declared_exposure_id, a.imported_exposure_id) AS exposure_id
+       coalesce(a.declared_exposure_id, a.imported_exposure_id) AS exposure_id, a.lifecycle_stage_id
 FROM findings f
 JOIN assets a USING (cmdb_source_id, record_id)
 WHERE f.closed_at IS NULL AND f.cmdb_source_id = @cmdb_source_id
@@ -98,7 +98,7 @@ ORDER BY f.cmdb_source_id, f.record_id, f.product_vendor, f.product_name, f.cve_
 -- name: ListOpenFindingsOfAsset :many
 SELECT f.id, f.cmdb_source_id, f.record_id, f.product_vendor, f.product_name, f.cve_id,
        f.component_name, f.component_version, a.criticality_id,
-       coalesce(a.declared_exposure_id, a.imported_exposure_id) AS exposure_id
+       coalesce(a.declared_exposure_id, a.imported_exposure_id) AS exposure_id, a.lifecycle_stage_id
 FROM findings f
 JOIN assets a USING (cmdb_source_id, record_id)
 WHERE f.cmdb_source_id = @cmdb_source_id AND f.record_id = @record_id AND f.closed_at IS NULL
@@ -120,7 +120,7 @@ ORDER BY flag_id;
 -- The latest Score of a Finding, with its Data Gaps in catalog order.
 -- name: LatestFindingScore :one
 SELECT s.scored_at, s.model, s.value, s.alpha, s.beta, s.gamma, s.vulnerability,
-       s.criticality_multiplier, s.exposure_multiplier,
+       s.criticality_multiplier, s.exposure_multiplier, s.lifecycle_multiplier,
        coalesce(array_agg(g.gap_id ORDER BY g.gap_id) FILTER (WHERE g.gap_id IS NOT NULL), '{}')::smallint[] AS gaps
 FROM finding_scores s
 LEFT JOIN finding_score_data_gaps g USING (finding_id, scored_at)
@@ -134,10 +134,10 @@ LIMIT 1;
 -- name: InsertFindingScore :one
 INSERT INTO finding_scores (
     finding_id, scored_at, model, value, alpha, beta, gamma, vulnerability,
-    criticality_multiplier, exposure_multiplier
+    criticality_multiplier, exposure_multiplier, lifecycle_multiplier
 ) VALUES (
     @finding_id, clock_timestamp(), @model, @value, @alpha, @beta, @gamma, @vulnerability,
-    @criticality_multiplier, @exposure_multiplier
+    @criticality_multiplier, @exposure_multiplier, @lifecycle_multiplier
 )
 RETURNING scored_at;
 
@@ -151,13 +151,13 @@ INSERT INTO finding_score_data_gaps (finding_id, scored_at, gap_id) VALUES ($1, 
 SELECT f.id, f.cmdb_source_id, f.record_id, f.cve_id, f.component_name, f.component_version,
        v.object AS vulnerability_object,
        s.model, s.value, s.alpha, s.beta, s.gamma, s.vulnerability,
-       s.criticality_multiplier, s.exposure_multiplier, s.gaps
+       s.criticality_multiplier, s.exposure_multiplier, s.lifecycle_multiplier, s.gaps
 FROM findings f
 JOIN cmdb_sources src ON src.id = f.cmdb_source_id
 JOIN vulnerabilities v ON v.cve_id = f.cve_id
 JOIN LATERAL (
     SELECT sc.model, sc.value, sc.alpha, sc.beta, sc.gamma, sc.vulnerability,
-           sc.criticality_multiplier, sc.exposure_multiplier,
+           sc.criticality_multiplier, sc.exposure_multiplier, sc.lifecycle_multiplier,
            coalesce(array_agg(g.gap_id ORDER BY g.gap_id) FILTER (WHERE g.gap_id IS NOT NULL), '{}')::smallint[] AS gaps
     FROM finding_scores sc
     LEFT JOIN finding_score_data_gaps g USING (finding_id, scored_at)
@@ -175,13 +175,13 @@ ORDER BY f.id;
 SELECT f.id, f.cmdb_source_id, f.record_id, f.cve_id, f.component_name, f.component_version,
        v.object AS vulnerability_object,
        s.model, s.value, s.alpha, s.beta, s.gamma, s.vulnerability,
-       s.criticality_multiplier, s.exposure_multiplier, s.gaps
+       s.criticality_multiplier, s.exposure_multiplier, s.lifecycle_multiplier, s.gaps
 FROM findings f
 JOIN cmdb_sources src ON src.id = f.cmdb_source_id
 JOIN vulnerabilities v ON v.cve_id = f.cve_id
 JOIN LATERAL (
     SELECT sc.model, sc.value, sc.alpha, sc.beta, sc.gamma, sc.vulnerability,
-           sc.criticality_multiplier, sc.exposure_multiplier,
+           sc.criticality_multiplier, sc.exposure_multiplier, sc.lifecycle_multiplier,
            coalesce(array_agg(g.gap_id ORDER BY g.gap_id) FILTER (WHERE g.gap_id IS NOT NULL), '{}')::smallint[] AS gaps
     FROM finding_scores sc
     LEFT JOIN finding_score_data_gaps g USING (finding_id, scored_at)

@@ -60,6 +60,7 @@ type Asset struct {
 	ID                 int64
 	ExposureDeclaredBy pgtype.UUID
 	ExposureDeclaredAt *time.Time
+	LifecycleStageID   *int16
 }
 
 type AssetKind struct {
@@ -200,12 +201,18 @@ type FindingScore struct {
 	Vulnerability         float64
 	CriticalityMultiplier float64
 	ExposureMultiplier    float64
+	LifecycleMultiplier   float64
 }
 
 type FindingScoreDataGap struct {
 	FindingID uuid.UUID
 	ScoredAt  time.Time
 	GapID     int16
+}
+
+type LifecycleStage struct {
+	ID   int16
+	Name string
 }
 
 type MatchFlag struct {

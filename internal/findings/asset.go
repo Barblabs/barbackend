@@ -8,7 +8,7 @@ import (
 )
 
 // RescoreAsset rescores every open Finding of the Asset from its stored
-// Vulnerability and the Asset's effective Criticality and Exposure, after a
+// Vulnerability and the Asset's values, with its effective Exposure, after a
 // Declaration changed them (ADR 0021). It reads them afresh in one
 // transaction, so of two Declarations close together the last one's Scores
 // stand, and stores a Score only when it changed.
@@ -24,7 +24,7 @@ func (s *Service) RescoreAsset(ctx context.Context, asset inventory.SourceRefere
 			if err != nil {
 				return err
 			}
-			if err := s.score(ctx, tx, f.ID, v, f.Criticality, f.Exposure); err != nil {
+			if err := s.score(ctx, tx, f.ID, v, f.Values); err != nil {
 				return err
 			}
 		}

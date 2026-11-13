@@ -61,7 +61,7 @@ func TestNewStandingShowsEachGroupInBrief(t *testing.T) {
 	}
 	want := assessment.Summary{
 		Finding: finding, CVE: cve, Asset: "pg-prod-01", Criticality: "high", Exposure: "unknown",
-		CriticalServices: []string{"Pagos en línea"}, Component: "PostgreSQL 15.6",
+		Lifecycle: "production", CriticalServices: []string{"Pagos en línea"}, Component: "PostgreSQL 15.6",
 		Score: 0.9131, KEV: true, EPSS: ptr(0.9003), Exploitation: []string{"T1190"},
 	}
 	if !reflect.DeepEqual(standing[1].Findings[0], want) {

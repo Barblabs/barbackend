@@ -27,6 +27,14 @@ var exposures = map[string]inventory.Exposure{
 	"not exposed": inventory.Internal,
 }
 
+// lifecycles maps the iTop status to a Lifecycle Stage (ADR 0028). Obsolete
+// is Retired instead, and any other status is Unknown.
+var lifecycles = map[string]inventory.LifecycleStage{
+	"production":     inventory.LifecycleProduction,
+	"implementation": inventory.LifecycleImplementation,
+	"stock":          inventory.LifecycleStock,
+}
+
 const (
 	retiredStatus      = "obsolete"
 	inactiveAreaStatus = "inactive"
@@ -89,6 +97,7 @@ func importedAsset(c ci, readableAreas map[string]bool, lk lookups) (inventory.I
 		Software:    components,
 		Criticality: crit,
 		Exposure:    exposures[strings.ToLower(strings.TrimSpace(c.Location))],
+		Lifecycle:   lifecycles[strings.ToLower(strings.TrimSpace(c.Status))],
 		Owner:       owner(c, lk),
 		Area:        c.OrgID,
 		Retired:     c.Status == retiredStatus,

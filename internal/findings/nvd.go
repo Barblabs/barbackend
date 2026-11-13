@@ -98,7 +98,7 @@ func (s *Service) save(ctx context.Context, tx *postgres.Tx, v *stix2.Vulnerabil
 		if err != nil {
 			return nil, err
 		}
-		if err := s.score(ctx, tx, id, v, m.criticality, m.exposure); err != nil {
+		if err := s.score(ctx, tx, id, v, m.asset); err != nil {
 			return nil, err
 		}
 		saved[m.Key] = true

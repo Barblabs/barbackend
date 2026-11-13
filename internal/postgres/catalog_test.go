@@ -22,13 +22,14 @@ func TestCatalogsMatchDomainConstants(t *testing.T) {
 		"asset_kinds":           names(inventory.Server, inventory.VirtualMachine, inventory.Workstation, inventory.NetworkDevice),
 		"criticalities":         names(inventory.CriticalityHigh, inventory.CriticalityMedium, inventory.CriticalityLow),
 		"exposures":             names(inventory.InternetFacing, inventory.Internal),
+		"lifecycle_stages":      names(inventory.LifecycleProduction, inventory.LifecycleImplementation, inventory.LifecycleStock),
 		"software_roles":        names(inventory.OperatingSystem, inventory.Application),
 		"sync_outcomes":         names(inventory.SyncSucceeded, inventory.SyncFailed),
 		"user_roles":            names(tenancy.PlatformAdmin, tenancy.CustomerAdmin, tenancy.Viewer),
 		"feedback_verdicts":     names(assessment.VerdictApplies, assessment.VerdictDoesNotApply, assessment.VerdictRemediated, assessment.VerdictShouldBeEarlier, assessment.VerdictShouldBeLater),
 		"match_flags":           names(matching.VersionUnparsed, matching.DistroBackport),
 		"finding_close_reasons": names(finding.NoLongerAffected, finding.ComponentRemoved, finding.AssetInactive, finding.VulnerabilityRejected),
-		"score_data_gaps":       names(scoring.CVSSEstimated, scoring.EPSSPending, scoring.KEVStale, scoring.CriticalityUnknown, scoring.ExposureUndeclared),
+		"score_data_gaps":       names(scoring.CVSSEstimated, scoring.EPSSPending, scoring.KEVStale, scoring.CriticalityUnknown, scoring.ExposureUndeclared, scoring.LifecycleUnknown),
 	}
 	ctx := context.Background()
 	conn := pgtest.Conn(t, pgtest.URL(t))

@@ -116,6 +116,7 @@ type assetResponse struct {
 	Software      []softwareResponse `json:"software"`
 	Criticality   *string            `json:"criticality"`
 	Exposure      exposureResponse   `json:"exposure"`
+	Lifecycle     *string            `json:"lifecycle_stage" enum:"production,implementation,stock" doc:"Null when the CMDB Source does not give it, and for a retired Asset"`
 	Owner         *ownerResponse     `json:"owner"`
 	Area          *areaRefResponse   `json:"area"`
 	Retired       bool               `json:"retired"`
@@ -214,6 +215,7 @@ func newAssetResponse(stored assets.StoredAsset) assetResponse {
 		Software:      make([]softwareResponse, len(software)),
 		Criticality:   code(imported.Criticality().Code()),
 		Exposure:      newExposureResponse(stored),
+		Lifecycle:     code(imported.Lifecycle().Code()),
 		Retired:       imported.Retired(),
 		Active:        a.Active(),
 		InactiveSince: stored.InactiveSince,

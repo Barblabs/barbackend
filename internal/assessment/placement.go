@@ -62,6 +62,7 @@ type Summary struct {
 	Asset            string   `json:"asset"`
 	Criticality      string   `json:"criticality"`
 	Exposure         string   `json:"exposure"`
+	Lifecycle        string   `json:"lifecycle_stage"`
 	CriticalServices []string `json:"critical_services"`
 	Component        string   `json:"component"`
 	Score            float64  `json:"score"`
@@ -211,7 +212,7 @@ func NewStanding(l PriorityList, dossiers []Dossier) []StandingGroup {
 func summaryOf(d Dossier) Summary {
 	s := Summary{
 		Finding: d.Finding, CVE: d.CVE, Asset: d.Asset.Name, Criticality: d.Asset.Criticality, Exposure: d.Asset.Exposure,
-		CriticalServices: []string{}, Component: strings.TrimSpace(d.Component.Name + " " + d.Component.Version),
+		Lifecycle: d.Asset.Lifecycle, CriticalServices: []string{}, Component: strings.TrimSpace(d.Component.Name + " " + d.Component.Version),
 		Score: d.Score.Value, KEV: d.KEV != nil, Exploitation: []string{},
 	}
 	for _, c := range d.Asset.CriticalServices {

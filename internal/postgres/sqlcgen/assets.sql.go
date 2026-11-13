@@ -138,6 +138,7 @@ type InsertAssetsParams struct {
 	HardwareModel      *string
 	CriticalityID      *int16
 	ImportedExposureID *int16
+	LifecycleStageID   *int16
 	ImportedOwnerID    *int64
 	AreaRecordID       *string
 	Retired            bool
@@ -159,7 +160,7 @@ const listAssets = `-- name: ListAssets :many
 SELECT a.id, a.cmdb_source_id, a.record_id, a.name, a.description, a.kind_id,
        a.hardware_vendor, a.hardware_model, a.criticality_id,
        imported_owner.email AS imported_owner, declared_owner.email AS declared_owner,
-       a.imported_exposure_id, a.declared_exposure_id, a.area_record_id, a.retired, a.inactive_since,
+       a.imported_exposure_id, a.declared_exposure_id, a.lifecycle_stage_id, a.area_record_id, a.retired, a.inactive_since,
        area.id AS area_id, area.name AS area_name,
        exposure_declarer.email AS exposure_declared_by, a.exposure_declared_at
 FROM assets a
@@ -185,6 +186,7 @@ type ListAssetsRow struct {
 	DeclaredOwner      *string
 	ImportedExposureID *int16
 	DeclaredExposureID *int16
+	LifecycleStageID   *int16
 	AreaRecordID       *string
 	Retired            bool
 	InactiveSince      *time.Time
@@ -217,6 +219,7 @@ func (q *Queries) ListAssets(ctx context.Context, cmdbSourceID uuid.UUID) ([]Lis
 			&i.DeclaredOwner,
 			&i.ImportedExposureID,
 			&i.DeclaredExposureID,
+			&i.LifecycleStageID,
 			&i.AreaRecordID,
 			&i.Retired,
 			&i.InactiveSince,
@@ -239,7 +242,7 @@ const listAssetsByReference = `-- name: ListAssetsByReference :many
 SELECT a.id, a.cmdb_source_id, a.record_id, a.name, a.description, a.kind_id,
        a.hardware_vendor, a.hardware_model, a.criticality_id,
        imported_owner.email AS imported_owner, declared_owner.email AS declared_owner,
-       a.imported_exposure_id, a.declared_exposure_id, a.area_record_id, a.retired, a.inactive_since,
+       a.imported_exposure_id, a.declared_exposure_id, a.lifecycle_stage_id, a.area_record_id, a.retired, a.inactive_since,
        area.id AS area_id, area.name AS area_name,
        exposure_declarer.email AS exposure_declared_by, a.exposure_declared_at
 FROM assets a
@@ -274,6 +277,7 @@ type ListAssetsByReferenceRow struct {
 	DeclaredOwner      *string
 	ImportedExposureID *int16
 	DeclaredExposureID *int16
+	LifecycleStageID   *int16
 	AreaRecordID       *string
 	Retired            bool
 	InactiveSince      *time.Time
@@ -308,6 +312,7 @@ func (q *Queries) ListAssetsByReference(ctx context.Context, arg ListAssetsByRef
 			&i.DeclaredOwner,
 			&i.ImportedExposureID,
 			&i.DeclaredExposureID,
+			&i.LifecycleStageID,
 			&i.AreaRecordID,
 			&i.Retired,
 			&i.InactiveSince,
@@ -330,7 +335,7 @@ const listCustomerAssets = `-- name: ListCustomerAssets :many
 SELECT a.id, a.cmdb_source_id, a.record_id, a.name, a.description, a.kind_id,
        a.hardware_vendor, a.hardware_model, a.criticality_id,
        imported_owner.email AS imported_owner, declared_owner.email AS declared_owner,
-       a.imported_exposure_id, a.declared_exposure_id, a.area_record_id, a.retired, a.inactive_since,
+       a.imported_exposure_id, a.declared_exposure_id, a.lifecycle_stage_id, a.area_record_id, a.retired, a.inactive_since,
        area.id AS area_id, area.name AS area_name,
        exposure_declarer.email AS exposure_declared_by, a.exposure_declared_at
 FROM assets a
@@ -375,6 +380,7 @@ type ListCustomerAssetsRow struct {
 	DeclaredOwner      *string
 	ImportedExposureID *int16
 	DeclaredExposureID *int16
+	LifecycleStageID   *int16
 	AreaRecordID       *string
 	Retired            bool
 	InactiveSince      *time.Time
@@ -418,6 +424,7 @@ func (q *Queries) ListCustomerAssets(ctx context.Context, arg ListCustomerAssets
 			&i.DeclaredOwner,
 			&i.ImportedExposureID,
 			&i.DeclaredExposureID,
+			&i.LifecycleStageID,
 			&i.AreaRecordID,
 			&i.Retired,
 			&i.InactiveSince,

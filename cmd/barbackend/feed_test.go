@@ -11,7 +11,7 @@ import (
 )
 
 func TestHandledByGivesEachFeedItsUseCase(t *testing.T) {
-	feeds := handledBy(findings.New(nil, scoring.Model1, time.Hour), advisories.New(nil), techniques.New(nil), registeredFeeds())
+	feeds := handledBy(findings.New(nil, scoring.Model2, time.Hour), advisories.New(nil), techniques.New(nil), registeredFeeds())
 
 	handled := make(map[string]bool)
 	for _, f := range feeds {

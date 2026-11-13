@@ -27,8 +27,8 @@ func TestHandleNVDOpensAScoredFindingOnEachAffectedAsset(t *testing.T) {
 		t.Error("lab runs the fixed 1.20.1 and got a finding")
 	}
 	_, _, gaps, scores := w.latestScore(t, f.id)
-	if scores != 1 || !slices.Equal(gaps, []string{"epss_pending", "kev_stale", "exposure_undeclared"}) {
-		t.Errorf("score = %d scores with gaps %v, want one, waiting for EPSS and KEV, exposure undeclared", scores, gaps)
+	if scores != 1 || !slices.Equal(gaps, []string{"epss_pending", "kev_stale", "exposure_undeclared", "lifecycle_unknown"}) {
+		t.Errorf("score = %d scores with gaps %v, want one, waiting for EPSS and KEV, exposure undeclared, lifecycle unknown", scores, gaps)
 	}
 }
 
