@@ -15,9 +15,12 @@ import (
 
 // paymentsScore is a Score of a Finding on the payments server.
 var paymentsScore = scoring.Score{
-	Model: 1, Value: 0.308,
-	Factors: scoring.Factors{Alpha: 0.81, Beta: 0.9, Gamma: 0, Vulnerability: 0.513, CriticalityMultiplier: 1, ExposureMultiplier: 0.6},
-	Gaps:    []scoring.DataGap{scoring.EPSSPending, scoring.ExposureUndeclared},
+	Model: 2, Value: 0.24624,
+	Factors: scoring.Factors{
+		Alpha: 0.81, Beta: 0.9, Gamma: 0, Vulnerability: 0.513,
+		CriticalityMultiplier: 1, ExposureMultiplier: 0.6, LifecycleMultiplier: 0.8,
+	},
+	Gaps: []scoring.DataGap{scoring.EPSSPending, scoring.ExposureUndeclared},
 }
 
 func saveScore(t *testing.T, db *postgres.DB, id finding.ID, s scoring.Score) {

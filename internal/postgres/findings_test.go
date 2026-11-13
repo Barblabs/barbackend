@@ -244,10 +244,15 @@ func TestSaveScoreIfChangedStoresOnlyAChangedScore(t *testing.T) {
 	id, _ := saveMatch(t, w.db, match(t, w.payments, "1.18.0"))
 	score := scoring.Score{
 		Model: 1, Value: 0.308,
-		Factors: scoring.Factors{Alpha: 0.81, Beta: 0.9, Gamma: 0, Vulnerability: 0.513, CriticalityMultiplier: 1, ExposureMultiplier: 0.6},
+		Factors: scoring.Factors{
+			Alpha: 0.81, Beta: 0.9, Gamma: 0, Vulnerability: 0.513,
+			CriticalityMultiplier: 1, ExposureMultiplier: 0.6, LifecycleMultiplier: 1,
+		},
 	}
-	withGap := score
-	withGap.Gaps = []scoring.DataGap{scoring.ExposureUndeclared}
+	nextModel := score
+	nextModel.Model = 2
+	withGap := nextModel
+	withGap.Gaps = []scoring.DataGap{scoring.ExposureUndeclared, scoring.LifecycleUnknown}
 
 	for i, step := range []struct {
 		score  scoring.Score
@@ -255,6 +260,8 @@ func TestSaveScoreIfChangedStoresOnlyAChangedScore(t *testing.T) {
 	}{
 		{score, true},
 		{score, false},
+		{nextModel, true},
+		{nextModel, false},
 		{withGap, true},
 		{withGap, false},
 	} {

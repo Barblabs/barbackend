@@ -225,6 +225,7 @@ func (t *Tx) SaveScoreIfChanged(ctx context.Context, id finding.ID, s scoring.Sc
 		Vulnerability:         s.Factors.Vulnerability,
 		CriticalityMultiplier: s.Factors.CriticalityMultiplier,
 		ExposureMultiplier:    s.Factors.ExposureMultiplier,
+		LifecycleMultiplier:   s.Factors.LifecycleMultiplier,
 	})
 	if err != nil {
 		return false, fmt.Errorf("insert score of finding %s: %w", id, err)
@@ -262,6 +263,7 @@ func (t *Tx) LatestScore(ctx context.Context, id finding.ID) (scoring.Score, err
 		Factors: scoring.Factors{
 			Alpha: row.Alpha, Beta: row.Beta, Gamma: row.Gamma, Vulnerability: row.Vulnerability,
 			CriticalityMultiplier: row.CriticalityMultiplier, ExposureMultiplier: row.ExposureMultiplier,
+			LifecycleMultiplier: row.LifecycleMultiplier,
 		},
 		Gaps: gaps,
 	}, nil

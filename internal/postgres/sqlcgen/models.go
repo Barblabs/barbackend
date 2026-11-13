@@ -201,6 +201,7 @@ type FindingScore struct {
 	Vulnerability         float64
 	CriticalityMultiplier float64
 	ExposureMultiplier    float64
+	LifecycleMultiplier   float64
 }
 
 type FindingScoreDataGap struct {

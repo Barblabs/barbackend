@@ -29,7 +29,7 @@ func TestCatalogsMatchDomainConstants(t *testing.T) {
 		"feedback_verdicts":     names(assessment.VerdictApplies, assessment.VerdictDoesNotApply, assessment.VerdictRemediated, assessment.VerdictShouldBeEarlier, assessment.VerdictShouldBeLater),
 		"match_flags":           names(matching.VersionUnparsed, matching.DistroBackport),
 		"finding_close_reasons": names(finding.NoLongerAffected, finding.ComponentRemoved, finding.AssetInactive, finding.VulnerabilityRejected),
-		"score_data_gaps":       names(scoring.CVSSEstimated, scoring.EPSSPending, scoring.KEVStale, scoring.CriticalityUnknown, scoring.ExposureUndeclared),
+		"score_data_gaps":       names(scoring.CVSSEstimated, scoring.EPSSPending, scoring.KEVStale, scoring.CriticalityUnknown, scoring.ExposureUndeclared, scoring.LifecycleUnknown),
 	}
 	ctx := context.Background()
 	conn := pgtest.Conn(t, pgtest.URL(t))
