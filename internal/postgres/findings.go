@@ -21,11 +21,10 @@ import (
 // its Asset, which breaks ties between two installations of one Product
 // (ADR 0020).
 type Candidate struct {
-	Asset       inventory.SourceReference
-	Position    int
-	Component   inventory.SoftwareComponent
-	Criticality inventory.Criticality
-	Exposure    inventory.Exposure
+	Asset     inventory.SourceReference
+	Position  int
+	Component inventory.SoftwareComponent
+	Values    finding.AssetValues
 }
 
 // OpenFinding is an open Finding with what scoring needs of its Asset.
@@ -34,8 +33,7 @@ type OpenFinding struct {
 	Key              finding.Key
 	ComponentName    string
 	ComponentVersion string
-	Criticality      inventory.Criticality
-	Exposure         inventory.Exposure
+	Values           finding.AssetValues
 }
 
 // ComponentsWithProducts is the Software Components of every Active Asset, of
@@ -287,8 +285,7 @@ func candidate(row sqlcgen.ListActiveComponentsWithProductsRow) Candidate {
 			Version: row.Version,
 			Product: inventory.Product{Vendor: valueOrZero(row.ProductVendor), Name: valueOrZero(row.ProductName)},
 		},
-		Criticality: inventory.Criticality(valueOrZero(row.CriticalityID)),
-		Exposure:    inventory.Exposure(valueOrZero(row.ExposureID)),
+		Values: assetValues(row.CriticalityID, row.ExposureID, row.LifecycleStageID),
 	}
 }
 
@@ -301,7 +298,16 @@ func openFinding(row sqlcgen.ListOpenFindingsOfVulnerabilityRow) OpenFinding {
 		},
 		ComponentName:    row.ComponentName,
 		ComponentVersion: row.ComponentVersion,
-		Criticality:      inventory.Criticality(valueOrZero(row.CriticalityID)),
-		Exposure:         inventory.Exposure(valueOrZero(row.ExposureID)),
+		Values:           assetValues(row.CriticalityID, row.ExposureID, row.LifecycleStageID),
+	}
+}
+
+// assetValues reads what scoring needs of an Asset from its catalog ids, NULL
+// being Unknown.
+func assetValues(criticality, exposure, lifecycle *int16) finding.AssetValues {
+	return finding.AssetValues{
+		Criticality: inventory.Criticality(valueOrZero(criticality)),
+		Exposure:    inventory.Exposure(valueOrZero(exposure)),
+		Lifecycle:   inventory.LifecycleStage(valueOrZero(lifecycle)),
 	}
 }

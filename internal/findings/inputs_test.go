@@ -71,7 +71,7 @@ func TestHandleEPSSStoresNoScoreThatDidNotChange(t *testing.T) {
 func TestAKEVCatalogOlderThanItsMaximumAgeIsStale(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
-	w.findings = findings.New(w.db, scoring.Model1, time.Nanosecond)
+	w.findings = findings.New(w.db, scoring.Model2, time.Nanosecond)
 	w.sync(t, server(t, "payments", inventory.CriticalityHigh, app("Nginx", "f5", "nginx", "1.18.0")))
 	if err := w.findings.HandleKEV(context.Background(), batch(kevListing(t, "CVE-2099-0001"))); err != nil {
 		t.Fatal(err)

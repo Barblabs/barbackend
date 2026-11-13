@@ -83,7 +83,7 @@ func (s *Service) rescoreWith(ctx context.Context, cve string, definition stix2.
 			return err
 		}
 		for _, f := range open {
-			if err := s.score(ctx, tx, f.ID, v, f.Criticality, f.Exposure); err != nil {
+			if err := s.score(ctx, tx, f.ID, v, f.Values); err != nil {
 				return err
 			}
 		}

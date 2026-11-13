@@ -49,6 +49,45 @@ func exposedTo(t *testing.T, r inventory.Record, e inventory.Exposure) inventory
 	return inventory.Record{RecordID: r.RecordID, Imported: imported}
 }
 
+// inStage is the record with that Lifecycle Stage, as the iTop status gives
+// it (ADR 0028).
+func inStage(t *testing.T, r inventory.Record, s inventory.LifecycleStage) inventory.Record {
+	t.Helper()
+	p := inventory.ImportedAssetParams{
+		Name: r.Imported.Name(), Kind: r.Imported.Kind(), Software: r.Imported.Software(),
+		Criticality: r.Imported.Criticality(), Exposure: r.Imported.Exposure(), Lifecycle: s,
+	}
+	imported, err := inventory.NewImportedAsset(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return inventory.Record{RecordID: r.RecordID, Imported: imported}
+}
+
+func TestAfterSyncRescoresWhenTheLifecycleStageChanges(t *testing.T) {
+	t.Parallel()
+	w, f := matchedPayments(t)
+	payments := server(t, "payments", inventory.CriticalityHigh, app("Nginx", "f5", "nginx", "1.18.0"))
+	multiplier := func() (m float64, scores int) {
+		t.Helper()
+		_, _, _, scores = w.latestScore(t, f.id)
+		return w.latestLifecycleMultiplier(t, f.id), scores
+	}
+
+	w.afterSync(t, inStage(t, payments, inventory.LifecycleStock))
+	if m, scores := multiplier(); m != 0.3 || scores != 2 {
+		t.Errorf("in stock: multiplier %v in %d scores, want 0.3 in a second score", m, scores)
+	}
+	if _, _, gaps, _ := w.latestScore(t, f.id); slices.Contains(gaps, "lifecycle_unknown") {
+		t.Errorf("gaps = %v, want no lifecycle_unknown once the CMDB gives the stage", gaps)
+	}
+
+	w.afterSync(t, inStage(t, payments, inventory.LifecycleProduction))
+	if m, scores := multiplier(); m != 1 || scores != 3 {
+		t.Errorf("deployed to production: multiplier %v in %d scores, want 1 in a third score", m, scores)
+	}
+}
+
 func TestAfterSyncRescoresWhenTheExposureChanges(t *testing.T) {
 	t.Parallel()
 	w, f := matchedPayments(t)

@@ -107,7 +107,7 @@ func TestComponentsWithProductsReadsActiveAssetsIgnoringCase(t *testing.T) {
 	if len(got) != 2 || got[0].Asset != w.payments || got[1].Asset != w.lab {
 		t.Fatalf("candidates = %+v, want nginx of payments and of lab", got)
 	}
-	if got[0].Component != nginx || got[0].Criticality != inventory.CriticalityHigh || got[0].Position != 0 {
+	if got[0].Component != nginx || got[0].Values.Criticality != inventory.CriticalityHigh || got[0].Position != 0 {
 		t.Errorf("payments candidate = %+v", got[0])
 	}
 
@@ -153,7 +153,7 @@ func TestSaveMatchOpensUpdatesAndReopensTheSameFinding(t *testing.T) {
 		t.Fatalf("second match = %v %v, want updated %v", outcome, again, id)
 	}
 	open := openFindingsOf(t, w.db, "CVE-2021-23017")
-	if len(open) != 1 || open[0].ComponentVersion != "1.19.0" || open[0].Key.Vendor != "f5" || open[0].Criticality != inventory.CriticalityHigh {
+	if len(open) != 1 || open[0].ComponentVersion != "1.19.0" || open[0].Key.Vendor != "f5" || open[0].Values.Criticality != inventory.CriticalityHigh {
 		t.Fatalf("open findings = %+v, want payments at 1.19.0", open)
 	}
 	inTx(t, w.db, func(tx *postgres.Tx) error {

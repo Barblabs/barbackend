@@ -269,7 +269,7 @@ func osScore() scoring.Score { return score(0.6) }
 func score(value float64) scoring.Score {
 	return scoring.Score{
 		Model: 1, Value: value,
-		Factors: scoring.Factors{Alpha: 0.81, Beta: 0.1, Gamma: 1, Vulnerability: value, CriticalityMultiplier: 1, ExposureMultiplier: 1},
+		Factors: scoring.Factors{Alpha: 0.81, Beta: 0.1, Gamma: 1, Vulnerability: value, CriticalityMultiplier: 1, ExposureMultiplier: 1, LifecycleMultiplier: 1},
 		Gaps:    []scoring.DataGap{scoring.EPSSPending, scoring.ExposureUndeclared},
 	}
 }

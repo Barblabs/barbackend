@@ -54,7 +54,7 @@ func (e env) openFinding(t *testing.T, src inventory.CMDBSourceID, recordID stri
 		if id, _, err = tx.SaveMatch(ctx, finding.Match{Key: key, Component: nginx}); err != nil {
 			return err
 		}
-		score, err := scoring.Model1.Compute(finding.ScoreInputs(v, inventory.CriticalityUnknown, inventory.ExposureUnknown, false))
+		score, err := scoring.Model2.Compute(finding.ScoreInputs(v, finding.AssetValues{}, false))
 		if err != nil {
 			return err
 		}

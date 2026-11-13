@@ -132,7 +132,7 @@ func newEnv(t *testing.T) env {
 	llm := claudetest.New(t)
 	agentService := agents.NewService(db, agents.NewCrew(llm.Client(), agents.DefaultModels()))
 	router := httpapi.New(httpapi.Config{
-		Agents: agentService, Areas: areas.New(db), Assets: assets.New(db, findings.New(db, scoring.Model1, time.Hour)), BusinessContext: businesscontext.New(db), CMDB: svc,
+		Agents: agentService, Areas: areas.New(db), Assets: assets.New(db, findings.New(db, scoring.Model2, time.Hour)), BusinessContext: businesscontext.New(db), CMDB: svc,
 		Slack: slackService, Users: users.New(db, pool.Verifier(t), admin), AllowedOrigins: []string{allowedOrigin},
 	})
 	e := env{db: db, conn: pgtest.Conn(t, url), pool: pool, provider: p, admin: admin, cmdb: svc, key: key, slack: slackService, slackAPI: slackAPI, llm: llm, agents: agentService, router: router}
@@ -422,7 +422,7 @@ func (e env) prioritize(t *testing.T) agents.Prioritization {
 			}
 			ids = append(ids, id.String())
 			value := []float64{0.3, 0.6}[i]
-			_, err = tx.SaveScoreIfChanged(ctx, id, scoring.Score{Model: 1, Value: value, Factors: scoring.Factors{Alpha: 0.5, Beta: 0.5, Vulnerability: value, CriticalityMultiplier: 1, ExposureMultiplier: 1}})
+			_, err = tx.SaveScoreIfChanged(ctx, id, scoring.Score{Model: 2, Value: value, Factors: scoring.Factors{Alpha: 0.5, Beta: 0.5, Vulnerability: value, CriticalityMultiplier: 1, ExposureMultiplier: 1, LifecycleMultiplier: 1}})
 			return err
 		})
 		if err != nil {
