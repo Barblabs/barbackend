@@ -210,14 +210,16 @@ func TestCallbackRejectsATamperedState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	state := []byte(stateOf(t, authorize))
-	if state[len(state)-1] == 'A' {
-		state[len(state)-1] = 'B'
-	} else {
-		state[len(state)-1] = 'A'
+	// Flip a byte of the sealed state, not a base64 character: the last
+	// character can carry only padding bits the decoder drops.
+	sealed, err := base64.RawURLEncoding.DecodeString(stateOf(t, authorize))
+	if err != nil {
+		t.Fatal(err)
 	}
+	sealed[len(sealed)/2] ^= 0xff
+	state := base64.RawURLEncoding.EncodeToString(sealed)
 
-	err = svc.HandleCallback(context.Background(), slacktest.Code, string(state))
+	err = svc.HandleCallback(context.Background(), slacktest.Code, state)
 
 	if !errors.Is(err, slack.ErrInvalidState) {
 		t.Fatalf("err = %v, want ErrInvalidState", err)
