@@ -18,7 +18,7 @@ func TestRescoreAssetScoresItsOpenFindingsWithTheDeclaredExposure(t *testing.T) 
 			t.Fatal(err)
 		}
 		_, _, gaps, scores = w.latestScore(t, f.id)
-		return w.latestExposureMultiplier(t, f.id), gaps, scores
+		return w.latestMultipliers(t, f.id).exposure, gaps, scores
 	}
 
 	w.declareExposure(t, "payments", inventory.Internal)
