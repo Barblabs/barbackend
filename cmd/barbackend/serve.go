@@ -60,7 +60,7 @@ func serve(ctx context.Context, _ []string) error {
 		// the Prioritizer (ADR 0026): Feeds, Syncs, a Business Context save,
 		// a User's Feedback on the order and a Cartógrafo run that labeled.
 		changed := newWakeup()
-		found := findings.New(db, scoring.Model1, kevMaxAge)
+		found := findings.New(db, scoring.Model2, kevMaxAge)
 		found.OnChanged(changed.notify)
 		businessContext := businesscontext.New(db)
 		businessContext.OnSaved(changed.notify)
