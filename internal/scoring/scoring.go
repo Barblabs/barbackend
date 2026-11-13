@@ -22,6 +22,7 @@ type Inputs struct {
 	KEVStale    bool     // that catalog is older than expected, or was never read
 	Criticality inventory.Criticality
 	Exposure    inventory.Exposure
+	Lifecycle   inventory.LifecycleStage
 }
 
 type DataGap int
@@ -33,6 +34,7 @@ const (
 	KEVStale           DataGap = 3
 	CriticalityUnknown DataGap = 4
 	ExposureUndeclared DataGap = 5
+	LifecycleUnknown   DataGap = 6
 )
 
 func (g DataGap) String() string {
@@ -47,6 +49,8 @@ func (g DataGap) String() string {
 		return "criticality_unknown"
 	case ExposureUndeclared:
 		return "exposure_undeclared"
+	case LifecycleUnknown:
+		return "lifecycle_unknown"
 	default:
 		return fmt.Sprintf("DataGap(%d)", int(g))
 	}
@@ -63,7 +67,12 @@ type Model struct {
 	critLow, critUnknown     float64
 	expInternet, expInternal float64
 	expUnknown               float64
-	defaultCVSS              float64
+	// scoresLifecycle is false for a Model that had no lifecycle factor: its
+	// multiplier is 1 and the Lifecycle Stage is not read.
+	scoresLifecycle         bool
+	lifeProduction, lifeImp float64
+	lifeStock, lifeUnknown  float64
+	defaultCVSS             float64
 }
 
 // Model1 is the linear model of ADR 0009. Unknown Criticality and Exposure
@@ -76,6 +85,18 @@ var Model1 = Model{
 	defaultCVSS: 0.7,
 }
 
+// Model2 is Model1 with the Lifecycle Stage as a third Asset multiplier
+// (ADR 0028). An Unknown stage takes the highest one, as in Model1.
+var Model2 = Model{
+	version: 2,
+	wCVSS:   0.3, wEPSS: 0.3, wKEV: 0.4,
+	critHigh: 1.0, critMedium: 0.7, critLow: 0.4, critUnknown: 1.0,
+	expInternet: 1.0, expInternal: 0.6, expUnknown: 1.0,
+	scoresLifecycle: true,
+	lifeProduction:  1.0, lifeImp: 0.8, lifeStock: 0.3, lifeUnknown: 1.0,
+	defaultCVSS: 0.7,
+}
+
 func (m Model) Version() ModelVersion { return m.version }
 
 type Factors struct {
@@ -83,6 +104,7 @@ type Factors struct {
 	Vulnerability         float64 // S, layer 1
 	CriticalityMultiplier float64
 	ExposureMultiplier    float64
+	LifecycleMultiplier   float64 // 1 in a Model without a lifecycle factor
 }
 
 type Score struct {
@@ -124,37 +146,68 @@ func (m Model) Compute(in Inputs) (Score, error) {
 		gaps = append(gaps, KEVStale)
 	}
 
-	switch in.Criticality {
-	case inventory.CriticalityHigh:
-		f.CriticalityMultiplier = m.critHigh
-	case inventory.CriticalityMedium:
-		f.CriticalityMultiplier = m.critMedium
-	case inventory.CriticalityLow:
-		f.CriticalityMultiplier = m.critLow
-	case inventory.CriticalityUnknown:
-		f.CriticalityMultiplier = m.critUnknown
-		gaps = append(gaps, CriticalityUnknown)
-	default:
-		return Score{}, fmt.Errorf("%w: %d", inventory.ErrInvalidCriticality, int(in.Criticality))
+	var err error
+	if f.CriticalityMultiplier, gaps, err = m.criticality(in.Criticality, gaps); err != nil {
+		return Score{}, err
 	}
-
-	switch in.Exposure {
-	case inventory.InternetFacing:
-		f.ExposureMultiplier = m.expInternet
-	case inventory.Internal:
-		f.ExposureMultiplier = m.expInternal
-	case inventory.ExposureUnknown:
-		f.ExposureMultiplier = m.expUnknown
-		gaps = append(gaps, ExposureUndeclared)
-	default:
-		return Score{}, fmt.Errorf("%w: %d", inventory.ErrInvalidExposure, int(in.Exposure))
+	if f.ExposureMultiplier, gaps, err = m.exposure(in.Exposure, gaps); err != nil {
+		return Score{}, err
+	}
+	if f.LifecycleMultiplier, gaps, err = m.lifecycle(in.Lifecycle, gaps); err != nil {
+		return Score{}, err
 	}
 
 	f.Vulnerability = m.wCVSS*f.Alpha + m.wEPSS*f.Beta + m.wKEV*f.Gamma
 	return Score{
 		Model:   m.version,
-		Value:   f.Vulnerability * f.CriticalityMultiplier * f.ExposureMultiplier,
+		Value:   f.Vulnerability * f.CriticalityMultiplier * f.ExposureMultiplier * f.LifecycleMultiplier,
 		Factors: f,
 		Gaps:    gaps,
 	}, nil
+}
+
+func (m Model) criticality(c inventory.Criticality, gaps []DataGap) (float64, []DataGap, error) {
+	switch c {
+	case inventory.CriticalityHigh:
+		return m.critHigh, gaps, nil
+	case inventory.CriticalityMedium:
+		return m.critMedium, gaps, nil
+	case inventory.CriticalityLow:
+		return m.critLow, gaps, nil
+	case inventory.CriticalityUnknown:
+		return m.critUnknown, append(gaps, CriticalityUnknown), nil
+	default:
+		return 0, nil, fmt.Errorf("%w: %d", inventory.ErrInvalidCriticality, int(c))
+	}
+}
+
+func (m Model) exposure(e inventory.Exposure, gaps []DataGap) (float64, []DataGap, error) {
+	switch e {
+	case inventory.InternetFacing:
+		return m.expInternet, gaps, nil
+	case inventory.Internal:
+		return m.expInternal, gaps, nil
+	case inventory.ExposureUnknown:
+		return m.expUnknown, append(gaps, ExposureUndeclared), nil
+	default:
+		return 0, nil, fmt.Errorf("%w: %d", inventory.ErrInvalidExposure, int(e))
+	}
+}
+
+func (m Model) lifecycle(s inventory.LifecycleStage, gaps []DataGap) (float64, []DataGap, error) {
+	if !m.scoresLifecycle {
+		return 1, gaps, nil
+	}
+	switch s {
+	case inventory.LifecycleProduction:
+		return m.lifeProduction, gaps, nil
+	case inventory.LifecycleImplementation:
+		return m.lifeImp, gaps, nil
+	case inventory.LifecycleStock:
+		return m.lifeStock, gaps, nil
+	case inventory.LifecycleUnknown:
+		return m.lifeUnknown, append(gaps, LifecycleUnknown), nil
+	default:
+		return 0, nil, fmt.Errorf("%w: %d", inventory.ErrInvalidLifecycleStage, int(s))
+	}
 }
