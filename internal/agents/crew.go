@@ -138,7 +138,7 @@ type Prioritization struct {
 	// reads it.
 	Current  map[string]Current `json:"-"`
 	Plans    []Plan             `json:"-"`
-	Feedback []Feedback              `json:"-"`
+	Feedback []Feedback         `json:"-"`
 
 	Findings    []assessment.Dossier      `json:"findings"`
 	List        assessment.PriorityList   `json:"list"`
