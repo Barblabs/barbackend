@@ -43,9 +43,12 @@ type Server struct {
 	PageSize int
 	// OAuthError, when set, is Slack refusing the code exchange.
 	OAuthError string
+	// Users is what users.lookupByEmail resolves, by email.
+	Users map[string]string
 
 	mu    sync.Mutex
 	fail  map[string]string
+	rate  map[string]int
 	calls []Call
 }
 
@@ -54,11 +57,14 @@ func New(t *testing.T) *Server {
 	s := &Server{
 		Channels: []slack.Channel{{ID: "C-general", Name: "general"}},
 		PageSize: 200,
+		Users:    map[string]string{"owner@example.com": "U-owner"},
 		fail:     map[string]string{},
+		rate:     map[string]int{},
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/oauth.v2.access", s.oauth)
 	mux.HandleFunc("/conversations.list", s.listChannels)
+	mux.HandleFunc("/users.lookupByEmail", s.lookupByEmail)
 	mux.HandleFunc("/chat.postMessage", s.postMessage)
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
@@ -73,11 +79,24 @@ func New(t *testing.T) *Server {
 	return s
 }
 
-// Fail makes method answer ok false with code, as Slack does.
+// Fail makes method answer ok false with code, as Slack does. An empty code
+// clears a failure set before.
 func (s *Server) Fail(method, code string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.fail[method] = code
+}
+
+// RateLimit makes method answer 429 with Retry-After for seconds, as Slack
+// does when a bot posts too fast. Zero clears it.
+func (s *Server) RateLimit(method string, seconds int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if seconds <= 0 {
+		delete(s.rate, method)
+		return
+	}
+	s.rate[method] = seconds
 }
 
 // Calls is every request the app made, in order.
@@ -148,6 +167,9 @@ func (s *Server) oauth(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) listChannels(w http.ResponseWriter, r *http.Request) {
 	s.record(r)
+	if s.tooMany(w, "conversations.list") {
+		return
+	}
 	if code := s.failure("conversations.list"); code != "" {
 		write(w, map[string]any{"ok": false, "error": code})
 		return
@@ -174,6 +196,9 @@ func (s *Server) listChannels(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) postMessage(w http.ResponseWriter, r *http.Request) {
 	s.record(r)
+	if s.tooMany(w, "chat.postMessage") {
+		return
+	}
 	if code := s.failure("chat.postMessage"); code != "" {
 		write(w, map[string]any{"ok": false, "error": code})
 		return
@@ -183,6 +208,40 @@ func (s *Server) postMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	write(w, map[string]any{"ok": true, "channel": r.FormValue("channel"), "ts": "1.0"})
+}
+
+func (s *Server) lookupByEmail(w http.ResponseWriter, r *http.Request) {
+	s.record(r)
+	if s.tooMany(w, "users.lookupByEmail") {
+		return
+	}
+	if code := s.failure("users.lookupByEmail"); code != "" {
+		write(w, map[string]any{"ok": false, "error": code})
+		return
+	}
+	if r.Header.Get("Authorization") != "Bearer "+AccessToken {
+		write(w, map[string]any{"ok": false, "error": "invalid_auth"})
+		return
+	}
+	id, ok := s.Users[r.URL.Query().Get("email")]
+	if !ok {
+		write(w, map[string]any{"ok": false, "error": "users_not_found"})
+		return
+	}
+	write(w, map[string]any{"ok": true, "user": map[string]string{"id": id}})
+}
+
+// tooMany answers 429 with Retry-After when method is rate limited.
+func (s *Server) tooMany(w http.ResponseWriter, method string) bool {
+	s.mu.Lock()
+	seconds, limited := s.rate[method]
+	s.mu.Unlock()
+	if !limited {
+		return false
+	}
+	w.Header().Set("Retry-After", strconv.Itoa(seconds))
+	w.WriteHeader(http.StatusTooManyRequests)
+	return true
 }
 
 func write(w http.ResponseWriter, body any) {

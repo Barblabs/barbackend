@@ -4,6 +4,7 @@ import (
 	"context"
 	"html"
 	"net/http"
+	"time"
 
 	"barbackend/internal/slack"
 	"barbackend/internal/tenancy"
@@ -64,6 +65,22 @@ func (h slackHandler) register(api huma.API) {
 		Summary:     "Disconnect the Customer's Slack workspace",
 		Description: "Drops the bot token and removes the installation from the Customer's view. A later install returns it to active.",
 	}, h.disconnect)
+	register(api, huma.Operation{
+		OperationID: "list-failed-slack-deliveries",
+		Method:      http.MethodGet,
+		Path:        "/slack/deliveries/failed",
+		Summary:     "List the failed Slack messages",
+		Description: "Lists the Customer's rows the worker gave up on, with their target, attempts, failure code and last error. Every role of the Customer can read it.",
+		Errors:      []int{http.StatusInternalServerError},
+	}, h.failedDeliveries)
+	register(api, huma.Operation{
+		OperationID: "retry-failed-slack-deliveries",
+		Method:      http.MethodPost,
+		Path:        "/slack/deliveries/retry",
+		Summary:     "Retry the failed Slack messages",
+		Description: "Returns the Customer's failed rows to pending, resetting their attempts and error, except the ones whose payload is malformed and a retry cannot fix. Customer Admin only.",
+		Errors:      []int{http.StatusInternalServerError},
+	}, h.retryDeliveries)
 }
 
 type slackInstallationResponse struct {
@@ -97,6 +114,24 @@ type slackChannelRequest struct {
 type slackTestResponse struct {
 	OK    bool   `json:"ok"`
 	Error string `json:"error,omitempty"`
+}
+
+type slackFailedDeliveryResponse struct {
+	Kind        string    `json:"kind"`
+	TargetKind  string    `json:"target_kind"`
+	Target      string    `json:"target"`
+	Attempts    int32     `json:"attempts"`
+	FailureCode string    `json:"failure_code,omitempty"`
+	LastError   string    `json:"last_error,omitempty"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+type slackFailedDeliveriesResponse struct {
+	Deliveries []slackFailedDeliveryResponse `json:"deliveries"`
+}
+
+type slackRetryResponse struct {
+	Retried int64 `json:"retried"`
 }
 
 func (h slackHandler) get(ctx context.Context, caller tenancy.User, _ *struct{}) (*body[*slackInstallationResponse], error) {
@@ -145,6 +180,34 @@ func (h slackHandler) test(ctx context.Context, caller tenancy.User, _ *struct{}
 
 func (h slackHandler) disconnect(ctx context.Context, caller tenancy.User, _ *struct{}) (*struct{}, error) {
 	return &struct{}{}, h.slack.Disconnect(ctx, caller)
+}
+
+func (h slackHandler) failedDeliveries(ctx context.Context, caller tenancy.User, _ *struct{}) (*body[slackFailedDeliveriesResponse], error) {
+	failed, err := h.slack.FailedDeliveries(ctx, caller)
+	if err != nil {
+		return nil, err
+	}
+	resp := slackFailedDeliveriesResponse{Deliveries: make([]slackFailedDeliveryResponse, len(failed))}
+	for i, d := range failed {
+		resp.Deliveries[i] = slackFailedDeliveryResponse{
+			Kind:        d.Kind,
+			TargetKind:  d.TargetKind,
+			Target:      d.Target,
+			Attempts:    d.Attempts,
+			FailureCode: d.FailureCode,
+			LastError:   d.LastError,
+			CreatedAt:   d.CreatedAt,
+		}
+	}
+	return &body[slackFailedDeliveriesResponse]{Body: resp}, nil
+}
+
+func (h slackHandler) retryDeliveries(ctx context.Context, caller tenancy.User, _ *struct{}) (*body[slackRetryResponse], error) {
+	retried, err := h.slack.RetryFailedDeliveries(ctx, caller)
+	if err != nil {
+		return nil, err
+	}
+	return &body[slackRetryResponse]{Body: slackRetryResponse{Retried: retried}}, nil
 }
 
 // callback is Slack redirecting the popup. It is a plain Gin route, not a

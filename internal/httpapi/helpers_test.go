@@ -58,6 +58,7 @@ var operations = []struct{ method, path string }{
 	{http.MethodGet, "/business-context/brief"},
 	{http.MethodGet, "/slack/installation"},
 	{http.MethodGet, "/slack/channels"},
+	{http.MethodGet, "/slack/deliveries/failed"},
 }
 
 // platformOperations are those only a Platform Admin may call.
@@ -82,6 +83,7 @@ var customerAdminOperations = []struct{ method, path string }{
 	{http.MethodPut, "/slack/installation"},
 	{http.MethodPost, "/slack/installation/test"},
 	{http.MethodDelete, "/slack/installation"},
+	{http.MethodPost, "/slack/deliveries/retry"},
 }
 
 // businessContextEdits are those only a Customer Admin may call on the

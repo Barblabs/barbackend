@@ -255,6 +255,21 @@ type ScoreDataGap struct {
 	Name string
 }
 
+type SlackDelivery struct {
+	ID            uuid.UUID
+	CustomerID    uuid.UUID
+	Kind          string
+	TargetKind    string
+	Target        string
+	Payload       []byte
+	Status        string
+	Attempts      int32
+	NextAttemptAt time.Time
+	FailureCode   *string
+	LastError     *string
+	CreatedAt     time.Time
+}
+
 type SlackInstallation struct {
 	CustomerID  uuid.UUID
 	TeamID      string
