@@ -206,6 +206,43 @@ func TestDossierLeavesOutTheAssetOwner(t *testing.T) {
 	}
 }
 
+func TestADossierStoredBeforeTheLifecycleStageReadsAsModel1ScoredIt(t *testing.T) {
+	t.Parallel()
+	d := dossier(t)
+	d.Score.LifecycleMultiplier = 0.3
+	raw, err := json.Marshal(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var kept assessment.Dossier
+	if err := json.Unmarshal(raw, &kept); err != nil {
+		t.Fatal(err)
+	}
+	if kept.Score.LifecycleMultiplier != 0.3 || kept.Asset.Lifecycle != "production" {
+		t.Errorf("score %+v, asset %+v, want what was stored", kept.Score, kept.Asset)
+	}
+
+	var old map[string]any
+	if err := json.Unmarshal(raw, &old); err != nil {
+		t.Fatal(err)
+	}
+	delete(old["score"].(map[string]any), "lifecycle_multiplier")
+	delete(old["asset"].(map[string]any), "lifecycle_stage")
+	if raw, err = json.Marshal(old); err != nil {
+		t.Fatal(err)
+	}
+	var got assessment.Dossier
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Score.LifecycleMultiplier != 1 || got.Asset.Lifecycle != "unknown" || got.Score.Value != d.Score.Value || got.Asset.Name != d.Asset.Name {
+		t.Errorf("score %+v, asset %+v, want multiplier 1 and an unknown stage", got.Score, got.Asset)
+	}
+	if err := got.Validate(); err != nil {
+		t.Errorf("validate = %v", err)
+	}
+}
+
 func TestDossierOfAnAssetWithoutCriticality(t *testing.T) {
 	t.Parallel()
 	s := stored(t)
