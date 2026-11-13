@@ -35,174 +35,118 @@ func redHat() []inventory.SoftwareComponent {
 	return []inventory.SoftwareComponent{{Role: inventory.OperatingSystem, Name: "Red Hat", Version: "9"}}
 }
 
+// expected is what mapped(class, nil) maps to for that kind, with change
+// applied.
+func expected(kind inventory.AssetKind, change func(*inventory.ImportedAssetParams)) inventory.ImportedAssetParams {
+	p := inventory.ImportedAssetParams{
+		Name: "Server1", Description: "  Billing database\n", Kind: kind, Lifecycle: inventory.LifecycleProduction,
+		Hardware: inventory.Hardware{Vendor: "HPE", Model: "DL380"}, Software: redHat(), Criticality: inventory.CriticalityLow,
+	}
+	if change != nil {
+		change(&p)
+	}
+	return p
+}
+
+type params = inventory.ImportedAssetParams
+
+func noHardware(p *params) { p.Hardware = inventory.Hardware{} }
+
 func TestSnapshotMapsRecords(t *testing.T) {
 	cisco := lookups{iosVersions: map[string]iosVersion{"90": {Brand: "Cisco", Name: "15.2(7)E"}}}
-	hpe := inventory.Hardware{Vendor: "HPE", Model: "DL380"}
 	tests := []struct {
 		name string
 		ci   ci
 		lk   lookups
 		want inventory.ImportedAssetParams
 	}{
-		{
-			name: "server",
-			ci:   mapped("Server", nil),
-			want: inventory.ImportedAssetParams{
-				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server, Lifecycle: inventory.LifecycleProduction,
-				Hardware: hpe, Software: redHat(), Criticality: inventory.CriticalityLow,
-			},
-		},
-		{
-			name: "virtual machine has no hardware",
-			ci:   mapped("VirtualMachine", nil),
-			want: inventory.ImportedAssetParams{
-				Name: "Server1", Description: "  Billing database\n", Kind: inventory.VirtualMachine, Lifecycle: inventory.LifecycleProduction,
-				Software: redHat(), Criticality: inventory.CriticalityLow,
-			},
-		},
-		{
-			name: "pc is a workstation",
-			ci:   mapped("PC", nil),
-			want: inventory.ImportedAssetParams{
-				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Workstation, Lifecycle: inventory.LifecycleProduction,
-				Hardware: hpe, Software: redHat(), Criticality: inventory.CriticalityLow,
-			},
-		},
+		{name: "server", ci: mapped("Server", nil), want: expected(inventory.Server, nil)},
+		{name: "virtual machine has no hardware", ci: mapped("VirtualMachine", nil), want: expected(inventory.VirtualMachine, noHardware)},
+		{name: "pc is a workstation", ci: mapped("PC", nil), want: expected(inventory.Workstation, nil)},
 		{
 			name: "obsolete is retired, with no lifecycle stage",
 			ci:   mapped("Server", func(c *ci) { c.Status = "obsolete" }),
-			want: inventory.ImportedAssetParams{
-				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server,
-				Hardware: hpe, Software: redHat(), Criticality: inventory.CriticalityLow, Retired: true,
-			},
+			want: expected(inventory.Server, func(p *params) { p.Lifecycle, p.Retired = inventory.LifecycleUnknown, true }),
 		},
 		{
 			name: "implementation is not retired",
 			ci:   mapped("Server", func(c *ci) { c.Status = "implementation" }),
-			want: inventory.ImportedAssetParams{
-				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server, Lifecycle: inventory.LifecycleImplementation,
-				Hardware: hpe, Software: redHat(), Criticality: inventory.CriticalityLow,
-			},
+			want: expected(inventory.Server, func(p *params) { p.Lifecycle = inventory.LifecycleImplementation }),
 		},
 		{
 			name: "stock is not retired",
 			ci:   mapped("Server", func(c *ci) { c.Status = "stock" }),
-			want: inventory.ImportedAssetParams{
-				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server, Lifecycle: inventory.LifecycleStock,
-				Hardware: hpe, Software: redHat(), Criticality: inventory.CriticalityLow,
-			},
+			want: expected(inventory.Server, func(p *params) { p.Lifecycle = inventory.LifecycleStock }),
 		},
 		{
 			name: "status is matched ignoring case and spaces",
 			ci:   mapped("Server", func(c *ci) { c.Status = " Stock " }),
-			want: inventory.ImportedAssetParams{
-				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server, Lifecycle: inventory.LifecycleStock,
-				Hardware: hpe, Software: redHat(), Criticality: inventory.CriticalityLow,
-			},
+			want: expected(inventory.Server, func(p *params) { p.Lifecycle = inventory.LifecycleStock }),
 		},
 		{
 			name: "other status is unknown lifecycle stage",
 			ci:   mapped("Server", func(c *ci) { c.Status = "test" }),
-			want: inventory.ImportedAssetParams{
-				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server,
-				Hardware: hpe, Software: redHat(), Criticality: inventory.CriticalityLow,
-			},
+			want: expected(inventory.Server, func(p *params) { p.Lifecycle = inventory.LifecycleUnknown }),
 		},
 		{
 			name: "high criticality",
 			ci:   mapped("Server", func(c *ci) { c.Criticality = ptr("high") }),
-			want: inventory.ImportedAssetParams{
-				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server, Lifecycle: inventory.LifecycleProduction,
-				Hardware: hpe, Software: redHat(), Criticality: inventory.CriticalityHigh,
-			},
+			want: expected(inventory.Server, func(p *params) { p.Criticality = inventory.CriticalityHigh }),
 		},
 		{
 			name: "medium criticality",
 			ci:   mapped("Server", func(c *ci) { c.Criticality = ptr("medium") }),
-			want: inventory.ImportedAssetParams{
-				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server, Lifecycle: inventory.LifecycleProduction,
-				Hardware: hpe, Software: redHat(), Criticality: inventory.CriticalityMedium,
-			},
+			want: expected(inventory.Server, func(p *params) { p.Criticality = inventory.CriticalityMedium }),
 		},
 		{
 			name: "blank criticality is unknown",
 			ci:   mapped("Server", func(c *ci) { c.Criticality = nil }),
-			want: inventory.ImportedAssetParams{
-				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server, Lifecycle: inventory.LifecycleProduction,
-				Hardware: hpe, Software: redHat(), Criticality: inventory.CriticalityUnknown,
-			},
+			want: expected(inventory.Server, func(p *params) { p.Criticality = inventory.CriticalityUnknown }),
 		},
 		{
 			name: "exposed location is internet facing",
 			ci:   mapped("Server", func(c *ci) { c.Location = "exposed" }),
-			want: inventory.ImportedAssetParams{
-				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server, Lifecycle: inventory.LifecycleProduction,
-				Hardware: hpe, Software: redHat(), Criticality: inventory.CriticalityLow, Exposure: inventory.InternetFacing,
-			},
+			want: expected(inventory.Server, func(p *params) { p.Exposure = inventory.InternetFacing }),
 		},
 		{
 			name: "not exposed location is internal",
 			ci:   mapped("Server", func(c *ci) { c.Location = "not exposed" }),
-			want: inventory.ImportedAssetParams{
-				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server, Lifecycle: inventory.LifecycleProduction,
-				Hardware: hpe, Software: redHat(), Criticality: inventory.CriticalityLow, Exposure: inventory.Internal,
-			},
+			want: expected(inventory.Server, func(p *params) { p.Exposure = inventory.Internal }),
 		},
 		{
 			name: "location is matched ignoring case and spaces",
 			ci:   mapped("Server", func(c *ci) { c.Location = " Not Exposed " }),
-			want: inventory.ImportedAssetParams{
-				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server, Lifecycle: inventory.LifecycleProduction,
-				Hardware: hpe, Software: redHat(), Criticality: inventory.CriticalityLow, Exposure: inventory.Internal,
-			},
+			want: expected(inventory.Server, func(p *params) { p.Exposure = inventory.Internal }),
 		},
 		{
 			name: "blank location is unknown exposure",
 			ci:   mapped("Server", func(c *ci) { c.Location = "" }),
-			want: inventory.ImportedAssetParams{
-				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server, Lifecycle: inventory.LifecycleProduction,
-				Hardware: hpe, Software: redHat(), Criticality: inventory.CriticalityLow, Exposure: inventory.ExposureUnknown,
-			},
+			want: expected(inventory.Server, func(p *params) { p.Exposure = inventory.ExposureUnknown }),
 		},
 		{
 			name: "other location is unknown exposure",
 			ci:   mapped("Server", func(c *ci) { c.Location = "Guadalajara" }),
-			want: inventory.ImportedAssetParams{
-				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server, Lifecycle: inventory.LifecycleProduction,
-				Hardware: hpe, Software: redHat(), Criticality: inventory.CriticalityLow, Exposure: inventory.ExposureUnknown,
-			},
+			want: expected(inventory.Server, func(p *params) { p.Exposure = inventory.ExposureUnknown }),
 		},
 		{
 			name: "pc takes exposure from its location",
 			ci:   mapped("PC", func(c *ci) { c.Location = "exposed" }),
-			want: inventory.ImportedAssetParams{
-				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Workstation, Lifecycle: inventory.LifecycleProduction,
-				Hardware: hpe, Software: redHat(), Criticality: inventory.CriticalityLow, Exposure: inventory.InternetFacing,
-			},
+			want: expected(inventory.Workstation, func(p *params) { p.Exposure = inventory.InternetFacing }),
 		},
 		{
 			name: "hardware with only a vendor",
 			ci:   mapped("Server", func(c *ci) { c.Model = "" }),
-			want: inventory.ImportedAssetParams{
-				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server, Lifecycle: inventory.LifecycleProduction,
-				Hardware: inventory.Hardware{Vendor: "HPE"}, Software: redHat(), Criticality: inventory.CriticalityLow,
-			},
+			want: expected(inventory.Server, func(p *params) { p.Hardware = inventory.Hardware{Vendor: "HPE"} }),
 		},
 		{
 			name: "no hardware when vendor and model are blank",
 			ci:   mapped("PC", func(c *ci) { c.Brand, c.Model = "", " " }),
-			want: inventory.ImportedAssetParams{
-				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Workstation, Lifecycle: inventory.LifecycleProduction,
-				Software: redHat(), Criticality: inventory.CriticalityLow,
-			},
+			want: expected(inventory.Workstation, noHardware),
 		},
 		{
 			name: "no operating system when its name is blank",
 			ci:   mapped("Server", func(c *ci) { c.OSFamily = "" }),
-			want: inventory.ImportedAssetParams{
-				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server, Lifecycle: inventory.LifecycleProduction,
-				Hardware: hpe, Criticality: inventory.CriticalityLow,
-			},
+			want: expected(inventory.Server, func(p *params) { p.Software = nil }),
 		},
 		{
 			name: "applications named after their instances and identified by their Software, and one with a blank vendor kept unidentified",
@@ -213,17 +157,15 @@ func TestSnapshotMapsRecords(t *testing.T) {
 				"2": {Vendor: "Oracle", Name: "Oracle DB engine", Version: "19c"},
 				"7": {Name: "Internal portal", Version: "3.1"},
 			}},
-			want: inventory.ImportedAssetParams{
-				Name: "Server1", Description: "  Billing database\n", Kind: inventory.Server, Lifecycle: inventory.LifecycleProduction, Hardware: hpe,
-				Software: append(redHat(),
+			want: expected(inventory.Server, func(p *params) {
+				p.Software = append(redHat(),
 					inventory.SoftwareComponent{
 						Role: inventory.Application, Name: "db", Version: "19c",
 						Product: inventory.Product{Vendor: "Oracle", Name: "Oracle DB engine"},
 					},
 					inventory.SoftwareComponent{Role: inventory.Application, Name: "portal", Version: "3.1"},
-				),
-				Criticality: inventory.CriticalityLow,
-			},
+				)
+			}),
 		},
 		{
 			name: "network device os is its IOSVersion",
@@ -231,23 +173,18 @@ func TestSnapshotMapsRecords(t *testing.T) {
 				c.Brand, c.Model, c.OSFamily, c.OSVersion, c.IOSVersionID = "Cisco", "Cisco 6500", "", "", "90"
 			}),
 			lk: cisco,
-			want: inventory.ImportedAssetParams{
-				Name: "Server1", Description: "  Billing database\n", Kind: inventory.NetworkDevice, Lifecycle: inventory.LifecycleProduction,
-				Hardware:    inventory.Hardware{Vendor: "Cisco", Model: "Cisco 6500"},
-				Software:    []inventory.SoftwareComponent{{Role: inventory.OperatingSystem, Name: "Cisco", Version: "15.2(7)E"}},
-				Criticality: inventory.CriticalityLow,
-			},
+			want: expected(inventory.NetworkDevice, func(p *params) {
+				p.Hardware = inventory.Hardware{Vendor: "Cisco", Model: "Cisco 6500"}
+				p.Software = []inventory.SoftwareComponent{{Role: inventory.OperatingSystem, Name: "Cisco", Version: "15.2(7)E"}}
+			}),
 		},
 		{
 			name: "network device without IOSVersion has no os",
 			ci: mapped("NetworkDevice", func(c *ci) {
 				c.OSFamily, c.OSVersion, c.IOSVersionID = "", "", blankKey
 			}),
-			lk: cisco,
-			want: inventory.ImportedAssetParams{
-				Name: "Server1", Description: "  Billing database\n", Kind: inventory.NetworkDevice, Lifecycle: inventory.LifecycleProduction,
-				Hardware: hpe, Criticality: inventory.CriticalityLow,
-			},
+			lk:   cisco,
+			want: expected(inventory.NetworkDevice, func(p *params) { p.Software = nil }),
 		},
 	}
 	for _, tt := range tests {
