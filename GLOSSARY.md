@@ -152,6 +152,10 @@ _Avoid_: Priority, severity, business criticity
 Where an Asset is in its life: Production, Implementation, Stock, or Unknown. It is only imported, from the iTop `status`; an obsolete record is Retired instead and has no Lifecycle Stage (ADR 0028).
 _Avoid_: Status, environment, state
 
+**Information Classification**:
+How sensitive the data an Asset holds is: Public, Private, Confidential, or Unclassified. iTop has no field for it, so it is only declared, by a Customer Admin, and is Unclassified until then. It is shown, not scored (ADR 0031). "Private", not "Internal": Internal is an Exposure value.
+_Avoid_: Data classification, sensitivity
+
 ### Business
 
 **Business Context**:
