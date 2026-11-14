@@ -31,14 +31,15 @@ type asset struct {
 		Version string                         `json:"version"`
 		Product *struct{ Vendor, Name string } `json:"product"`
 	} `json:"software"`
-	Criticality   *string                         `json:"criticality"`
-	Exposure      assetExposure                   `json:"exposure"`
-	Lifecycle     *string                         `json:"lifecycle_stage"`
-	Owner         *struct{ Email, Source string } `json:"owner"`
-	Area          *areaRef                        `json:"area"`
-	Retired       bool                            `json:"retired"`
-	Active        bool                            `json:"active"`
-	InactiveSince *string                         `json:"inactive_since"`
+	Criticality               *string                         `json:"criticality"`
+	Exposure                  assetExposure                   `json:"exposure"`
+	Lifecycle                 *string                         `json:"lifecycle_stage"`
+	InformationClassification assetInformationClassification  `json:"information_classification"`
+	Owner                     *struct{ Email, Source string } `json:"owner"`
+	Area                      *areaRef                        `json:"area"`
+	Retired                   bool                            `json:"retired"`
+	Active                    bool                            `json:"active"`
+	InactiveSince             *string                         `json:"inactive_since"`
 }
 
 type assetExposure struct {
