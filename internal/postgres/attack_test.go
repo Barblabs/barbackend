@@ -14,6 +14,7 @@ import (
 const (
 	t1190ID = "attack-pattern--3f886f2a-874f-4333-b794-aa6075009b1c"
 	t1100ID = "attack-pattern--c16e5409-ee53-4d79-afdc-4099dc9292df"
+	t1200ID = "attack-pattern--d456de47-a16f-4e46-8980-e67478a12dcb"
 	m1051ID = "course-of-action--e5d930e9-775a-40ad-9bdb-b941d8dfe86b"
 	m1016ID = "course-of-action--15437c6d-b998-4a36-be41-4ace3d54d266"
 )
@@ -25,6 +26,12 @@ func technique(id, attackID, name string, modified time.Time) postgres.AttackTec
 		ID: id, AttackID: attackID, Name: name, Tactics: []string{"initial-access"},
 		Object: json.RawMessage(`{"type":"attack-pattern"}`), Modified: modified,
 	}
+}
+
+func revoked(id, attackID, name string) postgres.AttackTechnique {
+	r := technique(id, attackID, name, may)
+	r.Revoked = true
+	return r
 }
 
 func mitigation(id, attackID, name string) postgres.AttackMitigation {
@@ -85,9 +92,10 @@ func TestStoreAttackTechniqueReplacesItOnlyWithALaterModification(t *testing.T) 
 	}
 }
 
-func TestMitigationsOfATechniqueComeWithTheirAdvice(t *testing.T) {
+func TestMitigationsStoredBeforeTheirObjectsAreReadWithTheirAdvice(t *testing.T) {
 	t.Parallel()
-	db := pgtest.NewDB(t)
+	const cve = "CVE-2025-1094"
+	db := storedCVEs(t, cve)
 	inTx(t, db, func(tx *postgres.Tx) error {
 		ctx := context.Background()
 		// The relationships arrive before the objects they join, as a batch
@@ -106,14 +114,20 @@ func TestMitigationsOfATechniqueComeWithTheirAdvice(t *testing.T) {
 				return err
 			}
 		}
-		return nil
+		return tx.StoreAttackTechnique(ctx, technique(t1190ID, "T1190", "Exploit Public-Facing Application", may))
+	})
+	if err := storeLabeling(db, cve, postgres.TechniqueLabel{AttackID: "T1190", Role: "exploitation", Evidence: "it says so somewhere", Rationale: "r"}); err != nil {
+		t.Fatal(err)
+	}
+
+	threats := inTxValue(t, db, func(tx *postgres.Tx) (map[string]postgres.Threats, error) {
+		return tx.ThreatsOf(context.Background(), []string{cve})
 	})
 
-	var got []postgres.TechniqueMitigation
-	inTx(t, db, func(tx *postgres.Tx) (err error) {
-		got, err = tx.MitigationsOf(context.Background(), t1190ID)
-		return err
-	})
+	if len(threats[cve].Techniques) != 1 {
+		t.Fatalf("techniques = %+v, want T1190", threats[cve].Techniques)
+	}
+	got := threats[cve].Techniques[0].Mitigations
 	want := []postgres.TechniqueMitigation{
 		{AttackID: "M1016", Name: "Vulnerability Scanning", Advice: "Scan for vulnerabilities."},
 		{AttackID: "M1051", Name: "Update Software", Advice: "Update software regularly."},
@@ -128,11 +142,9 @@ func TestCurrentTechniquesLeaveOutRevokedAndDeprecatedOnes(t *testing.T) {
 	db := pgtest.NewDB(t)
 	inTx(t, db, func(tx *postgres.Tx) error {
 		ctx := context.Background()
-		revoked := technique(t1100ID, "T1100", "Web Shell", may)
-		revoked.Revoked = true
 		deprecated := technique("attack-pattern--e6a1b2c3-d4e5-4f60-8a71-b2c3d4e5f607", "T1300", "Old", may)
 		deprecated.Deprecated = true
-		for _, tech := range []postgres.AttackTechnique{technique(t1190ID, "T1190", "Exploit Public-Facing Application", may), revoked, deprecated} {
+		for _, tech := range []postgres.AttackTechnique{technique(t1190ID, "T1190", "Exploit Public-Facing Application", may), revoked(t1100ID, "T1100", "Web Shell"), deprecated} {
 			if err := tx.StoreAttackTechnique(ctx, tech); err != nil {
 				return err
 			}
@@ -153,9 +165,7 @@ func TestRevokingTechniqueIsTheOneThatReplacedIt(t *testing.T) {
 	db := pgtest.NewDB(t)
 	inTx(t, db, func(tx *postgres.Tx) error {
 		ctx := context.Background()
-		revoked := technique(t1100ID, "T1100", "Web Shell", may)
-		revoked.Revoked = true
-		if err := tx.StoreAttackTechnique(ctx, revoked); err != nil {
+		if err := tx.StoreAttackTechnique(ctx, revoked(t1100ID, "T1100", "Web Shell")); err != nil {
 			return err
 		}
 		if err := tx.StoreAttackTechnique(ctx, technique(t1190ID, "T1190", "Exploit Public-Facing Application", may)); err != nil {

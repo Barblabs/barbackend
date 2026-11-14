@@ -115,41 +115,6 @@ func (q *Queries) ListCurrentAttackTechniques(ctx context.Context) ([]ListCurren
 	return items, nil
 }
 
-const listMitigationsOfTechnique = `-- name: ListMitigationsOfTechnique :many
-SELECT m.attack_id, m.name, r.description
-FROM attack_relationships r
-JOIN attack_mitigations m ON m.id = r.source_id
-WHERE r.type = 'mitigates' AND r.target_id = $1
-ORDER BY m.attack_id
-`
-
-type ListMitigationsOfTechniqueRow struct {
-	AttackID    string
-	Name        string
-	Description string
-}
-
-// The Mitigations of a Technique, each with its advice for it.
-func (q *Queries) ListMitigationsOfTechnique(ctx context.Context, techniqueID string) ([]ListMitigationsOfTechniqueRow, error) {
-	rows, err := q.db.Query(ctx, listMitigationsOfTechnique, techniqueID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListMitigationsOfTechniqueRow
-	for rows.Next() {
-		var i ListMitigationsOfTechniqueRow
-		if err := rows.Scan(&i.AttackID, &i.Name, &i.Description); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listMitigationsOfTechniques = `-- name: ListMitigationsOfTechniques :many
 SELECT r.target_id AS technique_id, m.attack_id, m.name, r.description
 FROM attack_relationships r

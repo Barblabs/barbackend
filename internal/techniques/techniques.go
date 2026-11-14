@@ -1,6 +1,5 @@
-// Package techniques keeps the ATT&CK catalog whole, as reference data, and
-// reads a Technique by its ATT&CK id across ATT&CK versions (ADR 0023). Its
-// Handle functions have the shape of ingest.Feed.Handle.
+// Package techniques keeps the ATT&CK catalog whole, as reference data
+// (ADR 0023). Its Handle functions have the shape of ingest.Feed.Handle.
 package techniques
 
 import (
@@ -8,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"strings"
 	"time"
 
 	"barbackend/internal/postgres"
@@ -16,7 +14,7 @@ import (
 	"github.com/TcM1911/stix2"
 )
 
-// Service stores the ATT&CK catalog and reads it.
+// Service stores the ATT&CK catalog.
 type Service struct {
 	db *postgres.DB
 }
@@ -24,34 +22,6 @@ type Service struct {
 func New(db *postgres.DB) *Service {
 	return &Service{db: db}
 }
-
-// Technique is an ATT&CK Technique with its Mitigations.
-type Technique struct {
-	AttackID    string
-	Name        string
-	Tactics     []string
-	Revoked     bool
-	Deprecated  bool
-	Mitigations []Mitigation
-}
-
-// Mitigation is an ATT&CK Mitigation of one Technique, with its advice for
-// that Technique.
-type Mitigation struct {
-	AttackID string
-	Name     string
-	Advice   string
-}
-
-// Resolved is the Technique read for an ATT&CK id. When the id was revoked,
-// Technique is its current replacement and Asked keeps the id.
-type Resolved struct {
-	Asked string
-	Technique
-}
-
-// Replaced reports whether the Technique is a replacement of the one asked.
-func (r Resolved) Replaced() bool { return r.AttackID != r.Asked }
 
 // HandleATTACK stores the Techniques, Mitigations and relationships of a
 // batch of the ATT&CK Feed, replacing an object only with a later
@@ -129,34 +99,6 @@ func mitigation(c *stix2.CourseOfAction) (postgres.AttackMitigation, error) {
 	return postgres.AttackMitigation{
 		ID: string(c.ID), AttackID: stixext.AttackID(c.ExternalReferences), Name: c.Name, Object: object, Modified: timeOf(c.Modified),
 	}, nil
-}
-
-// Technique reads the Technique of attackID with its Mitigations, as
-// postgres.Tx.CurrentTechnique reads it: a revoked Technique as its current
-// replacement, and one with no replacement stored as it is, marked revoked.
-// It fails with postgres.ErrNotFound for an unknown id.
-func (s *Service) Technique(ctx context.Context, attackID string) (Resolved, error) {
-	asked := strings.ToUpper(strings.TrimSpace(attackID))
-	var out Resolved
-	err := s.db.InTx(ctx, func(tx *postgres.Tx) error {
-		t, err := tx.CurrentTechnique(ctx, asked)
-		if err != nil {
-			return err
-		}
-		mitigations, err := tx.MitigationsOf(ctx, t.ID)
-		if err != nil {
-			return err
-		}
-		out = Resolved{Asked: asked, Technique: Technique{
-			AttackID: t.AttackID, Name: t.Name, Tactics: t.Tactics, Revoked: t.Revoked, Deprecated: t.Deprecated,
-			Mitigations: make([]Mitigation, len(mitigations)),
-		}}
-		for i, m := range mitigations {
-			out.Mitigations[i] = Mitigation{AttackID: m.AttackID, Name: m.Name, Advice: m.Advice}
-		}
-		return nil
-	})
-	return out, err
 }
 
 // timeOf is t, or now when the Feed gave none.
