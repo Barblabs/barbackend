@@ -1,12 +1,8 @@
 package nvd_test
 
 import (
-	"context"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 
-	"barbackend/internal/feeds/nvd"
 	"barbackend/internal/stixext"
 )
 
@@ -30,16 +26,12 @@ const analyzed = `{"totalResults":1,"vulnerabilities":[{"cve":{
 
 func TestAffectedEntriesKeepVersionAndUpdate(t *testing.T) {
 	t.Parallel()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(analyzed))
-	}))
-	t.Cleanup(srv.Close)
+	got, _ := pull(t, analyzed)
 
-	v, err := nvd.New(srv.Client(), srv.URL, "").Lookup(context.Background(), "CVE-2099-0001")
-	if err != nil {
-		t.Fatal(err)
+	if len(got) != 1 {
+		t.Fatalf("emitted %d vulnerabilities, want 1", len(got))
 	}
-	record, ok := stixext.NVDOf(v)
+	record, ok := stixext.NVDOf(got[0])
 	if !ok {
 		t.Fatal("no nvd/1 extension")
 	}

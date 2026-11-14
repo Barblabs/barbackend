@@ -5,13 +5,11 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/csv"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -23,24 +21,18 @@ import (
 )
 
 const (
-	defaultURL    = "https://epss.cyentia.com/epss_scores-current.csv.gz"
-	defaultAPIURL = "https://api.first.org/data/v1/epss"
-	dateLayout    = "2006-01-02"
+	defaultURL = "https://epss.cyentia.com/epss_scores-current.csv.gz"
+	dateLayout = "2006-01-02"
 )
 
-// Adapter fetches the EPSS score snapshot, and the score of one CVE from FIRST's API.
+// Adapter fetches the EPSS score snapshot.
 type Adapter struct {
 	httpx.Endpoint
-
-	api httpx.Endpoint
 }
 
-// New returns an Adapter, defaulting the client and URLs when they are empty.
-func New(client *http.Client, snapshotURL, apiURL string) *Adapter {
-	return &Adapter{
-		Endpoint: httpx.NewEndpoint(client, snapshotURL, defaultURL),
-		api:      httpx.NewEndpoint(client, apiURL, defaultAPIURL),
-	}
+// New returns an Adapter, defaulting the client and URL when they are empty.
+func New(client *http.Client, url string) *Adapter {
+	return &Adapter{Endpoint: httpx.NewEndpoint(client, url, defaultURL)}
 }
 
 // Pull fetches the snapshot and emits one Vulnerability per score.
@@ -56,39 +48,6 @@ func (a *Adapter) Pull(ctx context.Context, emit feeds.Emit) error {
 	}
 	defer func() { _ = gz.Close() }()
 	return read(gz, emit)
-}
-
-// Lookup returns the current score of cveID, or nil when FIRST has none.
-func (a *Adapter) Lookup(ctx context.Context, cveID string) (*stix2.Vulnerability, error) {
-	endpoint := a.api.WithURL(a.api.URL() + "?" + url.Values{"cve": {cveID}}.Encode())
-	resp, err := endpoint.Get(ctx, "epss")
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	var body struct {
-		Data []struct {
-			Probability string `json:"epss"`
-			Percentile  string `json:"percentile"`
-			Date        string `json:"date"`
-		} `json:"data"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		return nil, fmt.Errorf("epss: decode %s: %w", cveID, err)
-	}
-	if len(body.Data) == 0 {
-		return nil, nil
-	}
-	score := body.Data[0]
-	probability, err := strconv.ParseFloat(score.Probability, 64)
-	if err != nil {
-		return nil, fmt.Errorf("epss: %s: probability %q: %w", cveID, score.Probability, err)
-	}
-	percentile, err := strconv.ParseFloat(score.Percentile, 64)
-	if err != nil {
-		return nil, fmt.Errorf("epss: %s: percentile %q: %w", cveID, score.Percentile, err)
-	}
-	return vulnerability(cveID, stixext.EPSS{Probability: probability, Percentile: percentile, ScoreDate: score.Date})
 }
 
 func read(r io.Reader, emit feeds.Emit) error {
