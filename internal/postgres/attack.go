@@ -135,17 +135,3 @@ func (t *Tx) CurrentTechniques(ctx context.Context) ([]CatalogTechnique, error) 
 	}
 	return out, nil
 }
-
-// MitigationsOf is the stored Mitigations of the Technique of that STIX id,
-// by ATT&CK id.
-func (t *Tx) MitigationsOf(ctx context.Context, techniqueID string) ([]TechniqueMitigation, error) {
-	rows, err := t.q.ListMitigationsOfTechnique(ctx, techniqueID)
-	if err != nil {
-		return nil, fmt.Errorf("list mitigations of %s: %w", techniqueID, err)
-	}
-	out := make([]TechniqueMitigation, len(rows))
-	for i, row := range rows {
-		out[i] = TechniqueMitigation{AttackID: row.AttackID, Name: row.Name, Advice: row.Description}
-	}
-	return out, nil
-}

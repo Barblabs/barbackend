@@ -17,7 +17,8 @@ Keep entries concise and useful across future sessions. Point to authoritative f
 
 ## Tools
 
-- Dev tools (`golangci-lint`, `sqlc`, `govulncheck`) are pinned in `tools.mod`; run them as `go tool -modfile=tools.mod <tool>` so local runs and CI use the same versions.
+- Dev tools (`golangci-lint`, `sqlc`, `govulncheck`, `deadcode`) are pinned in `tools.mod`; run them as `go tool -modfile=tools.mod <tool>` so local runs and CI use the same versions.
+- `go tool -modfile=tools.mod deadcode ./...` lists the functions only tests reach. CI's `lint` job fails on any of them outside the test-helper packages (`internal/**/*test/`), so delete dead code rather than keep it alive for a test.
 
 ## Agent skills
 

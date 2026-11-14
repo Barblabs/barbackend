@@ -2,9 +2,10 @@ package techniques_test
 
 import (
 	"context"
-	"errors"
+	"encoding/json"
 	"fmt"
 	"testing"
+	"time"
 
 	"barbackend/internal/postgres"
 	"barbackend/internal/postgres/pgtest"
@@ -21,7 +22,6 @@ func pattern(attackID string) string {
 	ids := map[string]string{
 		"T1190": "attack-pattern--3f886f2a-874f-4333-b794-aa6075009b1c",
 		"T1100": "attack-pattern--c16e5409-ee53-4d79-afdc-4099dc9292df",
-		"T1200": "attack-pattern--d456de47-a16f-4e46-8980-e67478a12dcb",
 		"T1300": "attack-pattern--e6a1b2c3-d4e5-4f60-8a71-b2c3d4e5f607",
 	}
 	return ids[attackID]
@@ -67,98 +67,86 @@ func relationshipJSON(n int, typ, source, target, description string) string {
 var mitigationJSON = `{"type":"course-of-action","id":"` + m1051 + `",` + stamp + `,"name":"Update Software",
  "external_references":[{"source_name":"mitre-attack","external_id":"M1051"}]}`
 
-func newService(t *testing.T, batch []stix2.STIXObject) *techniques.Service {
+func handle(t *testing.T, batch []stix2.STIXObject) *postgres.DB {
 	t.Helper()
-	s := techniques.New(pgtest.NewDB(t))
-	if err := s.HandleATTACK(context.Background(), batch); err != nil {
+	db := pgtest.NewDB(t)
+	if err := techniques.New(db).HandleATTACK(context.Background(), batch); err != nil {
 		t.Fatal(err)
 	}
-	return s
+	return db
 }
 
-func read(t *testing.T, s *techniques.Service, attackID string) techniques.Resolved {
+func read(t *testing.T, db *postgres.DB, attackID string) postgres.LabeledTechnique {
 	t.Helper()
-	r, err := s.Technique(context.Background(), attackID)
+	const cve = "CVE-2099-0001"
+	threats, err := postgres.InTxValue(context.Background(), db, func(tx *postgres.Tx) (map[string]postgres.Threats, error) {
+		ctx := context.Background()
+		if err := tx.StoreVulnerability(ctx, postgres.StoredVulnerability{CVE: cve, Object: json.RawMessage(`{"type":"vulnerability"}`), Modified: time.Now()}); err != nil {
+			return nil, err
+		}
+		label := postgres.TechniqueLabel{AttackID: attackID, Role: "exploitation", Evidence: "e", Rationale: "r"}
+		if err := tx.StoreLabeling(ctx, cve, "model", "hash", []postgres.TechniqueLabel{label}); err != nil {
+			return nil, err
+		}
+		return tx.ThreatsOf(ctx, []string{cve})
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	return r
+	if len(threats[cve].Techniques) != 1 {
+		t.Fatalf("techniques = %+v, want the one labeled", threats[cve].Techniques)
+	}
+	return threats[cve].Techniques[0]
 }
 
-func TestTechniqueIsReadWithItsTacticsAndMitigations(t *testing.T) {
+func current(t *testing.T, db *postgres.DB, attackID string) postgres.AttackTechnique {
+	t.Helper()
+	got := read(t, db, attackID)
+	if got.Current == nil {
+		t.Fatalf("%s is not in the catalog", attackID)
+	}
+	return *got.Current
+}
+
+func TestATechniqueIsStoredWithItsTacticsAndMitigations(t *testing.T) {
 	t.Parallel()
-	s := newService(t, catalog(t,
+	db := handle(t, catalog(t,
 		relationshipJSON(1, "mitigates", m1051, pattern("T1190"), "Update software regularly."),
 		techniqueJSON("T1190", "Exploit Public-Facing Application", ""),
 		mitigationJSON,
 	))
 
-	got := read(t, s, " t1190 ")
-	if got.AttackID != "T1190" || got.Replaced() || got.Revoked || got.Deprecated {
-		t.Errorf("T1190 = %+v, want the current Technique itself", got)
+	got := read(t, db, "T1190")
+	if got.Current == nil || got.Current.AttackID != "T1190" || got.Current.Revoked || got.Current.Deprecated {
+		t.Fatalf("T1190 = %+v, want the current Technique itself", got.Current)
 	}
-	if len(got.Tactics) != 1 || got.Tactics[0] != "initial-access" {
-		t.Errorf("tactics = %v, want initial-access", got.Tactics)
+	if len(got.Current.Tactics) != 1 || got.Current.Tactics[0] != "initial-access" {
+		t.Errorf("tactics = %v, want initial-access", got.Current.Tactics)
 	}
-	want := techniques.Mitigation{AttackID: "M1051", Name: "Update Software", Advice: "Update software regularly."}
+	want := postgres.TechniqueMitigation{AttackID: "M1051", Name: "Update Software", Advice: "Update software regularly."}
 	if len(got.Mitigations) != 1 || got.Mitigations[0] != want {
 		t.Errorf("mitigations = %+v, want %+v", got.Mitigations, want)
 	}
 }
 
-func TestARevokedTechniqueIsReadAsItsCurrentReplacement(t *testing.T) {
+func TestARevokedTechniqueIsReadAsItsReplacement(t *testing.T) {
 	t.Parallel()
-	s := newService(t, catalog(t,
-		techniqueJSON("T1100", "Revoked first", `"revoked":true,`),
-		techniqueJSON("T1200", "Revoked later", `"revoked":true,`),
+	db := handle(t, catalog(t,
+		relationshipJSON(1, "revoked-by", pattern("T1100"), pattern("T1190"), ""),
+		techniqueJSON("T1100", "Revoked", `"revoked":true,`),
 		techniqueJSON("T1190", "Exploit Public-Facing Application", ""),
-		relationshipJSON(1, "revoked-by", pattern("T1100"), pattern("T1200"), ""),
-		relationshipJSON(2, "revoked-by", pattern("T1200"), pattern("T1190"), ""),
 	))
 
-	got := read(t, s, "T1100")
-	if got.AttackID != "T1190" || got.Asked != "T1100" || !got.Replaced() || got.Revoked {
-		t.Errorf("T1100 = %+v, want T1190, two replacements later, asked as T1100", got)
-	}
-}
-
-func TestARevokedTechniqueWithNoReplacementIsReadMarked(t *testing.T) {
-	t.Parallel()
-	s := newService(t, catalog(t, techniqueJSON("T1100", "Revoked", `"revoked":true,`)))
-
-	if got := read(t, s, "T1100"); got.AttackID != "T1100" || !got.Revoked {
-		t.Errorf("T1100 = %+v, want it as it is, marked revoked", got)
+	if got := current(t, db, "T1100"); got.AttackID != "T1190" || got.Revoked {
+		t.Errorf("T1100 = %+v, want its replacement T1190", got)
 	}
 }
 
 func TestADeprecatedTechniqueIsReadMarked(t *testing.T) {
 	t.Parallel()
-	s := newService(t, catalog(t, techniqueJSON("T1300", "Deprecated", `"x_mitre_deprecated":true,`)))
+	db := handle(t, catalog(t, techniqueJSON("T1300", "Deprecated", `"x_mitre_deprecated":true,`)))
 
-	if got := read(t, s, "T1300"); !got.Deprecated {
+	if got := current(t, db, "T1300"); !got.Deprecated {
 		t.Errorf("T1300 = %+v, want it marked deprecated", got)
-	}
-}
-
-func TestReadingStopsOnARevocationCycle(t *testing.T) {
-	t.Parallel()
-	s := newService(t, catalog(t,
-		techniqueJSON("T1100", "Revoked", `"revoked":true,`),
-		techniqueJSON("T1200", "Revoked too", `"revoked":true,`),
-		relationshipJSON(1, "revoked-by", pattern("T1100"), pattern("T1200"), ""),
-		relationshipJSON(2, "revoked-by", pattern("T1200"), pattern("T1100"), ""),
-	))
-
-	if got := read(t, s, "T1100"); !got.Revoked {
-		t.Errorf("T1100 = %+v, want a revoked Technique after the bounded walk", got)
-	}
-}
-
-func TestAnUnknownTechniqueIsNotFound(t *testing.T) {
-	t.Parallel()
-	s := newService(t, nil)
-
-	if _, err := s.Technique(context.Background(), "T9999"); !errors.Is(err, postgres.ErrNotFound) {
-		t.Errorf("err = %v, want ErrNotFound", err)
 	}
 }

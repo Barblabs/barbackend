@@ -88,7 +88,7 @@ func (t *Tx) currentTechniques(ctx context.Context, labels []sqlcgen.Vulnerabili
 		if _, ok := current[l.AttackID]; ok {
 			continue
 		}
-		technique, err := t.CurrentTechnique(ctx, l.AttackID)
+		technique, err := t.currentTechnique(ctx, l.AttackID)
 		if errors.Is(err, ErrNotFound) {
 			continue
 		}
@@ -114,12 +114,9 @@ func (t *Tx) currentTechniques(ctx context.Context, labels []sqlcgen.Vulnerabili
 	return current, mitigations, nil
 }
 
-// CurrentTechnique is the stored Technique of that ATT&CK id, or the one that
-// replaced it when it was revoked, following revoked-by for at most
-// maxReplacements steps (ADR 0023). A revoked one with no replacement stored
-// is read as it is. It fails with ErrNotFound for an id the catalog does not
-// hold.
-func (t *Tx) CurrentTechnique(ctx context.Context, attackID string) (AttackTechnique, error) {
+// currentTechnique follows revoked-by so a label of a revoked Technique reads
+// as what replaced it (ADR 0023).
+func (t *Tx) currentTechnique(ctx context.Context, attackID string) (AttackTechnique, error) {
 	technique, err := t.AttackTechnique(ctx, attackID)
 	if err != nil {
 		return AttackTechnique{}, err

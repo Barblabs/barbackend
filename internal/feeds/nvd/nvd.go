@@ -1,4 +1,4 @@
-// Package nvd pulls CVEs modified in the last 24 hours from the NVD API, and looks up one CVE (ADR 0010).
+// Package nvd pulls CVEs modified in the last 24 hours from the NVD API (ADR 0010).
 package nvd
 
 import (
@@ -67,22 +67,6 @@ func (a *Adapter) Pull(ctx context.Context, emit feeds.Emit) error {
 	}
 }
 
-// Lookup fetches one CVE, returning nil when NVD does not have it.
-func (a *Adapter) Lookup(ctx context.Context, cveID string) (*stix2.Vulnerability, error) {
-	p, err := a.fetch(ctx, url.Values{"cveId": {cveID}})
-	if err != nil {
-		return nil, err
-	}
-	if len(p.Vulnerabilities) == 0 {
-		return nil, nil
-	}
-	v, ok, err := vulnerability(p.Vulnerabilities[0].CVE)
-	if err != nil || !ok {
-		return nil, err
-	}
-	return v, nil
-}
-
 func emitPage(p page, emit feeds.Emit) (int, error) {
 	for _, v := range p.Vulnerabilities {
 		obj, ok, err := vulnerability(v.CVE)
@@ -105,10 +89,6 @@ func (a *Adapter) page(ctx context.Context, from, to time.Time, index int) (page
 	query.Set("lastModEndDate", to.Format(timeLayout))
 	query.Set("startIndex", strconv.Itoa(index))
 	query.Set("resultsPerPage", strconv.Itoa(pageSize))
-	return a.fetch(ctx, query)
-}
-
-func (a *Adapter) fetch(ctx context.Context, query url.Values) (page, error) {
 	endpoint := a.WithURL(a.URL() + "?" + query.Encode())
 	resp, err := endpoint.Get(ctx, "nvd")
 	if err != nil {

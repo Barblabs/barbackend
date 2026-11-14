@@ -3,13 +3,11 @@ package postgres_test
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"testing"
 	"time"
 
 	"barbackend/internal/assessment"
 	"barbackend/internal/postgres"
-	"barbackend/internal/postgres/pgtest"
 )
 
 const t1505ID = "attack-pattern--5d0d3609-d06d-49e1-b9c9-b544e0c618cb"
@@ -20,9 +18,7 @@ func storeCatalog(t *testing.T, db *postgres.DB) {
 	t.Helper()
 	inTx(t, db, func(tx *postgres.Tx) error {
 		ctx := context.Background()
-		revoked := technique(t1100ID, "T1100", "Web Shell", may)
-		revoked.Revoked = true
-		for _, technique := range []postgres.AttackTechnique{technique(t1190ID, "T1190", "Exploit Public-Facing Application", may), revoked, technique(t1505ID, "T1505.003", "Web Shell", may)} {
+		for _, technique := range []postgres.AttackTechnique{technique(t1190ID, "T1190", "Exploit Public-Facing Application", may), revoked(t1100ID, "T1100", "Web Shell"), technique(t1505ID, "T1505.003", "Web Shell", may)} {
 			if err := tx.StoreAttackTechnique(ctx, technique); err != nil {
 				return err
 			}
@@ -94,23 +90,76 @@ func TestThreatsOfReadsWhatIsStoredAboutEachVulnerability(t *testing.T) {
 	}
 }
 
-func TestCurrentTechniqueFollowsRevokedBy(t *testing.T) {
+func labeledAs(t *testing.T, attackID string, relationships ...postgres.AttackRelationship) postgres.LabeledTechnique {
+	t.Helper()
+	const cve = "CVE-2099-0001"
+	db := storedCVEs(t, cve)
+	inTx(t, db, func(tx *postgres.Tx) error {
+		ctx := context.Background()
+		for _, technique := range []postgres.AttackTechnique{
+			revoked(t1100ID, "T1100", "Revoked first"), revoked(t1200ID, "T1200", "Revoked later"),
+			technique(t1190ID, "T1190", "Exploit Public-Facing Application", may),
+		} {
+			if err := tx.StoreAttackTechnique(ctx, technique); err != nil {
+				return err
+			}
+		}
+		for _, r := range relationships {
+			if err := tx.StoreAttackRelationship(ctx, r); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err := storeLabeling(db, cve, postgres.TechniqueLabel{AttackID: attackID, Role: "exploitation", Evidence: "it says so somewhere", Rationale: "r"}); err != nil {
+		t.Fatal(err)
+	}
+	threats := inTxValue(t, db, func(tx *postgres.Tx) (map[string]postgres.Threats, error) {
+		return tx.ThreatsOf(context.Background(), []string{cve})
+	})
+	if len(threats[cve].Techniques) != 1 || threats[cve].Techniques[0].Current == nil {
+		t.Fatalf("techniques = %+v, want the one labeled, in the catalog", threats[cve].Techniques)
+	}
+	return threats[cve].Techniques[0]
+}
+
+func TestALabelIsReadAsItsCurrentTechnique(t *testing.T) {
 	t.Parallel()
-	db := pgtest.NewDB(t)
-	storeCatalog(t, db)
-	current := func(attackID string) (postgres.AttackTechnique, error) {
-		return postgres.InTxValue(context.Background(), db, func(tx *postgres.Tx) (postgres.AttackTechnique, error) {
-			return tx.CurrentTechnique(context.Background(), attackID)
+	tests := []struct {
+		name          string
+		relationships []postgres.AttackRelationship
+		wantAttackID  string
+		wantRevoked   bool
+	}{
+		{
+			name: "replaced twice",
+			relationships: []postgres.AttackRelationship{
+				relationship("relationship--0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d", "revoked-by", t1100ID, t1200ID, ""),
+				relationship("relationship--1b2c3d4e-5f6a-4b7c-8d9e-0f1a2b3c4d5e", "revoked-by", t1200ID, t1190ID, ""),
+			},
+			wantAttackID: "T1190",
+		},
+		{name: "revoked with no replacement", wantAttackID: "T1100", wantRevoked: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := labeledAs(t, "T1100", tt.relationships...).Current
+			if got.AttackID != tt.wantAttackID || got.Revoked != tt.wantRevoked {
+				t.Errorf("T1100 = %+v, want %s with revoked %v", got, tt.wantAttackID, tt.wantRevoked)
+			}
 		})
 	}
+}
 
-	for asked, want := range map[string]string{"T1190": "T1190", "T1100": "T1505.003"} {
-		got, err := current(asked)
-		if err != nil || got.AttackID != want || got.Revoked {
-			t.Errorf("current %s = %+v, %v, want %s", asked, got, err, want)
-		}
-	}
-	if _, err := current("T9999"); !errors.Is(err, postgres.ErrNotFound) {
-		t.Errorf("unknown id: err = %v, want ErrNotFound", err)
+func TestReadingALabelStopsOnARevocationCycle(t *testing.T) {
+	t.Parallel()
+	got := labeledAs(t, "T1100",
+		relationship("relationship--0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d", "revoked-by", t1100ID, t1200ID, ""),
+		relationship("relationship--1b2c3d4e-5f6a-4b7c-8d9e-0f1a2b3c4d5e", "revoked-by", t1200ID, t1100ID, ""),
+	)
+
+	if !got.Current.Revoked {
+		t.Errorf("T1100 = %+v, want a revoked Technique after the bounded walk", got.Current)
 	}
 }

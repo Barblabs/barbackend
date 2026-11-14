@@ -33,7 +33,6 @@ The review of the Agents found structural changes that were left out to keep the
 - **`Run.Status`**: only verified runs are stored, so `Crew.Prioritize` and `Crew.Plan` can return `(Run[T], error)`, with `ErrRefused`, `ErrRejected` (wrapping the violations) or `ErrUnavailable`, and `Run.Output` can stop being a pointer. That removes `Status`, `failure()` and every nil check, and splits stored content from the read model that carries Plans and Feedback.
 - **Rename `internal/assessment`**, which is no longer a domain term (for example to `internal/dossier`), updating ADR 0008, ADR 0016 and depguard.
 - **`Crew` holds the Analista's client and model**: move them to `Service`, since the Crew is the Prioritizer and Luna.
-- **The Feed Lookups of `kev`, `epss` and `nvd`** lost their last caller with `agent finding`: remove them, and the API URL only EPSS's needs, moving the tests that use them to `Pull`, which are the only tests of `kev` and `epss`.
 
 ## 5. News Items reach the Security Team
 
