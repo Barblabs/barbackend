@@ -37,6 +37,14 @@ jobs:
         run: go tool -modfile=tools.mod golangci-lint run ./...
       - name: check sqlc output is up to date
         run: go tool -modfile=tools.mod sqlc diff
+      # Without -test, so code only tests reach is reported. deadcode exits 0
+      # either way, so the step fails on any line outside the test-helper
+      # packages, which only tests are meant to reach.
+      - name: deadcode
+        shell: bash
+        run: |
+          dead=$(go tool -modfile=tools.mod deadcode ./... | { grep -Ev '^internal/[^:]*test/[^/:]+:' || true; })
+          if [ -n "$dead" ]; then echo "$dead"; exit 1; fi
       - &save-go-cache
         name: save go cache
         if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
