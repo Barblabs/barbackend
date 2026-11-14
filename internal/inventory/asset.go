@@ -105,8 +105,6 @@ func (a *Asset) DeclareExposure(e Exposure) error {
 	return nil
 }
 
-func (a *Asset) ClearExposureDeclaration() { a.declaredExposure = ExposureUnknown }
-
 // InformationClassification is the declared one: nothing is imported, so
 // without a Declaration it is Unclassified (ADR 0031).
 func (a *Asset) InformationClassification() InformationClassification {
@@ -125,10 +123,6 @@ func (a *Asset) DeclareInformationClassification(c InformationClassification) er
 	}
 	a.declaredInformationClassification = c
 	return nil
-}
-
-func (a *Asset) ClearInformationClassificationDeclaration() {
-	a.declaredInformationClassification = Unclassified
 }
 
 func (a *Asset) Active() bool { return a.active }
