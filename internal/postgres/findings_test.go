@@ -4,15 +4,12 @@ import (
 	"context"
 	"slices"
 	"testing"
-	"time"
 
 	"barbackend/internal/finding"
 	"barbackend/internal/inventory"
 	"barbackend/internal/matching"
 	"barbackend/internal/postgres"
-	"barbackend/internal/postgres/pgtest"
 	"barbackend/internal/scoring"
-	"barbackend/internal/stixext"
 	"barbackend/internal/tenancy"
 )
 
@@ -32,23 +29,6 @@ type findingWorld struct {
 	lab      inventory.SourceReference
 }
 
-func newFindingWorld(t *testing.T) findingWorld {
-	t.Helper()
-	db := pgtest.NewDB(t)
-	customer := newCustomer(t, db)
-	src := newSource(t, db, customer)
-	w := findingWorld{
-		db:       db,
-		customer: customer,
-		source:   src.ID(),
-		payments: inventory.SourceReference{Source: src.ID(), RecordID: "1"},
-		lab:      inventory.SourceReference{Source: src.ID(), RecordID: "2"},
-	}
-	syncRecords(t, db, src.ID(), w.paymentsRecord(t), w.labRecord(t))
-	storeVulnerability(t, db, "CVE-2021-23017", time.Now(), vulnerabilityObject("CVE-2021-23017", "Analyzed", `[]`))
-	return w
-}
-
 func (w findingWorld) paymentsRecord(t *testing.T) inventory.Record {
 	return inventory.Record{RecordID: "1", Imported: mustImported(t, inventory.ImportedAssetParams{
 		Name: "payments", Kind: inventory.Server, Criticality: inventory.CriticalityHigh, Software: []inventory.SoftwareComponent{nginx, vault, bash},
@@ -59,41 +39,6 @@ func (w findingWorld) labRecord(t *testing.T) inventory.Record {
 	return inventory.Record{RecordID: "2", Imported: mustImported(t, inventory.ImportedAssetParams{
 		Name: "lab", Kind: inventory.Server, Criticality: inventory.CriticalityLow, Software: []inventory.SoftwareComponent{nginx},
 	})}
-}
-
-// match builds the Match of CVE-2021-23017 on nginx of asset at version.
-func match(t *testing.T, asset inventory.SourceReference, version string, flags ...matching.Flag) finding.Match {
-	t.Helper()
-	c := nginx
-	c.Version = version
-	m, err := finding.NewMatch(asset, c, "CVE-2021-23017", matching.Result{
-		Matched: true, Evidence: stixext.Affected{Vendor: "f5", Product: "nginx", Version: "*", VersionEndExcluding: "1.20.1"}, Flags: flags,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return m
-}
-
-func saveMatch(t *testing.T, db *postgres.DB, m finding.Match) (finding.ID, finding.Outcome) {
-	t.Helper()
-	var id finding.ID
-	var outcome finding.Outcome
-	inTx(t, db, func(tx *postgres.Tx) (err error) {
-		id, outcome, err = tx.SaveMatch(context.Background(), m)
-		return err
-	})
-	return id, outcome
-}
-
-func openFindingsOf(t *testing.T, db *postgres.DB, cve string) []postgres.OpenFinding {
-	t.Helper()
-	var open []postgres.OpenFinding
-	inTx(t, db, func(tx *postgres.Tx) (err error) {
-		open, err = tx.OpenFindingsOfVulnerability(context.Background(), cve)
-		return err
-	})
-	return open
 }
 
 func TestComponentsWithProductsReadsActiveAssetsIgnoringCase(t *testing.T) {

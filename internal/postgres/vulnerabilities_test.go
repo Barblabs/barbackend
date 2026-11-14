@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"slices"
 	"testing"
 	"time"
@@ -20,20 +19,6 @@ var (
 	epssKey = string(stixext.EPSSDefinitionID)
 	kevKey  = string(stixext.KEVDefinitionID)
 )
-
-// vulnerabilityObject is a STIX vulnerability whose nvd/1 extension lists
-// affected as given, raw JSON, and has that status.
-func vulnerabilityObject(cve, status, affected string) json.RawMessage {
-	return json.RawMessage(fmt.Sprintf(`{"type":"vulnerability","name":%q,"extensions":{%q:{"vuln_status":%q,"affected":%s}}}`,
-		cve, nvdKey, status, affected))
-}
-
-func storeVulnerability(t *testing.T, db *postgres.DB, cve string, modified time.Time, object json.RawMessage) {
-	t.Helper()
-	inTx(t, db, func(tx *postgres.Tx) error {
-		return tx.StoreVulnerability(context.Background(), postgres.StoredVulnerability{CVE: cve, Object: object, Modified: modified})
-	})
-}
 
 func storedExtensions(t *testing.T, db *postgres.DB, cve string) map[string]map[string]any {
 	t.Helper()

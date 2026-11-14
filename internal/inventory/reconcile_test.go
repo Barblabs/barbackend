@@ -400,22 +400,6 @@ func with(p inventory.ImportedAssetParams, mutate func(*inventory.ImportedAssetP
 	return p
 }
 
-func recs(id string, p inventory.ImportedAssetParams) map[string]inventory.ImportedAssetParams {
-	return map[string]inventory.ImportedAssetParams{id: p}
-}
-
-func snapshot(t *testing.T, records map[string]inventory.ImportedAssetParams, skipped ...string) inventory.Snapshot {
-	t.Helper()
-	var s inventory.Snapshot
-	for id, p := range records {
-		s.Records = append(s.Records, inventory.Record{RecordID: id, Imported: mustImported(t, p)})
-	}
-	for _, id := range skipped {
-		s.Skipped = append(s.Skipped, inventory.SkippedRecord{RecordID: id, Reason: "invalid " + id})
-	}
-	return s
-}
-
 func storedAssets(t *testing.T, specs []stored) []*inventory.Asset {
 	t.Helper()
 	assets := make([]*inventory.Asset, len(specs))

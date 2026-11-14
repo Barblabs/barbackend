@@ -14,29 +14,6 @@ import (
 	"github.com/google/uuid"
 )
 
-func fullParams(t *testing.T) inventory.ImportedAssetParams {
-	return inventory.ImportedAssetParams{
-		Name:        "srv-01",
-		Description: "Billing API",
-		Kind:        inventory.Server,
-		Hardware:    inventory.Hardware{Vendor: "Dell", Model: ""},
-		Software: []inventory.SoftwareComponent{
-			{Role: inventory.Application, Name: "nginx", Version: "1.24", Product: inventory.Product{Vendor: "f5", Name: "nginx"}},
-			{Role: inventory.OperatingSystem, Name: "Ubuntu", Version: "22.04 LTS"},
-			{Role: inventory.Application, Name: "custom agent"},
-		},
-		Criticality: inventory.CriticalityHigh,
-		Exposure:    inventory.InternetFacing,
-		Lifecycle:   inventory.LifecycleStock,
-		Owner:       mustOwner(t, "owner@example.com"),
-		Retired:     true,
-	}
-}
-
-func record(t *testing.T, id string, p inventory.ImportedAssetParams) inventory.Record {
-	return inventory.Record{RecordID: id, Imported: mustImported(t, p)}
-}
-
 func TestCreatedAssetRoundTrip(t *testing.T) {
 	tests := []struct {
 		name     string

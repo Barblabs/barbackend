@@ -2,7 +2,6 @@ package postgres_test
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -20,27 +19,6 @@ const (
 )
 
 var may = time.Date(2026, 5, 12, 0, 0, 0, 0, time.UTC)
-
-func technique(id, attackID, name string, modified time.Time) postgres.AttackTechnique {
-	return postgres.AttackTechnique{
-		ID: id, AttackID: attackID, Name: name, Tactics: []string{"initial-access"},
-		Object: json.RawMessage(`{"type":"attack-pattern"}`), Modified: modified,
-	}
-}
-
-func revoked(id, attackID, name string) postgres.AttackTechnique {
-	r := technique(id, attackID, name, may)
-	r.Revoked = true
-	return r
-}
-
-func mitigation(id, attackID, name string) postgres.AttackMitigation {
-	return postgres.AttackMitigation{ID: id, AttackID: attackID, Name: name, Object: json.RawMessage(`{"type":"course-of-action"}`), Modified: may}
-}
-
-func relationship(id, typ, source, target, description string) postgres.AttackRelationship {
-	return postgres.AttackRelationship{ID: id, Type: typ, Source: source, Target: target, Description: description, Modified: may}
-}
 
 func readTechnique(t *testing.T, db *postgres.DB, attackID string) postgres.AttackTechnique {
 	t.Helper()

@@ -97,8 +97,6 @@ func recorder(t *testing.T, path string) http.Handler {
 	})
 }
 
-func ptr(s string) *string { return &s }
-
 func TestFetchSeededInstance(t *testing.T) {
 	cis, orgs, lk, err := fetch(context.Background(), recorded(t, "seeded"))
 	if err != nil {

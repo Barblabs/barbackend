@@ -9,22 +9,12 @@ import (
 
 	"barbackend/internal/assessment"
 	"barbackend/internal/postgres"
-	"barbackend/internal/postgres/pgtest"
 )
 
 const (
 	cartografo = "claude-haiku-5-5"
 	promptHash = "sha256:0f1e2d"
 )
-
-func storedCVEs(t *testing.T, cves ...string) *postgres.DB {
-	t.Helper()
-	db := pgtest.NewDB(t)
-	for _, cve := range cves {
-		storeVulnerability(t, db, cve, may, vulnerabilityObject(cve, "Analyzed", `[]`))
-	}
-	return db
-}
 
 func unlabeled(t *testing.T, db *postgres.DB, limit, maxAttempts int) []string {
 	t.Helper()
@@ -36,18 +26,6 @@ func unlabeled(t *testing.T, db *postgres.DB, limit, maxAttempts int) []string {
 func labelingOf(t *testing.T, db *postgres.DB, cve string) postgres.Labeling {
 	t.Helper()
 	return inTxValue(t, db, func(tx *postgres.Tx) (postgres.Labeling, error) { return tx.LabelingOf(context.Background(), cve) })
-}
-
-func storeLabeling(db *postgres.DB, cve string, labels ...postgres.TechniqueLabel) error {
-	return db.InTx(context.Background(), func(tx *postgres.Tx) error {
-		return tx.StoreLabeling(context.Background(), cve, cartografo, promptHash, labels)
-	})
-}
-
-func storeFailedLabeling(db *postgres.DB, cve string) error {
-	return db.InTx(context.Background(), func(tx *postgres.Tx) error {
-		return tx.StoreFailedLabeling(context.Background(), cve, cartografo, promptHash)
-	})
 }
 
 func TestStoreLabelingKeepsItsTechniquesInTheOrderOfAnAttack(t *testing.T) {

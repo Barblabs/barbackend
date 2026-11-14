@@ -67,15 +67,6 @@ func (e env) syncRecords(t *testing.T, records ...inventory.Record) {
 	}
 }
 
-func imported(t *testing.T, p inventory.ImportedAssetParams) inventory.ImportedAsset {
-	t.Helper()
-	a, err := inventory.NewImportedAsset(p)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return a
-}
-
 func TestListAssetsPagesEveryAssetOnceInSortOrder(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)

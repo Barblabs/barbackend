@@ -7,17 +7,7 @@ import (
 
 	"barbackend/internal/postgres"
 	"barbackend/internal/tenancy"
-	"github.com/google/uuid"
 )
-
-func platformAdmin(t *testing.T) tenancy.User {
-	t.Helper()
-	u, err := tenancy.NewUser(tenancy.UserID(uuid.New()), "staff@example.com", tenancy.PlatformAdmin, tenancy.CustomerID{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return u
-}
 
 func TestCreateCustomerStoresItWithItsFirstCustomerAdmin(t *testing.T) {
 	t.Parallel()
