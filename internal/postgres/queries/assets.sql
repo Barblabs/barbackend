@@ -52,12 +52,15 @@ SELECT a.id, a.cmdb_source_id, a.record_id, a.name, a.description, a.kind_id,
        imported_owner.email AS imported_owner, declared_owner.email AS declared_owner,
        a.imported_exposure_id, a.declared_exposure_id, a.lifecycle_stage_id, a.area_record_id, a.retired, a.inactive_since,
        area.id AS area_id, area.name AS area_name,
-       exposure_declarer.email AS exposure_declared_by, a.exposure_declared_at
+       exposure_declarer.email AS exposure_declared_by, a.exposure_declared_at,
+       a.declared_information_classification_id,
+       information_classification_declarer.email AS information_classification_declared_by, a.information_classification_declared_at
 FROM assets a
 LEFT JOIN asset_owners imported_owner ON imported_owner.id = a.imported_owner_id
 LEFT JOIN asset_owners declared_owner ON declared_owner.id = a.declared_owner_id
 LEFT JOIN customer_areas area ON area.cmdb_source_id = a.cmdb_source_id AND area.record_id = a.area_record_id
 LEFT JOIN users exposure_declarer ON exposure_declarer.id = a.exposure_declared_by
+LEFT JOIN users information_classification_declarer ON information_classification_declarer.id = a.information_classification_declared_by
 WHERE a.cmdb_source_id = @cmdb_source_id
 ORDER BY a.record_id;
 
@@ -89,13 +92,16 @@ SELECT a.id, a.cmdb_source_id, a.record_id, a.name, a.description, a.kind_id,
        imported_owner.email AS imported_owner, declared_owner.email AS declared_owner,
        a.imported_exposure_id, a.declared_exposure_id, a.lifecycle_stage_id, a.area_record_id, a.retired, a.inactive_since,
        area.id AS area_id, area.name AS area_name,
-       exposure_declarer.email AS exposure_declared_by, a.exposure_declared_at
+       exposure_declarer.email AS exposure_declared_by, a.exposure_declared_at,
+       a.declared_information_classification_id,
+       information_classification_declarer.email AS information_classification_declared_by, a.information_classification_declared_at
 FROM assets a
 JOIN cmdb_sources s ON s.id = a.cmdb_source_id
 LEFT JOIN asset_owners imported_owner ON imported_owner.id = a.imported_owner_id
 LEFT JOIN asset_owners declared_owner ON declared_owner.id = a.declared_owner_id
 LEFT JOIN customer_areas area ON area.cmdb_source_id = a.cmdb_source_id AND area.record_id = a.area_record_id
 LEFT JOIN users exposure_declarer ON exposure_declarer.id = a.exposure_declared_by
+LEFT JOIN users information_classification_declarer ON information_classification_declarer.id = a.information_classification_declared_by
 WHERE s.customer_id = @customer_id
   AND (sqlc.narg(active)::boolean IS NULL OR (a.inactive_since IS NULL) = sqlc.narg(active)::boolean)
   AND (sqlc.narg(kind_id)::smallint IS NULL OR a.kind_id = sqlc.narg(kind_id)::smallint)
@@ -123,12 +129,15 @@ SELECT a.id, a.cmdb_source_id, a.record_id, a.name, a.description, a.kind_id,
        imported_owner.email AS imported_owner, declared_owner.email AS declared_owner,
        a.imported_exposure_id, a.declared_exposure_id, a.lifecycle_stage_id, a.area_record_id, a.retired, a.inactive_since,
        area.id AS area_id, area.name AS area_name,
-       exposure_declarer.email AS exposure_declared_by, a.exposure_declared_at
+       exposure_declarer.email AS exposure_declared_by, a.exposure_declared_at,
+       a.declared_information_classification_id,
+       information_classification_declarer.email AS information_classification_declared_by, a.information_classification_declared_at
 FROM assets a
 LEFT JOIN asset_owners imported_owner ON imported_owner.id = a.imported_owner_id
 LEFT JOIN asset_owners declared_owner ON declared_owner.id = a.declared_owner_id
 LEFT JOIN customer_areas area ON area.cmdb_source_id = a.cmdb_source_id AND area.record_id = a.area_record_id
 LEFT JOIN users exposure_declarer ON exposure_declarer.id = a.exposure_declared_by
+LEFT JOIN users information_classification_declarer ON information_classification_declarer.id = a.information_classification_declared_by
 WHERE (a.cmdb_source_id, a.record_id) IN (
     SELECT s.id, r.id
     FROM unnest(@source_ids::uuid[]) WITH ORDINALITY AS s (id, n)
@@ -166,4 +175,18 @@ WHERE cmdb_source_id = @cmdb_source_id AND record_id = @record_id;
 -- name: ClearAssetExposure :exec
 UPDATE assets
 SET declared_exposure_id = NULL, exposure_declared_by = NULL, exposure_declared_at = NULL
+WHERE cmdb_source_id = @cmdb_source_id AND record_id = @record_id;
+
+-- name: DeclareAssetInformationClassification :exec
+UPDATE assets
+SET declared_information_classification_id = @declared_information_classification_id::smallint,
+    information_classification_declared_by = @declared_by::uuid,
+    information_classification_declared_at = now()
+WHERE cmdb_source_id = @cmdb_source_id AND record_id = @record_id;
+
+-- name: ClearAssetInformationClassification :exec
+UPDATE assets
+SET declared_information_classification_id = NULL,
+    information_classification_declared_by = NULL,
+    information_classification_declared_at = NULL
 WHERE cmdb_source_id = @cmdb_source_id AND record_id = @record_id;

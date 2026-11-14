@@ -64,3 +64,33 @@ func (t *Tx) ClearExposureDeclaration(ctx context.Context, asset inventory.Sourc
 	}
 	return nil
 }
+
+// DeclareInformationClassification stores the Asset's declared Information
+// Classification as by's Declaration, made now. The caller has read the Asset
+// with CustomerAsset in the same transaction and declared it there; a missing
+// Asset is not reported.
+func (t *Tx) DeclareInformationClassification(ctx context.Context, a *inventory.Asset, by tenancy.UserID) error {
+	ref := a.Ref()
+	err := t.q.DeclareAssetInformationClassification(ctx, sqlcgen.DeclareAssetInformationClassificationParams{
+		DeclaredInformationClassificationID: int16(a.InformationClassification()), DeclaredBy: uuid.UUID(by),
+		CmdbSourceID: uuid.UUID(ref.Source), RecordID: ref.RecordID,
+	})
+	if err != nil {
+		return fmt.Errorf("declare information classification of %v: %w", ref, err)
+	}
+	return nil
+}
+
+// ClearInformationClassificationDeclaration clears the Asset's declared
+// Information Classification with who declared it and when. The caller has
+// read the Asset with CustomerAsset in the same transaction; a missing Asset
+// is not reported.
+func (t *Tx) ClearInformationClassificationDeclaration(ctx context.Context, asset inventory.SourceReference) error {
+	err := t.q.ClearAssetInformationClassification(ctx, sqlcgen.ClearAssetInformationClassificationParams{
+		CmdbSourceID: uuid.UUID(asset.Source), RecordID: asset.RecordID,
+	})
+	if err != nil {
+		return fmt.Errorf("clear information classification declaration of %v: %w", asset, err)
+	}
+	return nil
+}

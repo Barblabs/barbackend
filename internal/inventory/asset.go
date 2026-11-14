@@ -9,8 +9,9 @@ type Asset struct {
 	imported ImportedAsset
 	active   bool
 
-	declaredOwner    OwnerEmail
-	declaredExposure Exposure
+	declaredOwner                     OwnerEmail
+	declaredExposure                  Exposure
+	declaredInformationClassification InformationClassification
 }
 
 func NewAsset(ref SourceReference, imported ImportedAsset) (*Asset, error) {
@@ -24,11 +25,13 @@ func NewAsset(ref SourceReference, imported ImportedAsset) (*Asset, error) {
 }
 
 // AssetState is what barbattack itself holds about an Asset, as opposed to
-// its imported values. A zero owner or an Unknown exposure means no Declaration.
+// its imported values. A zero owner, an Unknown exposure or Unclassified means
+// no Declaration.
 type AssetState struct {
-	Active           bool
-	DeclaredOwner    OwnerEmail
-	DeclaredExposure Exposure
+	Active                            bool
+	DeclaredOwner                     OwnerEmail
+	DeclaredExposure                  Exposure
+	DeclaredInformationClassification InformationClassification
 }
 
 func RestoreAsset(ref SourceReference, imported ImportedAsset, state AssetState) (*Asset, error) {
@@ -39,9 +42,13 @@ func RestoreAsset(ref SourceReference, imported ImportedAsset, state AssetState)
 	if !state.DeclaredExposure.valid() {
 		return nil, fmt.Errorf("%w: %d", ErrInvalidExposure, int(state.DeclaredExposure))
 	}
+	if !state.DeclaredInformationClassification.valid() {
+		return nil, fmt.Errorf("%w: %d", ErrInvalidInformationClassification, int(state.DeclaredInformationClassification))
+	}
 	a.active = state.Active
 	a.declaredOwner = state.DeclaredOwner
 	a.declaredExposure = state.DeclaredExposure
+	a.declaredInformationClassification = state.DeclaredInformationClassification
 	return a, nil
 }
 
@@ -99,6 +106,30 @@ func (a *Asset) DeclareExposure(e Exposure) error {
 }
 
 func (a *Asset) ClearExposureDeclaration() { a.declaredExposure = ExposureUnknown }
+
+// InformationClassification is the declared one: nothing is imported, so
+// without a Declaration it is Unclassified (ADR 0031).
+func (a *Asset) InformationClassification() InformationClassification {
+	return a.declaredInformationClassification
+}
+
+// DeclareInformationClassification states how sensitive the Asset's data is.
+// As with Exposure, Unclassified is no statement and an Inactive Asset cannot
+// be declared, but a Declaration survives deactivation (ADR 0031).
+func (a *Asset) DeclareInformationClassification(c InformationClassification) error {
+	if !c.valid() || c == Unclassified {
+		return fmt.Errorf("%w: %d", ErrInvalidInformationClassification, int(c))
+	}
+	if !a.active {
+		return fmt.Errorf("%w: %v", ErrAssetInactive, a.ref)
+	}
+	a.declaredInformationClassification = c
+	return nil
+}
+
+func (a *Asset) ClearInformationClassificationDeclaration() {
+	a.declaredInformationClassification = Unclassified
+}
 
 func (a *Asset) Active() bool { return a.active }
 

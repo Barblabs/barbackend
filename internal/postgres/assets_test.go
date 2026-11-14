@@ -122,8 +122,10 @@ func TestImportedUpdateKeepsDeclarations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	declareInternal(t, db, src.Customer(), onlyAsset(t, db, src.Customer()).ID, admin.ID())
-	declaration := onlyAsset(t, db, src.Customer()).ExposureAudit
+	id := onlyAsset(t, db, src.Customer()).ID
+	declareInternal(t, db, src.Customer(), id, admin.ID())
+	declareConfidential(t, db, src.Customer(), id, admin.ID())
+	declared := onlyAsset(t, db, src.Customer())
 
 	changed := inventory.ImportedAssetParams{
 		Name:     "srv-01-renamed",
@@ -133,9 +135,10 @@ func TestImportedUpdateKeepsDeclarations(t *testing.T) {
 	syncRecords(t, db, src.ID(), record(t, "1", changed))
 
 	want, err := inventory.RestoreAsset(inventory.SourceReference{Source: src.ID(), RecordID: "1"}, mustImported(t, changed), inventory.AssetState{
-		Active:           true,
-		DeclaredOwner:    mustOwner(t, "declared@example.com"),
-		DeclaredExposure: inventory.Internal,
+		Active:                            true,
+		DeclaredOwner:                     mustOwner(t, "declared@example.com"),
+		DeclaredExposure:                  inventory.Internal,
+		DeclaredInformationClassification: inventory.ClassifiedConfidential,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -143,8 +146,13 @@ func TestImportedUpdateKeepsDeclarations(t *testing.T) {
 	if got := assets(t, db, src.ID()); len(got) != 1 || !reflect.DeepEqual(got[0], want) {
 		t.Errorf("assets = %+v, want [%+v]", got, want)
 	}
-	if got := onlyAsset(t, db, src.Customer()).ExposureAudit; got != declaration {
-		t.Errorf("ExposureAudit after the Sync = %+v, want %+v", got, declaration)
+	after := onlyAsset(t, db, src.Customer())
+	if after.ExposureAudit != declared.ExposureAudit {
+		t.Errorf("ExposureAudit after the Sync = %+v, want %+v", after.ExposureAudit, declared.ExposureAudit)
+	}
+	if after.InformationClassificationAudit != declared.InformationClassificationAudit {
+		t.Errorf("InformationClassificationAudit after the Sync = %+v, want %+v",
+			after.InformationClassificationAudit, declared.InformationClassificationAudit)
 	}
 }
 

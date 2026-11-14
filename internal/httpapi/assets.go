@@ -40,6 +40,22 @@ func (h assetHandler) register(api huma.API) {
 		Description: "Only a Customer Admin clears it. The Asset's Exposure falls back to the imported one, and its open Findings are rescored before the response.",
 		Errors:      []int{http.StatusNotFound},
 	}, h.clearExposure)
+	register(api, huma.Operation{
+		OperationID: "declare-asset-information-classification",
+		Method:      http.MethodPut,
+		Path:        "/assets/{id}/information-classification",
+		Summary:     "Declare an Asset's Information Classification",
+		Description: "Only a Customer Admin declares it, and only on an Active Asset. Unclassified cannot be declared: clear the Declaration instead. It is not scored, so no Finding is rescored. A Sync never changes it.",
+		Errors:      []int{http.StatusBadRequest, http.StatusNotFound, http.StatusConflict},
+	}, h.declareInformationClassification)
+	register(api, huma.Operation{
+		OperationID: "clear-asset-information-classification",
+		Method:      http.MethodDelete,
+		Path:        "/assets/{id}/information-classification",
+		Summary:     "Clear an Asset's Information Classification",
+		Description: "Only a Customer Admin clears it, even on an Inactive Asset. The Asset is Unclassified again.",
+		Errors:      []int{http.StatusNotFound},
+	}, h.clearInformationClassification)
 }
 
 type assetQuery struct {
@@ -106,22 +122,23 @@ type assetListResponse struct {
 }
 
 type assetResponse struct {
-	ID            int64              `json:"id" doc:"The Asset's handle in this API, as in PUT /assets/{id}/exposure"`
-	SourceID      string             `json:"source_id"`
-	RecordID      string             `json:"record_id"`
-	Name          string             `json:"name"`
-	Description   string             `json:"description"`
-	Kind          string             `json:"kind"`
-	Hardware      *hardwareResponse  `json:"hardware"`
-	Software      []softwareResponse `json:"software"`
-	Criticality   *string            `json:"criticality"`
-	Exposure      exposureResponse   `json:"exposure"`
-	Lifecycle     *string            `json:"lifecycle_stage" enum:"production,implementation,stock" doc:"Null when the CMDB Source does not give it, and for a retired Asset"`
-	Owner         *ownerResponse     `json:"owner"`
-	Area          *areaRefResponse   `json:"area"`
-	Retired       bool               `json:"retired"`
-	Active        bool               `json:"active"`
-	InactiveSince *time.Time         `json:"inactive_since"`
+	ID                        int64                             `json:"id" doc:"The Asset's handle in this API, as in PUT /assets/{id}/exposure"`
+	SourceID                  string                            `json:"source_id"`
+	RecordID                  string                            `json:"record_id"`
+	Name                      string                            `json:"name"`
+	Description               string                            `json:"description"`
+	Kind                      string                            `json:"kind"`
+	Hardware                  *hardwareResponse                 `json:"hardware"`
+	Software                  []softwareResponse                `json:"software"`
+	Criticality               *string                           `json:"criticality"`
+	Exposure                  exposureResponse                  `json:"exposure"`
+	Lifecycle                 *string                           `json:"lifecycle_stage" enum:"production,implementation,stock" doc:"Null when the CMDB Source does not give it, and for a retired Asset"`
+	InformationClassification informationClassificationResponse `json:"information_classification"`
+	Owner                     *ownerResponse                    `json:"owner"`
+	Area                      *areaRefResponse                  `json:"area"`
+	Retired                   bool                              `json:"retired"`
+	Active                    bool                              `json:"active"`
+	InactiveSince             *time.Time                        `json:"inactive_since"`
 }
 
 type hardwareResponse struct {
@@ -165,6 +182,28 @@ type declareExposureInput struct {
 	Body declareExposureRequest
 }
 
+type informationClassificationResponse struct {
+	Value      *string    `json:"value" enum:"public,private,confidential" doc:"The declared Information Classification; null when Unclassified"`
+	DeclaredBy *string    `json:"declared_by" doc:"Email of the User who declared it; null when Unclassified"`
+	DeclaredAt *time.Time `json:"declared_at" doc:"When it was declared; null when Unclassified"`
+}
+
+type informationClassificationCode string
+
+func (informationClassificationCode) Schema(huma.Registry) *huma.Schema {
+	return &huma.Schema{Type: huma.TypeString, Enum: codes(inventory.ClassifiedPublic, inventory.ClassifiedPrivate, inventory.ClassifiedConfidential)}
+}
+
+type declareInformationClassificationRequest struct {
+	_                         struct{}                      `additionalProperties:"true"`
+	InformationClassification informationClassificationCode `json:"information_classification" doc:"Unclassified cannot be declared; clear the Declaration instead"`
+}
+
+type declareInformationClassificationInput struct {
+	ID   int64 `path:"id"`
+	Body declareInformationClassificationRequest
+}
+
 type assetIDInput struct {
 	ID int64 `path:"id"`
 }
@@ -206,19 +245,20 @@ func newAssetResponse(stored assets.StoredAsset) assetResponse {
 	a, imported := stored.Asset, stored.Asset.Imported()
 	software := imported.Software()
 	resp := assetResponse{
-		ID:            stored.ID,
-		SourceID:      a.Ref().Source.String(),
-		RecordID:      a.Ref().RecordID,
-		Name:          imported.Name(),
-		Description:   imported.Description(),
-		Kind:          imported.Kind().Code(),
-		Software:      make([]softwareResponse, len(software)),
-		Criticality:   code(imported.Criticality().Code()),
-		Exposure:      newExposureResponse(stored),
-		Lifecycle:     code(imported.Lifecycle().Code()),
-		Retired:       imported.Retired(),
-		Active:        a.Active(),
-		InactiveSince: stored.InactiveSince,
+		ID:                        stored.ID,
+		SourceID:                  a.Ref().Source.String(),
+		RecordID:                  a.Ref().RecordID,
+		Name:                      imported.Name(),
+		Description:               imported.Description(),
+		Kind:                      imported.Kind().Code(),
+		Software:                  make([]softwareResponse, len(software)),
+		Criticality:               code(imported.Criticality().Code()),
+		Exposure:                  newExposureResponse(stored),
+		Lifecycle:                 code(imported.Lifecycle().Code()),
+		InformationClassification: newInformationClassificationResponse(stored),
+		Retired:                   imported.Retired(),
+		Active:                    a.Active(),
+		InactiveSince:             stored.InactiveSince,
 	}
 	if hw, ok := imported.Hardware(); ok {
 		resp.Hardware = &hardwareResponse{Vendor: hw.Vendor, Model: hw.Model}
@@ -255,6 +295,15 @@ func newExposureResponse(stored assets.StoredAsset) exposureResponse {
 	return resp
 }
 
+func newInformationClassificationResponse(stored assets.StoredAsset) informationClassificationResponse {
+	c := stored.Asset.InformationClassification()
+	if c == inventory.Unclassified {
+		return informationClassificationResponse{}
+	}
+	audit := stored.InformationClassificationAudit
+	return informationClassificationResponse{Value: code(c.Code()), DeclaredBy: &audit.By, DeclaredAt: &audit.At}
+}
+
 func (h assetHandler) declareExposure(ctx context.Context, caller tenancy.User, in *declareExposureInput) (*body[assetResponse], error) {
 	e, err := inventory.ParseExposure(string(in.Body.Exposure))
 	if err != nil {
@@ -269,6 +318,26 @@ func (h assetHandler) declareExposure(ctx context.Context, caller tenancy.User, 
 
 func (h assetHandler) clearExposure(ctx context.Context, caller tenancy.User, in *assetIDInput) (*body[assetResponse], error) {
 	stored, err := h.assets.ClearExposure(ctx, caller, in.ID)
+	if err != nil {
+		return nil, err
+	}
+	return &body[assetResponse]{Body: newAssetResponse(stored)}, nil
+}
+
+func (h assetHandler) declareInformationClassification(ctx context.Context, caller tenancy.User, in *declareInformationClassificationInput) (*body[assetResponse], error) {
+	c, err := inventory.ParseInformationClassification(string(in.Body.InformationClassification))
+	if err != nil {
+		return nil, err
+	}
+	stored, err := h.assets.DeclareInformationClassification(ctx, caller, in.ID, c)
+	if err != nil {
+		return nil, err
+	}
+	return &body[assetResponse]{Body: newAssetResponse(stored)}, nil
+}
+
+func (h assetHandler) clearInformationClassification(ctx context.Context, caller tenancy.User, in *assetIDInput) (*body[assetResponse], error) {
+	stored, err := h.assets.ClearInformationClassification(ctx, caller, in.ID)
 	if err != nil {
 		return nil, err
 	}

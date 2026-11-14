@@ -159,3 +159,17 @@ func declareInternal(t *testing.T, db *postgres.DB, customer tenancy.CustomerID,
 		return tx.DeclareExposure(context.Background(), stored.Asset, by)
 	})
 }
+
+func declareConfidential(t *testing.T, db *postgres.DB, customer tenancy.CustomerID, id int64, by tenancy.UserID) {
+	t.Helper()
+	inTx(t, db, func(tx *postgres.Tx) error {
+		stored, err := tx.CustomerAsset(context.Background(), customer, id)
+		if err != nil {
+			return err
+		}
+		if err := stored.Asset.DeclareInformationClassification(inventory.ClassifiedConfidential); err != nil {
+			return err
+		}
+		return tx.DeclareInformationClassification(context.Background(), stored.Asset, by)
+	})
+}
