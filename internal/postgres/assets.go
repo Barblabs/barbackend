@@ -279,6 +279,9 @@ type StoredAsset struct {
 	// ExposureAudit is who declared the Asset's Exposure and when, set exactly
 	// when Asset.DeclaredExposure is not Unknown.
 	ExposureAudit DeclarationAudit
+	// InformationClassificationAudit is who declared the Asset's Information
+	// Classification and when, set exactly when it is not Unclassified.
+	InformationClassificationAudit DeclarationAudit
 }
 
 // DeclarationAudit is who stated a declared value and when.
@@ -297,13 +300,25 @@ func restoreAsset(row sqlcgen.ListAssetsRow, software map[inventory.SourceRefere
 	if row.AreaID != nil {
 		stored.Area = &AreaSummary{ID: *row.AreaID, Name: valueOrZero(row.AreaName)}
 	}
-	if row.DeclaredExposureID != nil {
-		if row.ExposureDeclaredBy == nil || row.ExposureDeclaredAt == nil {
-			return StoredAsset{}, fmt.Errorf("restore asset %v: declared exposure without who declared it and when", ref)
-		}
-		stored.ExposureAudit = DeclarationAudit{By: *row.ExposureDeclaredBy, At: *row.ExposureDeclaredAt}
+	if stored.ExposureAudit, err = declarationAudit(row.DeclaredExposureID, row.ExposureDeclaredBy, row.ExposureDeclaredAt); err != nil {
+		return StoredAsset{}, fmt.Errorf("restore asset %v: exposure: %w", ref, err)
+	}
+	stored.InformationClassificationAudit, err = declarationAudit(
+		row.DeclaredInformationClassificationID, row.InformationClassificationDeclaredBy, row.InformationClassificationDeclaredAt)
+	if err != nil {
+		return StoredAsset{}, fmt.Errorf("restore asset %v: information classification: %w", ref, err)
 	}
 	return stored, nil
+}
+
+func declarationAudit(value *int16, by *string, at *time.Time) (DeclarationAudit, error) {
+	if value == nil {
+		return DeclarationAudit{}, nil
+	}
+	if by == nil || at == nil {
+		return DeclarationAudit{}, errors.New("declared without who declared it and when")
+	}
+	return DeclarationAudit{By: *by, At: *at}, nil
 }
 
 func restoreAssetValues(ref inventory.SourceReference, row sqlcgen.ListAssetsRow, software []inventory.SoftwareComponent) (*inventory.Asset, error) {
@@ -335,6 +350,8 @@ func restoreAssetValues(ref inventory.SourceReference, row sqlcgen.ListAssetsRow
 		Active:           row.InactiveSince == nil,
 		DeclaredOwner:    declaredOwner,
 		DeclaredExposure: inventory.Exposure(valueOrZero(row.DeclaredExposureID)),
+		DeclaredInformationClassification: inventory.InformationClassification(
+			valueOrZero(row.DeclaredInformationClassificationID)),
 	})
 }
 

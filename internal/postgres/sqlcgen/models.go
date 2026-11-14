@@ -40,27 +40,30 @@ type AnalistaConversation struct {
 }
 
 type Asset struct {
-	CmdbSourceID       uuid.UUID
-	RecordID           string
-	Name               string
-	Description        string
-	KindID             int16
-	HardwareVendor     *string
-	HardwareModel      *string
-	CriticalityID      *int16
-	ImportedOwnerID    *int64
-	Retired            bool
-	DeclaredOwnerID    *int64
-	DeclaredExposureID *int16
-	CreatedAt          time.Time
-	ImportedChangedAt  time.Time
-	InactiveSince      *time.Time
-	AreaRecordID       *string
-	ImportedExposureID *int16
-	ID                 int64
-	ExposureDeclaredBy pgtype.UUID
-	ExposureDeclaredAt *time.Time
-	LifecycleStageID   *int16
+	CmdbSourceID                        uuid.UUID
+	RecordID                            string
+	Name                                string
+	Description                         string
+	KindID                              int16
+	HardwareVendor                      *string
+	HardwareModel                       *string
+	CriticalityID                       *int16
+	ImportedOwnerID                     *int64
+	Retired                             bool
+	DeclaredOwnerID                     *int64
+	DeclaredExposureID                  *int16
+	CreatedAt                           time.Time
+	ImportedChangedAt                   time.Time
+	InactiveSince                       *time.Time
+	AreaRecordID                        *string
+	ImportedExposureID                  *int16
+	ID                                  int64
+	ExposureDeclaredBy                  pgtype.UUID
+	ExposureDeclaredAt                  *time.Time
+	LifecycleStageID                    *int16
+	DeclaredInformationClassificationID *int16
+	InformationClassificationDeclaredBy pgtype.UUID
+	InformationClassificationDeclaredAt *time.Time
 }
 
 type AssetKind struct {
@@ -208,6 +211,11 @@ type FindingScoreDataGap struct {
 	FindingID uuid.UUID
 	ScoredAt  time.Time
 	GapID     int16
+}
+
+type InformationClassification struct {
+	ID   int16
+	Name string
 }
 
 type LifecycleStage struct {
