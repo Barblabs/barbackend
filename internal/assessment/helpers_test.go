@@ -148,3 +148,20 @@ func briefs(t *testing.T) []assessment.Brief {
 }
 
 func ptr[T any](v T) *T { return &v }
+
+func part(reason string, findings ...string) assessment.GroupPart {
+	evidence := make([]assessment.FindingEvidence, len(findings))
+	for i, id := range findings {
+		evidence[i] = assessment.FindingEvidence{Finding: id, Path: "/kev", Value: "null"}
+	}
+	return assessment.GroupPart{Findings: findings, Reason: reason, Evidence: evidence}
+}
+
+// standingDossier is a Finding that stands, as osDossier with another id and
+// CVE.
+func standingDossier(t *testing.T, id string) assessment.Dossier {
+	t.Helper()
+	d := osDossier(t)
+	d.Finding, d.CVE = id, standingCVE
+	return d
+}

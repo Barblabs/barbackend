@@ -281,12 +281,3 @@ func TestDisconnectingASourceClosesTheFindingsOfItsAssets(t *testing.T) {
 		t.Errorf("open findings = %+v, want none of a Disconnected source", open)
 	}
 }
-
-func inTxValue[T any](t *testing.T, db *postgres.DB, fn func(*postgres.Tx) (T, error)) T {
-	t.Helper()
-	v, err := postgres.InTxValue(context.Background(), db, fn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return v
-}

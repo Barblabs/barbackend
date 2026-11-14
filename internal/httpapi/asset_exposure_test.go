@@ -20,15 +20,6 @@ import (
 
 var nginx = inventory.SoftwareComponent{Role: inventory.Application, Name: "nginx", Version: "1.18.0", Product: inventory.Product{Vendor: "f5", Name: "nginx"}}
 
-// virtualMachine is a record of a Virtual Machine running nginx; iTop gives
-// a Virtual Machine no Location, so its Exposure is Unknown (ADR 0021).
-func virtualMachine(t *testing.T, id string, retired bool) inventory.Record {
-	t.Helper()
-	return inventory.Record{RecordID: id, Imported: imported(t, inventory.ImportedAssetParams{
-		Name: "vm-" + id, Kind: inventory.VirtualMachine, Software: []inventory.SoftwareComponent{nginx}, Retired: retired,
-	})}
-}
-
 // openFinding stores a Finding of a CVE on the record's nginx, scored as the
 // Findings pipeline would score it with its Exposure Unknown.
 func (e env) openFinding(t *testing.T, src inventory.CMDBSourceID, recordID string) finding.ID {

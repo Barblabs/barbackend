@@ -62,19 +62,6 @@ func TestUserBySubWithUnknownSub(t *testing.T) {
 	}
 }
 
-func storeUser(t *testing.T, db *postgres.DB, email string, role tenancy.Role, customer tenancy.CustomerID) tenancy.User {
-	t.Helper()
-	u, err := tenancy.NewUser(tenancy.UserID(uuid.New()), email, role, customer)
-	if err != nil {
-		t.Fatal(err)
-	}
-	inTx(t, db, func(tx *postgres.Tx) error {
-		_, err := tx.CreateUser(context.Background(), u, uuid.NewString())
-		return err
-	})
-	return u
-}
-
 func TestUsersAreOnlyTheCustomersOrderedByEmail(t *testing.T) {
 	t.Parallel()
 	db, _ := newDBWithConn(t)

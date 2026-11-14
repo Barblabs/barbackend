@@ -13,15 +13,6 @@ import (
 
 const standingCVE = "CVE-2023-38408"
 
-// standingDossier is a Finding that stands, as osDossier with another id and
-// CVE.
-func standingDossier(t *testing.T, id string) assessment.Dossier {
-	t.Helper()
-	d := osDossier(t)
-	d.Finding, d.CVE = id, standingCVE
-	return d
-}
-
 // round places f-1 and f-2 in an order of two standing groups, f-0's and
 // f-3's, for a Customer averse to risk.
 func round(t *testing.T) assessment.Round {

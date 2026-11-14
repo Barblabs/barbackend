@@ -57,3 +57,19 @@ func restoreArea(t *testing.T, id, name string, state inventory.AreaState) *inve
 	}
 	return a
 }
+
+func recs(id string, p inventory.ImportedAssetParams) map[string]inventory.ImportedAssetParams {
+	return map[string]inventory.ImportedAssetParams{id: p}
+}
+
+func snapshot(t *testing.T, records map[string]inventory.ImportedAssetParams, skipped ...string) inventory.Snapshot {
+	t.Helper()
+	var s inventory.Snapshot
+	for id, p := range records {
+		s.Records = append(s.Records, inventory.Record{RecordID: id, Imported: mustImported(t, p)})
+	}
+	for _, id := range skipped {
+		s.Skipped = append(s.Skipped, inventory.SkippedRecord{RecordID: id, Reason: "invalid " + id})
+	}
+	return s
+}

@@ -5,31 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"barbackend/internal/postgres"
 	"barbackend/internal/tenancy"
-	"barbackend/internal/users"
 )
-
-// customerAdmin creates a Customer and returns its first Customer Admin.
-func customerAdmin(t *testing.T, svc *users.Service, db *postgres.DB, admin *fakeAdmin) tenancy.User {
-	t.Helper()
-	if _, err := svc.CreateCustomer(context.Background(), platformAdmin(t), "Acme", "admin@example.com"); err != nil {
-		t.Fatal(err)
-	}
-	return userBySub(t, db, admin.created[len(admin.created)-1])
-}
-
-func userBySub(t *testing.T, db *postgres.DB, sub string) tenancy.User {
-	t.Helper()
-	var u tenancy.User
-	if err := db.InTx(context.Background(), func(tx *postgres.Tx) (err error) {
-		u, err = tx.UserBySub(context.Background(), sub)
-		return err
-	}); err != nil {
-		t.Fatal(err)
-	}
-	return u
-}
 
 func TestDisabledUserIsRefusedAtOnce(t *testing.T) {
 	t.Parallel()

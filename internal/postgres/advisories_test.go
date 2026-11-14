@@ -23,11 +23,6 @@ func advisory(name string, modified time.Time) postgres.StoredAdvisory {
 	}
 }
 
-func storeAdvisory(t *testing.T, db *postgres.DB, a postgres.StoredAdvisory, cves ...string) {
-	t.Helper()
-	inTx(t, db, func(tx *postgres.Tx) error { return tx.StoreAdvisory(context.Background(), a, cves) })
-}
-
 func advisoriesOf(t *testing.T, db *postgres.DB, cve string) []postgres.StoredAdvisory {
 	t.Helper()
 	var out []postgres.StoredAdvisory

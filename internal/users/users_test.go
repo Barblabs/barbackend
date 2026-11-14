@@ -6,9 +6,7 @@ import (
 	"testing"
 
 	"barbackend/internal/postgres"
-	"barbackend/internal/postgres/pgtest"
 	"barbackend/internal/tenancy"
-	"barbackend/internal/users"
 	"github.com/google/uuid"
 )
 
@@ -33,16 +31,6 @@ func (a *fakeAdmin) CreateUser(_ context.Context, email string) (string, error) 
 	sub := uuid.NewString()
 	a.created = append(a.created, sub)
 	return sub, nil
-}
-
-func newService(t *testing.T, admin users.Admin) (*users.Service, *postgres.DB) {
-	t.Helper()
-	db, err := postgres.Open(context.Background(), pgtest.URL(t))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(db.Close)
-	return users.New(db, nil, admin), db
 }
 
 func TestByEmailResolvesAnOperatorsInput(t *testing.T) {

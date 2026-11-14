@@ -564,3 +564,21 @@ func (e env) userEmail(t *testing.T, id string) string {
 	}
 	return email
 }
+
+// virtualMachine is a record of a Virtual Machine running nginx; iTop gives
+// a Virtual Machine no Location, so its Exposure is Unknown (ADR 0021).
+func virtualMachine(t *testing.T, id string, retired bool) inventory.Record {
+	t.Helper()
+	return inventory.Record{RecordID: id, Imported: imported(t, inventory.ImportedAssetParams{
+		Name: "vm-" + id, Kind: inventory.VirtualMachine, Software: []inventory.SoftwareComponent{nginx}, Retired: retired,
+	})}
+}
+
+func imported(t *testing.T, p inventory.ImportedAssetParams) inventory.ImportedAsset {
+	t.Helper()
+	a, err := inventory.NewImportedAsset(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return a
+}

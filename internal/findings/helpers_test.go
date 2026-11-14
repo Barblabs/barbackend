@@ -225,3 +225,13 @@ func (w world) latestMultipliers(t *testing.T, id uuid.UUID) multipliers {
 	}
 	return m
 }
+
+// matchedPayments is a world whose payments server has an open Finding of
+// CVE-2021-23017.
+func matchedPayments(t *testing.T) (world, storedFinding) {
+	t.Helper()
+	w := newWorld(t)
+	w.sync(t, server(t, "payments", inventory.CriticalityHigh, app("Nginx", "f5", "nginx", "1.18.0")))
+	w.handleNVD(t, nvdVulnerability(t, "CVE-2021-23017", "Analyzed", nginxBefore1201))
+	return w, w.mustFinding(t, "payments", "CVE-2021-23017")
+}

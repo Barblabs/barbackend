@@ -27,19 +27,6 @@ func createPending(t *testing.T, db *postgres.DB, customer tenancy.CustomerID, c
 	return stored
 }
 
-func claim(t *testing.T, db *postgres.DB, now time.Time) (postgres.Invitation, bool) {
-	t.Helper()
-	var (
-		claimed postgres.Invitation
-		due     bool
-	)
-	inTx(t, db, func(tx *postgres.Tx) (err error) {
-		claimed, due, err = tx.ClaimInvitation(context.Background(), now, now.Add(time.Minute))
-		return err
-	})
-	return claimed, due
-}
-
 func TestAPendingUserIsListedButNotFoundBySub(t *testing.T) {
 	t.Parallel()
 	db, _ := newDBWithConn(t)

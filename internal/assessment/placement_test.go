@@ -11,14 +11,6 @@ import (
 	"barbackend/internal/stixext"
 )
 
-func part(reason string, findings ...string) assessment.GroupPart {
-	evidence := make([]assessment.FindingEvidence, len(findings))
-	for i, id := range findings {
-		evidence[i] = assessment.FindingEvidence{Finding: id, Path: "/kev", Value: "null"}
-	}
-	return assessment.GroupPart{Findings: findings, Reason: reason, Evidence: evidence}
-}
-
 // list is an order of three groups: f-0 alone, then f-1 with f-2, which a
 // later round added, then f-3.
 func list() assessment.PriorityList {
