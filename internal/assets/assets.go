@@ -1,5 +1,6 @@
 // Package assets holds the use cases on a Customer's Assets: listing them
-// across all its CMDB Sources and declaring their Exposure (ADR 0008).
+// across all its CMDB Sources and declaring their Exposure and Information
+// Classification (ADR 0008).
 package assets
 
 import (

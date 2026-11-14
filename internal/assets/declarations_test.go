@@ -217,3 +217,81 @@ func TestDeclaringExposureIsRefused(t *testing.T) {
 		t.Errorf("exposure %v after %d rescores, want nothing declared or rescored", stored.Asset.Exposure(), len(e.rescorer.rescored))
 	}
 }
+
+func TestDeclareInformationClassificationStoresTheCallersDeclarationWithoutRescoring(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	vm := e.asset(t, "vm")
+
+	got, err := e.assets.DeclareInformationClassification(context.Background(), e.admin, vm.ID, inventory.ClassifiedConfidential)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got.Asset.InformationClassification() != inventory.ClassifiedConfidential || got.InformationClassificationAudit.By != e.admin.Email() {
+		t.Errorf("returned classification %v declared %+v, want Confidential by %s",
+			got.Asset.InformationClassification(), got.InformationClassificationAudit, e.admin.Email())
+	}
+	if stored := e.asset(t, "vm"); stored.Asset.InformationClassification() != inventory.ClassifiedConfidential {
+		t.Errorf("stored classification = %v, want Confidential", stored.Asset.InformationClassification())
+	}
+	if len(e.rescorer.rescored) != 0 {
+		t.Errorf("rescored %v, want nothing: Information Classification is not scored", e.rescorer.rescored)
+	}
+}
+
+func TestClearInformationClassificationLeavesTheAssetUnclassifiedWithoutRescoring(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	vm := e.asset(t, "vm")
+	if _, err := e.assets.DeclareInformationClassification(context.Background(), e.admin, vm.ID, inventory.ClassifiedPublic); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := e.assets.ClearInformationClassification(context.Background(), e.admin, vm.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got.Asset.InformationClassification() != inventory.Unclassified || got.InformationClassificationAudit != (postgres.DeclarationAudit{}) {
+		t.Errorf("classification %v declared %+v, want Unclassified and no Declaration",
+			got.Asset.InformationClassification(), got.InformationClassificationAudit)
+	}
+	if len(e.rescorer.rescored) != 0 {
+		t.Errorf("rescored %v, want nothing: Information Classification is not scored", e.rescorer.rescored)
+	}
+}
+
+func TestDeclaringInformationClassificationIsRefused(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	viewer := e.storeUser(t, tenancy.Viewer)
+	other := newCustomer(t, e.db)
+	connect(t, e.db, other, map[string]bool{"theirs": true})
+	theirs := assetOf(t, e.assets, other, "theirs").ID
+	tests := []struct {
+		name           string
+		caller         tenancy.User
+		id             int64
+		classification inventory.InformationClassification
+		want           error
+	}{
+		{"to a viewer", viewer, e.asset(t, "vm").ID, inventory.ClassifiedPrivate, tenancy.ErrNotCustomerAdmin},
+		{"on an inactive asset", e.admin, e.asset(t, "gone").ID, inventory.ClassifiedPrivate, inventory.ErrAssetInactive},
+		{"as unclassified", e.admin, e.asset(t, "vm").ID, inventory.Unclassified, inventory.ErrInvalidInformationClassification},
+		{"on an asset of another customer", e.admin, theirs, inventory.ClassifiedPrivate, assets.ErrAssetNotFound},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := e.assets.DeclareInformationClassification(context.Background(), tt.caller, tt.id, tt.classification); !errors.Is(err, tt.want) {
+				t.Errorf("err = %v, want %v", err, tt.want)
+			}
+		})
+	}
+	if _, err := e.assets.ClearInformationClassification(context.Background(), viewer, e.asset(t, "vm").ID); !errors.Is(err, tenancy.ErrNotCustomerAdmin) {
+		t.Errorf("clearing as a viewer: err = %v, want %v", err, tenancy.ErrNotCustomerAdmin)
+	}
+	if stored := e.asset(t, "vm"); stored.Asset.InformationClassification() != inventory.Unclassified {
+		t.Errorf("classification = %v, want nothing declared", stored.Asset.InformationClassification())
+	}
+}
