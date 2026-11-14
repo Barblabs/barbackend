@@ -56,4 +56,12 @@ func TestCodesRoundTrip(t *testing.T) {
 	if _, err := inventory.ParseLifecycleStage(""); err == nil {
 		t.Error("ParseLifecycleStage accepted the empty code of Unknown")
 	}
+	for _, c := range []inventory.InformationClassification{inventory.ClassifiedPublic, inventory.ClassifiedPrivate, inventory.ClassifiedConfidential} {
+		if got, err := inventory.ParseInformationClassification(c.Code()); err != nil || got != c {
+			t.Errorf("inventory.ParseInformationClassification(%q) = %v, %v, want %v", c.Code(), got, err, c)
+		}
+	}
+	if _, err := inventory.ParseInformationClassification(""); err == nil {
+		t.Error("ParseInformationClassification accepted the empty code of Unclassified")
+	}
 }

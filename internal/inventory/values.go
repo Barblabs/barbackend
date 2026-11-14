@@ -7,17 +7,18 @@ import (
 )
 
 var (
-	ErrInvalidSourceReference   = errors.New("invalid source reference")
-	ErrInvalidKind              = errors.New("invalid asset kind")
-	ErrEmptyName                = errors.New("name is required")
-	ErrHardwareOnVirtual        = errors.New("virtual machine cannot have hardware")
-	ErrInvalidSoftware          = errors.New("invalid software component")
-	ErrMultipleOperatingSystems = errors.New("asset has more than one operating system")
-	ErrInvalidCriticality       = errors.New("invalid criticality")
-	ErrInvalidExposure          = errors.New("invalid exposure")
-	ErrInvalidLifecycleStage    = errors.New("invalid lifecycle stage")
-	ErrEmptyOwnerEmail          = errors.New("owner email is empty")
-	ErrZeroImportedAsset        = errors.New("imported asset is the zero value")
+	ErrInvalidSourceReference           = errors.New("invalid source reference")
+	ErrInvalidKind                      = errors.New("invalid asset kind")
+	ErrEmptyName                        = errors.New("name is required")
+	ErrHardwareOnVirtual                = errors.New("virtual machine cannot have hardware")
+	ErrInvalidSoftware                  = errors.New("invalid software component")
+	ErrMultipleOperatingSystems         = errors.New("asset has more than one operating system")
+	ErrInvalidCriticality               = errors.New("invalid criticality")
+	ErrInvalidExposure                  = errors.New("invalid exposure")
+	ErrInvalidLifecycleStage            = errors.New("invalid lifecycle stage")
+	ErrInvalidInformationClassification = errors.New("invalid information classification")
+	ErrEmptyOwnerEmail                  = errors.New("owner email is empty")
+	ErrZeroImportedAsset                = errors.New("imported asset is the zero value")
 	// ErrAssetInactive is a Declaration asked of an Asset barbattack no longer
 	// monitors.
 	ErrAssetInactive = errors.New("asset is inactive")
@@ -193,6 +194,37 @@ func (s LifecycleStage) String() string {
 	}
 }
 
+// InformationClassification is how sensitive the data an Asset holds is. It
+// is only declared, and Unclassified until then (ADR 0031).
+type InformationClassification int
+
+// Stored as catalog ids (ADR 0006): never renumber.
+const (
+	Unclassified           InformationClassification = 0
+	ClassifiedPublic       InformationClassification = 1
+	ClassifiedPrivate      InformationClassification = 2
+	ClassifiedConfidential InformationClassification = 3
+)
+
+func (c InformationClassification) valid() bool {
+	return c >= Unclassified && c <= ClassifiedConfidential
+}
+
+func (c InformationClassification) String() string {
+	switch c {
+	case Unclassified:
+		return "Unclassified"
+	case ClassifiedPublic:
+		return "Public"
+	case ClassifiedPrivate:
+		return "Private"
+	case ClassifiedConfidential:
+		return "Confidential"
+	default:
+		return fmt.Sprintf("InformationClassification(%d)", int(c))
+	}
+}
+
 // OwnerEmail identifies an Asset Owner. Emails differing only in case or
 // surrounding space name the same person (ADR 0003), so every edge gets the
 // same canonical form from here. The zero value means no owner.
@@ -216,11 +248,12 @@ func (o OwnerEmail) isZero() bool { return o == OwnerEmail{} }
 func blank(s string) bool { return strings.TrimSpace(s) == "" }
 
 var (
-	assetKindCodes    = map[AssetKind]string{Server: "server", VirtualMachine: "virtual_machine", Workstation: "workstation", NetworkDevice: "network_device"}
-	criticalityCodes  = map[Criticality]string{CriticalityHigh: "high", CriticalityMedium: "medium", CriticalityLow: "low"}
-	exposureCodes     = map[Exposure]string{InternetFacing: "internet_facing", Internal: "internal"}
-	lifecycleCodes    = map[LifecycleStage]string{LifecycleProduction: "production", LifecycleImplementation: "implementation", LifecycleStock: "stock"}
-	softwareRoleCodes = map[SoftwareRole]string{OperatingSystem: "operating_system", Application: "application"}
+	assetKindCodes                 = map[AssetKind]string{Server: "server", VirtualMachine: "virtual_machine", Workstation: "workstation", NetworkDevice: "network_device"}
+	criticalityCodes               = map[Criticality]string{CriticalityHigh: "high", CriticalityMedium: "medium", CriticalityLow: "low"}
+	exposureCodes                  = map[Exposure]string{InternetFacing: "internet_facing", Internal: "internal"}
+	lifecycleCodes                 = map[LifecycleStage]string{LifecycleProduction: "production", LifecycleImplementation: "implementation", LifecycleStock: "stock"}
+	informationClassificationCodes = map[InformationClassification]string{ClassifiedPublic: "public", ClassifiedPrivate: "private", ClassifiedConfidential: "confidential"}
+	softwareRoleCodes              = map[SoftwareRole]string{OperatingSystem: "operating_system", Application: "application"}
 )
 
 // Code is the stable lowercase snake_case name clients use for the kind, or
@@ -270,6 +303,19 @@ func ParseLifecycleStage(code string) (LifecycleStage, error) {
 		return s, nil
 	}
 	return 0, fmt.Errorf("%w: %q", ErrInvalidLifecycleStage, code)
+}
+
+// Code is the stable lowercase snake_case name clients use for the
+// classification, or empty for Unclassified.
+func (c InformationClassification) Code() string { return informationClassificationCodes[c] }
+
+// ParseInformationClassification is the inverse of
+// InformationClassification.Code. Unclassified has no code.
+func ParseInformationClassification(code string) (InformationClassification, error) {
+	if c, ok := parseCode(informationClassificationCodes, code); ok {
+		return c, nil
+	}
+	return 0, fmt.Errorf("%w: %q", ErrInvalidInformationClassification, code)
 }
 
 // Code is the stable lowercase snake_case name clients use for the role.
