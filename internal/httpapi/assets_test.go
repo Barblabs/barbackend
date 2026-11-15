@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"testing"
 	"time"
 
@@ -121,18 +122,30 @@ func TestListAssetsSurvivesADeactivationBetweenPages(t *testing.T) {
 func TestListAssetsFilters(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
-	asset := func(id, name string, k inventory.AssetKind, c inventory.Criticality, x inventory.Exposure) inventory.Record {
-		return inventory.Record{RecordID: id, Imported: imported(t, inventory.ImportedAssetParams{Name: name, Kind: k, Criticality: c, Exposure: x})}
+	asset := func(id, name string, k inventory.AssetKind, c inventory.Criticality, x inventory.Exposure, area string) inventory.Record {
+		return inventory.Record{RecordID: id, Imported: imported(t, inventory.ImportedAssetParams{Name: name, Kind: k, Criticality: c, Exposure: x, Area: area})}
 	}
 	active := []inventory.Record{
-		asset("1", "a", inventory.Server, inventory.CriticalityHigh, inventory.InternetFacing),
-		asset("2", "b", inventory.Server, inventory.CriticalityLow, inventory.Internal),
+		asset("1", "a", inventory.Server, inventory.CriticalityHigh, inventory.InternetFacing, "it"),
+		asset("2", "b", inventory.Server, inventory.CriticalityLow, inventory.Internal, "it"),
 		record(t, "3", "c"),
-		asset("5", "e", inventory.Workstation, inventory.CriticalityMedium, inventory.Internal),
+		asset("5", "e", inventory.Workstation, inventory.CriticalityMedium, inventory.Internal, ""),
 	}
-	e.provider.Snapshot = inventory.Snapshot{Records: append(active, record(t, "4", "d"))}
+	areas := []inventory.AreaRecord{areaRecord(t, "it", "IT")}
+	snapshot := func(records ...inventory.Record) inventory.Snapshot {
+		return inventory.Snapshot{Areas: areas, Records: records}
+	}
+	e.provider.Snapshot = snapshot(append(active, record(t, "4", "d"))...)
 	e.connect(t, e.customer)
-	e.syncRecords(t, active...)
+	e.provider.Snapshot = snapshot(active...)
+	if rec := e.sync(context.Background()); rec.Code != http.StatusOK {
+		t.Fatalf("sync = %d %s", rec.Code, rec.Body)
+	}
+	_, admin := e.customerAdmin(t, e.customer)
+	if rec := e.asUser(admin, http.MethodPut, informationClassificationPath(e.assetNamed(t, "1").ID), informationClassificationBody("confidential")); rec.Code != http.StatusOK {
+		t.Fatalf("declare classification = %d %s", rec.Code, rec.Body)
+	}
+	it := strconv.FormatInt(e.areaID(t, "it"), 10)
 
 	tests := []struct {
 		name  string
@@ -147,6 +160,10 @@ func TestListAssetsFilters(t *testing.T) {
 		{"criticality", url.Values{"criticality": {"high"}}, []string{"1"}},
 		{"unknown criticality", url.Values{"criticality": {"unknown"}}, []string{"3"}},
 		{"unknown exposure", url.Values{"exposure": {"unknown"}}, []string{"3"}},
+		{"confidential", url.Values{"information_classification": {"confidential"}}, []string{"1"}},
+		{"unclassified", url.Values{"information_classification": {"unclassified"}}, []string{"2", "3", "5"}},
+		{"area", url.Values{"area": {it}}, []string{"1", "2"}},
+		{"classification and area", url.Values{"information_classification": {"confidential"}, "area": {it}}, []string{"1"}},
 		{"kind and inactive", url.Values{"kind": {"virtual_machine"}, "active": {"all"}}, []string{"3", "4"}},
 	}
 	for _, tt := range tests {

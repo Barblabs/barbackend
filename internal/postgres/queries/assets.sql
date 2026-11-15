@@ -86,44 +86,54 @@ WHERE cmdb_source_id = @cmdb_source_id;
 
 -- The keyset condition and the ORDER BY both use (name, cmdb_source_id,
 -- record_id), so a page boundary is exact even between equal names.
+-- matching holds the Customer's Assets that pass every value filter, so the
+-- filter lives once; total counts them before the page keyset narrows the
+-- rows, and so counts every match whatever page is read.
 -- name: ListCustomerAssets :many
-SELECT a.id, a.cmdb_source_id, a.record_id, a.name, a.description, a.kind_id,
-       a.hardware_vendor, a.hardware_model, a.criticality_id,
-       imported_owner.email AS imported_owner, declared_owner.email AS declared_owner,
-       a.imported_exposure_id, a.declared_exposure_id, a.lifecycle_stage_id, a.area_record_id, a.retired, a.inactive_since,
-       area.id AS area_id, area.name AS area_name,
-       exposure_declarer.email AS exposure_declared_by, a.exposure_declared_at,
-       a.declared_information_classification_id,
-       information_classification_declarer.email AS information_classification_declared_by, a.information_classification_declared_at
-FROM assets a
-JOIN cmdb_sources s ON s.id = a.cmdb_source_id
-LEFT JOIN asset_owners imported_owner ON imported_owner.id = a.imported_owner_id
-LEFT JOIN asset_owners declared_owner ON declared_owner.id = a.declared_owner_id
-LEFT JOIN customer_areas area ON area.cmdb_source_id = a.cmdb_source_id AND area.record_id = a.area_record_id
-LEFT JOIN users exposure_declarer ON exposure_declarer.id = a.exposure_declared_by
-LEFT JOIN users information_classification_declarer ON information_classification_declarer.id = a.information_classification_declared_by
-WHERE s.customer_id = @customer_id
-  AND (sqlc.narg(active)::boolean IS NULL OR (a.inactive_since IS NULL) = sqlc.narg(active)::boolean)
-  AND (cardinality(@kind_ids::smallint[]) = 0 OR a.kind_id = ANY(@kind_ids::smallint[]))
-  AND (cardinality(@criticality_ids::smallint[]) = 0 OR coalesce(a.criticality_id, 0) = ANY(@criticality_ids::smallint[]))
-  AND (cardinality(@exposure_ids::smallint[]) = 0
-       OR coalesce(a.declared_exposure_id, a.imported_exposure_id, 0) = ANY(@exposure_ids::smallint[]))
-  AND (sqlc.narg(after_name)::text IS NULL
-       OR (a.name, a.cmdb_source_id, a.record_id)
-          > (sqlc.narg(after_name)::text, sqlc.narg(after_source_id)::uuid, sqlc.narg(after_record_id)::text))
-ORDER BY a.name, a.cmdb_source_id, a.record_id
+WITH matching AS (
+    SELECT a.id, a.cmdb_source_id, a.record_id, a.name, a.description, a.kind_id,
+           a.hardware_vendor, a.hardware_model, a.criticality_id,
+           imported_owner.email AS imported_owner, declared_owner.email AS declared_owner,
+           a.imported_exposure_id, a.declared_exposure_id, a.lifecycle_stage_id, a.area_record_id, a.retired, a.inactive_since,
+           area.id AS area_id, area.name AS area_name,
+           exposure_declarer.email AS exposure_declared_by, a.exposure_declared_at,
+           a.declared_information_classification_id,
+           information_classification_declarer.email AS information_classification_declared_by, a.information_classification_declared_at,
+           count(*) OVER () AS total
+    FROM assets a
+    JOIN cmdb_sources s ON s.id = a.cmdb_source_id
+    LEFT JOIN asset_owners imported_owner ON imported_owner.id = a.imported_owner_id
+    LEFT JOIN asset_owners declared_owner ON declared_owner.id = a.declared_owner_id
+    LEFT JOIN customer_areas area ON area.cmdb_source_id = a.cmdb_source_id AND area.record_id = a.area_record_id
+    LEFT JOIN users exposure_declarer ON exposure_declarer.id = a.exposure_declared_by
+    LEFT JOIN users information_classification_declarer ON information_classification_declarer.id = a.information_classification_declared_by
+    WHERE s.customer_id = @customer_id
+      AND (sqlc.narg(active)::boolean IS NULL OR (a.inactive_since IS NULL) = sqlc.narg(active)::boolean)
+      AND (cardinality(@kind_ids::smallint[]) = 0 OR a.kind_id = ANY(@kind_ids::smallint[]))
+      AND (cardinality(@criticality_ids::smallint[]) = 0 OR coalesce(a.criticality_id, 0) = ANY(@criticality_ids::smallint[]))
+      AND (cardinality(@exposure_ids::smallint[]) = 0
+           OR coalesce(a.declared_exposure_id, a.imported_exposure_id, 0) = ANY(@exposure_ids::smallint[]))
+      AND (cardinality(@information_classification_ids::smallint[]) = 0
+           OR coalesce(a.declared_information_classification_id, 0) = ANY(@information_classification_ids::smallint[]))
+      AND (cardinality(@area_ids::bigint[]) = 0
+           OR (a.cmdb_source_id, a.area_record_id) IN
+              (SELECT cmdb_source_id, record_id FROM customer_areas WHERE id = ANY(@area_ids::bigint[])))
+)
+SELECT id, cmdb_source_id, record_id, name, description, kind_id,
+       hardware_vendor, hardware_model, criticality_id,
+       imported_owner, declared_owner,
+       imported_exposure_id, declared_exposure_id, lifecycle_stage_id, area_record_id, retired, inactive_since,
+       area_id, area_name,
+       exposure_declared_by, exposure_declared_at,
+       declared_information_classification_id,
+       information_classification_declared_by, information_classification_declared_at,
+       total
+FROM matching
+WHERE sqlc.narg(after_name)::text IS NULL
+   OR (name, cmdb_source_id, record_id)
+      > (sqlc.narg(after_name)::text, sqlc.narg(after_source_id)::uuid, sqlc.narg(after_record_id)::text)
+ORDER BY name, cmdb_source_id, record_id
 LIMIT @page_size;
-
--- name: CountCustomerAssets :one
-SELECT count(*)
-FROM assets a
-JOIN cmdb_sources s ON s.id = a.cmdb_source_id
-WHERE s.customer_id = @customer_id
-  AND (sqlc.narg(active)::boolean IS NULL OR (a.inactive_since IS NULL) = sqlc.narg(active)::boolean)
-  AND (cardinality(@kind_ids::smallint[]) = 0 OR a.kind_id = ANY(@kind_ids::smallint[]))
-  AND (cardinality(@criticality_ids::smallint[]) = 0 OR coalesce(a.criticality_id, 0) = ANY(@criticality_ids::smallint[]))
-  AND (cardinality(@exposure_ids::smallint[]) = 0
-       OR coalesce(a.declared_exposure_id, a.imported_exposure_id, 0) = ANY(@exposure_ids::smallint[]));
 
 -- Assets by their references, as ListAssets reads them. The two arrays are
 -- parallel: element i of each names one Asset.

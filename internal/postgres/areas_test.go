@@ -12,15 +12,6 @@ import (
 	"barbackend/internal/postgres/pgtest"
 )
 
-func areaRecord(t *testing.T, id, name string, inactive bool) inventory.AreaRecord {
-	t.Helper()
-	imported, err := inventory.NewImportedArea(inventory.ImportedAreaParams{Name: name, Inactive: inactive})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return inventory.AreaRecord{RecordID: id, Imported: imported}
-}
-
 func inArea(area string) inventory.ImportedAssetParams {
 	return inventory.ImportedAssetParams{Name: "vm", Kind: inventory.VirtualMachine, Area: area}
 }
