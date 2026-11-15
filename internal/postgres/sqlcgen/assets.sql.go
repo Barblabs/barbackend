@@ -54,22 +54,17 @@ JOIN cmdb_sources s ON s.id = a.cmdb_source_id
 WHERE s.customer_id = $1
   AND ($2::boolean IS NULL OR (a.inactive_since IS NULL) = $2::boolean)
   AND (cardinality($3::smallint[]) = 0 OR a.kind_id = ANY($3::smallint[]))
-  AND ((cardinality($4::smallint[]) = 0 AND NOT $5::boolean)
-       OR a.criticality_id = ANY($4::smallint[])
-       OR ($5::boolean AND a.criticality_id IS NULL))
-  AND ((cardinality($6::smallint[]) = 0 AND NOT $7::boolean)
-       OR coalesce(a.declared_exposure_id, a.imported_exposure_id) = ANY($6::smallint[])
-       OR ($7::boolean AND coalesce(a.declared_exposure_id, a.imported_exposure_id) IS NULL))
+  AND (cardinality($4::smallint[]) = 0 OR coalesce(a.criticality_id, 0) = ANY($4::smallint[]))
+  AND (cardinality($5::smallint[]) = 0
+       OR coalesce(a.declared_exposure_id, a.imported_exposure_id, 0) = ANY($5::smallint[]))
 `
 
 type CountCustomerAssetsParams struct {
-	CustomerID                uuid.UUID
-	Active                    *bool
-	KindIds                   []int16
-	CriticalityIds            []int16
-	IncludeUnknownCriticality bool
-	ExposureIds               []int16
-	IncludeUnknownExposure    bool
+	CustomerID     uuid.UUID
+	Active         *bool
+	KindIds        []int16
+	CriticalityIds []int16
+	ExposureIds    []int16
 }
 
 func (q *Queries) CountCustomerAssets(ctx context.Context, arg CountCustomerAssetsParams) (int64, error) {
@@ -78,9 +73,7 @@ func (q *Queries) CountCustomerAssets(ctx context.Context, arg CountCustomerAsse
 		arg.Active,
 		arg.KindIds,
 		arg.CriticalityIds,
-		arg.IncludeUnknownCriticality,
 		arg.ExposureIds,
-		arg.IncludeUnknownExposure,
 	)
 	var count int64
 	err := row.Scan(&count)
@@ -422,31 +415,26 @@ LEFT JOIN users information_classification_declarer ON information_classificatio
 WHERE s.customer_id = $1
   AND ($2::boolean IS NULL OR (a.inactive_since IS NULL) = $2::boolean)
   AND (cardinality($3::smallint[]) = 0 OR a.kind_id = ANY($3::smallint[]))
-  AND ((cardinality($4::smallint[]) = 0 AND NOT $5::boolean)
-       OR a.criticality_id = ANY($4::smallint[])
-       OR ($5::boolean AND a.criticality_id IS NULL))
-  AND ((cardinality($6::smallint[]) = 0 AND NOT $7::boolean)
-       OR coalesce(a.declared_exposure_id, a.imported_exposure_id) = ANY($6::smallint[])
-       OR ($7::boolean AND coalesce(a.declared_exposure_id, a.imported_exposure_id) IS NULL))
-  AND ($8::text IS NULL
+  AND (cardinality($4::smallint[]) = 0 OR coalesce(a.criticality_id, 0) = ANY($4::smallint[]))
+  AND (cardinality($5::smallint[]) = 0
+       OR coalesce(a.declared_exposure_id, a.imported_exposure_id, 0) = ANY($5::smallint[]))
+  AND ($6::text IS NULL
        OR (a.name, a.cmdb_source_id, a.record_id)
-          > ($8::text, $9::uuid, $10::text))
+          > ($6::text, $7::uuid, $8::text))
 ORDER BY a.name, a.cmdb_source_id, a.record_id
-LIMIT $11
+LIMIT $9
 `
 
 type ListCustomerAssetsParams struct {
-	CustomerID                uuid.UUID
-	Active                    *bool
-	KindIds                   []int16
-	CriticalityIds            []int16
-	IncludeUnknownCriticality bool
-	ExposureIds               []int16
-	IncludeUnknownExposure    bool
-	AfterName                 *string
-	AfterSourceID             pgtype.UUID
-	AfterRecordID             *string
-	PageSize                  int32
+	CustomerID     uuid.UUID
+	Active         *bool
+	KindIds        []int16
+	CriticalityIds []int16
+	ExposureIds    []int16
+	AfterName      *string
+	AfterSourceID  pgtype.UUID
+	AfterRecordID  *string
+	PageSize       int32
 }
 
 type ListCustomerAssetsRow struct {
@@ -484,9 +472,7 @@ func (q *Queries) ListCustomerAssets(ctx context.Context, arg ListCustomerAssets
 		arg.Active,
 		arg.KindIds,
 		arg.CriticalityIds,
-		arg.IncludeUnknownCriticality,
 		arg.ExposureIds,
-		arg.IncludeUnknownExposure,
 		arg.AfterName,
 		arg.AfterSourceID,
 		arg.AfterRecordID,

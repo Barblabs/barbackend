@@ -17,20 +17,26 @@ type AssetPosition struct {
 	Ref  inventory.SourceReference
 }
 
+// AssetFilter selects the Assets of a listing. Each filter combines with the
+// others by AND; a nil filter keeps every value.
+type AssetFilter struct {
+	// Active keeps only Active Assets when true and only Inactive ones when
+	// false.
+	Active *bool
+	// Kind, Criticality and Exposure keep the Assets with any of their
+	// values. CriticalityUnknown and ExposureUnknown keep the Assets without
+	// one. Exposure is the effective one: the declared Exposure, otherwise
+	// the imported one.
+	Kind        []inventory.AssetKind
+	Criticality []inventory.Criticality
+	Exposure    []inventory.Exposure
+}
+
 // AssetListQuery selects one page of a Customer's Assets, sorted by name,
 // then CMDB Source, then Record ID.
 type AssetListQuery struct {
 	Customer tenancy.CustomerID
-	// Active keeps only Active Assets when true and only Inactive ones when
-	// false; nil keeps both.
-	Active *bool
-	// Kind, Criticality and Exposure keep the Assets with any of their
-	// values; empty keeps every value. CriticalityUnknown and ExposureUnknown
-	// keep the Assets without one. Exposure is the effective one: the
-	// declared Exposure, otherwise the imported one.
-	Kind        []inventory.AssetKind
-	Criticality []inventory.Criticality
-	Exposure    []inventory.Exposure
+	Filter   AssetFilter
 	// After, when set, starts the page just past that position.
 	After *AssetPosition
 	Limit int
@@ -49,22 +55,19 @@ type AssetPage struct {
 // Sources, Disconnected ones included, with their Software Components loaded
 // in one further query whatever the page size.
 func (t *Tx) ListAssets(ctx context.Context, q AssetListQuery) (AssetPage, error) {
-	criticalities, includeUnknownCriticality := splitUnknown(q.Criticality, inventory.CriticalityUnknown)
-	exposures, includeUnknownExposure := splitUnknown(q.Exposure, inventory.ExposureUnknown)
 	filter := sqlcgen.CountCustomerAssetsParams{
-		CustomerID: uuid.UUID(q.Customer), Active: q.Active,
-		KindIds:        catalogIDs(q.Kind),
-		CriticalityIds: catalogIDs(criticalities), IncludeUnknownCriticality: includeUnknownCriticality,
-		ExposureIds: catalogIDs(exposures), IncludeUnknownExposure: includeUnknownExposure,
+		CustomerID: uuid.UUID(q.Customer), Active: q.Filter.Active,
+		KindIds:        catalogIDs(q.Filter.Kind),
+		CriticalityIds: catalogIDs(q.Filter.Criticality),
+		ExposureIds:    catalogIDs(q.Filter.Exposure),
 	}
 	total, err := t.q.CountCustomerAssets(ctx, filter)
 	if err != nil {
 		return AssetPage{}, fmt.Errorf("count assets of customer %s: %w", q.Customer, err)
 	}
 	params := sqlcgen.ListCustomerAssetsParams{
-		CustomerID: filter.CustomerID, Active: filter.Active, KindIds: filter.KindIds,
-		CriticalityIds: filter.CriticalityIds, IncludeUnknownCriticality: filter.IncludeUnknownCriticality,
-		ExposureIds: filter.ExposureIds, IncludeUnknownExposure: filter.IncludeUnknownExposure,
+		CustomerID: filter.CustomerID, Active: filter.Active,
+		KindIds: filter.KindIds, CriticalityIds: filter.CriticalityIds, ExposureIds: filter.ExposureIds,
 		// One extra row tells whether another page follows.
 		PageSize: int32(q.Limit + 1),
 	}
@@ -109,17 +112,6 @@ func (t *Tx) softwareOf(ctx context.Context, rows []sqlcgen.ListCustomerAssetsRo
 		return nil, fmt.Errorf("list software of %d assets: %w", len(rows), err)
 	}
 	return softwareByAsset(components), nil
-}
-
-func splitUnknown[T comparable](values []T, unknown T) (known []T, includeUnknown bool) {
-	for _, v := range values {
-		if v == unknown {
-			includeUnknown = true
-		} else {
-			known = append(known, v)
-		}
-	}
-	return known, includeUnknown
 }
 
 // catalogIDs is never nil: pgx sends a nil slice as NULL, whose cardinality

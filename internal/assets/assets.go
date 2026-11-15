@@ -32,6 +32,8 @@ var ErrAssetNotFound = errors.New("asset not found")
 
 type StoredAsset = postgres.StoredAsset
 
+type Filter = postgres.AssetFilter
+
 // Rescorer rescores the open Findings of an Asset from its effective
 // Criticality and Exposure.
 type Rescorer interface {
@@ -48,19 +50,10 @@ func New(db *postgres.DB, rescorer Rescorer) *Service {
 }
 
 // Query selects a page of a Customer's Assets. A zero Limit takes
-// DefaultLimit; a nil or empty filter keeps every value.
+// DefaultLimit.
 type Query struct {
-	Limit int
-	// Active keeps only Active Assets when true and only Inactive ones when
-	// false.
-	Active *bool
-	// Kind, Criticality and Exposure keep the Assets with any of their
-	// values. CriticalityUnknown and ExposureUnknown keep the Assets without
-	// one. Exposure is the effective one: the declared Exposure, otherwise
-	// the imported one.
-	Kind        []inventory.AssetKind
-	Criticality []inventory.Criticality
-	Exposure    []inventory.Exposure
+	Limit  int
+	Filter Filter
 	// Cursor is the NextCursor of the previous page, empty for the first.
 	Cursor string
 }
@@ -92,14 +85,14 @@ func (s *Service) List(ctx context.Context, caller tenancy.User, q Query) (Page,
 	if err != nil {
 		return Page{}, err
 	}
-	query := postgres.AssetListQuery{Customer: customer, Active: q.Active, Kind: q.Kind, Criticality: q.Criticality, Exposure: q.Exposure, Limit: q.Limit}
+	query := postgres.AssetListQuery{Customer: customer, Filter: q.Filter, Limit: q.Limit}
 	if query.Limit == 0 {
 		query.Limit = DefaultLimit
 	}
 	if query.Limit < 1 || query.Limit > MaxLimit {
 		return Page{}, fmt.Errorf("%w: limit must be a number from 1 to %d", ErrInvalidQuery, MaxLimit)
 	}
-	filters, err := q.filters()
+	filters, err := canonicalFilters(q.Filter)
 	if err != nil {
 		return Page{}, err
 	}
@@ -120,15 +113,15 @@ func (s *Service) List(ctx context.Context, caller tenancy.User, q Query) (Page,
 	return result, nil
 }
 
-// filters is the canonical form of q's filters, which a cursor carries.
-// encoding/json sorts map keys, so equal filters give equal strings.
-func (q Query) filters() (string, error) {
+// canonicalFilters is the form of f a cursor carries. encoding/json sorts map
+// keys, so equal filters give equal strings.
+func canonicalFilters(f Filter) (string, error) {
 	active := "all"
-	if q.Active != nil {
-		active = fmt.Sprint(*q.Active)
+	if f.Active != nil {
+		active = fmt.Sprint(*f.Active)
 	}
 	b, err := json.Marshal(map[string]any{
-		"active": active, "kind": canonical(q.Kind), "criticality": canonical(q.Criticality), "exposure": canonical(q.Exposure),
+		"active": active, "kind": canonical(f.Kind), "criticality": canonical(f.Criticality), "exposure": canonical(f.Exposure),
 	})
 	return string(b), err
 }

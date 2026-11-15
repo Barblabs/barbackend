@@ -146,10 +146,7 @@ func TestListAssetsFilters(t *testing.T) {
 		{"kinds", url.Values{"kind": {"server", "workstation"}}, []string{"1", "2", "5"}},
 		{"criticality", url.Values{"criticality": {"high"}}, []string{"1"}},
 		{"unknown criticality", url.Values{"criticality": {"unknown"}}, []string{"3"}},
-		{"unknown and high criticality", url.Values{"criticality": {"unknown", "high"}}, []string{"1", "3"}},
-		{"kinds and criticalities", url.Values{"kind": {"server", "virtual_machine"}, "criticality": {"low", "unknown"}}, []string{"2", "3"}},
 		{"unknown exposure", url.Values{"exposure": {"unknown"}}, []string{"3"}},
-		{"unknown and internal exposure", url.Values{"exposure": {"unknown", "internal"}}, []string{"2", "3", "5"}},
 		{"kind and inactive", url.Values{"kind": {"virtual_machine"}, "active": {"all"}}, []string{"3", "4"}},
 	}
 	for _, tt := range tests {

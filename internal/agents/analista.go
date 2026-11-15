@@ -391,13 +391,13 @@ func (s *Service) assets(ctx context.Context, caller tenancy.User, in assetsInpu
 		return assetsResult{}, err
 	}
 	active := true
-	query := postgres.AssetListQuery{Customer: customer, Active: &active, Limit: assetsPerTool}
+	query := postgres.AssetListQuery{Customer: customer, Filter: postgres.AssetFilter{Active: &active}, Limit: assetsPerTool}
 	if in.Criticality != nil {
 		criticality, err := inventory.ParseCriticality(strings.TrimSpace(*in.Criticality))
 		if err != nil {
 			return assetsResult{}, err
 		}
-		query.Criticality = []inventory.Criticality{criticality}
+		query.Filter.Criticality = []inventory.Criticality{criticality}
 	}
 	page, err := postgres.InTxValue(ctx, s.db, func(tx *postgres.Tx) (postgres.AssetPage, error) { return tx.ListAssets(ctx, query) })
 	if err != nil {
