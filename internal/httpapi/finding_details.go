@@ -7,7 +7,8 @@ func newFindingDetails(d agents.Dossier) findingDetailsResponse {
 		Description: d.Description,
 		Asset: findingAssetResponse{
 			Name: d.Asset.Name, Kind: d.Asset.Kind, Criticality: d.Asset.Criticality, Exposure: d.Asset.Exposure,
-			LifecycleStage: d.Asset.Lifecycle, CriticalServices: make([]criticalServiceResponse, len(d.Asset.CriticalServices)),
+			LifecycleStage: d.Asset.Lifecycle, InformationClassification: d.Asset.Classification,
+			CriticalServices: make([]criticalServiceResponse, len(d.Asset.CriticalServices)),
 		},
 		ComponentRole:    d.Component.Role,
 		ScoreDetails:     newScoreResponse(d.Score),
@@ -54,7 +55,8 @@ func newScoreResponse(s agents.Score) scoreResponse {
 		ScoringModel: s.ScoringModel, Value: s.Value,
 		Alpha: s.Alpha, Beta: s.Beta, Gamma: s.Gamma, Vulnerability: s.Vulnerability,
 		CriticalityMultiplier: s.CriticalityMultiplier, ExposureMultiplier: s.ExposureMultiplier,
-		LifecycleMultiplier: s.LifecycleMultiplier, DataGaps: nonNil(s.DataGaps),
+		LifecycleMultiplier: s.LifecycleMultiplier, Exploitation: s.Exploitation,
+		InformationClassificationMultiplier: s.ClassificationMultiplier, Band: nonBlank(s.Band), DataGaps: nonNil(s.DataGaps),
 	}
 }
 
@@ -64,7 +66,18 @@ func newCurrentResponse(c agents.Current, ok bool) *currentResponse {
 		return nil
 	}
 	return &currentResponse{
-		Asset:        currentAssetResponse{Criticality: c.Asset.Criticality, Exposure: c.Asset.Exposure, LifecycleStage: c.Asset.Lifecycle},
+		Asset: currentAssetResponse{
+			Criticality: c.Asset.Criticality, Exposure: c.Asset.Exposure, LifecycleStage: c.Asset.Lifecycle,
+			InformationClassification: c.Asset.Classification,
+		},
 		ScoreDetails: newScoreResponse(c.Score),
 	}
+}
+
+// nonBlank is s, nil when it is blank.
+func nonBlank(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
 }
