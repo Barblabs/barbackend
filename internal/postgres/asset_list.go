@@ -24,10 +24,13 @@ type AssetListQuery struct {
 	// Active keeps only Active Assets when true and only Inactive ones when
 	// false; nil keeps both.
 	Active *bool
-	// Kind and Criticality keep the Assets with any of their values; empty
-	// keeps every value. CriticalityUnknown keeps the Assets without one.
+	// Kind, Criticality and Exposure keep the Assets with any of their
+	// values; empty keeps every value. CriticalityUnknown and ExposureUnknown
+	// keep the Assets without one. Exposure is the effective one: the
+	// declared Exposure, otherwise the imported one.
 	Kind        []inventory.AssetKind
 	Criticality []inventory.Criticality
+	Exposure    []inventory.Exposure
 	// After, when set, starts the page just past that position.
 	After *AssetPosition
 	Limit int
@@ -47,10 +50,12 @@ type AssetPage struct {
 // in one further query whatever the page size.
 func (t *Tx) ListAssets(ctx context.Context, q AssetListQuery) (AssetPage, error) {
 	criticalities, includeUnknownCriticality := splitUnknown(q.Criticality, inventory.CriticalityUnknown)
+	exposures, includeUnknownExposure := splitUnknown(q.Exposure, inventory.ExposureUnknown)
 	filter := sqlcgen.CountCustomerAssetsParams{
 		CustomerID: uuid.UUID(q.Customer), Active: q.Active,
 		KindIds:        catalogIDs(q.Kind),
 		CriticalityIds: catalogIDs(criticalities), IncludeUnknownCriticality: includeUnknownCriticality,
+		ExposureIds: catalogIDs(exposures), IncludeUnknownExposure: includeUnknownExposure,
 	}
 	total, err := t.q.CountCustomerAssets(ctx, filter)
 	if err != nil {
@@ -59,6 +64,7 @@ func (t *Tx) ListAssets(ctx context.Context, q AssetListQuery) (AssetPage, error
 	params := sqlcgen.ListCustomerAssetsParams{
 		CustomerID: filter.CustomerID, Active: filter.Active, KindIds: filter.KindIds,
 		CriticalityIds: filter.CriticalityIds, IncludeUnknownCriticality: filter.IncludeUnknownCriticality,
+		ExposureIds: filter.ExposureIds, IncludeUnknownExposure: filter.IncludeUnknownExposure,
 		// One extra row tells whether another page follows.
 		PageSize: int32(q.Limit + 1),
 	}
