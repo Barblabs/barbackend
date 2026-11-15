@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"reflect"
 	"testing"
 	"time"
@@ -106,6 +107,30 @@ func TestDeclaringAVirtualMachineInternalRescoresItsFindingsUntilCleared(t *test
 	}
 	if m, undeclared, scores := e.latestExposure(t, f); m != 1 || !undeclared || scores != 3 {
 		t.Errorf("after clearing: multiplier %v, exposure_undeclared %v, %d scores; want 1 with the gap in a new score", m, undeclared, scores)
+	}
+}
+
+func TestTheExposureFilterFollowsTheDeclaration(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	e.provider.Snapshot = inventory.Snapshot{Records: []inventory.Record{{RecordID: "srv", Imported: imported(t, inventory.ImportedAssetParams{
+		Name: "srv", Kind: inventory.Server, Exposure: inventory.Internal,
+	})}}}
+	e.connect(t, e.customer)
+	_, admin := e.customerAdmin(t, e.customer)
+	srv := e.assetNamed(t, "srv").ID
+	listedUnder := func(exposure string) bool {
+		return decode[assetList](t, e.listAssets(url.Values{"exposure": {exposure}}), http.StatusOK).Total == 1
+	}
+
+	decode[asset](t, e.asUser(admin, http.MethodPut, exposurePath(srv), map[string]string{"exposure": "internet_facing"}), http.StatusOK)
+	if !listedUnder("internet_facing") || listedUnder("internal") {
+		t.Error("declared internet_facing over an imported internal: want it listed under internet_facing only")
+	}
+
+	decode[asset](t, e.asUser(admin, http.MethodDelete, exposurePath(srv), nil), http.StatusOK)
+	if listedUnder("internet_facing") || !listedUnder("internal") {
+		t.Error("declaration cleared: want it listed under internal only")
 	}
 }
 

@@ -121,12 +121,14 @@ func TestListAssetsSurvivesADeactivationBetweenPages(t *testing.T) {
 func TestListAssetsFilters(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
-	asset := func(id, name string, k inventory.AssetKind, c inventory.Criticality) inventory.Record {
-		return inventory.Record{RecordID: id, Imported: imported(t, inventory.ImportedAssetParams{Name: name, Kind: k, Criticality: c})}
+	asset := func(id, name string, k inventory.AssetKind, c inventory.Criticality, x inventory.Exposure) inventory.Record {
+		return inventory.Record{RecordID: id, Imported: imported(t, inventory.ImportedAssetParams{Name: name, Kind: k, Criticality: c, Exposure: x})}
 	}
 	active := []inventory.Record{
-		asset("1", "a", inventory.Server, inventory.CriticalityHigh), asset("2", "b", inventory.Server, inventory.CriticalityLow),
-		record(t, "3", "c"), asset("5", "e", inventory.Workstation, inventory.CriticalityMedium),
+		asset("1", "a", inventory.Server, inventory.CriticalityHigh, inventory.InternetFacing),
+		asset("2", "b", inventory.Server, inventory.CriticalityLow, inventory.Internal),
+		record(t, "3", "c"),
+		asset("5", "e", inventory.Workstation, inventory.CriticalityMedium, inventory.Internal),
 	}
 	e.provider.Snapshot = inventory.Snapshot{Records: append(active, record(t, "4", "d"))}
 	e.connect(t, e.customer)
@@ -146,6 +148,8 @@ func TestListAssetsFilters(t *testing.T) {
 		{"unknown criticality", url.Values{"criticality": {"unknown"}}, []string{"3"}},
 		{"unknown and high criticality", url.Values{"criticality": {"unknown", "high"}}, []string{"1", "3"}},
 		{"kinds and criticalities", url.Values{"kind": {"server", "virtual_machine"}, "criticality": {"low", "unknown"}}, []string{"2", "3"}},
+		{"unknown exposure", url.Values{"exposure": {"unknown"}}, []string{"3"}},
+		{"unknown and internal exposure", url.Values{"exposure": {"unknown", "internal"}}, []string{"2", "3", "5"}},
 		{"kind and inactive", url.Values{"kind": {"virtual_machine"}, "active": {"all"}}, []string{"3", "4"}},
 	}
 	for _, tt := range tests {
@@ -283,10 +287,12 @@ func TestListAssetsRejectsInvalidRequests(t *testing.T) {
 		{"unknown kind", url.Values{"kind": {"toaster"}}},
 		{"unknown criticality", url.Values{"criticality": {"vital"}}},
 		{"one unknown kind among several", url.Values{"kind": {"server", "toaster"}}},
+		{"unlisted exposure", url.Values{"exposure": {"cloud"}}},
 		{"bad active", url.Values{"active": {"maybe"}}},
 		{"malformed cursor", url.Values{"cursor": {"not-a-cursor"}}},
 		{"cursor with other filters", url.Values{"cursor": {*page.NextCursor}, "kind": {"server"}}},
 		{"cursor with other active", url.Values{"cursor": {*page.NextCursor}, "active": {"all"}}},
+		{"cursor with other exposure", url.Values{"cursor": {*page.NextCursor}, "exposure": {"unknown"}}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
