@@ -23,9 +23,11 @@ type AssetListQuery struct {
 	Customer tenancy.CustomerID
 	// Active keeps only Active Assets when true and only Inactive ones when
 	// false; nil keeps both.
-	Active      *bool
-	Kind        *inventory.AssetKind
-	Criticality *inventory.Criticality
+	Active *bool
+	// Kind and Criticality keep the Assets with any of their values; empty
+	// keeps every value. CriticalityUnknown keeps the Assets without one.
+	Kind        []inventory.AssetKind
+	Criticality []inventory.Criticality
 	// After, when set, starts the page just past that position.
 	After *AssetPosition
 	Limit int
@@ -44,19 +46,19 @@ type AssetPage struct {
 // Sources, Disconnected ones included, with their Software Components loaded
 // in one further query whatever the page size.
 func (t *Tx) ListAssets(ctx context.Context, q AssetListQuery) (AssetPage, error) {
-	filter := sqlcgen.CountCustomerAssetsParams{CustomerID: uuid.UUID(q.Customer), Active: q.Active}
-	if q.Kind != nil {
-		filter.KindID = ptr(int16(*q.Kind))
-	}
-	if q.Criticality != nil {
-		filter.CriticalityID = ptr(int16(*q.Criticality))
+	criticalities, includeUnknownCriticality := splitUnknown(q.Criticality, inventory.CriticalityUnknown)
+	filter := sqlcgen.CountCustomerAssetsParams{
+		CustomerID: uuid.UUID(q.Customer), Active: q.Active,
+		KindIds:        catalogIDs(q.Kind),
+		CriticalityIds: catalogIDs(criticalities), IncludeUnknownCriticality: includeUnknownCriticality,
 	}
 	total, err := t.q.CountCustomerAssets(ctx, filter)
 	if err != nil {
 		return AssetPage{}, fmt.Errorf("count assets of customer %s: %w", q.Customer, err)
 	}
 	params := sqlcgen.ListCustomerAssetsParams{
-		CustomerID: filter.CustomerID, Active: filter.Active, KindID: filter.KindID, CriticalityID: filter.CriticalityID,
+		CustomerID: filter.CustomerID, Active: filter.Active, KindIds: filter.KindIds,
+		CriticalityIds: filter.CriticalityIds, IncludeUnknownCriticality: filter.IncludeUnknownCriticality,
 		// One extra row tells whether another page follows.
 		PageSize: int32(q.Limit + 1),
 	}
@@ -101,6 +103,27 @@ func (t *Tx) softwareOf(ctx context.Context, rows []sqlcgen.ListCustomerAssetsRo
 		return nil, fmt.Errorf("list software of %d assets: %w", len(rows), err)
 	}
 	return softwareByAsset(components), nil
+}
+
+func splitUnknown[T comparable](values []T, unknown T) (known []T, includeUnknown bool) {
+	for _, v := range values {
+		if v == unknown {
+			includeUnknown = true
+		} else {
+			known = append(known, v)
+		}
+	}
+	return known, includeUnknown
+}
+
+// catalogIDs is never nil: pgx sends a nil slice as NULL, whose cardinality
+// is NULL rather than 0, so it would match no Asset instead of every one.
+func catalogIDs[T ~int](values []T) []int16 {
+	ids := make([]int16, 0, len(values))
+	for _, v := range values {
+		ids = append(ids, int16(v))
+	}
+	return ids
 }
 
 func ptr[T any](v T) *T { return &v }

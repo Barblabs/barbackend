@@ -59,11 +59,11 @@ func (h assetHandler) register(api huma.API) {
 }
 
 type assetQuery struct {
-	Limit       pageSize        `query:"limit" doc:"Page size"`
-	Cursor      string          `query:"cursor" doc:"next_cursor of the previous page"`
-	Active      activeFilter    `query:"active" enum:"true,false,all" default:"true"`
-	Kind        assetKindCode   `query:"kind" doc:"Asset Kind code"`
-	Criticality criticalityCode `query:"criticality" doc:"Criticality code"`
+	Limit       pageSize                `query:"limit" doc:"Page size"`
+	Cursor      string                  `query:"cursor" doc:"next_cursor of the previous page"`
+	Active      activeFilter            `query:"active" enum:"true,false,all" default:"true"`
+	Kind        []assetKindCode         `query:"kind,explode" doc:"Asset Kind codes, as repeated keys; an Asset of any of them matches"`
+	Criticality []criticalityFilterCode `query:"criticality,explode" doc:"Criticality codes, as repeated keys; an Asset with any of them matches, and unknown matches an Asset without a Criticality"`
 }
 
 type activeFilter string
@@ -90,27 +90,37 @@ func (assetKindCode) Schema(huma.Registry) *huma.Schema {
 	return &huma.Schema{Type: huma.TypeString, Enum: codes(inventory.Server, inventory.VirtualMachine, inventory.Workstation, inventory.NetworkDevice)}
 }
 
-type criticalityCode string
+const unknownCriticality = "unknown"
 
-func (criticalityCode) Schema(huma.Registry) *huma.Schema {
-	return &huma.Schema{Type: huma.TypeString, Enum: codes(inventory.CriticalityHigh, inventory.CriticalityMedium, inventory.CriticalityLow)}
+type criticalityFilterCode string
+
+func (criticalityFilterCode) Schema(huma.Registry) *huma.Schema {
+	enum := append(codes(inventory.CriticalityHigh, inventory.CriticalityMedium, inventory.CriticalityLow), unknownCriticality)
+	return &huma.Schema{Type: huma.TypeString, Enum: enum}
+}
+
+func (c criticalityFilterCode) parse() (inventory.Criticality, error) {
+	if c == unknownCriticality {
+		return inventory.CriticalityUnknown, nil
+	}
+	return inventory.ParseCriticality(string(c))
 }
 
 func (in assetQuery) query() (assets.Query, error) {
 	q := assets.Query{Limit: int(in.Limit), Cursor: in.Cursor, Active: in.Active.keep()}
-	if in.Kind != "" {
-		kind, err := inventory.ParseAssetKind(string(in.Kind))
+	for _, code := range in.Kind {
+		kind, err := inventory.ParseAssetKind(string(code))
 		if err != nil {
 			return assets.Query{}, err
 		}
-		q.Kind = &kind
+		q.Kind = append(q.Kind, kind)
 	}
-	if in.Criticality != "" {
-		criticality, err := inventory.ParseCriticality(string(in.Criticality))
+	for _, code := range in.Criticality {
+		criticality, err := code.parse()
 		if err != nil {
 			return assets.Query{}, err
 		}
-		q.Criticality = &criticality
+		q.Criticality = append(q.Criticality, criticality)
 	}
 	return q, nil
 }

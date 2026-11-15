@@ -53,23 +53,27 @@ FROM assets a
 JOIN cmdb_sources s ON s.id = a.cmdb_source_id
 WHERE s.customer_id = $1
   AND ($2::boolean IS NULL OR (a.inactive_since IS NULL) = $2::boolean)
-  AND ($3::smallint IS NULL OR a.kind_id = $3::smallint)
-  AND ($4::smallint IS NULL OR a.criticality_id = $4::smallint)
+  AND (cardinality($3::smallint[]) = 0 OR a.kind_id = ANY($3::smallint[]))
+  AND ((cardinality($4::smallint[]) = 0 AND NOT $5::boolean)
+       OR a.criticality_id = ANY($4::smallint[])
+       OR ($5::boolean AND a.criticality_id IS NULL))
 `
 
 type CountCustomerAssetsParams struct {
-	CustomerID    uuid.UUID
-	Active        *bool
-	KindID        *int16
-	CriticalityID *int16
+	CustomerID                uuid.UUID
+	Active                    *bool
+	KindIds                   []int16
+	CriticalityIds            []int16
+	IncludeUnknownCriticality bool
 }
 
 func (q *Queries) CountCustomerAssets(ctx context.Context, arg CountCustomerAssetsParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countCustomerAssets,
 		arg.CustomerID,
 		arg.Active,
-		arg.KindID,
-		arg.CriticalityID,
+		arg.KindIds,
+		arg.CriticalityIds,
+		arg.IncludeUnknownCriticality,
 	)
 	var count int64
 	err := row.Scan(&count)
@@ -410,24 +414,27 @@ LEFT JOIN users exposure_declarer ON exposure_declarer.id = a.exposure_declared_
 LEFT JOIN users information_classification_declarer ON information_classification_declarer.id = a.information_classification_declared_by
 WHERE s.customer_id = $1
   AND ($2::boolean IS NULL OR (a.inactive_since IS NULL) = $2::boolean)
-  AND ($3::smallint IS NULL OR a.kind_id = $3::smallint)
-  AND ($4::smallint IS NULL OR a.criticality_id = $4::smallint)
-  AND ($5::text IS NULL
+  AND (cardinality($3::smallint[]) = 0 OR a.kind_id = ANY($3::smallint[]))
+  AND ((cardinality($4::smallint[]) = 0 AND NOT $5::boolean)
+       OR a.criticality_id = ANY($4::smallint[])
+       OR ($5::boolean AND a.criticality_id IS NULL))
+  AND ($6::text IS NULL
        OR (a.name, a.cmdb_source_id, a.record_id)
-          > ($5::text, $6::uuid, $7::text))
+          > ($6::text, $7::uuid, $8::text))
 ORDER BY a.name, a.cmdb_source_id, a.record_id
-LIMIT $8
+LIMIT $9
 `
 
 type ListCustomerAssetsParams struct {
-	CustomerID    uuid.UUID
-	Active        *bool
-	KindID        *int16
-	CriticalityID *int16
-	AfterName     *string
-	AfterSourceID pgtype.UUID
-	AfterRecordID *string
-	PageSize      int32
+	CustomerID                uuid.UUID
+	Active                    *bool
+	KindIds                   []int16
+	CriticalityIds            []int16
+	IncludeUnknownCriticality bool
+	AfterName                 *string
+	AfterSourceID             pgtype.UUID
+	AfterRecordID             *string
+	PageSize                  int32
 }
 
 type ListCustomerAssetsRow struct {
@@ -463,8 +470,9 @@ func (q *Queries) ListCustomerAssets(ctx context.Context, arg ListCustomerAssets
 	rows, err := q.db.Query(ctx, listCustomerAssets,
 		arg.CustomerID,
 		arg.Active,
-		arg.KindID,
-		arg.CriticalityID,
+		arg.KindIds,
+		arg.CriticalityIds,
+		arg.IncludeUnknownCriticality,
 		arg.AfterName,
 		arg.AfterSourceID,
 		arg.AfterRecordID,

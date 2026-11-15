@@ -121,27 +121,31 @@ func TestListAssetsSurvivesADeactivationBetweenPages(t *testing.T) {
 func TestListAssetsFilters(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
-	server := func(id, name string, c inventory.Criticality) inventory.Record {
-		return inventory.Record{RecordID: id, Imported: imported(t, inventory.ImportedAssetParams{
-			Name: name, Kind: inventory.Server, Criticality: c, Hardware: inventory.Hardware{Vendor: "Dell", Model: "R640"},
-		})}
+	asset := func(id, name string, k inventory.AssetKind, c inventory.Criticality) inventory.Record {
+		return inventory.Record{RecordID: id, Imported: imported(t, inventory.ImportedAssetParams{Name: name, Kind: k, Criticality: c})}
 	}
-	e.provider.Snapshot = inventory.Snapshot{Records: []inventory.Record{
-		server("1", "a", inventory.CriticalityHigh), server("2", "b", inventory.CriticalityLow), record(t, "3", "c"), record(t, "4", "d"),
-	}}
+	active := []inventory.Record{
+		asset("1", "a", inventory.Server, inventory.CriticalityHigh), asset("2", "b", inventory.Server, inventory.CriticalityLow),
+		record(t, "3", "c"), asset("5", "e", inventory.Workstation, inventory.CriticalityMedium),
+	}
+	e.provider.Snapshot = inventory.Snapshot{Records: append(active, record(t, "4", "d"))}
 	e.connect(t, e.customer)
-	e.syncRecords(t, server("1", "a", inventory.CriticalityHigh), server("2", "b", inventory.CriticalityLow), record(t, "3", "c"))
+	e.syncRecords(t, active...)
 
 	tests := []struct {
 		name  string
 		query url.Values
 		want  []string
 	}{
-		{"default hides inactive", url.Values{}, []string{"1", "2", "3"}},
+		{"default hides inactive", url.Values{}, []string{"1", "2", "3", "5"}},
 		{"active false", url.Values{"active": {"false"}}, []string{"4"}},
-		{"active all", url.Values{"active": {"all"}}, []string{"1", "2", "3", "4"}},
+		{"active all", url.Values{"active": {"all"}}, []string{"1", "2", "3", "4", "5"}},
 		{"kind", url.Values{"kind": {"server"}}, []string{"1", "2"}},
+		{"kinds", url.Values{"kind": {"server", "workstation"}}, []string{"1", "2", "5"}},
 		{"criticality", url.Values{"criticality": {"high"}}, []string{"1"}},
+		{"unknown criticality", url.Values{"criticality": {"unknown"}}, []string{"3"}},
+		{"unknown and high criticality", url.Values{"criticality": {"unknown", "high"}}, []string{"1", "3"}},
+		{"kinds and criticalities", url.Values{"kind": {"server", "virtual_machine"}, "criticality": {"low", "unknown"}}, []string{"2", "3"}},
 		{"kind and inactive", url.Values{"kind": {"virtual_machine"}, "active": {"all"}}, []string{"3", "4"}},
 	}
 	for _, tt := range tests {
@@ -277,7 +281,8 @@ func TestListAssetsRejectsInvalidRequests(t *testing.T) {
 		{"limit too large", url.Values{"limit": {"201"}}},
 		{"limit not a number", url.Values{"limit": {"many"}}},
 		{"unknown kind", url.Values{"kind": {"toaster"}}},
-		{"unknown criticality", url.Values{"criticality": {"unknown"}}},
+		{"unknown criticality", url.Values{"criticality": {"vital"}}},
+		{"one unknown kind among several", url.Values{"kind": {"server", "toaster"}}},
 		{"bad active", url.Values{"active": {"maybe"}}},
 		{"malformed cursor", url.Values{"cursor": {"not-a-cursor"}}},
 		{"cursor with other filters", url.Values{"cursor": {*page.NextCursor}, "kind": {"server"}}},
@@ -290,6 +295,25 @@ func TestListAssetsRejectsInvalidRequests(t *testing.T) {
 				t.Errorf("code = %q, want invalid_request", got.Code)
 			}
 		})
+	}
+}
+
+func TestListAssetsCursorTakesTheSameFilterValuesInAnyOrder(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	e.provider.Snapshot = inventory.Snapshot{Records: []inventory.Record{record(t, "1", "a"), record(t, "2", "b")}}
+	e.connect(t, e.customer)
+	first := decode[assetList](t, e.listAssets(url.Values{"limit": {"1"}, "kind": {"virtual_machine", "server"}}), http.StatusOK)
+
+	reordered := url.Values{"limit": {"1"}, "cursor": {*first.NextCursor}, "kind": {"server", "virtual_machine", "server"}}
+	second := decode[assetList](t, e.listAssets(reordered), http.StatusOK)
+	if len(second.Assets) != 1 || second.Assets[0].RecordID != "2" {
+		t.Errorf("second page = %+v, want record 2", second.Assets)
+	}
+
+	other := url.Values{"limit": {"1"}, "cursor": {*first.NextCursor}, "kind": {"virtual_machine"}}
+	if got := decode[codedError](t, e.listAssets(other), http.StatusBadRequest); got.Code != "invalid_request" {
+		t.Errorf("cursor with other values: code = %q, want invalid_request", got.Code)
 	}
 }
 

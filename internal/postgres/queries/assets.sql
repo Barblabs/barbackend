@@ -104,8 +104,10 @@ LEFT JOIN users exposure_declarer ON exposure_declarer.id = a.exposure_declared_
 LEFT JOIN users information_classification_declarer ON information_classification_declarer.id = a.information_classification_declared_by
 WHERE s.customer_id = @customer_id
   AND (sqlc.narg(active)::boolean IS NULL OR (a.inactive_since IS NULL) = sqlc.narg(active)::boolean)
-  AND (sqlc.narg(kind_id)::smallint IS NULL OR a.kind_id = sqlc.narg(kind_id)::smallint)
-  AND (sqlc.narg(criticality_id)::smallint IS NULL OR a.criticality_id = sqlc.narg(criticality_id)::smallint)
+  AND (cardinality(@kind_ids::smallint[]) = 0 OR a.kind_id = ANY(@kind_ids::smallint[]))
+  AND ((cardinality(@criticality_ids::smallint[]) = 0 AND NOT @include_unknown_criticality::boolean)
+       OR a.criticality_id = ANY(@criticality_ids::smallint[])
+       OR (@include_unknown_criticality::boolean AND a.criticality_id IS NULL))
   AND (sqlc.narg(after_name)::text IS NULL
        OR (a.name, a.cmdb_source_id, a.record_id)
           > (sqlc.narg(after_name)::text, sqlc.narg(after_source_id)::uuid, sqlc.narg(after_record_id)::text))
@@ -118,8 +120,10 @@ FROM assets a
 JOIN cmdb_sources s ON s.id = a.cmdb_source_id
 WHERE s.customer_id = @customer_id
   AND (sqlc.narg(active)::boolean IS NULL OR (a.inactive_since IS NULL) = sqlc.narg(active)::boolean)
-  AND (sqlc.narg(kind_id)::smallint IS NULL OR a.kind_id = sqlc.narg(kind_id)::smallint)
-  AND (sqlc.narg(criticality_id)::smallint IS NULL OR a.criticality_id = sqlc.narg(criticality_id)::smallint);
+  AND (cardinality(@kind_ids::smallint[]) = 0 OR a.kind_id = ANY(@kind_ids::smallint[]))
+  AND ((cardinality(@criticality_ids::smallint[]) = 0 AND NOT @include_unknown_criticality::boolean)
+       OR a.criticality_id = ANY(@criticality_ids::smallint[])
+       OR (@include_unknown_criticality::boolean AND a.criticality_id IS NULL));
 
 -- Assets by their references, as ListAssets reads them. The two arrays are
 -- parallel: element i of each names one Asset.
