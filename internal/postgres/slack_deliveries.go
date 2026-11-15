@@ -26,12 +26,18 @@ type NewSlackDelivery struct {
 }
 
 // EnqueueSlackDeliveries queues the Customer's deliveries, pending and due
-// now.
+// now, to be sent to each target in the order given: rows written in one
+// transaction share their created_at, so their ids, time-ordered, keep the
+// order the claim follows.
 func (t *Tx) EnqueueSlackDeliveries(ctx context.Context, customer tenancy.CustomerID, deliveries []NewSlackDelivery) error {
 	rows := make([]sqlcgen.InsertSlackDeliveriesParams, len(deliveries))
 	for i, d := range deliveries {
+		id, err := uuid.NewV7()
+		if err != nil {
+			return fmt.Errorf("id of a slack delivery: %w", err)
+		}
 		rows[i] = sqlcgen.InsertSlackDeliveriesParams{
-			CustomerID: uuid.UUID(customer), Kind: d.Kind, TargetKind: d.TargetKind, Target: d.Target,
+			ID: id, CustomerID: uuid.UUID(customer), Kind: d.Kind, TargetKind: d.TargetKind, Target: d.Target,
 			Payload: d.Payload, FindingID: pgtype.UUID{Bytes: d.Finding, Valid: d.Finding != uuid.Nil},
 		}
 	}

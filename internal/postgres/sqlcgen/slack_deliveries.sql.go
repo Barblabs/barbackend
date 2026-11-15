@@ -120,6 +120,7 @@ func (q *Queries) FailSlackDelivery(ctx context.Context, arg FailSlackDeliveryPa
 }
 
 type InsertSlackDeliveriesParams struct {
+	ID         uuid.UUID
 	CustomerID uuid.UUID
 	Kind       string
 	TargetKind string

@@ -247,6 +247,7 @@ func (r *iteratorForInsertSlackDeliveries) Next() bool {
 
 func (r iteratorForInsertSlackDeliveries) Values() ([]interface{}, error) {
 	return []interface{}{
+		r.rows[0].ID,
 		r.rows[0].CustomerID,
 		r.rows[0].Kind,
 		r.rows[0].TargetKind,
@@ -261,7 +262,7 @@ func (r iteratorForInsertSlackDeliveries) Err() error {
 }
 
 func (q *Queries) InsertSlackDeliveries(ctx context.Context, arg []InsertSlackDeliveriesParams) (int64, error) {
-	return q.db.CopyFrom(ctx, []string{"slack_deliveries"}, []string{"customer_id", "kind", "target_kind", "target", "payload", "finding_id"}, &iteratorForInsertSlackDeliveries{rows: arg})
+	return q.db.CopyFrom(ctx, []string{"slack_deliveries"}, []string{"id", "customer_id", "kind", "target_kind", "target", "payload", "finding_id"}, &iteratorForInsertSlackDeliveries{rows: arg})
 }
 
 // iteratorForInsertSoftwareComponents implements pgx.CopyFromSource.
