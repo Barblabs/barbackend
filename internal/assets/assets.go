@@ -85,7 +85,13 @@ func (s *Service) List(ctx context.Context, caller tenancy.User, q Query) (Page,
 	if err != nil {
 		return Page{}, err
 	}
-	query := postgres.AssetListQuery{Customer: customer, Active: q.Active, Kind: q.Kind, Criticality: q.Criticality, Limit: q.Limit}
+	query := postgres.AssetListQuery{Customer: customer, Active: q.Active, Limit: q.Limit}
+	if q.Kind != nil {
+		query.Kind = []inventory.AssetKind{*q.Kind}
+	}
+	if q.Criticality != nil {
+		query.Criticality = []inventory.Criticality{*q.Criticality}
+	}
 	if query.Limit == 0 {
 		query.Limit = DefaultLimit
 	}

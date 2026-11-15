@@ -47,3 +47,65 @@ func TestListAssetsQueryCountIsIndependentOfPageSize(t *testing.T) {
 		t.Errorf("queries for 1 asset = %d, for 20 = %d, want equal", small, large)
 	}
 }
+
+func TestListAssetsTotalCountsTheAssetsListedAcrossAllPages(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	db, _ := newDBWithConn(t)
+	customer := newCustomer(t, db)
+	src := newSource(t, db, customer)
+	asset := func(id string, kind inventory.AssetKind, criticality inventory.Criticality) inventory.Record {
+		return record(t, id, inventory.ImportedAssetParams{Name: "asset-" + id, Kind: kind, Criticality: criticality})
+	}
+	active := []inventory.Record{
+		asset("1", inventory.Server, inventory.CriticalityHigh),
+		asset("2", inventory.Server, inventory.CriticalityUnknown),
+		asset("3", inventory.VirtualMachine, inventory.CriticalityLow),
+		asset("4", inventory.VirtualMachine, inventory.CriticalityUnknown),
+		asset("5", inventory.Workstation, inventory.CriticalityMedium),
+	}
+	syncRecords(t, db, src.ID(), append(active, asset("6", inventory.Workstation, inventory.CriticalityHigh))...)
+	syncRecords(t, db, src.ID(), active...)
+
+	activeOnly := true
+	tests := []struct {
+		name  string
+		query postgres.AssetListQuery
+		want  []string
+	}{
+		{"no filter", postgres.AssetListQuery{}, []string{"1", "2", "3", "4", "5", "6"}},
+		{"active", postgres.AssetListQuery{Active: &activeOnly}, []string{"1", "2", "3", "4", "5"}},
+		{"kinds", postgres.AssetListQuery{Kind: []inventory.AssetKind{inventory.Server, inventory.Workstation}}, []string{"1", "2", "5", "6"}},
+		{"criticality", postgres.AssetListQuery{Criticality: []inventory.Criticality{inventory.CriticalityHigh}}, []string{"1", "6"}},
+		{"unknown criticality", postgres.AssetListQuery{Criticality: []inventory.Criticality{inventory.CriticalityUnknown}}, []string{"2", "4"}},
+		{"criticalities with unknown", postgres.AssetListQuery{Criticality: []inventory.Criticality{inventory.CriticalityUnknown, inventory.CriticalityLow}}, []string{"2", "3", "4"}},
+		{"combination", postgres.AssetListQuery{
+			Active:      &activeOnly,
+			Kind:        []inventory.AssetKind{inventory.Server, inventory.VirtualMachine},
+			Criticality: []inventory.Criticality{inventory.CriticalityUnknown, inventory.CriticalityHigh},
+		}, []string{"1", "2", "4"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			query := tt.query
+			query.Customer, query.Limit = customer, 1
+			var listed []string
+			totals := map[int]bool{}
+			for {
+				page := inTxValue(t, db, func(tx *postgres.Tx) (postgres.AssetPage, error) { return tx.ListAssets(ctx, query) })
+				totals[page.Total] = true
+				for _, a := range page.Assets {
+					listed = append(listed, a.Asset.Ref().RecordID)
+				}
+				if !page.More || len(listed) > len(tt.want) {
+					break
+				}
+				last := page.Assets[len(page.Assets)-1].Asset
+				query.After = &postgres.AssetPosition{Name: last.Imported().Name(), Ref: last.Ref()}
+			}
+			if fmt.Sprint(listed) != fmt.Sprint(tt.want) || len(totals) != 1 || !totals[len(listed)] {
+				t.Errorf("listed %v with totals %v, want %v with total %d", listed, totals, tt.want, len(tt.want))
+			}
+		})
+	}
+}

@@ -397,7 +397,7 @@ func (s *Service) assets(ctx context.Context, caller tenancy.User, in assetsInpu
 		if err != nil {
 			return assetsResult{}, err
 		}
-		query.Criticality = &criticality
+		query.Criticality = []inventory.Criticality{criticality}
 	}
 	page, err := postgres.InTxValue(ctx, s.db, func(tx *postgres.Tx) (postgres.AssetPage, error) { return tx.ListAssets(ctx, query) })
 	if err != nil {
