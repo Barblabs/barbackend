@@ -125,15 +125,15 @@ func (c exposureFilterCode) parse() (inventory.Exposure, error) {
 }
 
 func (in assetQuery) query() (assets.Query, error) {
-	q := assets.Query{Limit: int(in.Limit), Cursor: in.Cursor, Active: in.Active.keep()}
+	q := assets.Query{Limit: int(in.Limit), Cursor: in.Cursor, Filter: assets.Filter{Active: in.Active.keep()}}
 	var err error
-	if q.Kind, err = parseEach(in.Kind, assetKindCode.parse); err != nil {
+	if q.Filter.Kind, err = parseEach(in.Kind, assetKindCode.parse); err != nil {
 		return assets.Query{}, err
 	}
-	if q.Criticality, err = parseEach(in.Criticality, criticalityFilterCode.parse); err != nil {
+	if q.Filter.Criticality, err = parseEach(in.Criticality, criticalityFilterCode.parse); err != nil {
 		return assets.Query{}, err
 	}
-	if q.Exposure, err = parseEach(in.Exposure, exposureFilterCode.parse); err != nil {
+	if q.Filter.Exposure, err = parseEach(in.Exposure, exposureFilterCode.parse); err != nil {
 		return assets.Query{}, err
 	}
 	return q, nil

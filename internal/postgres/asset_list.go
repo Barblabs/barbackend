@@ -17,20 +17,26 @@ type AssetPosition struct {
 	Ref  inventory.SourceReference
 }
 
+// AssetFilter selects the Assets of a listing. Each filter combines with the
+// others by AND; a nil filter keeps every value.
+type AssetFilter struct {
+	// Active keeps only Active Assets when true and only Inactive ones when
+	// false.
+	Active *bool
+	// Kind, Criticality and Exposure keep the Assets with any of their
+	// values. CriticalityUnknown and ExposureUnknown keep the Assets without
+	// one. Exposure is the effective one: the declared Exposure, otherwise
+	// the imported one.
+	Kind        []inventory.AssetKind
+	Criticality []inventory.Criticality
+	Exposure    []inventory.Exposure
+}
+
 // AssetListQuery selects one page of a Customer's Assets, sorted by name,
 // then CMDB Source, then Record ID.
 type AssetListQuery struct {
 	Customer tenancy.CustomerID
-	// Active keeps only Active Assets when true and only Inactive ones when
-	// false; nil keeps both.
-	Active *bool
-	// Kind, Criticality and Exposure keep the Assets with any of their
-	// values; empty keeps every value. CriticalityUnknown and ExposureUnknown
-	// keep the Assets without one. Exposure is the effective one: the
-	// declared Exposure, otherwise the imported one.
-	Kind        []inventory.AssetKind
-	Criticality []inventory.Criticality
-	Exposure    []inventory.Exposure
+	Filter   AssetFilter
 	// After, when set, starts the page just past that position.
 	After *AssetPosition
 	Limit int
@@ -50,8 +56,10 @@ type AssetPage struct {
 // in one further query whatever the page size.
 func (t *Tx) ListAssets(ctx context.Context, q AssetListQuery) (AssetPage, error) {
 	filter := sqlcgen.CountCustomerAssetsParams{
-		CustomerID: uuid.UUID(q.Customer), Active: q.Active,
-		KindIds: catalogIDs(q.Kind), CriticalityIds: catalogIDs(q.Criticality), ExposureIds: catalogIDs(q.Exposure),
+		CustomerID: uuid.UUID(q.Customer), Active: q.Filter.Active,
+		KindIds:        catalogIDs(q.Filter.Kind),
+		CriticalityIds: catalogIDs(q.Filter.Criticality),
+		ExposureIds:    catalogIDs(q.Filter.Exposure),
 	}
 	total, err := t.q.CountCustomerAssets(ctx, filter)
 	if err != nil {

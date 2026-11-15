@@ -70,26 +70,26 @@ func TestListAssetsTotalCountsTheAssetsListedAcrossAllPages(t *testing.T) {
 	activeOnly := true
 	admin := storeUser(t, db, "admin@example.com", tenancy.CustomerAdmin, customer)
 	workstation := inTxValue(t, db, func(tx *postgres.Tx) (postgres.AssetPage, error) {
-		return tx.ListAssets(ctx, postgres.AssetListQuery{Customer: customer, Active: &activeOnly, Kind: []inventory.AssetKind{inventory.Workstation}, Limit: 1})
+		return tx.ListAssets(ctx, postgres.AssetListQuery{Customer: customer, Filter: postgres.AssetFilter{Active: &activeOnly, Kind: []inventory.AssetKind{inventory.Workstation}}, Limit: 1})
 	})
 	declareInternal(t, db, customer, workstation.Assets[0].ID, admin.ID())
 
 	tests := []struct {
-		name  string
-		query postgres.AssetListQuery
-		want  []string
+		name   string
+		filter postgres.AssetFilter
+		want   []string
 	}{
-		{"no filter", postgres.AssetListQuery{}, []string{"1", "2", "3", "4", "5", "6"}},
-		{"active", postgres.AssetListQuery{Active: &activeOnly}, []string{"1", "2", "3", "4", "5"}},
-		{"kinds", postgres.AssetListQuery{Kind: []inventory.AssetKind{inventory.Server, inventory.Workstation}}, []string{"1", "2", "5", "6"}},
-		{"criticality", postgres.AssetListQuery{Criticality: []inventory.Criticality{inventory.CriticalityHigh}}, []string{"1", "6"}},
-		{"unknown criticality", postgres.AssetListQuery{Criticality: []inventory.Criticality{inventory.CriticalityUnknown}}, []string{"2", "4"}},
-		{"criticalities with unknown", postgres.AssetListQuery{Criticality: []inventory.Criticality{inventory.CriticalityUnknown, inventory.CriticalityLow}}, []string{"2", "3", "4"}},
-		{"exposure", postgres.AssetListQuery{Exposure: []inventory.Exposure{inventory.InternetFacing}}, []string{"1"}},
-		{"declared exposure", postgres.AssetListQuery{Exposure: []inventory.Exposure{inventory.Internal}}, []string{"2", "5", "6"}},
-		{"unknown exposure", postgres.AssetListQuery{Exposure: []inventory.Exposure{inventory.ExposureUnknown}}, []string{"3", "4"}},
-		{"exposures with unknown", postgres.AssetListQuery{Exposure: []inventory.Exposure{inventory.ExposureUnknown, inventory.Internal}}, []string{"2", "3", "4", "5", "6"}},
-		{"combination", postgres.AssetListQuery{
+		{"no filter", postgres.AssetFilter{}, []string{"1", "2", "3", "4", "5", "6"}},
+		{"active", postgres.AssetFilter{Active: &activeOnly}, []string{"1", "2", "3", "4", "5"}},
+		{"kinds", postgres.AssetFilter{Kind: []inventory.AssetKind{inventory.Server, inventory.Workstation}}, []string{"1", "2", "5", "6"}},
+		{"criticality", postgres.AssetFilter{Criticality: []inventory.Criticality{inventory.CriticalityHigh}}, []string{"1", "6"}},
+		{"unknown criticality", postgres.AssetFilter{Criticality: []inventory.Criticality{inventory.CriticalityUnknown}}, []string{"2", "4"}},
+		{"criticalities with unknown", postgres.AssetFilter{Criticality: []inventory.Criticality{inventory.CriticalityUnknown, inventory.CriticalityLow}}, []string{"2", "3", "4"}},
+		{"exposure", postgres.AssetFilter{Exposure: []inventory.Exposure{inventory.InternetFacing}}, []string{"1"}},
+		{"declared exposure", postgres.AssetFilter{Exposure: []inventory.Exposure{inventory.Internal}}, []string{"2", "5", "6"}},
+		{"unknown exposure", postgres.AssetFilter{Exposure: []inventory.Exposure{inventory.ExposureUnknown}}, []string{"3", "4"}},
+		{"exposures with unknown", postgres.AssetFilter{Exposure: []inventory.Exposure{inventory.ExposureUnknown, inventory.Internal}}, []string{"2", "3", "4", "5", "6"}},
+		{"combination", postgres.AssetFilter{
 			Active:      &activeOnly,
 			Kind:        []inventory.AssetKind{inventory.Server, inventory.VirtualMachine},
 			Criticality: []inventory.Criticality{inventory.CriticalityUnknown, inventory.CriticalityHigh},
@@ -98,8 +98,7 @@ func TestListAssetsTotalCountsTheAssetsListedAcrossAllPages(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			query := tt.query
-			query.Customer, query.Limit = customer, 1
+			query := postgres.AssetListQuery{Customer: customer, Filter: tt.filter, Limit: 1}
 			var listed []string
 			totals := map[int]bool{}
 			for {
