@@ -69,28 +69,16 @@ type ModelVersion int
 // Model is a Scoring Model. Its fields are unexported so a published version
 // can never be edited: changing any number means a new Model.
 type Model struct {
-	version                  ModelVersion
-	wCVSS, wEPSS, wKEV       float64
-	critHigh, critMedium     float64
-	critLow, critUnknown     float64
-	expInternet, expInternal float64
-	expUnknown               float64
-	// scoresLifecycle is false for a Model that had no lifecycle factor: its
-	// multiplier is 1 and the Lifecycle Stage is not read.
-	scoresLifecycle         bool
-	lifeProduction, lifeImp float64
-	lifeStock, lifeUnknown  float64
-	defaultCVSS             float64
-	// weighsByExploitSignal replaces the weighted sum of layer 1 with the
-	// severity weighed by ExploitSignal (ADR 0032); the w* weights are unused.
-	weighsByExploitSignal bool
-	epssSaturation        float64 // the EPSS that counts as an ExploitSignal of 1
-	unexploitedShare      float64 // the share of the severity at an ExploitSignal of 0
-	// scoresClassification makes the impact the higher of Criticality and the
-	// Information Classification; Unclassified does not count (ADR 0032).
-	scoresClassification                      bool
-	classConfidential, classPrivate, classPub float64
-	bands                                     []bandFloor // highest first; none before Model 3
+	version     ModelVersion
+	layer1      func(Factors) (vulnerability float64, exploitSignal *float64)
+	criticality map[inventory.Criticality]float64
+	exposure    map[inventory.Exposure]float64
+	// A nil table is a factor the Model does not score: lifecycle then
+	// multiplies by 1, and classification leaves the impact to Criticality.
+	lifecycle      map[inventory.LifecycleStage]float64
+	classification map[inventory.InformationClassification]float64
+	defaultCVSS    float64
+	bands          []bandFloor // highest first
 }
 
 // bandFloor is the lowest Score of a Band.
@@ -99,13 +87,35 @@ type bandFloor struct {
 	floor float64
 }
 
+// weightedSum is layer 1 of ADR 0009: CVSS, EPSS and KEV added by weight.
+func weightedSum(cvss, epss, kev float64) func(Factors) (float64, *float64) {
+	return func(f Factors) (float64, *float64) {
+		return cvss*f.Alpha + epss*f.Beta + kev*f.Gamma, nil
+	}
+}
+
+// weighedByExploitSignal is layer 1 of ADR 0032: the CVSS weighed by the
+// Exploit Signal, which is 1 on a KEV CVE and grows linearly with EPSS up to
+// saturation; at a signal of 0, unexploitedShare of the CVSS counts.
+func weighedByExploitSignal(saturation, unexploitedShare float64) func(Factors) (float64, *float64) {
+	return func(f Factors) (float64, *float64) {
+		signal := 1.0
+		if f.Gamma != 1 {
+			signal = min(f.Beta/saturation, 1)
+		}
+		return f.Alpha * (unexploitedShare + (1-unexploitedShare)*signal), &signal
+	}
+}
+
 // Model1 is the linear model of ADR 0009. Unknown Criticality and Exposure
 // take the highest multiplier, so missing context never lowers a Score.
 var Model1 = Model{
 	version: 1,
-	wCVSS:   0.3, wEPSS: 0.3, wKEV: 0.4,
-	critHigh: 1.0, critMedium: 0.7, critLow: 0.4, critUnknown: 1.0,
-	expInternet: 1.0, expInternal: 0.6, expUnknown: 1.0,
+	layer1:  weightedSum(0.3, 0.3, 0.4),
+	criticality: map[inventory.Criticality]float64{
+		inventory.CriticalityHigh: 1.0, inventory.CriticalityMedium: 0.7, inventory.CriticalityLow: 0.4, inventory.CriticalityUnknown: 1.0,
+	},
+	exposure:    map[inventory.Exposure]float64{inventory.InternetFacing: 1.0, inventory.Internal: 0.6, inventory.ExposureUnknown: 1.0},
 	defaultCVSS: 0.7,
 }
 
@@ -113,26 +123,33 @@ var Model1 = Model{
 // (ADR 0028). An Unknown stage takes the highest one, as in Model1.
 var Model2 = Model{
 	version: 2,
-	wCVSS:   0.3, wEPSS: 0.3, wKEV: 0.4,
-	critHigh: 1.0, critMedium: 0.7, critLow: 0.4, critUnknown: 1.0,
-	expInternet: 1.0, expInternal: 0.6, expUnknown: 1.0,
-	scoresLifecycle: true,
-	lifeProduction:  1.0, lifeImp: 0.8, lifeStock: 0.3, lifeUnknown: 1.0,
+	layer1:  weightedSum(0.3, 0.3, 0.4),
+	criticality: map[inventory.Criticality]float64{
+		inventory.CriticalityHigh: 1.0, inventory.CriticalityMedium: 0.7, inventory.CriticalityLow: 0.4, inventory.CriticalityUnknown: 1.0,
+	},
+	exposure: map[inventory.Exposure]float64{inventory.InternetFacing: 1.0, inventory.Internal: 0.6, inventory.ExposureUnknown: 1.0},
+	lifecycle: map[inventory.LifecycleStage]float64{
+		inventory.LifecycleProduction: 1.0, inventory.LifecycleImplementation: 0.8, inventory.LifecycleStock: 0.3, inventory.LifecycleUnknown: 1.0,
+	},
 	defaultCVSS: 0.7,
 }
 
-// Model3 weighs the severity by ExploitSignal instead of adding EPSS and KEV
+// Model3 weighs the CVSS by the Exploit Signal instead of adding EPSS and KEV
 // to it, takes the higher of Criticality and Information Classification as
 // the impact, softens the multipliers and sets the Score Bands (ADR 0032).
 var Model3 = Model{
-	version:               3,
-	weighsByExploitSignal: true, epssSaturation: 0.10, unexploitedShare: 0.5,
-	critHigh: 1.0, critMedium: 0.75, critLow: 0.5, critUnknown: 1.0,
-	scoresClassification: true,
-	classConfidential:    1.0, classPrivate: 0.75, classPub: 0.5,
-	expInternet: 1.0, expInternal: 0.7, expUnknown: 1.0,
-	scoresLifecycle: true,
-	lifeProduction:  1.0, lifeImp: 0.85, lifeStock: 0.4, lifeUnknown: 1.0,
+	version: 3,
+	layer1:  weighedByExploitSignal(0.10, 0.5),
+	criticality: map[inventory.Criticality]float64{
+		inventory.CriticalityHigh: 1.0, inventory.CriticalityMedium: 0.75, inventory.CriticalityLow: 0.5, inventory.CriticalityUnknown: 1.0,
+	},
+	exposure: map[inventory.Exposure]float64{inventory.InternetFacing: 1.0, inventory.Internal: 0.7, inventory.ExposureUnknown: 1.0},
+	lifecycle: map[inventory.LifecycleStage]float64{
+		inventory.LifecycleProduction: 1.0, inventory.LifecycleImplementation: 0.85, inventory.LifecycleStock: 0.4, inventory.LifecycleUnknown: 1.0,
+	},
+	classification: map[inventory.InformationClassification]float64{
+		inventory.ClassifiedConfidential: 1.0, inventory.ClassifiedPrivate: 0.75, inventory.ClassifiedPublic: 0.5,
+	},
 	defaultCVSS: 0.7,
 	bands: []bandFloor{
 		{BandCritical, 0.70},
@@ -283,20 +300,23 @@ func (m Model) Compute(in Inputs) (Score, error) {
 	}
 
 	var err error
-	if f.CriticalityMultiplier, gaps, err = m.criticality(in.Criticality, gaps); err != nil {
+	if f.CriticalityMultiplier, gaps, err = multiplier(m.criticality, in.Criticality, inventory.CriticalityUnknown, CriticalityUnknown, inventory.ErrInvalidCriticality, gaps); err != nil {
 		return Score{}, err
 	}
-	if f.ExposureMultiplier, gaps, err = m.exposure(in.Exposure, gaps); err != nil {
+	if f.ExposureMultiplier, gaps, err = multiplier(m.exposure, in.Exposure, inventory.ExposureUnknown, ExposureUndeclared, inventory.ErrInvalidExposure, gaps); err != nil {
 		return Score{}, err
 	}
-	if f.LifecycleMultiplier, gaps, err = m.lifecycle(in.Lifecycle, gaps); err != nil {
-		return Score{}, err
+	f.LifecycleMultiplier = 1
+	if m.lifecycle != nil {
+		if f.LifecycleMultiplier, gaps, err = multiplier(m.lifecycle, in.Lifecycle, inventory.LifecycleUnknown, LifecycleUnknown, inventory.ErrInvalidLifecycleStage, gaps); err != nil {
+			return Score{}, err
+		}
 	}
-	if f.ClassificationMultiplier, gaps, err = m.classification(in.Classification, gaps); err != nil {
+	if f.ClassificationMultiplier, gaps, err = m.classificationOf(in.Classification, gaps); err != nil {
 		return Score{}, err
 	}
 
-	f.Vulnerability, f.ExploitSignal = m.vulnerability(f)
+	f.Vulnerability, f.ExploitSignal = m.layer1(f)
 	return Score{
 		Model:   m.version,
 		Value:   f.Vulnerability * f.Impact() * f.ExposureMultiplier * f.LifecycleMultiplier,
@@ -305,82 +325,32 @@ func (m Model) Compute(in Inputs) (Score, error) {
 	}, nil
 }
 
-// vulnerability is layer 1: the weighted sum of ADR 0009, or the severity
-// weighed by ExploitSignal, which is 1 on a KEV CVE and grows linearly with
-// EPSS up to epssSaturation (ADR 0032).
-func (m Model) vulnerability(f Factors) (float64, *float64) {
-	if !m.weighsByExploitSignal {
-		return m.wCVSS*f.Alpha + m.wEPSS*f.Beta + m.wKEV*f.Gamma, nil
+// multiplier is v's multiplier in table, recording gap when v is the unknown
+// value, and failing with invalid when the table has no such value.
+func multiplier[V comparable](table map[V]float64, v, unknown V, gap DataGap, invalid error, gaps []DataGap) (float64, []DataGap, error) {
+	m, ok := table[v]
+	if !ok {
+		return 0, nil, fmt.Errorf("%w: %v", invalid, v)
 	}
-	exploitSignal := 1.0
-	if f.Gamma != 1 {
-		exploitSignal = min(f.Beta/m.epssSaturation, 1)
+	if v == unknown {
+		gaps = append(gaps, gap)
 	}
-	return f.Alpha * (m.unexploitedShare + (1-m.unexploitedShare)*exploitSignal), &exploitSignal
+	return m, gaps, nil
 }
 
-func (m Model) classification(c inventory.InformationClassification, gaps []DataGap) (*float64, []DataGap, error) {
-	if !m.scoresClassification {
+// classificationOf is nil for a Model that does not score the Information
+// Classification, and for an Unclassified Asset, which does not count and is
+// a Data Gap (ADR 0032).
+func (m Model) classificationOf(c inventory.InformationClassification, gaps []DataGap) (*float64, []DataGap, error) {
+	if m.classification == nil {
 		return nil, gaps, nil
 	}
-	var v float64
-	switch c {
-	case inventory.ClassifiedConfidential:
-		v = m.classConfidential
-	case inventory.ClassifiedPrivate:
-		v = m.classPrivate
-	case inventory.ClassifiedPublic:
-		v = m.classPub
-	case inventory.Unclassified:
+	if c == inventory.Unclassified {
 		return nil, append(gaps, ClassificationUndeclared), nil
-	default:
-		return nil, nil, fmt.Errorf("%w: %d", inventory.ErrInvalidInformationClassification, int(c))
+	}
+	v, ok := m.classification[c]
+	if !ok {
+		return nil, nil, fmt.Errorf("%w: %v", inventory.ErrInvalidInformationClassification, c)
 	}
 	return &v, gaps, nil
-}
-
-func (m Model) criticality(c inventory.Criticality, gaps []DataGap) (float64, []DataGap, error) {
-	switch c {
-	case inventory.CriticalityHigh:
-		return m.critHigh, gaps, nil
-	case inventory.CriticalityMedium:
-		return m.critMedium, gaps, nil
-	case inventory.CriticalityLow:
-		return m.critLow, gaps, nil
-	case inventory.CriticalityUnknown:
-		return m.critUnknown, append(gaps, CriticalityUnknown), nil
-	default:
-		return 0, nil, fmt.Errorf("%w: %d", inventory.ErrInvalidCriticality, int(c))
-	}
-}
-
-func (m Model) exposure(e inventory.Exposure, gaps []DataGap) (float64, []DataGap, error) {
-	switch e {
-	case inventory.InternetFacing:
-		return m.expInternet, gaps, nil
-	case inventory.Internal:
-		return m.expInternal, gaps, nil
-	case inventory.ExposureUnknown:
-		return m.expUnknown, append(gaps, ExposureUndeclared), nil
-	default:
-		return 0, nil, fmt.Errorf("%w: %d", inventory.ErrInvalidExposure, int(e))
-	}
-}
-
-func (m Model) lifecycle(s inventory.LifecycleStage, gaps []DataGap) (float64, []DataGap, error) {
-	if !m.scoresLifecycle {
-		return 1, gaps, nil
-	}
-	switch s {
-	case inventory.LifecycleProduction:
-		return m.lifeProduction, gaps, nil
-	case inventory.LifecycleImplementation:
-		return m.lifeImp, gaps, nil
-	case inventory.LifecycleStock:
-		return m.lifeStock, gaps, nil
-	case inventory.LifecycleUnknown:
-		return m.lifeUnknown, append(gaps, LifecycleUnknown), nil
-	default:
-		return 0, nil, fmt.Errorf("%w: %d", inventory.ErrInvalidLifecycleStage, int(s))
-	}
 }
