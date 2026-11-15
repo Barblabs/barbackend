@@ -1,6 +1,16 @@
 // Package slack installs the Slack app into a Customer's workspace and sends
 // the messages the pipeline queues (ADR 0029). It talks to the Slack Web API
 // through Client, so tests can stand in a fake server.
+//
+// The worker only reads and updates slack_deliveries; it never inserts (ADR
+// 0030). The Prioritizer inserts the rows, in the transaction of the round
+// that placed the Findings: an Alert for a new Finding or one whose Score
+// Band rose, of kind finding, or, during a Customer's Initial Load, a batch
+// of up to 10, of kind finding_batch (ADR 0033). Their payloads are the
+// types of package alert, which render reads and nothing else. A DM row
+// targets the Asset Owner's email, blank when the Asset has none; a channel
+// row targets alert.SecurityTeam, and goes to the channel the installation
+// names when it is sent.
 package slack
 
 import (
