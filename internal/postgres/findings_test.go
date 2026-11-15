@@ -184,6 +184,44 @@ func TestOpenFindingsOfSourceReadsOnlyItsOpenFindings(t *testing.T) {
 	}
 }
 
+func TestScoringReadsTheDeclaredInformationClassification(t *testing.T) {
+	t.Parallel()
+	w := newFindingWorld(t)
+	saveMatch(t, w.db, match(t, w.payments, "1.18.0"))
+	saveMatch(t, w.db, match(t, w.lab, "1.18.0"))
+	admin := storeUser(t, w.db, "admin@example.com", tenancy.CustomerAdmin, w.customer)
+	page := inTxValue(t, w.db, func(tx *postgres.Tx) (postgres.AssetPage, error) {
+		return tx.ListAssets(context.Background(), postgres.AssetListQuery{Customer: w.customer, Limit: 10})
+	})
+	for _, a := range page.Assets {
+		if a.Asset.Ref() == w.payments {
+			declareConfidential(t, w.db, w.customer, a.ID, admin.ID())
+		}
+	}
+	want := map[inventory.SourceReference]inventory.InformationClassification{
+		w.payments: inventory.ClassifiedConfidential,
+		w.lab:      inventory.Unclassified,
+	}
+
+	candidates := inTxValue(t, w.db, func(tx *postgres.Tx) ([]postgres.Candidate, error) {
+		return tx.ComponentsWithProducts(context.Background(), []inventory.Product{{Vendor: "f5", Name: "nginx"}})
+	})
+	for _, c := range candidates {
+		if c.Values.Classification != want[c.Asset] {
+			t.Errorf("candidate on %v classification = %v, want %v", c.Asset, c.Values.Classification, want[c.Asset])
+		}
+	}
+	open := openFindingsOf(t, w.db, "CVE-2021-23017")
+	if len(open) != 2 {
+		t.Fatalf("open findings = %+v, want payments' and lab's", open)
+	}
+	for _, f := range open {
+		if f.Values.Classification != want[f.Key.Asset] {
+			t.Errorf("open finding on %v classification = %v, want %v", f.Key.Asset, f.Values.Classification, want[f.Key.Asset])
+		}
+	}
+}
+
 func TestModel3ScoresKeepExploitationAndTheClassificationMultiplier(t *testing.T) {
 	t.Parallel()
 	w := newFindingWorld(t)

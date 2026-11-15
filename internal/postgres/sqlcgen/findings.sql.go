@@ -260,7 +260,8 @@ func (q *Queries) LatestFindingScore(ctx context.Context, findingID uuid.UUID) (
 const listActiveComponentsOfSource = `-- name: ListActiveComponentsOfSource :many
 SELECT c.cmdb_source_id, c.record_id, c.position, c.role_id, c.name, c.version,
        c.product_vendor, c.product_name, a.criticality_id,
-       coalesce(a.declared_exposure_id, a.imported_exposure_id) AS exposure_id, a.lifecycle_stage_id
+       coalesce(a.declared_exposure_id, a.imported_exposure_id) AS exposure_id, a.lifecycle_stage_id,
+       a.declared_information_classification_id
 FROM software_components c
 JOIN assets a USING (cmdb_source_id, record_id)
 WHERE a.inactive_since IS NULL AND c.cmdb_source_id = $1
@@ -268,17 +269,18 @@ ORDER BY c.cmdb_source_id, c.record_id, c.position
 `
 
 type ListActiveComponentsOfSourceRow struct {
-	CmdbSourceID     uuid.UUID
-	RecordID         string
-	Position         int16
-	RoleID           int16
-	Name             string
-	Version          string
-	ProductVendor    *string
-	ProductName      *string
-	CriticalityID    *int16
-	ExposureID       *int16
-	LifecycleStageID *int16
+	CmdbSourceID                        uuid.UUID
+	RecordID                            string
+	Position                            int16
+	RoleID                              int16
+	Name                                string
+	Version                             string
+	ProductVendor                       *string
+	ProductName                         *string
+	CriticalityID                       *int16
+	ExposureID                          *int16
+	LifecycleStageID                    *int16
+	DeclaredInformationClassificationID *int16
 }
 
 // The Software Components of a CMDB Source's Active Assets, with what scoring
@@ -304,6 +306,7 @@ func (q *Queries) ListActiveComponentsOfSource(ctx context.Context, cmdbSourceID
 			&i.CriticalityID,
 			&i.ExposureID,
 			&i.LifecycleStageID,
+			&i.DeclaredInformationClassificationID,
 		); err != nil {
 			return nil, err
 		}
@@ -318,7 +321,8 @@ func (q *Queries) ListActiveComponentsOfSource(ctx context.Context, cmdbSourceID
 const listActiveComponentsWithProducts = `-- name: ListActiveComponentsWithProducts :many
 SELECT c.cmdb_source_id, c.record_id, c.position, c.role_id, c.name, c.version,
        c.product_vendor, c.product_name, a.criticality_id,
-       coalesce(a.declared_exposure_id, a.imported_exposure_id) AS exposure_id, a.lifecycle_stage_id
+       coalesce(a.declared_exposure_id, a.imported_exposure_id) AS exposure_id, a.lifecycle_stage_id,
+       a.declared_information_classification_id
 FROM software_components c
 JOIN assets a USING (cmdb_source_id, record_id)
 WHERE a.inactive_since IS NULL
@@ -336,17 +340,18 @@ type ListActiveComponentsWithProductsParams struct {
 }
 
 type ListActiveComponentsWithProductsRow struct {
-	CmdbSourceID     uuid.UUID
-	RecordID         string
-	Position         int16
-	RoleID           int16
-	Name             string
-	Version          string
-	ProductVendor    *string
-	ProductName      *string
-	CriticalityID    *int16
-	ExposureID       *int16
-	LifecycleStageID *int16
+	CmdbSourceID                        uuid.UUID
+	RecordID                            string
+	Position                            int16
+	RoleID                              int16
+	Name                                string
+	Version                             string
+	ProductVendor                       *string
+	ProductName                         *string
+	CriticalityID                       *int16
+	ExposureID                          *int16
+	LifecycleStageID                    *int16
+	DeclaredInformationClassificationID *int16
 }
 
 // The Software Components of Active Assets that have one of the Products,
@@ -374,6 +379,7 @@ func (q *Queries) ListActiveComponentsWithProducts(ctx context.Context, arg List
 			&i.CriticalityID,
 			&i.ExposureID,
 			&i.LifecycleStageID,
+			&i.DeclaredInformationClassificationID,
 		); err != nil {
 			return nil, err
 		}
@@ -415,7 +421,8 @@ func (q *Queries) ListFindingMatchFlags(ctx context.Context, findingID uuid.UUID
 const listOpenFindingsOfAsset = `-- name: ListOpenFindingsOfAsset :many
 SELECT f.id, f.cmdb_source_id, f.record_id, f.product_vendor, f.product_name, f.cve_id,
        f.component_name, f.component_version, a.criticality_id,
-       coalesce(a.declared_exposure_id, a.imported_exposure_id) AS exposure_id, a.lifecycle_stage_id
+       coalesce(a.declared_exposure_id, a.imported_exposure_id) AS exposure_id, a.lifecycle_stage_id,
+       a.declared_information_classification_id
 FROM findings f
 JOIN assets a USING (cmdb_source_id, record_id)
 WHERE f.cmdb_source_id = $1 AND f.record_id = $2 AND f.closed_at IS NULL
@@ -428,17 +435,18 @@ type ListOpenFindingsOfAssetParams struct {
 }
 
 type ListOpenFindingsOfAssetRow struct {
-	ID               uuid.UUID
-	CmdbSourceID     uuid.UUID
-	RecordID         string
-	ProductVendor    string
-	ProductName      string
-	CveID            string
-	ComponentName    string
-	ComponentVersion string
-	CriticalityID    *int16
-	ExposureID       *int16
-	LifecycleStageID *int16
+	ID                                  uuid.UUID
+	CmdbSourceID                        uuid.UUID
+	RecordID                            string
+	ProductVendor                       string
+	ProductName                         string
+	CveID                               string
+	ComponentName                       string
+	ComponentVersion                    string
+	CriticalityID                       *int16
+	ExposureID                          *int16
+	LifecycleStageID                    *int16
+	DeclaredInformationClassificationID *int16
 }
 
 // The open Findings of one Asset, with what scoring needs of it.
@@ -463,6 +471,7 @@ func (q *Queries) ListOpenFindingsOfAsset(ctx context.Context, arg ListOpenFindi
 			&i.CriticalityID,
 			&i.ExposureID,
 			&i.LifecycleStageID,
+			&i.DeclaredInformationClassificationID,
 		); err != nil {
 			return nil, err
 		}
@@ -567,7 +576,8 @@ func (q *Queries) ListOpenFindingsOfCustomer(ctx context.Context, customerID uui
 const listOpenFindingsOfSource = `-- name: ListOpenFindingsOfSource :many
 SELECT f.id, f.cmdb_source_id, f.record_id, f.product_vendor, f.product_name, f.cve_id,
        f.component_name, f.component_version, a.criticality_id,
-       coalesce(a.declared_exposure_id, a.imported_exposure_id) AS exposure_id, a.lifecycle_stage_id
+       coalesce(a.declared_exposure_id, a.imported_exposure_id) AS exposure_id, a.lifecycle_stage_id,
+       a.declared_information_classification_id
 FROM findings f
 JOIN assets a USING (cmdb_source_id, record_id)
 WHERE f.closed_at IS NULL AND f.cmdb_source_id = $1
@@ -575,17 +585,18 @@ ORDER BY f.cmdb_source_id, f.record_id, f.product_vendor, f.product_name, f.cve_
 `
 
 type ListOpenFindingsOfSourceRow struct {
-	ID               uuid.UUID
-	CmdbSourceID     uuid.UUID
-	RecordID         string
-	ProductVendor    string
-	ProductName      string
-	CveID            string
-	ComponentName    string
-	ComponentVersion string
-	CriticalityID    *int16
-	ExposureID       *int16
-	LifecycleStageID *int16
+	ID                                  uuid.UUID
+	CmdbSourceID                        uuid.UUID
+	RecordID                            string
+	ProductVendor                       string
+	ProductName                         string
+	CveID                               string
+	ComponentName                       string
+	ComponentVersion                    string
+	CriticalityID                       *int16
+	ExposureID                          *int16
+	LifecycleStageID                    *int16
+	DeclaredInformationClassificationID *int16
 }
 
 // The open Findings of a CMDB Source's Assets, with what scoring needs of
@@ -611,6 +622,7 @@ func (q *Queries) ListOpenFindingsOfSource(ctx context.Context, cmdbSourceID uui
 			&i.CriticalityID,
 			&i.ExposureID,
 			&i.LifecycleStageID,
+			&i.DeclaredInformationClassificationID,
 		); err != nil {
 			return nil, err
 		}
@@ -625,7 +637,8 @@ func (q *Queries) ListOpenFindingsOfSource(ctx context.Context, cmdbSourceID uui
 const listOpenFindingsOfVulnerability = `-- name: ListOpenFindingsOfVulnerability :many
 SELECT f.id, f.cmdb_source_id, f.record_id, f.product_vendor, f.product_name, f.cve_id,
        f.component_name, f.component_version, a.criticality_id,
-       coalesce(a.declared_exposure_id, a.imported_exposure_id) AS exposure_id, a.lifecycle_stage_id
+       coalesce(a.declared_exposure_id, a.imported_exposure_id) AS exposure_id, a.lifecycle_stage_id,
+       a.declared_information_classification_id
 FROM findings f
 JOIN assets a USING (cmdb_source_id, record_id)
 WHERE f.cve_id = $1 AND f.closed_at IS NULL
@@ -633,17 +646,18 @@ ORDER BY f.cmdb_source_id, f.record_id, f.product_vendor, f.product_name
 `
 
 type ListOpenFindingsOfVulnerabilityRow struct {
-	ID               uuid.UUID
-	CmdbSourceID     uuid.UUID
-	RecordID         string
-	ProductVendor    string
-	ProductName      string
-	CveID            string
-	ComponentName    string
-	ComponentVersion string
-	CriticalityID    *int16
-	ExposureID       *int16
-	LifecycleStageID *int16
+	ID                                  uuid.UUID
+	CmdbSourceID                        uuid.UUID
+	RecordID                            string
+	ProductVendor                       string
+	ProductName                         string
+	CveID                               string
+	ComponentName                       string
+	ComponentVersion                    string
+	CriticalityID                       *int16
+	ExposureID                          *int16
+	LifecycleStageID                    *int16
+	DeclaredInformationClassificationID *int16
 }
 
 // The open Findings of one Vulnerability, with what scoring needs of their Asset.
@@ -668,6 +682,7 @@ func (q *Queries) ListOpenFindingsOfVulnerability(ctx context.Context, cveID str
 			&i.CriticalityID,
 			&i.ExposureID,
 			&i.LifecycleStageID,
+			&i.DeclaredInformationClassificationID,
 		); err != nil {
 			return nil, err
 		}

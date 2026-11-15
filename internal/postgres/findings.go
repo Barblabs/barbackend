@@ -288,7 +288,7 @@ func candidate(row sqlcgen.ListActiveComponentsWithProductsRow) Candidate {
 			Version: row.Version,
 			Product: inventory.Product{Vendor: valueOrZero(row.ProductVendor), Name: valueOrZero(row.ProductName)},
 		},
-		Values: assetValues(row.CriticalityID, row.ExposureID, row.LifecycleStageID),
+		Values: assetValues(row.CriticalityID, row.ExposureID, row.LifecycleStageID, row.DeclaredInformationClassificationID),
 	}
 }
 
@@ -301,16 +301,17 @@ func openFinding(row sqlcgen.ListOpenFindingsOfVulnerabilityRow) OpenFinding {
 		},
 		ComponentName:    row.ComponentName,
 		ComponentVersion: row.ComponentVersion,
-		Values:           assetValues(row.CriticalityID, row.ExposureID, row.LifecycleStageID),
+		Values:           assetValues(row.CriticalityID, row.ExposureID, row.LifecycleStageID, row.DeclaredInformationClassificationID),
 	}
 }
 
 // assetValues reads what scoring needs of an Asset from its catalog ids, NULL
-// being Unknown.
-func assetValues(criticality, exposure, lifecycle *int16) finding.AssetValues {
+// being Unknown, or Unclassified.
+func assetValues(criticality, exposure, lifecycle, classification *int16) finding.AssetValues {
 	return finding.AssetValues{
-		Criticality: inventory.Criticality(valueOrZero(criticality)),
-		Exposure:    inventory.Exposure(valueOrZero(exposure)),
-		Lifecycle:   inventory.LifecycleStage(valueOrZero(lifecycle)),
+		Criticality:    inventory.Criticality(valueOrZero(criticality)),
+		Exposure:       inventory.Exposure(valueOrZero(exposure)),
+		Lifecycle:      inventory.LifecycleStage(valueOrZero(lifecycle)),
+		Classification: inventory.InformationClassification(valueOrZero(classification)),
 	}
 }
