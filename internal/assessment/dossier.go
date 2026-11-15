@@ -26,9 +26,7 @@ const (
 )
 
 const (
-	unknown = "unknown"
-	// unclassified is the code of an Asset whose Information Classification
-	// nobody declared, which inventory gives no code (ADR 0031).
+	unknown      = "unknown"
 	unclassified = "unclassified"
 )
 
@@ -36,10 +34,6 @@ var dataGaps = []string{
 	scoring.CVSSEstimated.String(), scoring.EPSSPending.String(), scoring.KEVStale.String(),
 	scoring.CriticalityUnknown.String(), scoring.ExposureUndeclared.String(), scoring.LifecycleUnknown.String(),
 	scoring.ClassificationUndeclared.String(),
-}
-
-var bands = []string{
-	scoring.BandCritical.String(), scoring.BandHigh.String(), scoring.BandMedium.String(), scoring.BandLow.String(),
 }
 
 // ErrInvalidDossier is a Dossier that names no Finding, no real CVE or no
@@ -389,10 +383,23 @@ func (s Score) problems() []string {
 	if s.ExploitSignal != nil && !inRange(*s.ExploitSignal, 1) {
 		problems = append(problems, fmt.Sprintf("exploit signal %v is out of range", *s.ExploitSignal))
 	}
-	if s.Band != "" && !slices.Contains(bands, s.Band) {
-		problems = append(problems, fmt.Sprintf("band %q is not one of %v", s.Band, bands))
+	if m := s.ClassificationMultiplier; m != nil && (*m <= 0 || *m > 1) {
+		problems = append(problems, fmt.Sprintf("information classification multiplier %v is out of range", *m))
+	}
+	if want := bandOf(s); s.Band != want {
+		problems = append(problems, fmt.Sprintf("band %q is not %q, the Band of %v under scoring model %d", s.Band, want, s.Value, s.ScoringModel))
 	}
 	return problems
+}
+
+// bandOf is the Band the Score's own Model gives its value, blank for a Model
+// without Bands.
+func bandOf(s Score) string {
+	band, ok := scoring.Score{Model: scoring.ModelVersion(s.ScoringModel), Value: s.Value}.Band()
+	if !ok {
+		return ""
+	}
+	return band.String()
 }
 
 // Brief is what the Prioritizer reads of a Finding: enough to weigh it against
@@ -558,9 +565,7 @@ func newScore(s scoring.Score) Score {
 		ClassificationMultiplier: roundedOrNil(s.Factors.ClassificationMultiplier),
 		DataGaps:                 gaps,
 	}
-	if band, ok := s.Band(); ok {
-		out.Band = band.String()
-	}
+	out.Band = bandOf(out)
 	return out
 }
 
