@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 	"unicode/utf8"
+
+	"barbackend/internal/scoring"
 )
 
 const (
@@ -194,6 +196,18 @@ func Changed(was, now Dossier) bool {
 	default:
 		return rounded(math.Abs(now.Score.Value-was.Score.Value)) >= ScoreShift
 	}
+}
+
+// BandRose reports whether now's Score Band is higher than was's, the
+// rise an Alert is written for (ADR 0033). A Score without a Band has none to
+// compare.
+func BandRose(was, now Dossier) bool {
+	before, ok := scoring.ParseBand(was.Score.Band)
+	if !ok {
+		return false
+	}
+	after, ok := scoring.ParseBand(now.Score.Band)
+	return ok && after > before
 }
 
 // NewStanding is the order a round starts from: the groups of l, numbered

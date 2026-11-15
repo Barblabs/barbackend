@@ -9,32 +9,6 @@ import (
 	"barbackend/internal/alert"
 )
 
-func TestWhy(t *testing.T) {
-	cases := []struct {
-		name     string
-		held     bool
-		was, now string
-		want     alert.Reason
-		alerts   bool
-	}{
-		{name: "not held is new", held: false, now: "low", want: alert.New, alerts: true},
-		{name: "a rise of one Band", held: true, was: "high", now: "critical", want: alert.BandRose, alerts: true},
-		{name: "a rise of two Bands", held: true, was: "low", now: "high", want: alert.BandRose, alerts: true},
-		{name: "the same Band", held: true, was: "high", now: "high"},
-		{name: "a fall", held: true, was: "critical", now: "medium"},
-		{name: "no Band before", held: true, was: "", now: "critical"},
-		{name: "no Band now", held: true, was: "low", now: ""},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			got, alerts := alert.Why(c.held, c.was, c.now)
-			if got != c.want || alerts != c.alerts {
-				t.Errorf("Why(%v, %q, %q) = %q, %v; want %q, %v", c.held, c.was, c.now, got, alerts, c.want, c.alerts)
-			}
-		})
-	}
-}
-
 func TestBatchesAreOfTenHighestScoreFirst(t *testing.T) {
 	var findings []alert.Finding
 	for i := range 23 {

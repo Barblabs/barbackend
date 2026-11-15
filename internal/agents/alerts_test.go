@@ -3,6 +3,7 @@ package agents_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -11,8 +12,10 @@ import (
 	"barbackend/internal/agents"
 	"barbackend/internal/alert"
 	"barbackend/internal/assessment"
+	"barbackend/internal/business"
 	"barbackend/internal/claude/claudetest"
 	"barbackend/internal/inventory"
+	"barbackend/internal/postgres"
 	"barbackend/internal/postgres/pgtest"
 	"barbackend/internal/scoring"
 	"github.com/google/uuid"
@@ -26,13 +29,13 @@ type delivery struct {
 	payload                  []byte
 }
 
-// deliveries are the Customer's queued Slack deliveries, oldest first, then
-// by kind, target and payload, so a round's rows read in a fixed order.
+// deliveries are the Customer's queued Slack deliveries in the order the
+// worker claims each target's.
 func (e env) deliveries(t *testing.T) []delivery {
 	t.Helper()
 	rows, err := pgtest.Conn(t, e.url).Query(context.Background(), `
 		SELECT kind, target_kind, target, finding_id, payload FROM slack_deliveries
-		WHERE customer_id = $1 ORDER BY created_at, kind, target_kind, target, payload::text`, uuid.UUID(e.customer))
+		WHERE customer_id = $1 ORDER BY created_at, id`, uuid.UUID(e.customer))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,8 +106,8 @@ func TestAfterTheInitialLoadANewFindingIsAlertedAlone(t *testing.T) {
 	e.prioritizeWith(t, placement(standing(1), newGroup("Después de Ubuntu", newer, "No está en KEV, como Ubuntu.", assessment.FindingEvidence{Finding: newer, Path: "/kev", Value: "null"}), standing(2)))
 
 	got := e.deliveries(t)[queued:]
-	if len(got) != 2 || got[0].target != alert.SecurityTeam || got[1].target != owner {
-		t.Fatalf("deliveries = %+v, want one to the channel and one to the owner", got)
+	if len(got) != 2 || got[0].targetKind != alert.TargetEmail || got[0].target != owner || got[1].targetKind != alert.TargetChannel || got[1].target != alert.SecurityTeam {
+		t.Fatalf("deliveries = %+v, want one to the owner and one to the channel", got)
 	}
 	latest := e.latest(t)
 	for _, d := range got {
@@ -170,8 +173,8 @@ func TestTheInitialLoadLastsUntilEveryOpenFindingHasAPlace(t *testing.T) {
 	// With one answer queued, the second round gets none and the run stops
 	// after the first, as a run cut short does.
 	e.llm.Queue(claudetest.JSON(t, placement(firstRound)))
-	if stored, _ := e.svc.Prioritize(context.Background(), e.customer); stored != 1 || !e.latest(t).InitialLoad {
-		t.Fatalf("stored %d, Initial Load %v; want one round and the load going on with a Finding still without a place", stored, e.latest(t).InitialLoad)
+	if stored, err := e.svc.Prioritize(context.Background(), e.customer); stored != 1 || !errors.Is(err, agents.ErrUnavailable) || !e.latest(t).InitialLoad {
+		t.Fatalf("stored %d, %v, Initial Load %v; want one round, the second unanswered, and the load going on with a Finding still without a place", stored, err, e.latest(t).InitialLoad)
 	}
 	e.prioritizeWith(t, placement(lastOne))
 
@@ -187,4 +190,126 @@ func TestTheInitialLoadLastsUntilEveryOpenFindingHasAPlace(t *testing.T) {
 	if findings != 0 || batches != 2*(agents.MaxFindings+1) || e.latest(t).InitialLoad {
 		t.Errorf("%d alerts in batches and %d alone, Initial Load %v; want every Finding batched twice and the load over", batches, findings, e.latest(t).InitialLoad)
 	}
+}
+
+// allIn is one new group of the Findings of those ids, cited by the first.
+func allIn(title string, ids ...string) assessment.PlacedGroup {
+	g := newGroup(title, ids[0], "Ninguna está en KEV.", assessment.FindingEvidence{Finding: ids[0], Path: "/kev", Value: "null"})
+	g.Findings = ids
+	return g
+}
+
+func TestANewBusinessContextAlertsNothingEvenOverSeveralRounds(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	var ids []string
+	for i := range agents.MaxFindings + 1 {
+		ids = append(ids, e.storeFinding(t, vulnerability(t, fmt.Sprintf("CVE-2026-%05d", 10000+i), "PostgreSQL is affected."), postgreSQL, banded(t, 6, false)))
+	}
+	slices.Sort(ids)
+	lastOne := allIn("", ids[agents.MaxFindings])
+	lastOne.Standing = ptr(1)
+	e.prioritizeWith(t, placement(allIn("Todas", ids[:agents.MaxFindings]...)), placement(lastOne))
+	queued := len(e.deliveries(t))
+	bc, err := business.New(business.Fields{Operations: business.Operations{CriticalServices: []business.CriticalService{
+		{Name: "Nómina", Impact: "critical", MaxDowntime: "1h_4h", Assets: []string{"PG-PROD-01"}},
+	}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.db.InTx(context.Background(), func(tx *postgres.Tx) error {
+		_, err := tx.SaveBusinessContext(context.Background(), e.customer, 0, bc, e.user)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if stored := e.prioritizeWith(t, placement(allIn("Todas", ids[:agents.MaxFindings]...)), placement(lastOne)); stored != 2 {
+		t.Fatalf("stored %d, want the order made anew in two rounds", stored)
+	}
+
+	if got := e.deliveries(t)[queued:]; len(got) != 0 {
+		t.Errorf("%d deliveries, want none for Findings placed before, at the same Band", len(got))
+	}
+}
+
+func TestAFindingWithNoAssetOwnerStillGetsItsDMRow(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	e.prioritize(t)
+	queued := len(e.deliveries(t))
+	ownerless := assetParams("pg-prod-01")
+	ownerless.Owner = inventory.OwnerEmail{}
+	e.sync(t, e.source, map[string]inventory.ImportedAssetParams{"1": ownerless})
+	newer := e.storeFinding(t, vulnerability(t, "CVE-2026-0001", "PostgreSQL is affected."), postgreSQL, score(0.7))
+
+	e.prioritizeWith(t, placement(standing(1), standing(2), allIn("Al final", newer)))
+
+	got := e.deliveries(t)[queued:]
+	if len(got) != 2 || got[0].targetKind != alert.TargetEmail || got[0].target != "" || got[1].target != alert.SecurityTeam {
+		t.Fatalf("deliveries = %+v, want a DM row with no target and the channel's", got)
+	}
+}
+
+func TestTheInitialLoadBatchesEachOwnersFindingsAndTheChannelsHighestScoreFirst(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	web := assetParams("web-01")
+	web.Owner = mustOwner(t, "ops@example.com")
+	e.sync(t, e.source, map[string]inventory.ImportedAssetParams{"1": assetParams("pg-prod-01"), "2": web})
+	low := e.storeFindingOn(t, "1", vulnerability(t, "CVE-2026-0001", "PostgreSQL is affected."), postgreSQL, score(0.6))
+	high := e.storeFindingOn(t, "2", vulnerability(t, "CVE-2026-0002", "PostgreSQL is affected."), postgreSQL, score(0.8))
+	mid := e.storeFindingOn(t, "1", vulnerability(t, "CVE-2026-0003", "PostgreSQL is affected."), postgreSQL, score(0.7))
+	ids := []string{low, high, mid}
+	slices.Sort(ids)
+
+	e.prioritizeWith(t, placement(allIn("Todas", ids...)))
+
+	var got []string
+	for _, d := range e.deliveries(t) {
+		var findings []string
+		for _, a := range decode[alert.Batch](t, d.payload).Findings {
+			findings = append(findings, a.Finding)
+		}
+		got = append(got, fmt.Sprintf("%s:%v", d.target, findings))
+	}
+	want := []string{
+		fmt.Sprintf("%s:%v", alert.SecurityTeam, []string{high, mid, low}),
+		fmt.Sprintf("%s:%v", owner, []string{mid, low}),
+		fmt.Sprintf("ops@example.com:%v", []string{high}),
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("batches = %v, want %v", got, want)
+	}
+}
+
+func TestARoundQueuesItsAlertsHighestScoreFirst(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	e.prioritize(t)
+	queued := len(e.deliveries(t))
+	lower := e.storeFinding(t, vulnerability(t, "CVE-2026-0001", "PostgreSQL is affected."), postgreSQL, score(0.7))
+	higher := e.storeFinding(t, vulnerability(t, "CVE-2026-0002", "PostgreSQL is affected."), postgreSQL, score(0.8))
+	placing := []string{lower, higher}
+	slices.Sort(placing)
+
+	e.prioritizeWith(t, placement(standing(1), standing(2), allIn("Al final", placing...)))
+
+	var got []string
+	for _, d := range e.deliveries(t)[queued:] {
+		got = append(got, d.finding.String()+"/"+d.targetKind)
+	}
+	want := []string{higher + "/email", higher + "/channel", lower + "/email", lower + "/channel"}
+	if !slices.Equal(got, want) {
+		t.Errorf("deliveries = %v, want %v", got, want)
+	}
+}
+
+func mustOwner(t *testing.T, email string) inventory.OwnerEmail {
+	t.Helper()
+	o, err := inventory.NewOwnerEmail(email)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return o
 }

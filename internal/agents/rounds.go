@@ -30,7 +30,7 @@ type content struct {
 	List        assessment.PriorityList   `json:"list"`
 	Prioritizer Run[assessment.Placement] `json:"prioritizer"`
 	// InitialLoad is whether the Customer's Initial Load goes on after it
-	// (ADR 0033). A Prioritization stored before Alerts has it false.
+	// (ADR 0033).
 	InitialLoad bool `json:"initial_load,omitempty"`
 }
 
@@ -153,7 +153,6 @@ func (s *Service) nextRound(ctx context.Context, customer tenancy.CustomerID) (R
 	r.Standing, r.Placed, r.Findings, r.unplaced = plan.Standing, plan.Placed, plan.Findings, plan.Unplaced
 	r.initialLoad = newest == nil || newest.InitialLoad
 	if newest != nil {
-		r.previous = newest.dossiers()
 		r.kept = make(map[string]uuid.UUID, len(r.Placed))
 		for _, d := range r.Placed {
 			r.kept[d.Finding] = newest.States[d.Finding].placement
@@ -208,20 +207,12 @@ func load(ctx context.Context, tx *postgres.Tx, customer tenancy.CustomerID, sto
 
 // order is p as the order the next round starts from.
 func (p Prioritization) order() assessment.Order {
-	o := assessment.Order{List: p.List, Placed: p.dossiers(), Closed: map[string]bool{}}
+	o := assessment.Order{List: p.List, Placed: make(map[string]assessment.Dossier, len(p.Findings)), Closed: map[string]bool{}}
 	for _, d := range p.Findings {
+		o.Placed[d.Finding] = d
 		o.Closed[d.Finding] = p.States[d.Finding].Closed != nil
 	}
 	return o
-}
-
-// dossiers is the Dossier of each Finding of p as it was placed, by Finding.
-func (p Prioritization) dossiers() map[string]assessment.Dossier {
-	out := make(map[string]assessment.Dossier, len(p.Findings))
-	for _, d := range p.Findings {
-		out[d.Finding] = d
-	}
-	return out
 }
 
 // orderFeedback is, by Finding of p, the verdicts on where it should be that
@@ -263,11 +254,11 @@ func (s *Service) store(ctx context.Context, customer tenancy.CustomerID, r Roun
 		ID: uuid.New(), Previous: p.Previous, BusinessContext: p.BusinessContext,
 		Content: raw, Findings: len(p.Findings), Groups: len(p.List.Groups),
 	}
-	alerts, err := s.alertsOf(r, p, stored.ID)
-	if err != nil {
-		return err
-	}
 	return s.db.InTx(ctx, func(tx *postgres.Tx) error {
+		alerts, err := s.alertsOf(ctx, tx, customer, r, p, stored.ID)
+		if err != nil {
+			return err
+		}
 		if _, err := tx.CreatePrioritization(ctx, customer, stored, r.read, placements); err != nil {
 			return err
 		}

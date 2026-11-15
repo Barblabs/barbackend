@@ -192,6 +192,21 @@ func (t *Tx) PrioritizationFindings(ctx context.Context, customer tenancy.Custom
 	return out, nil
 }
 
+// LatestPlacedDossiers is, by Finding of the Customer among findings, the
+// Dossier it was last placed with, in any Prioritization; a Finding never
+// placed has none (ADR 0033).
+func (t *Tx) LatestPlacedDossiers(ctx context.Context, customer tenancy.CustomerID, findings []uuid.UUID) (map[uuid.UUID][]byte, error) {
+	rows, err := t.q.ListLatestPlacedDossiers(ctx, sqlcgen.ListLatestPlacedDossiersParams{CustomerID: uuid.UUID(customer), Findings: findings})
+	if err != nil {
+		return nil, fmt.Errorf("list the latest dossiers of customer %s: %w", customer, err)
+	}
+	out := make(map[uuid.UUID][]byte, len(rows))
+	for _, row := range rows {
+		out[row.FindingID] = row.Dossier
+	}
+	return out, nil
+}
+
 // PrioritizationHolds is whether the Customer's Prioritization holds the
 // Finding of that id. It fails with ErrNotFound when the Customer has no such
 // Prioritization.

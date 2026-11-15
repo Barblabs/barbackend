@@ -194,13 +194,10 @@ type Round struct {
 	// each Finding that stands keeps.
 	read time.Time
 	kept map[string]uuid.UUID
-	// previous is, by Finding, its Dossier in the Prioritization the round
-	// builds on, whatever order the round starts from, and owners the email
-	// of the Asset Owner of each open Finding, missing when it has none.
-	// initialLoad reports whether the round is in the Customer's Initial
-	// Load, and unplaced how many open Findings it leaves without a place
-	// (ADR 0033).
-	previous    map[string]assessment.Dossier
+	// owners is the email of the Asset Owner of each open Finding, missing
+	// when it has none. initialLoad reports whether the round is in the
+	// Customer's Initial Load, and unplaced how many open Findings it leaves
+	// without a place (ADR 0033).
 	owners      map[string]string
 	initialLoad bool
 	unplaced    int

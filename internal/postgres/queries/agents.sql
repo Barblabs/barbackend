@@ -110,3 +110,13 @@ WHERE id = @id AND customer_id = @customer_id AND user_id = @user_id AND turns =
 UPDATE analista_conversations
 SET history = @history, turns = turns + 1, answering_since = NULL, updated_at = now()
 WHERE id = @id AND customer_id = @customer_id AND user_id = @user_id AND turns = @turns;
+
+-- The Dossier each of the Customer's Findings of those ids was last placed
+-- with, for those placed at all.
+-- name: ListLatestPlacedDossiers :many
+SELECT DISTINCT ON (fp.finding_id) fp.finding_id, fp.dossier
+FROM finding_placements fp
+JOIN findings f ON f.id = fp.finding_id
+JOIN cmdb_sources src ON src.id = f.cmdb_source_id
+WHERE src.customer_id = @customer_id AND fp.finding_id = ANY(@findings::uuid[])
+ORDER BY fp.finding_id, fp.placed_at DESC;

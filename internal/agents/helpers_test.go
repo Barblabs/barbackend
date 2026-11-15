@@ -109,18 +109,27 @@ func (e env) newCustomerWithSource(t *testing.T, assetName string) (tenancy.User
 	if err != nil {
 		t.Fatal(err)
 	}
-	imported, err := inventory.NewImportedAsset(assetParams(assetName))
-	if err != nil {
-		t.Fatal(err)
+	e.sync(t, source.ID(), map[string]inventory.ImportedAssetParams{"1": assetParams(assetName)})
+	return user, source.ID()
+}
+
+// sync syncs the source with an Asset of each record id and params.
+func (e env) sync(t *testing.T, source inventory.CMDBSourceID, assets map[string]inventory.ImportedAssetParams) {
+	t.Helper()
+	var snapshot inventory.Snapshot
+	for id, params := range assets {
+		imported, err := inventory.NewImportedAsset(params)
+		if err != nil {
+			t.Fatal(err)
+		}
+		snapshot.Records = append(snapshot.Records, inventory.Record{RecordID: id, Imported: imported})
 	}
-	snapshot := inventory.Snapshot{Records: []inventory.Record{{RecordID: "1", Imported: imported}}}
-	_, err = e.db.CommitSync(ctx, source.ID(), time.Now(), func(existing inventory.Stored) (inventory.Reconciliation, error) {
-		return inventory.Reconcile(source.ID(), existing, snapshot)
+	_, err := e.db.CommitSync(context.Background(), source, time.Now(), func(existing inventory.Stored) (inventory.Reconciliation, error) {
+		return inventory.Reconcile(source, existing, snapshot)
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	return user, source.ID()
 }
 
 // pg and os are the ids of the Findings storeFindings stored.
@@ -143,12 +152,19 @@ func (e env) storeFindings(t *testing.T) {
 // Asset and its Score, and returns its id.
 func (e env) storeFinding(t *testing.T, v *stix2.Vulnerability, c inventory.SoftwareComponent, s scoring.Score) string {
 	t.Helper()
+	return e.storeFindingOn(t, "1", v, c, s)
+}
+
+// storeFindingOn stores the Finding of v on the component of the Customer's
+// Asset of that record id, as storeFinding does.
+func (e env) storeFindingOn(t *testing.T, record string, v *stix2.Vulnerability, c inventory.SoftwareComponent, s scoring.Score) string {
+	t.Helper()
 	ctx := context.Background()
 	object, err := json.Marshal(v)
 	if err != nil {
 		t.Fatal(err)
 	}
-	key, err := finding.NewKey(inventory.SourceReference{Source: e.source, RecordID: "1"}, c.Product, v.Name)
+	key, err := finding.NewKey(inventory.SourceReference{Source: e.source, RecordID: record}, c.Product, v.Name)
 	if err != nil {
 		t.Fatal(err)
 	}

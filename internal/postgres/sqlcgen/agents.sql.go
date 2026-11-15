@@ -335,6 +335,47 @@ func (q *Queries) ListLatestActionPlans(ctx context.Context, arg ListLatestActio
 	return items, nil
 }
 
+const listLatestPlacedDossiers = `-- name: ListLatestPlacedDossiers :many
+SELECT DISTINCT ON (fp.finding_id) fp.finding_id, fp.dossier
+FROM finding_placements fp
+JOIN findings f ON f.id = fp.finding_id
+JOIN cmdb_sources src ON src.id = f.cmdb_source_id
+WHERE src.customer_id = $1 AND fp.finding_id = ANY($2::uuid[])
+ORDER BY fp.finding_id, fp.placed_at DESC
+`
+
+type ListLatestPlacedDossiersParams struct {
+	CustomerID uuid.UUID
+	Findings   []uuid.UUID
+}
+
+type ListLatestPlacedDossiersRow struct {
+	FindingID uuid.UUID
+	Dossier   []byte
+}
+
+// The Dossier each of the Customer's Findings of those ids was last placed
+// with, for those placed at all.
+func (q *Queries) ListLatestPlacedDossiers(ctx context.Context, arg ListLatestPlacedDossiersParams) ([]ListLatestPlacedDossiersRow, error) {
+	rows, err := q.db.Query(ctx, listLatestPlacedDossiers, arg.CustomerID, arg.Findings)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLatestPlacedDossiersRow
+	for rows.Next() {
+		var i ListLatestPlacedDossiersRow
+		if err := rows.Scan(&i.FindingID, &i.Dossier); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPrioritizationFeedback = `-- name: ListPrioritizationFeedback :many
 SELECT f.id, f.finding_id, f.author_id, f.verdict_id, f.note, f.via_analista, f.created_at
 FROM prioritization_findings pf

@@ -6,8 +6,6 @@ package alert
 import (
 	"cmp"
 	"slices"
-
-	"barbackend/internal/scoring"
 )
 
 const (
@@ -21,6 +19,10 @@ const (
 	// delivery written before a channel was picked, or one changed since,
 	// goes where the Security Team reads now.
 	SecurityTeam = "security-team"
+	// TargetEmail is a delivery to an Asset Owner, by email, and
+	// TargetChannel one to the Security Team channel (ADR 0030).
+	TargetEmail   = "email"
+	TargetChannel = "channel"
 )
 
 // Reason is why a Finding is alerted.
@@ -33,25 +35,6 @@ const (
 	// placed with.
 	BandRose Reason = "band_rose"
 )
-
-// Why is why placing a Finding now alerts, and false when it does not: held
-// reports whether the previous Prioritization holds it, was is the Score
-// Band it was placed with there, and now its Band now, both as the Dossier
-// names them.
-func Why(held bool, was, now string) (Reason, bool) {
-	if !held {
-		return New, true
-	}
-	before, ok := scoring.ParseBand(was)
-	if !ok {
-		return "", false
-	}
-	after, ok := scoring.ParseBand(now)
-	if !ok || after <= before {
-		return "", false
-	}
-	return BandRose, true
-}
 
 // Finding is an Alert about one Finding, as it was placed: what the message
 // shows, and why the Prioritizer placed it where it did.
@@ -94,12 +77,15 @@ type Batch struct {
 	Findings []Finding `json:"findings"`
 }
 
-// Batches is findings in batches of BatchSize, highest Score first, then by
-// Finding, so the same Findings make the same batches.
+// ByScore orders Alerts highest Score first, then by Finding, so the same
+// Alerts are always sent in the same order.
+func ByScore(a, b Finding) int {
+	return cmp.Or(cmp.Compare(b.Score, a.Score), cmp.Compare(a.Finding, b.Finding))
+}
+
+// Batches is findings in batches of BatchSize, in ByScore order.
 func Batches(findings []Finding) []Batch {
-	sorted := slices.SortedFunc(slices.Values(findings), func(a, b Finding) int {
-		return cmp.Or(cmp.Compare(b.Score, a.Score), cmp.Compare(a.Finding, b.Finding))
-	})
+	sorted := slices.SortedFunc(slices.Values(findings), ByScore)
 	var out []Batch
 	for chunk := range slices.Chunk(sorted, BatchSize) {
 		out = append(out, Batch{Findings: chunk})

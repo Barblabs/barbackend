@@ -193,3 +193,29 @@ func TestChanged(t *testing.T) {
 		})
 	}
 }
+
+func TestBandRose(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		was, now string
+		want     bool
+	}{
+		{"a rise of one Band", "high", "critical", true},
+		{"a rise of two Bands", "low", "high", true},
+		{"the same Band", "high", "high", false},
+		{"a fall", "critical", "medium", false},
+		{"no Band before", "", "critical", false},
+		{"no Band now", "low", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			was, now := dossier(t), dossier(t)
+			was.Score.Band, now.Score.Band = tt.was, tt.now
+			if got := assessment.BandRose(was, now); got != tt.want {
+				t.Errorf("BandRose(%q, %q) = %v, want %v", tt.was, tt.now, got, tt.want)
+			}
+		})
+	}
+}
