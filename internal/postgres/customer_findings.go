@@ -89,7 +89,7 @@ func (t *Tx) customerFindings(ctx context.Context, rows []sqlcgen.ListOpenFindin
 					Alpha: row.Alpha, Beta: row.Beta, Gamma: row.Gamma, Vulnerability: row.Vulnerability,
 					CriticalityMultiplier: row.CriticalityMultiplier, ExposureMultiplier: row.ExposureMultiplier,
 					LifecycleMultiplier: row.LifecycleMultiplier,
-					Exploitation:        row.Exploitation, ClassificationMultiplier: row.InformationClassificationMultiplier,
+					ExploitSignal:       row.ExploitSignal, ClassificationMultiplier: row.InformationClassificationMultiplier,
 				},
 				Gaps: gaps,
 			},

@@ -164,7 +164,7 @@ type scoreResponse struct {
 	CriticalityMultiplier               float64  `json:"criticality_multiplier"`
 	ExposureMultiplier                  float64  `json:"exposure_multiplier"`
 	LifecycleMultiplier                 float64  `json:"lifecycle_multiplier" doc:"1 in a Scoring Model without a lifecycle factor"`
-	Exploitation                        *float64 `json:"exploitation" doc:"From 0 to 1, how much KEV and EPSS count as a sign the CVE is exploited: 1 when KEV lists it or its EPSS reaches 10%. Null before Scoring Model 3"`
+	ExploitSignal                       *float64 `json:"exploit_signal" doc:"From 0 to 1, how much KEV and EPSS count as a sign the CVE is exploited: 1 when KEV lists it or its EPSS reaches 10%. Null before Scoring Model 3"`
 	InformationClassificationMultiplier *float64 `json:"information_classification_multiplier" doc:"Null before Scoring Model 3, and while the Asset is Unclassified, which does not count: the impact is then Criticality's alone"`
 	Band                                *string  `json:"band" enum:"critical,high,medium,low" doc:"The Score Band. Null before Scoring Model 3, which has no Bands"`
 	DataGaps                            []string `json:"data_gaps" doc:"Inputs a default replaced: the Score is estimated, not measured"`

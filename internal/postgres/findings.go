@@ -224,7 +224,7 @@ func (t *Tx) SaveScoreIfChanged(ctx context.Context, id finding.ID, s scoring.Sc
 		CriticalityMultiplier:               s.Factors.CriticalityMultiplier,
 		ExposureMultiplier:                  s.Factors.ExposureMultiplier,
 		LifecycleMultiplier:                 s.Factors.LifecycleMultiplier,
-		Exploitation:                        s.Factors.Exploitation,
+		ExploitSignal:                       s.Factors.ExploitSignal,
 		InformationClassificationMultiplier: s.Factors.ClassificationMultiplier,
 	})
 	if err != nil {
@@ -264,7 +264,7 @@ func (t *Tx) LatestScore(ctx context.Context, id finding.ID) (scoring.Score, err
 			Alpha: row.Alpha, Beta: row.Beta, Gamma: row.Gamma, Vulnerability: row.Vulnerability,
 			CriticalityMultiplier: row.CriticalityMultiplier, ExposureMultiplier: row.ExposureMultiplier,
 			LifecycleMultiplier: row.LifecycleMultiplier,
-			Exploitation:        row.Exploitation, ClassificationMultiplier: row.InformationClassificationMultiplier,
+			ExploitSignal:       row.ExploitSignal, ClassificationMultiplier: row.InformationClassificationMultiplier,
 		},
 		Gaps: gaps,
 	}, nil

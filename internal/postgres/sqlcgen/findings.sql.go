@@ -70,14 +70,14 @@ SELECT f.id, f.cmdb_source_id, f.record_id, f.cve_id, f.component_name, f.compon
        v.object AS vulnerability_object,
        s.model, s.value, s.alpha, s.beta, s.gamma, s.vulnerability,
        s.criticality_multiplier, s.exposure_multiplier, s.lifecycle_multiplier,
-       s.exploitation, s.information_classification_multiplier, s.gaps
+       s.exploit_signal, s.information_classification_multiplier, s.gaps
 FROM findings f
 JOIN cmdb_sources src ON src.id = f.cmdb_source_id
 JOIN vulnerabilities v ON v.cve_id = f.cve_id
 JOIN LATERAL (
     SELECT sc.model, sc.value, sc.alpha, sc.beta, sc.gamma, sc.vulnerability,
            sc.criticality_multiplier, sc.exposure_multiplier, sc.lifecycle_multiplier,
-           sc.exploitation, sc.information_classification_multiplier,
+           sc.exploit_signal, sc.information_classification_multiplier,
            coalesce(array_agg(g.gap_id ORDER BY g.gap_id) FILTER (WHERE g.gap_id IS NOT NULL), '{}')::smallint[] AS gaps
     FROM finding_scores sc
     LEFT JOIN finding_score_data_gaps g USING (finding_id, scored_at)
@@ -111,7 +111,7 @@ type GetFindingOfCustomerRow struct {
 	CriticalityMultiplier               float64
 	ExposureMultiplier                  float64
 	LifecycleMultiplier                 float64
-	Exploitation                        *float64
+	ExploitSignal                       *float64
 	InformationClassificationMultiplier *float64
 	Gaps                                []int16
 }
@@ -138,7 +138,7 @@ func (q *Queries) GetFindingOfCustomer(ctx context.Context, arg GetFindingOfCust
 		&i.CriticalityMultiplier,
 		&i.ExposureMultiplier,
 		&i.LifecycleMultiplier,
-		&i.Exploitation,
+		&i.ExploitSignal,
 		&i.InformationClassificationMultiplier,
 		&i.Gaps,
 	)
@@ -154,7 +154,7 @@ const insertFindingScore = `-- name: InsertFindingScore :one
 INSERT INTO finding_scores (
     finding_id, scored_at, model, value, alpha, beta, gamma, vulnerability,
     criticality_multiplier, exposure_multiplier, lifecycle_multiplier,
-    exploitation, information_classification_multiplier
+    exploit_signal, information_classification_multiplier
 ) VALUES (
     $1, clock_timestamp(), $2, $3, $4, $5, $6, $7,
     $8, $9, $10,
@@ -174,7 +174,7 @@ type InsertFindingScoreParams struct {
 	CriticalityMultiplier               float64
 	ExposureMultiplier                  float64
 	LifecycleMultiplier                 float64
-	Exploitation                        *float64
+	ExploitSignal                       *float64
 	InformationClassificationMultiplier *float64
 }
 
@@ -192,7 +192,7 @@ func (q *Queries) InsertFindingScore(ctx context.Context, arg InsertFindingScore
 		arg.CriticalityMultiplier,
 		arg.ExposureMultiplier,
 		arg.LifecycleMultiplier,
-		arg.Exploitation,
+		arg.ExploitSignal,
 		arg.InformationClassificationMultiplier,
 	)
 	var scored_at time.Time
@@ -209,7 +209,7 @@ type InsertFindingScoreDataGapsParams struct {
 const latestFindingScore = `-- name: LatestFindingScore :one
 SELECT s.scored_at, s.model, s.value, s.alpha, s.beta, s.gamma, s.vulnerability,
        s.criticality_multiplier, s.exposure_multiplier, s.lifecycle_multiplier,
-       s.exploitation, s.information_classification_multiplier,
+       s.exploit_signal, s.information_classification_multiplier,
        coalesce(array_agg(g.gap_id ORDER BY g.gap_id) FILTER (WHERE g.gap_id IS NOT NULL), '{}')::smallint[] AS gaps
 FROM finding_scores s
 LEFT JOIN finding_score_data_gaps g USING (finding_id, scored_at)
@@ -230,7 +230,7 @@ type LatestFindingScoreRow struct {
 	CriticalityMultiplier               float64
 	ExposureMultiplier                  float64
 	LifecycleMultiplier                 float64
-	Exploitation                        *float64
+	ExploitSignal                       *float64
 	InformationClassificationMultiplier *float64
 	Gaps                                []int16
 }
@@ -250,7 +250,7 @@ func (q *Queries) LatestFindingScore(ctx context.Context, findingID uuid.UUID) (
 		&i.CriticalityMultiplier,
 		&i.ExposureMultiplier,
 		&i.LifecycleMultiplier,
-		&i.Exploitation,
+		&i.ExploitSignal,
 		&i.InformationClassificationMultiplier,
 		&i.Gaps,
 	)
@@ -488,14 +488,14 @@ SELECT f.id, f.cmdb_source_id, f.record_id, f.cve_id, f.component_name, f.compon
        v.object AS vulnerability_object,
        s.model, s.value, s.alpha, s.beta, s.gamma, s.vulnerability,
        s.criticality_multiplier, s.exposure_multiplier, s.lifecycle_multiplier,
-       s.exploitation, s.information_classification_multiplier, s.gaps
+       s.exploit_signal, s.information_classification_multiplier, s.gaps
 FROM findings f
 JOIN cmdb_sources src ON src.id = f.cmdb_source_id
 JOIN vulnerabilities v ON v.cve_id = f.cve_id
 JOIN LATERAL (
     SELECT sc.model, sc.value, sc.alpha, sc.beta, sc.gamma, sc.vulnerability,
            sc.criticality_multiplier, sc.exposure_multiplier, sc.lifecycle_multiplier,
-           sc.exploitation, sc.information_classification_multiplier,
+           sc.exploit_signal, sc.information_classification_multiplier,
            coalesce(array_agg(g.gap_id ORDER BY g.gap_id) FILTER (WHERE g.gap_id IS NOT NULL), '{}')::smallint[] AS gaps
     FROM finding_scores sc
     LEFT JOIN finding_score_data_gaps g USING (finding_id, scored_at)
@@ -525,7 +525,7 @@ type ListOpenFindingsOfCustomerRow struct {
 	CriticalityMultiplier               float64
 	ExposureMultiplier                  float64
 	LifecycleMultiplier                 float64
-	Exploitation                        *float64
+	ExploitSignal                       *float64
 	InformationClassificationMultiplier *float64
 	Gaps                                []int16
 }
@@ -559,7 +559,7 @@ func (q *Queries) ListOpenFindingsOfCustomer(ctx context.Context, customerID uui
 			&i.CriticalityMultiplier,
 			&i.ExposureMultiplier,
 			&i.LifecycleMultiplier,
-			&i.Exploitation,
+			&i.ExploitSignal,
 			&i.InformationClassificationMultiplier,
 			&i.Gaps,
 		); err != nil {

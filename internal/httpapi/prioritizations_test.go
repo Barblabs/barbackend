@@ -53,8 +53,8 @@ func TestPrioritizationLifecycle(t *testing.T) {
 		t.Errorf("details = %+v, want the unknown stage of an Asset the CMDB gave none and its multiplier 1", details)
 	}
 	if s := details.ScoreDetails; details.Asset.Classification != "unclassified" || s.Band == nil || *s.Band != "medium" ||
-		s.Exploitation == nil || *s.Exploitation != 0 || s.ClassificationMultiplier != nil {
-		t.Errorf("details = %+v, want an Unclassified Asset and a Model 3 Score of Band medium, Exploitation 0 and no classification multiplier", details)
+		s.ExploitSignal == nil || *s.ExploitSignal != 0 || s.ClassificationMultiplier != nil {
+		t.Errorf("details = %+v, want an Unclassified Asset and a Model 3 Score of Band medium, ExploitSignal 0 and no classification multiplier", details)
 	}
 	if c := first.Current; c == nil || c.Asset.Criticality != "high" || c.Asset.LifecycleStage != "unknown" || c.Asset.Classification != "unclassified" ||
 		c.ScoreDetails.Value != 0.3 || c.ScoreDetails.LifecycleMultiplier != 1 || c.ScoreDetails.Band == nil || *c.ScoreDetails.Band != "medium" {

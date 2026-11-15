@@ -176,10 +176,10 @@ type Score struct {
 	CriticalityMultiplier float64 `json:"criticality_multiplier"`
 	ExposureMultiplier    float64 `json:"exposure_multiplier"`
 	LifecycleMultiplier   float64 `json:"lifecycle_multiplier"`
-	// Exploitation, the classification multiplier and the Band are set from
+	// ExploitSignal, the classification multiplier and the Band are set from
 	// Scoring Model 3 (ADR 0032); the multiplier is also left out when the
 	// Asset is Unclassified, which does not count.
-	Exploitation             *float64 `json:"exploitation,omitempty"`
+	ExploitSignal            *float64 `json:"exploit_signal,omitempty"`
 	ClassificationMultiplier *float64 `json:"information_classification_multiplier,omitempty"`
 	Band                     string   `json:"band,omitempty"`
 	DataGaps                 []string `json:"data_gaps"`
@@ -187,7 +187,7 @@ type Score struct {
 
 // UnmarshalJSON reads a Score stored before Scoring Model 2 had a lifecycle
 // factor with a lifecycle multiplier of 1, as Model 1 scored it (ADR 0028).
-// A Score stored before Model 3 reads with no Exploitation, classification
+// A Score stored before Model 3 reads with no ExploitSignal, classification
 // multiplier or Band, as Models 1 and 2 have none.
 func (s *Score) UnmarshalJSON(data []byte) error {
 	type plain Score
@@ -386,8 +386,8 @@ func (s Score) problems() []string {
 			problems = append(problems, fmt.Sprintf("data gap %q is not one a Scoring Model records", gap))
 		}
 	}
-	if s.Exploitation != nil && !inRange(*s.Exploitation, 1) {
-		problems = append(problems, fmt.Sprintf("exploitation %v is out of range", *s.Exploitation))
+	if s.ExploitSignal != nil && !inRange(*s.ExploitSignal, 1) {
+		problems = append(problems, fmt.Sprintf("exploit signal %v is out of range", *s.ExploitSignal))
 	}
 	if s.Band != "" && !slices.Contains(bands, s.Band) {
 		problems = append(problems, fmt.Sprintf("band %q is not one of %v", s.Band, bands))
@@ -554,7 +554,7 @@ func newScore(s scoring.Score) Score {
 		CriticalityMultiplier:    rounded(s.Factors.CriticalityMultiplier),
 		ExposureMultiplier:       rounded(s.Factors.ExposureMultiplier),
 		LifecycleMultiplier:      rounded(s.Factors.LifecycleMultiplier),
-		Exploitation:             roundedOrNil(s.Factors.Exploitation),
+		ExploitSignal:            roundedOrNil(s.Factors.ExploitSignal),
 		ClassificationMultiplier: roundedOrNil(s.Factors.ClassificationMultiplier),
 		DataGaps:                 gaps,
 	}

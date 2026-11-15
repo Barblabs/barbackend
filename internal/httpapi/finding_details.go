@@ -55,7 +55,7 @@ func newScoreResponse(s agents.Score) scoreResponse {
 		ScoringModel: s.ScoringModel, Value: s.Value,
 		Alpha: s.Alpha, Beta: s.Beta, Gamma: s.Gamma, Vulnerability: s.Vulnerability,
 		CriticalityMultiplier: s.CriticalityMultiplier, ExposureMultiplier: s.ExposureMultiplier,
-		LifecycleMultiplier: s.LifecycleMultiplier, Exploitation: s.Exploitation,
+		LifecycleMultiplier: s.LifecycleMultiplier, ExploitSignal: s.ExploitSignal,
 		InformationClassificationMultiplier: s.ClassificationMultiplier, Band: nonBlank(s.Band), DataGaps: nonNil(s.DataGaps),
 	}
 }

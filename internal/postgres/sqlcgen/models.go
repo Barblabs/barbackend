@@ -205,7 +205,7 @@ type FindingScore struct {
 	CriticalityMultiplier               float64
 	ExposureMultiplier                  float64
 	LifecycleMultiplier                 float64
-	Exploitation                        *float64
+	ExploitSignal                       *float64
 	InformationClassificationMultiplier *float64
 }
 

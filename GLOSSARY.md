@@ -128,6 +128,10 @@ _Avoid_: Dudoso, warning, uncertain boolean
 A deterministic number from 0 to 1 that ranks how urgently a Finding should be remediated, computed from its Vulnerability's CVSS base score, EPSS probability and presence in the CISA KEV catalog, and its Asset's Criticality, Exposure, Lifecycle Stage and, from Scoring Model 3, Information Classification (ADR 0032).
 _Avoid_: Risk score, priority, rating
 
+**Exploit Signal**:
+How strongly KEV and EPSS say a Vulnerability is exploited, from 0 to 1: 1 when KEV lists its CVE, else its EPSS probability over 10%, capped at 1. From Scoring Model 3 it sets how much of the CVSS base score counts (ADR 0032).
+_Avoid_: Threat (Techniques, Advisories and News are Threats), exploitation (the role of a Technique that gets an attacker in)
+
 **Score Band**:
 A named range of Scores: Critical, High, Medium or Low, set by the Scoring Model from Model 3 (ADR 0032). A change of Band places the Finding again in the Prioritizer's order.
 _Avoid_: Tier, severity, level

@@ -424,9 +424,9 @@ func (e env) prioritize(t *testing.T) agents.Prioritization {
 			}
 			ids = append(ids, id.String())
 			value := []float64{0.3, 0.6}[i]
-			exploitation := 0.0
+			exploitSignal := 0.0
 			_, err = tx.SaveScoreIfChanged(ctx, id, scoring.Score{Model: 3, Value: value, Factors: scoring.Factors{
-				Alpha: 0.5, Beta: 0, Vulnerability: value, CriticalityMultiplier: 1, ExposureMultiplier: 1, LifecycleMultiplier: 1, Exploitation: &exploitation,
+				Alpha: 0.5, Beta: 0, Vulnerability: value, CriticalityMultiplier: 1, ExposureMultiplier: 1, LifecycleMultiplier: 1, ExploitSignal: &exploitSignal,
 			}})
 			return err
 		})
@@ -514,7 +514,7 @@ type findingBody struct {
 		ScoreDetails struct {
 			Value                    float64  `json:"value"`
 			LifecycleMultiplier      float64  `json:"lifecycle_multiplier"`
-			Exploitation             *float64 `json:"exploitation"`
+			ExploitSignal            *float64 `json:"exploit_signal"`
 			ClassificationMultiplier *float64 `json:"information_classification_multiplier"`
 			Band                     *string  `json:"band"`
 			DataGaps                 []string `json:"data_gaps"`

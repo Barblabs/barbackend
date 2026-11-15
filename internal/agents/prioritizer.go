@@ -23,7 +23,7 @@ The user message holds four parts:
 
 ` + dataRules + `
 
-Each Finding carries its score, from 0 to 1, computed by a deterministic Scoring Model from the CVSS base score, the EPSS probability, the CISA KEV catalog and the asset's criticality, information classification, exposure and lifecycle stage. A score of scoring_model 3 also carries its band, critical, high, medium or low, and score.exploitation, from 0 to 1, how much the Scoring Model counted KEV and EPSS as a sign that the vulnerability is exploited; it is not the techniques whose role is exploitation. Never change, recompute or propose a score or a band: start from them, and use judgment on top of them. Weigh, for each Finding to place:
+Each Finding carries its score, from 0 to 1, computed by a deterministic Scoring Model from the CVSS base score, the EPSS probability, the CISA KEV catalog and the asset's criticality, information classification, exposure and lifecycle stage. A score of scoring_model 3 also carries its band, critical, high, medium or low, and score.exploit_signal, from 0 to 1, how much the Scoring Model counted KEV and EPSS as a sign that the vulnerability is exploited. Never change, recompute or propose a score or a band: start from them, and use judgment on top of them. Weigh, for each Finding to place:
 - whether attackers exploit it now: kev lists it, and known_ransomware_campaign_use says whether ransomware uses it;
 - how likely it is to be exploited soon: epss.probability;
 - how severe it is: nvd.cvss;

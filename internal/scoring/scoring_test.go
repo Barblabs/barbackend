@@ -172,8 +172,8 @@ func TestModel2IgnoresInformationClassification(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Compute with %v: %v", c, err)
 		}
-		if want := 0.1506 * 0.4 * 0.6; math.Abs(got.Value-want) > 1e-9 || got.Factors.ClassificationMultiplier != nil || got.Factors.Exploitation != nil || len(got.Gaps) != 0 {
-			t.Errorf("Compute with %v = %+v, want Value %v, no classification or exploitation factor and no gaps", c, got, want)
+		if want := 0.1506 * 0.4 * 0.6; math.Abs(got.Value-want) > 1e-9 || got.Factors.ClassificationMultiplier != nil || got.Factors.ExploitSignal != nil || len(got.Gaps) != 0 {
+			t.Errorf("Compute with %v = %+v, want Value %v, no classification multiplier or exploit signal and no gaps", c, got, want)
 		}
 	}
 }
@@ -269,7 +269,7 @@ func TestModel3ComputeTheExamplesOfADR0032(t *testing.T) {
 	}
 }
 
-func TestModel3Exploitation(t *testing.T) {
+func TestModel3ExploitSignal(t *testing.T) {
 	tests := []struct {
 		name string
 		in   scoring.Inputs
@@ -288,8 +288,8 @@ func TestModel3Exploitation(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Compute: %v", err)
 			}
-			if got.Factors.Exploitation == nil || math.Abs(*got.Factors.Exploitation-tt.want) > 1e-9 {
-				t.Fatalf("Exploitation = %v, want %v", got.Factors.Exploitation, tt.want)
+			if got.Factors.ExploitSignal == nil || math.Abs(*got.Factors.ExploitSignal-tt.want) > 1e-9 {
+				t.Fatalf("ExploitSignal = %v, want %v", got.Factors.ExploitSignal, tt.want)
 			}
 			if want := 0.5 + 0.5*tt.want; math.Abs(got.Factors.Vulnerability-want) > 1e-9 {
 				t.Errorf("Vulnerability = %v, want %v", got.Factors.Vulnerability, want)

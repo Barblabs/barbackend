@@ -222,7 +222,7 @@ func TestScoringReadsTheDeclaredInformationClassification(t *testing.T) {
 	}
 }
 
-func TestModel3ScoresKeepExploitationAndTheClassificationMultiplier(t *testing.T) {
+func TestModel3ScoresKeepTheExploitSignalAndTheClassificationMultiplier(t *testing.T) {
 	t.Parallel()
 	w := newFindingWorld(t)
 	id, _ := saveMatch(t, w.db, match(t, w.payments, "1.18.0"))
@@ -261,20 +261,20 @@ func TestModel3ScoresKeepExploitationAndTheClassificationMultiplier(t *testing.T
 	}
 }
 
-func TestOnlyModel3ScoresStoreExploitation(t *testing.T) {
+func TestOnlyModel3ScoresStoreAnExploitSignal(t *testing.T) {
 	t.Parallel()
 	w := newFindingWorld(t)
 	id, _ := saveMatch(t, w.db, match(t, w.payments, "1.18.0"))
-	exploitation, multiplier := 0.2, 0.75
+	exploitSignal, multiplier := 0.2, 0.75
 	factors := scoring.Factors{Alpha: 0.81, Beta: 0.02, Vulnerability: 0.486, CriticalityMultiplier: 1, ExposureMultiplier: 0.7, LifecycleMultiplier: 1}
 
 	for _, tt := range []struct {
 		name string
 		s    scoring.Score
 	}{
-		{"model 2 with exploitation", scoring.Score{Model: 2, Value: 0.3, Factors: withFactors(factors, &exploitation, nil)}},
+		{"model 2 with an exploit signal", scoring.Score{Model: 2, Value: 0.3, Factors: withFactors(factors, &exploitSignal, nil)}},
 		{"model 2 with a classification multiplier", scoring.Score{Model: 2, Value: 0.3, Factors: withFactors(factors, nil, &multiplier)}},
-		{"model 3 without exploitation", scoring.Score{Model: 3, Value: 0.3, Factors: factors}},
+		{"model 3 without an exploit signal", scoring.Score{Model: 3, Value: 0.3, Factors: factors}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			err := w.db.InTx(context.Background(), func(tx *postgres.Tx) error {
@@ -288,8 +288,8 @@ func TestOnlyModel3ScoresStoreExploitation(t *testing.T) {
 	}
 }
 
-func withFactors(f scoring.Factors, exploitation, classification *float64) scoring.Factors {
-	f.Exploitation, f.ClassificationMultiplier = exploitation, classification
+func withFactors(f scoring.Factors, exploitSignal, classification *float64) scoring.Factors {
+	f.ExploitSignal, f.ClassificationMultiplier = exploitSignal, classification
 	return f
 }
 

@@ -80,11 +80,11 @@ type Model struct {
 	lifeProduction, lifeImp float64
 	lifeStock, lifeUnknown  float64
 	defaultCVSS             float64
-	// weighsByExploitation replaces the weighted sum of layer 1 with the
-	// severity weighed by Exploitation (ADR 0032); the w* weights are unused.
-	weighsByExploitation bool
-	epssSaturation       float64 // the EPSS that counts as an Exploitation of 1
-	unexploitedShare     float64 // the share of the severity at an Exploitation of 0
+	// weighsByExploitSignal replaces the weighted sum of layer 1 with the
+	// severity weighed by ExploitSignal (ADR 0032); the w* weights are unused.
+	weighsByExploitSignal bool
+	epssSaturation        float64 // the EPSS that counts as an ExploitSignal of 1
+	unexploitedShare      float64 // the share of the severity at an ExploitSignal of 0
 	// scoresClassification makes the impact the higher of Criticality and the
 	// Information Classification; Unclassified does not count (ADR 0032).
 	scoresClassification                      bool
@@ -120,12 +120,12 @@ var Model2 = Model{
 	defaultCVSS: 0.7,
 }
 
-// Model3 weighs the severity by Exploitation instead of adding EPSS and KEV
+// Model3 weighs the severity by ExploitSignal instead of adding EPSS and KEV
 // to it, takes the higher of Criticality and Information Classification as
 // the impact, softens the multipliers and sets the Score Bands (ADR 0032).
 var Model3 = Model{
-	version:              3,
-	weighsByExploitation: true, epssSaturation: 0.10, unexploitedShare: 0.5,
+	version:               3,
+	weighsByExploitSignal: true, epssSaturation: 0.10, unexploitedShare: 0.5,
 	critHigh: 1.0, critMedium: 0.75, critLow: 0.5, critUnknown: 1.0,
 	scoresClassification: true,
 	classConfidential:    1.0, classPrivate: 0.75, classPub: 0.5,
@@ -205,8 +205,8 @@ type Factors struct {
 	CriticalityMultiplier float64
 	ExposureMultiplier    float64
 	LifecycleMultiplier   float64 // 1 in a Model without a lifecycle factor
-	// Exploitation is nil in a Model that adds EPSS and KEV instead.
-	Exploitation *float64
+	// ExploitSignal is nil in a Model that adds EPSS and KEV instead.
+	ExploitSignal *float64
 	// ClassificationMultiplier is nil in a Model that does not score the
 	// Information Classification, and when the Asset is Unclassified.
 	ClassificationMultiplier *float64
@@ -274,7 +274,7 @@ func (m Model) Compute(in Inputs) (Score, error) {
 		return Score{}, err
 	}
 
-	f.Vulnerability, f.Exploitation = m.vulnerability(f)
+	f.Vulnerability, f.ExploitSignal = m.vulnerability(f)
 	return Score{
 		Model:   m.version,
 		Value:   f.Vulnerability * f.Impact() * f.ExposureMultiplier * f.LifecycleMultiplier,
@@ -284,17 +284,17 @@ func (m Model) Compute(in Inputs) (Score, error) {
 }
 
 // vulnerability is layer 1: the weighted sum of ADR 0009, or the severity
-// weighed by Exploitation, which is 1 on a KEV CVE and grows linearly with
+// weighed by ExploitSignal, which is 1 on a KEV CVE and grows linearly with
 // EPSS up to epssSaturation (ADR 0032).
 func (m Model) vulnerability(f Factors) (float64, *float64) {
-	if !m.weighsByExploitation {
+	if !m.weighsByExploitSignal {
 		return m.wCVSS*f.Alpha + m.wEPSS*f.Beta + m.wKEV*f.Gamma, nil
 	}
-	exploitation := 1.0
+	exploitSignal := 1.0
 	if f.Gamma != 1 {
-		exploitation = min(f.Beta/m.epssSaturation, 1)
+		exploitSignal = min(f.Beta/m.epssSaturation, 1)
 	}
-	return f.Alpha * (m.unexploitedShare + (1-m.unexploitedShare)*exploitation), &exploitation
+	return f.Alpha * (m.unexploitedShare + (1-m.unexploitedShare)*exploitSignal), &exploitSignal
 }
 
 func (m Model) classification(c inventory.InformationClassification, gaps []DataGap) (*float64, []DataGap, error) {
