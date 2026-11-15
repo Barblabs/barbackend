@@ -529,9 +529,9 @@ func NewAsset(a *inventory.Asset) Asset {
 	return Asset{
 		Name:           imported.Name(),
 		Kind:           imported.Kind().Code(),
-		Criticality:    codeOrUnknown(imported.Criticality().Code()),
-		Exposure:       codeOrUnknown(a.Exposure().Code()),
-		Lifecycle:      codeOrUnknown(imported.Lifecycle().Code()),
+		Criticality:    codeOr(imported.Criticality().Code(), unknown),
+		Exposure:       codeOr(a.Exposure().Code(), unknown),
+		Lifecycle:      codeOr(imported.Lifecycle().Code(), unknown),
 		Classification: codeOr(a.InformationClassification().Code(), unclassified),
 		Software:       software,
 	}
@@ -543,8 +543,6 @@ func codeOr(code, fallback string) string {
 	}
 	return code
 }
-
-func codeOrUnknown(code string) string { return codeOr(code, unknown) }
 
 func newScore(s scoring.Score) Score {
 	gaps := make([]string, len(s.Gaps))
