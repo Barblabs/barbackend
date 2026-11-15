@@ -10,10 +10,10 @@ ADR 0029 has every Finding the agent emits reach Slack, and ADR 0030 queues the 
 
 An Alert is written for a Finding the Prioritizer places in a round when either:
 
-- **it is new**: the Prioritization the round builds on does not hold it, or there is none; or
-- **its Band rose**: that Prioritization holds it with a Dossier whose Score Band is lower than the one it has now (ADR 0032).
+- **it is new**: it was never placed before; or
+- **its Band rose**: the Dossier it was last placed with, in any of the Customer's Prioritizations, has a lower Score Band than the one it has now (ADR 0032). A Score without a Band has none to compare.
 
-Nothing else writes one: not a Score that moved within its Band, not a Band that fell, not User feedback, not a change of Business Context. The comparison is against the Dossier the previous Prioritization stored for the Finding, not against the order the round starts from, which is empty after a change of Business Context. A Finding that closed and was found again is not in the previous Prioritization, so it is alerted as new; it came back.
+Nothing else writes one: not a Score that moved within its Band, not a Band that fell, not User feedback, not a change of Business Context. The comparison is against each Finding's own last placement (`finding_placements`), not against the previous Prioritization: a change of Business Context places every open Finding anew over as many rounds as it takes, and from the second of them on, the previous Prioritization holds only what the first placed, so every other Finding would look new. A Finding that closed and was found again was placed before, so it is alerted only if it came back at a higher Band.
 
 KEV listing a CVE is not a reason of its own. It sets the Exploit Signal to 1 (ADR 0032), which raises the Band of almost every Finding of it; a KEV CVE that does not raise the Band, such as one on a spare in Stock, is not urgent for that Asset. Known ransomware use is not a reason either.
 
@@ -21,7 +21,7 @@ The Prioritizer writes the Alerts because they carry its reason: an Alert writte
 
 ## Exactly once per round
 
-The rows are written in the transaction that stores the round's Prioritization, so a round that fails writes none and a stored round wrote all of its own. A round places a Finding once, so no other dedupe key is needed. `slack_deliveries` gains a nullable `finding_id` that names the Finding a row is about; a batch row names several, so its `finding_id` is null and its payload holds their ids. Delivery stays at-least-once (ADR 0030): a crash between Slack accepting a message and the row being marked `sent` still reposts it.
+The rows are written in the transaction that stores the round's Prioritization, before its placements, so a round that fails writes none and a stored round wrote all of its own. A round places a Finding once, and the next placement compares with this one, so no other dedupe key is needed. The rows are written highest Score first, and their ids are time-ordered (UUID v7), so the worker, which sends each target's rows by `created_at` and then id, sends them in that order although one transaction gives them all the same `created_at`. `slack_deliveries` gains a nullable `finding_id` that names the Finding a row is about; a batch row names several, so its `finding_id` is null and its payload holds their ids. Delivery stays at-least-once (ADR 0030): a crash between Slack accepting a message and the row being marked `sent` still reposts it.
 
 ## The Initial Load is sent in batches
 
@@ -56,12 +56,14 @@ The queue, the claim, the retries and the failure codes of ADR 0030 stay as they
 - A channel row of a Customer whose installation names no channel stays `pending` without counting an attempt.
 - A DM row with an empty target fails at once as `owner_unreachable`, without calling Slack.
 - Channel pacing is per Customer and target: every Customer's channel rows share the target `security-team`, and one Customer's must not slow another's.
+- Every value an Alert carries is escaped for mrkdwn (`&`, `<`, `>`) before it goes into a message: a group's reason is the Prioritizer's, which reads Feed text, and must never mention `<!channel>` or forge a link. Each text is cut with an ellipsis to Block Kit's limits (header 150 characters, section 3,000, field 2,000), because Slack refuses a longer one and no retry would fix it.
 
 ## Considered Options
 
 - **Alert on every Finding a round places**, as ADR 0029 wrote: rejected. A change of Business Context places every open Finding again, and each daily move of 0.1 would repeat an Alert the owner already had.
 - **Alert when the Score is saved**, in the findings use case: rejected. It reaches Slack sooner and needs no round, but before any Agent has read the Finding, so the message cannot say why it matters.
-- **A table of what each Finding was last alerted with**: rejected. The previous Prioritization already holds the Dossier, and so the Band, each Finding was placed with, and writing in the round's transaction makes each Alert happen once.
+- **A table of what each Finding was last alerted with**: rejected. `finding_placements` already holds the Dossier, and so the Band, each Finding was last placed with, and writing in the round's transaction makes each Alert happen once.
+- **Compare with the previous Prioritization**: rejected; after a change of Business Context it holds only what the rounds so far placed again, so the rest would look new.
 - **Alert when KEV lists the CVE, or ransomware use is known**: rejected; the Band already rises with the Exploit Signal, and where it does not, the Finding is not urgent.
 - **Batch in the worker**, claiming up to 10 due rows of a target: rejected. Batching is only for the Initial Load; after it, each Alert is its own message, so the producer, which knows which is which, decides.
 - **One summary message for the whole Initial Load**: rejected for now; batches of 10 keep every Finding visible in the channel, which is the evidence of what was reported (ADR 0029).
@@ -73,3 +75,12 @@ The queue, the claim, the retries and the failure codes of ADR 0030 stay as they
 - A Band that falls never alerts. The portal shows it.
 - The Initial Load of a Customer with 3,000 Findings is about 300 messages in the channel, at one a second.
 - `finding_batch` rows have no `finding_id`; their Findings are read from the payload.
+- A Customer that was in the middle of its Initial Load when this was deployed has no flag in its newest Prioritization, so the rest of its load is sent one Alert at a time.
+
+## Pending
+
+Found in review and left for a later change:
+
+- **The worker reads the installation twice per channel row**: `token` reads it for the bot token and `address` again for the channel. `token` could return both, and `deliver` could check a row's shape (empty DM target, channel target other than `security-team`) in one function next to `render`.
+- **`PORTAL_URL` is set through a setter** (`agents.Service.LinkAlertsTo`) rather than given to `NewService`, and an empty one renders a message with no link instead of stopping `serve` at startup.
+- **The Initial Load flag can stay set**: when a round of the load leaves Findings without a place and they all close before the next round, no Prioritization is stored to clear it, and the Customer's next new Finding is sent as a batch of one.
