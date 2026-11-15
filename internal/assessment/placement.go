@@ -115,6 +115,10 @@ type RoundPlan struct {
 	Placed   []Dossier
 	// Findings are those to place, at most the limit PlanRound was given.
 	Findings []Dossier
+	// Unplaced is how many open Findings order does not hold are left for a
+	// later round, beyond the limit: while there are any, the Customer's
+	// Initial Load goes on (ADR 0033).
+	Unplaced int
 }
 
 // PlanRound is the next round of order (ADR 0026), given the Dossiers of the
@@ -139,6 +143,11 @@ func PlanRound(order Order, open []Dossier, feedback map[string][]OrderFeedback,
 	placing := make(map[string]bool, len(plan.Findings))
 	for _, d := range plan.Findings {
 		placing[d.Finding] = true
+	}
+	for _, d := range unplaced {
+		if !placing[d.Finding] {
+			plan.Unplaced++
+		}
 	}
 	plan.Standing = order.List.Without(func(id string) bool { return order.Closed[id] || placing[id] })
 	for _, g := range plan.Standing.Groups {
