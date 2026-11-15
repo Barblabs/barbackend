@@ -49,22 +49,17 @@ type AssetPage struct {
 // Sources, Disconnected ones included, with their Software Components loaded
 // in one further query whatever the page size.
 func (t *Tx) ListAssets(ctx context.Context, q AssetListQuery) (AssetPage, error) {
-	criticalities, includeUnknownCriticality := splitUnknown(q.Criticality, inventory.CriticalityUnknown)
-	exposures, includeUnknownExposure := splitUnknown(q.Exposure, inventory.ExposureUnknown)
 	filter := sqlcgen.CountCustomerAssetsParams{
 		CustomerID: uuid.UUID(q.Customer), Active: q.Active,
-		KindIds:        catalogIDs(q.Kind),
-		CriticalityIds: catalogIDs(criticalities), IncludeUnknownCriticality: includeUnknownCriticality,
-		ExposureIds: catalogIDs(exposures), IncludeUnknownExposure: includeUnknownExposure,
+		KindIds: catalogIDs(q.Kind), CriticalityIds: catalogIDs(q.Criticality), ExposureIds: catalogIDs(q.Exposure),
 	}
 	total, err := t.q.CountCustomerAssets(ctx, filter)
 	if err != nil {
 		return AssetPage{}, fmt.Errorf("count assets of customer %s: %w", q.Customer, err)
 	}
 	params := sqlcgen.ListCustomerAssetsParams{
-		CustomerID: filter.CustomerID, Active: filter.Active, KindIds: filter.KindIds,
-		CriticalityIds: filter.CriticalityIds, IncludeUnknownCriticality: filter.IncludeUnknownCriticality,
-		ExposureIds: filter.ExposureIds, IncludeUnknownExposure: filter.IncludeUnknownExposure,
+		CustomerID: filter.CustomerID, Active: filter.Active,
+		KindIds: filter.KindIds, CriticalityIds: filter.CriticalityIds, ExposureIds: filter.ExposureIds,
 		// One extra row tells whether another page follows.
 		PageSize: int32(q.Limit + 1),
 	}
@@ -109,17 +104,6 @@ func (t *Tx) softwareOf(ctx context.Context, rows []sqlcgen.ListCustomerAssetsRo
 		return nil, fmt.Errorf("list software of %d assets: %w", len(rows), err)
 	}
 	return softwareByAsset(components), nil
-}
-
-func splitUnknown[T comparable](values []T, unknown T) (known []T, includeUnknown bool) {
-	for _, v := range values {
-		if v == unknown {
-			includeUnknown = true
-		} else {
-			known = append(known, v)
-		}
-	}
-	return known, includeUnknown
 }
 
 // catalogIDs is never nil: pgx sends a nil slice as NULL, whose cardinality

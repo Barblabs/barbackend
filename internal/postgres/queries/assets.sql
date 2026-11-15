@@ -105,12 +105,9 @@ LEFT JOIN users information_classification_declarer ON information_classificatio
 WHERE s.customer_id = @customer_id
   AND (sqlc.narg(active)::boolean IS NULL OR (a.inactive_since IS NULL) = sqlc.narg(active)::boolean)
   AND (cardinality(@kind_ids::smallint[]) = 0 OR a.kind_id = ANY(@kind_ids::smallint[]))
-  AND ((cardinality(@criticality_ids::smallint[]) = 0 AND NOT @include_unknown_criticality::boolean)
-       OR a.criticality_id = ANY(@criticality_ids::smallint[])
-       OR (@include_unknown_criticality::boolean AND a.criticality_id IS NULL))
-  AND ((cardinality(@exposure_ids::smallint[]) = 0 AND NOT @include_unknown_exposure::boolean)
-       OR coalesce(a.declared_exposure_id, a.imported_exposure_id) = ANY(@exposure_ids::smallint[])
-       OR (@include_unknown_exposure::boolean AND coalesce(a.declared_exposure_id, a.imported_exposure_id) IS NULL))
+  AND (cardinality(@criticality_ids::smallint[]) = 0 OR coalesce(a.criticality_id, 0) = ANY(@criticality_ids::smallint[]))
+  AND (cardinality(@exposure_ids::smallint[]) = 0
+       OR coalesce(a.declared_exposure_id, a.imported_exposure_id, 0) = ANY(@exposure_ids::smallint[]))
   AND (sqlc.narg(after_name)::text IS NULL
        OR (a.name, a.cmdb_source_id, a.record_id)
           > (sqlc.narg(after_name)::text, sqlc.narg(after_source_id)::uuid, sqlc.narg(after_record_id)::text))
@@ -124,12 +121,9 @@ JOIN cmdb_sources s ON s.id = a.cmdb_source_id
 WHERE s.customer_id = @customer_id
   AND (sqlc.narg(active)::boolean IS NULL OR (a.inactive_since IS NULL) = sqlc.narg(active)::boolean)
   AND (cardinality(@kind_ids::smallint[]) = 0 OR a.kind_id = ANY(@kind_ids::smallint[]))
-  AND ((cardinality(@criticality_ids::smallint[]) = 0 AND NOT @include_unknown_criticality::boolean)
-       OR a.criticality_id = ANY(@criticality_ids::smallint[])
-       OR (@include_unknown_criticality::boolean AND a.criticality_id IS NULL))
-  AND ((cardinality(@exposure_ids::smallint[]) = 0 AND NOT @include_unknown_exposure::boolean)
-       OR coalesce(a.declared_exposure_id, a.imported_exposure_id) = ANY(@exposure_ids::smallint[])
-       OR (@include_unknown_exposure::boolean AND coalesce(a.declared_exposure_id, a.imported_exposure_id) IS NULL));
+  AND (cardinality(@criticality_ids::smallint[]) = 0 OR coalesce(a.criticality_id, 0) = ANY(@criticality_ids::smallint[]))
+  AND (cardinality(@exposure_ids::smallint[]) = 0
+       OR coalesce(a.declared_exposure_id, a.imported_exposure_id, 0) = ANY(@exposure_ids::smallint[]));
 
 -- Assets by their references, as ListAssets reads them. The two arrays are
 -- parallel: element i of each names one Asset.
