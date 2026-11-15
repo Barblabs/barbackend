@@ -20,7 +20,7 @@ It follows the Exposure Declaration (ADR 0021) in everything but the import and 
 
 ## Not scored
 
-Declaring or clearing it stores no Score and does not notify the Prioritizer. Scoring Model 2, the Data Gaps and the Dossier do not change.
+Declaring or clearing it stores no Score and does not notify the Prioritizer. Scoring Model 2, the Data Gaps and the Dossier do not change. Scoring Model 3 scores it and rescores on each Declaration (ADR 0032).
 
 ## Considered Options
 
