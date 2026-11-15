@@ -12,9 +12,10 @@ internal/
   cmdb/                use cases on CMDB Sources   -> cmdb/provider, encryption, inventory, postgres
     provider/          CMDB Provider seam          -> inventory
       <provider>/      adapters                    -> cmdb/provider, inventory, own subpackages
-  agents/              use case on the Agents      -> assessment, business, claude, inventory, postgres, tenancy
+  agents/              use case on the Agents      -> alert, assessment, business, claude, inventory, postgres, tenancy
   businesscontext/     use cases on the Business Context -> business, postgres, tenancy
   findings/            use case turning Feeds and Syncs into Findings -> finding, inventory, matching, postgres, scoring, stixext
+  slack/               use cases on Slack          -> alert, encryption, postgres, tenancy
   advisories/          use case linking Advisories to Vulnerabilities -> postgres, stixext
   techniques/          use case keeping the ATT&CK catalog -> postgres
   ingest/              use case polling Feeds      -> feeds, stixext
@@ -26,6 +27,7 @@ internal/
   encryption/          sealing credentials         -> nothing internal
   postgres/            all persistence             -> assessment, business, finding, inventory, matching, scoring, tenancy
   finding/             pure domain                 -> inventory, matching, scoring, stixext
+  alert/               pure domain                 -> nothing internal
   matching/            pure domain                 -> inventory, stixext
   assessment/          pure domain                 -> inventory, scoring, stixext
   business/            pure domain                 -> nothing internal
@@ -43,7 +45,7 @@ New features get a home before they get code:
 
 - **Declarations**: the use-case package `internal/assets`, which already lists Assets, with its queries in `postgres`.
 - **Areas**: the use-case package `internal/areas`, which lists a Customer's Areas and states their Area Owners, with its queries in `postgres`. The Sync that imports Areas stays in `internal/cmdb` (ADR 0018).
-- **Slack alerts**: an adapter under `internal/slack`, called from an alerting use-case package.
+- **Slack alerts**: the use-case package `internal/slack` installs the app and sends the queued messages; the Prioritizer, in `internal/agents`, writes the Alerts it sends, as the types of the pure domain package `internal/alert`, which both import (ADR 0029, ADR 0030, ADR 0033).
 - **Customers and Users**: Customer, User and Role are a pure domain package, `internal/tenancy`, which takes `CustomerID` out of `inventory`. It sits below `inventory`, since every CMDB Source belongs to a Customer, so it cannot also hold the use cases: they call `postgres`, which stores Users and so imports `tenancy`. Authenticating and creating Users is the use-case package `internal/users`, which also manages Customers, since creating a Customer creates its first Customer Admin in the same transaction, and Cognito is an adapter, `internal/cognito`, that `users` calls (ADR 0013).
 - **Threat matching**: the pure domain package `internal/matching`, which imports `inventory` and reads Feed objects through `stixext` (ADR 0010), never the reverse.
 - **Findings**: the pure domain package `internal/finding` holds what identifies a Finding, what a match makes of it and why it is closed, so `postgres` can store it; the use-case package `internal/findings` reacts to Feeds and Syncs by calling `matching`, `scoring` and `postgres` (ADR 0020).

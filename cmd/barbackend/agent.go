@@ -25,6 +25,14 @@ func newCrew() *agents.Crew {
 	return agents.NewCrew(claude.New("", ""), agents.ModelsFrom(os.Getenv))
 }
 
+// newAgentService is the agents use case whose rounds write Slack Alerts
+// linking to the portal at PORTAL_URL (ADR 0033).
+func newAgentService(db *postgres.DB) *agents.Service {
+	svc := agents.NewService(db, newCrew())
+	svc.LinkAlertsTo(strings.TrimSpace(os.Getenv("PORTAL_URL")))
+	return svc
+}
+
 func agent(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return errors.New("usage: barbackend agent " + agentSynopsis)
@@ -130,7 +138,7 @@ func agentPrioritize(ctx context.Context, out io.Writer, args []string) error {
 		if err != nil {
 			return err
 		}
-		svc := agents.NewService(db, newCrew())
+		svc := newAgentService(db)
 		stored, err := svc.Prioritize(ctx, customer)
 		if err != nil {
 			return err

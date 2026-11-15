@@ -69,3 +69,7 @@ SET status = 'pending',
 WHERE customer_id = @customer_id
   AND status = 'failed'
   AND failure_code IS DISTINCT FROM 'malformed_payload';
+
+-- name: InsertSlackDeliveries :copyfrom
+INSERT INTO slack_deliveries (id, customer_id, kind, target_kind, target, payload, finding_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7);

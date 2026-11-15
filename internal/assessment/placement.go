@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 	"unicode/utf8"
+
+	"barbackend/internal/scoring"
 )
 
 const (
@@ -115,6 +117,10 @@ type RoundPlan struct {
 	Placed   []Dossier
 	// Findings are those to place, at most the limit PlanRound was given.
 	Findings []Dossier
+	// Unplaced is how many open Findings order does not hold are left for a
+	// later round, beyond the limit: while there are any, the Customer's
+	// Initial Load goes on (ADR 0033).
+	Unplaced int
 }
 
 // PlanRound is the next round of order (ADR 0026), given the Dossiers of the
@@ -139,6 +145,11 @@ func PlanRound(order Order, open []Dossier, feedback map[string][]OrderFeedback,
 	placing := make(map[string]bool, len(plan.Findings))
 	for _, d := range plan.Findings {
 		placing[d.Finding] = true
+	}
+	for _, d := range unplaced {
+		if !placing[d.Finding] {
+			plan.Unplaced++
+		}
 	}
 	plan.Standing = order.List.Without(func(id string) bool { return order.Closed[id] || placing[id] })
 	for _, g := range plan.Standing.Groups {
@@ -185,6 +196,18 @@ func Changed(was, now Dossier) bool {
 	default:
 		return rounded(math.Abs(now.Score.Value-was.Score.Value)) >= ScoreShift
 	}
+}
+
+// BandRose reports whether now's Score Band is higher than was's, the
+// rise an Alert is written for (ADR 0033). A Score without a Band has none to
+// compare.
+func BandRose(was, now Dossier) bool {
+	before, ok := scoring.ParseBand(was.Score.Band)
+	if !ok {
+		return false
+	}
+	after, ok := scoring.ParseBand(now.Score.Band)
+	return ok && after > before
 }
 
 // NewStanding is the order a round starts from: the groups of l, numbered

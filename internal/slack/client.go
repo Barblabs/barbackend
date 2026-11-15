@@ -1,6 +1,8 @@
 // Package slack installs the Slack app into a Customer's workspace and sends
 // the messages the pipeline queues (ADR 0029). It talks to the Slack Web API
 // through Client, so tests can stand in a fake server.
+// The Prioritizer writes the rows and this package only sends them; their
+// payloads are the types of package alert (ADR 0030, ADR 0033).
 package slack
 
 import (

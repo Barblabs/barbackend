@@ -278,6 +278,7 @@ type SlackDelivery struct {
 	FailureCode   *string
 	LastError     *string
 	CreatedAt     time.Time
+	FindingID     pgtype.UUID
 }
 
 type SlackInstallation struct {

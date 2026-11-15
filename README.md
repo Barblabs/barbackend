@@ -29,6 +29,7 @@ export CORS_ALLOWED_ORIGINS=http://localhost:5173
 export SLACK_CLIENT_ID=<client-id>
 export SLACK_CLIENT_SECRET=<client-secret>
 export SLACK_REDIRECT_URI=https://api.example.com/slack/install/callback
+export PORTAL_URL=https://app.example.com   # the portal every Slack Alert links to
 
 ./barbackend migrate   # apply migrations in internal/postgres/migrations
 ./barbackend serve     # HTTP server (gin, :8080 unless PORT is set)

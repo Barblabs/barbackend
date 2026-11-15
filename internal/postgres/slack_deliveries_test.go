@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"barbackend/internal/inventory"
 	"barbackend/internal/postgres"
 	"barbackend/internal/tenancy"
 	"github.com/google/uuid"
@@ -161,5 +162,33 @@ func TestRetryFailedSlackDeliveriesSkipsMalformedPayloads(t *testing.T) {
 	}
 	if status != "failed" {
 		t.Errorf("malformed row = %s, want failed", status)
+	}
+}
+
+func TestEnqueueSlackDeliveriesQueuesRowsDueNowNamingTheirFinding(t *testing.T) {
+	t.Parallel()
+	db, conn := newDBWithConn(t)
+	customer := newCustomer(t, db)
+	src := newSource(t, db, customer)
+	w := findingWorld{db: db, customer: customer, source: src.ID(), payments: inventory.SourceReference{Source: src.ID(), RecordID: "1"}}
+	syncRecords(t, db, src.ID(), w.paymentsRecord(t))
+	storeVulnerability(t, db, "CVE-2021-23017", time.Now(), vulnerabilityObject("CVE-2021-23017", "Analyzed", `[]`))
+	id, _ := saveMatch(t, db, match(t, w.payments, "1.18.0"))
+
+	inTx(t, db, func(tx *postgres.Tx) error {
+		return tx.EnqueueSlackDeliveries(context.Background(), customer, []postgres.NewSlackDelivery{
+			{Kind: "finding", TargetKind: "email", Target: "owner@example.com", Payload: []byte(`{"cve":"CVE-2021-23017"}`), Finding: uuid.UUID(id)},
+			{Kind: "finding_batch", TargetKind: "channel", Target: "security-team", Payload: []byte(`{"findings":[]}`)},
+		})
+	})
+
+	if n := queryInt(t, conn, `SELECT count(*) FROM slack_deliveries WHERE status = 'pending' AND next_attempt_at <= now() AND attempts = 0`); n != 2 {
+		t.Errorf("%d pending rows due now, want 2", n)
+	}
+	if n := queryInt(t, conn, `SELECT count(*) FROM slack_deliveries WHERE kind = 'finding' AND finding_id = $1`, uuid.UUID(id)); n != 1 {
+		t.Errorf("%d finding rows naming the Finding, want 1", n)
+	}
+	if n := queryInt(t, conn, `SELECT count(*) FROM slack_deliveries WHERE kind = 'finding_batch' AND finding_id IS NULL`); n != 1 {
+		t.Errorf("%d batch rows naming no Finding, want 1", n)
 	}
 }

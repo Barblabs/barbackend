@@ -137,6 +137,9 @@ func TestPlanRoundPlacesWhatIsNewOrChangedAndKeepsTheRest(t *testing.T) {
 	if ids := idsOf(limited.Findings); !slices.Equal(ids, []string{finding}) || limited.Standing.GroupOf("f-8") != 0 {
 		t.Errorf("placed within a limit of 1 = %v", ids)
 	}
+	if plan.Unplaced != 0 || limited.Unplaced != 2 {
+		t.Errorf("unplaced = %d within a limit of 3 and %d within 1, want 0 and the 2 new ones left", plan.Unplaced, limited.Unplaced)
+	}
 	asked := assessment.PlanRound(order, []assessment.Dossier{dossier(t), kept}, map[string][]assessment.OrderFeedback{osFind: {{Verdict: "should_be_later"}}}, 3)
 	if ids := idsOf(asked.Findings); !slices.Equal(ids, []string{osFind}) {
 		t.Errorf("placed with feedback = %v, want the Finding a User spoke of", ids)
@@ -186,6 +189,32 @@ func TestChanged(t *testing.T) {
 			tt.change(&was, &now)
 			if got := assessment.Changed(was, now); got != tt.want {
 				t.Errorf("Changed = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestBandRose(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		was, now string
+		want     bool
+	}{
+		{"a rise of one Band", "high", "critical", true},
+		{"a rise of two Bands", "low", "high", true},
+		{"the same Band", "high", "high", false},
+		{"a fall", "critical", "medium", false},
+		{"no Band before", "", "critical", false},
+		{"no Band now", "low", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			was, now := dossier(t), dossier(t)
+			was.Score.Band, now.Score.Band = tt.was, tt.now
+			if got := assessment.BandRose(was, now); got != tt.want {
+				t.Errorf("BandRose(%q, %q) = %v, want %v", tt.was, tt.now, got, tt.want)
 			}
 		})
 	}

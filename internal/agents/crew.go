@@ -131,6 +131,9 @@ type Prioritization struct {
 	// BusinessContext is the version of the Business Context its round read,
 	// 0 when the Customer had stated none.
 	BusinessContext int `json:"-"`
+	// InitialLoad reports whether the Customer's Initial Load goes on after
+	// it: some open Finding had no place yet (ADR 0033).
+	InitialLoad bool `json:"-"`
 	// States are what is known of each of its Findings since it was stored.
 	States map[string]FindingState `json:"-"`
 	// Current is, by open Finding with a Score, its Asset and Score as they
@@ -191,6 +194,13 @@ type Round struct {
 	// each Finding that stands keeps.
 	read time.Time
 	kept map[string]uuid.UUID
+	// owners is the email of the Asset Owner of each open Finding, missing
+	// when it has none. initialLoad reports whether the round is in the
+	// Customer's Initial Load, and unplaced how many open Findings it leaves
+	// without a place (ADR 0033).
+	owners      map[string]string
+	initialLoad bool
+	unplaced    int
 }
 
 // Finding is the Dossier of the Finding of that id, if p holds it.

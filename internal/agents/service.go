@@ -61,6 +61,7 @@ type Service struct {
 	crew *Crew
 
 	onOrderFeedback func()
+	portalURL       string
 }
 
 func NewService(db *postgres.DB, crew *Crew) *Service {

@@ -1,6 +1,11 @@
 package stixext
 
-import "github.com/TcM1911/stix2"
+import (
+	"cmp"
+	"slices"
+
+	"github.com/TcM1911/stix2"
+)
 
 // NVD is the nvd/1 property extension of a Vulnerability (ADR 0010).
 type NVD struct {
@@ -18,6 +23,20 @@ type NVD struct {
 
 // Rejected reports whether NVD withdrew the CVE.
 func (n NVD) Rejected() bool { return n.VulnStatus == "Rejected" }
+
+// BaseScore is the newest CVSS version's base score from NVD's Primary
+// metrics, else from the numbering authority's Secondary ones (ADR 0009), and
+// false when NVD reports neither.
+func (n NVD) BaseScore() (float64, bool) {
+	for _, kind := range []string{"Primary", "Secondary"} {
+		of := slices.DeleteFunc(slices.Clone(n.CVSS), func(m CVSS) bool { return m.Type != kind })
+		if len(of) == 0 {
+			continue
+		}
+		return slices.MaxFunc(of, func(a, b CVSS) int { return cmp.Compare(a.Version, b.Version) }).BaseScore, true
+	}
+	return 0, false
+}
 
 // CVSS is one metric NVD reports for a Vulnerability.
 type CVSS struct {

@@ -29,6 +29,9 @@ var orderVerdicts = []assessment.Verdict{assessment.VerdictShouldBeEarlier, asse
 type content struct {
 	List        assessment.PriorityList   `json:"list"`
 	Prioritizer Run[assessment.Placement] `json:"prioritizer"`
+	// InitialLoad is whether the Customer's Initial Load goes on after it
+	// (ADR 0033).
+	InitialLoad bool `json:"initial_load,omitempty"`
 }
 
 // Prioritize brings the Customer's newest Prioritization up to date (ADR
@@ -132,7 +135,7 @@ func (s *Service) nextRound(ctx context.Context, customer tenancy.CustomerID) (R
 		if newest, err = newestOf(ctx, tx, customer); err != nil {
 			return err
 		}
-		open, err = openDossiers(ctx, tx, customer, bc.Context)
+		open, r.owners, err = openDossiers(ctx, tx, customer, bc.Context)
 		return err
 	})
 	if err != nil {
@@ -147,7 +150,8 @@ func (s *Service) nextRound(ctx context.Context, customer tenancy.CustomerID) (R
 		}
 	}
 	plan := assessment.PlanRound(order, open, r.Feedback, MaxFindings)
-	r.Standing, r.Placed, r.Findings = plan.Standing, plan.Placed, plan.Findings
+	r.Standing, r.Placed, r.Findings, r.unplaced = plan.Standing, plan.Placed, plan.Findings, plan.Unplaced
+	r.initialLoad = newest == nil || newest.InitialLoad
 	if newest != nil {
 		r.kept = make(map[string]uuid.UUID, len(r.Placed))
 		for _, d := range r.Placed {
@@ -185,7 +189,7 @@ func load(ctx context.Context, tx *postgres.Tx, customer tenancy.CustomerID, sto
 	if err := json.Unmarshal(stored.Content, &c); err != nil {
 		return Prioritization{}, fmt.Errorf("read prioritization %s: %w", stored.ID, err)
 	}
-	p.List, p.Prioritizer = c.List, c.Prioritizer
+	p.List, p.Prioritizer, p.InitialLoad = c.List, c.Prioritizer, c.InitialLoad
 	placed, err := tx.PrioritizationFindings(ctx, customer, stored.ID)
 	if err != nil {
 		return Prioritization{}, err
@@ -231,7 +235,7 @@ func orderFeedback(p Prioritization) map[string][]assessment.OrderFeedback {
 // Findings: those that stand keep their placements, and those r placed get
 // one with their Dossiers, read when r read them.
 func (s *Service) store(ctx context.Context, customer tenancy.CustomerID, r Round, p Prioritization) error {
-	raw, err := json.Marshal(content{List: p.List, Prioritizer: p.Prioritizer})
+	raw, err := json.Marshal(content{List: p.List, Prioritizer: p.Prioritizer, InitialLoad: r.initialLoad && r.unplaced > 0})
 	if err != nil {
 		return fmt.Errorf("write prioritization: %w", err)
 	}
@@ -251,8 +255,17 @@ func (s *Service) store(ctx context.Context, customer tenancy.CustomerID, r Roun
 		Content: raw, Findings: len(p.Findings), Groups: len(p.List.Groups),
 	}
 	return s.db.InTx(ctx, func(tx *postgres.Tx) error {
-		_, err := tx.CreatePrioritization(ctx, customer, stored, r.read, placements)
-		return err
+		alerts, err := s.alertsOf(ctx, tx, customer, r, p, stored.ID)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.CreatePrioritization(ctx, customer, stored, r.read, placements); err != nil {
+			return err
+		}
+		if len(alerts) == 0 {
+			return nil
+		}
+		return tx.EnqueueSlackDeliveries(ctx, customer, alerts)
 	})
 }
 
@@ -273,12 +286,13 @@ func (s *Service) placementOf(p Prioritization, id string, rank, group int, kept
 }
 
 // openDossiers builds the Dossier of each open Finding of the Customer that
-// has a Score. A Finding whose Dossier cannot be built is logged and left
-// out, so one odd Finding does not stop a Customer's Prioritization.
-func openDossiers(ctx context.Context, tx *postgres.Tx, customer tenancy.CustomerID, bc business.Context) ([]assessment.Dossier, error) {
+// has a Score, with, by Finding, the email of its Asset Owner, which the
+// Dossier leaves out. A Finding whose Dossier cannot be built is logged and
+// left out, so one odd Finding does not stop a Customer's Prioritization.
+func openDossiers(ctx context.Context, tx *postgres.Tx, customer tenancy.CustomerID, bc business.Context) ([]assessment.Dossier, map[string]string, error) {
 	found, err := tx.OpenFindingsOfCustomer(ctx, customer)
 	if err != nil || len(found) == 0 {
-		return nil, err
+		return nil, nil, err
 	}
 	cves := make([]string, 0, len(found))
 	for _, f := range found {
@@ -288,9 +302,10 @@ func openDossiers(ctx context.Context, tx *postgres.Tx, customer tenancy.Custome
 	}
 	threats, err := tx.ThreatsOf(ctx, cves)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	out := make([]assessment.Dossier, 0, len(found))
+	owners := make(map[string]string, len(found))
 	for _, f := range found {
 		d, err := dossierOf(f, threats[f.CVE], bc)
 		if err != nil {
@@ -298,8 +313,11 @@ func openDossiers(ctx context.Context, tx *postgres.Tx, customer tenancy.Custome
 			continue
 		}
 		out = append(out, d)
+		if owner, ok := f.Asset.Owner(); ok {
+			owners[d.Finding] = owner.String()
+		}
 	}
-	return out, nil
+	return out, owners, nil
 }
 
 // currentOf is the Current of each open Finding of p that has a Score.

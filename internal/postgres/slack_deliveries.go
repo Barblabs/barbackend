@@ -10,7 +10,42 @@ import (
 	"barbackend/internal/tenancy"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
+
+// NewSlackDelivery is a Slack message the pipeline queues for the worker
+// (ADR 0030): its kind, its target and the payload the worker renders.
+// Finding is the Finding it is about, uuid.Nil for one about several or
+// none (ADR 0033).
+type NewSlackDelivery struct {
+	Kind       string
+	TargetKind string
+	Target     string
+	Payload    []byte
+	Finding    uuid.UUID
+}
+
+// EnqueueSlackDeliveries queues the Customer's deliveries, pending and due
+// now, to be sent to each target in the order given: rows written in one
+// transaction share their created_at, so their ids, time-ordered, keep the
+// order the claim follows.
+func (t *Tx) EnqueueSlackDeliveries(ctx context.Context, customer tenancy.CustomerID, deliveries []NewSlackDelivery) error {
+	rows := make([]sqlcgen.InsertSlackDeliveriesParams, len(deliveries))
+	for i, d := range deliveries {
+		id, err := uuid.NewV7()
+		if err != nil {
+			return fmt.Errorf("id of a slack delivery: %w", err)
+		}
+		rows[i] = sqlcgen.InsertSlackDeliveriesParams{
+			ID: id, CustomerID: uuid.UUID(customer), Kind: d.Kind, TargetKind: d.TargetKind, Target: d.Target,
+			Payload: d.Payload, FindingID: pgtype.UUID{Bytes: d.Finding, Valid: d.Finding != uuid.Nil},
+		}
+	}
+	if _, err := t.q.InsertSlackDeliveries(ctx, rows); err != nil {
+		return fmt.Errorf("enqueue slack deliveries of customer %s: %w", customer, err)
+	}
+	return nil
+}
 
 // SlackDelivery is a queued Slack message the worker is about to send. The
 // payload is still the raw jsonb the pipeline wrote (ADR 0030).

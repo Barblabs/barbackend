@@ -2,14 +2,13 @@ package slack
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"net/http"
-	"strconv"
 	"time"
 
+	"barbackend/internal/alert"
 	"barbackend/internal/postgres"
 	"barbackend/internal/tenancy"
 )
@@ -40,6 +39,11 @@ const (
 // deliveryRetry is how long a failed attempt waits before the next one.
 var deliveryRetry = [...]time.Duration{time.Minute, 5 * time.Minute}
 
+// errNoChannel is a channel delivery of a Customer whose installation names
+// no Security Team channel yet: it waits, as one without an installation
+// does.
+var errNoChannel = errors.New("no security team channel picked")
+
 // claimResult is one claim attempt's result: a delivery when one is due.
 type claimResult struct {
 	delivery postgres.SlackDelivery
@@ -63,8 +67,9 @@ func (s *Service) RunDeliveries(ctx context.Context) {
 }
 
 // DeliverDue deletes the rows Slack accepted, then sends every due row it can
-// claim. Rows of a Customer that has no working installation are left
-// pending: an admin has to reconnect before they can go.
+// claim. Rows of a Customer that has no working installation, and channel
+// rows of one that has picked no channel, are left pending: an admin has to
+// connect or pick one before they can go.
 func (s *Service) DeliverDue(ctx context.Context) error {
 	if err := s.db.InTx(ctx, func(tx *postgres.Tx) error {
 		return tx.DeleteSentSlackDeliveries(ctx)
@@ -90,13 +95,21 @@ func (s *Service) DeliverDue(ctx context.Context) error {
 // deliver sends one claimed row and records what happened. It reports false
 // when ctx ended while pacing.
 func (s *Service) deliver(ctx context.Context, d postgres.SlackDelivery, lastSent map[string]time.Time) bool {
-	if d.TargetKind == "channel" && !s.pace(ctx, d.Target, lastSent) {
-		return false
-	}
 	message, err := render(d)
 	if err != nil {
 		s.recordFailure(ctx, d, failureMalformedPayload, err, true)
 		return true
+	}
+	switch {
+	case d.TargetKind == alert.TargetEmail && d.Target == "":
+		s.recordFailure(ctx, d, failureOwnerUnreachable, errors.New("the asset has no asset owner"), true)
+		return true
+	case d.TargetKind == alert.TargetChannel && d.Target != alert.SecurityTeam:
+		s.recordFailure(ctx, d, failureMalformedPayload, fmt.Errorf("channel target %q, want %q", d.Target, alert.SecurityTeam), true)
+		return true
+	}
+	if d.TargetKind == alert.TargetChannel && !s.pace(ctx, d.Customer.String()+"/"+d.Target, lastSent) {
+		return false
 	}
 	token, err := s.token(ctx, d.Customer)
 	if errors.Is(err, ErrNotInstalled) || errors.Is(err, ErrNeedsReauthorisation) {
@@ -107,6 +120,9 @@ func (s *Service) deliver(ctx context.Context, d postgres.SlackDelivery, lastSen
 		return true
 	}
 	message.Channel, err = s.address(ctx, token, d)
+	if errors.Is(err, errNoChannel) {
+		return true
+	}
 	if err != nil {
 		s.recordAPIError(ctx, d, err)
 		return true
@@ -132,12 +148,20 @@ func (s *Service) pace(ctx context.Context, target string, lastSent map[string]t
 }
 
 // address resolves a row's target to where chat.postMessage sends it: a Slack
-// user id for a DM, the channel id itself otherwise.
+// user id for a DM, and the Security Team channel the installation names now
+// for a channel row (ADR 0033).
 func (s *Service) address(ctx context.Context, token string, d postgres.SlackDelivery) (string, error) {
-	if d.TargetKind == "channel" {
-		return d.Target, nil
+	if d.TargetKind != alert.TargetChannel {
+		return s.client.LookupByEmail(ctx, token, d.Target)
 	}
-	return s.client.LookupByEmail(ctx, token, d.Target)
+	stored, err := s.stored(ctx, d.Customer)
+	if err != nil {
+		return "", err
+	}
+	if stored.ChannelID == "" {
+		return "", errNoChannel
+	}
+	return stored.ChannelID, nil
 }
 
 // markSent records that Slack accepted the message; the next poll deletes it.
@@ -236,108 +260,6 @@ func sleep(ctx context.Context, d time.Duration) bool {
 	case <-timer.C:
 		return true
 	}
-}
-
-// findingPayload is the jsonb contract the pipeline writes for kind=finding
-// (ADR 0029). The worker renders it and reads nothing else; EPSS is the
-// probability Slack shows as a percentage.
-type findingPayload struct {
-	CVE            string  `json:"cve"`
-	Asset          string  `json:"asset"`
-	PortalURL      string  `json:"portal_url"`
-	OwnerEmail     string  `json:"owner_email"`
-	Score          float64 `json:"score"`
-	ScoreBand      string  `json:"score_band"`
-	KEV            bool    `json:"kev"`
-	EPSS           float64 `json:"epss"`
-	CVSS           float64 `json:"cvss"`
-	Criticality    string  `json:"criticality"`
-	Exposure       string  `json:"exposure"`
-	Recommendation string  `json:"recommendation"`
-}
-
-type text struct {
-	Type string `json:"type"`
-	Text string `json:"text"`
-}
-
-type block struct {
-	Type     string  `json:"type"`
-	Text     *text   `json:"text,omitempty"`
-	Fields   []*text `json:"fields,omitempty"`
-	Elements []*text `json:"elements,omitempty"`
-}
-
-// render turns a delivery's payload into the one message both the DM and the
-// channel copy carry. It fails when the payload is not a finding this worker
-// knows how to render.
-func render(d postgres.SlackDelivery) (Message, error) {
-	if d.Kind != "finding" {
-		return Message{}, fmt.Errorf("unknown slack delivery kind %q", d.Kind)
-	}
-	var p findingPayload
-	if err := json.Unmarshal(d.Payload, &p); err != nil {
-		return Message{}, fmt.Errorf("decode finding payload: %w", err)
-	}
-	if p.CVE == "" || p.Asset == "" {
-		return Message{}, errors.New("finding payload has no CVE or asset")
-	}
-	score := strconv.FormatFloat(p.Score, 'f', -1, 64)
-	fields := []*text{
-		mrkdwn("*Score*\n" + score + " (" + p.ScoreBand + ")"),
-		mrkdwn("*KEV*\n" + yesNo(p.KEV)),
-		mrkdwn("*EPSS*\n" + strconv.FormatFloat(p.EPSS*100, 'f', 1, 64) + "%"),
-		mrkdwn("*CVSS*\n" + strconv.FormatFloat(p.CVSS, 'f', 1, 64)),
-		mrkdwn("*Criticality*\n" + orDash(p.Criticality)),
-		mrkdwn("*Exposure*\n" + orDash(p.Exposure)),
-	}
-	blocks := []block{
-		{Type: "header", Text: &text{Type: "plain_text", Text: p.CVE + " on " + p.Asset}},
-		{Type: "section", Fields: fields},
-	}
-	if p.Recommendation != "" {
-		blocks = append(blocks, block{
-			Type: "section",
-			Text: mrkdwn("*Recommendation*\n" + p.Recommendation),
-		})
-	}
-	blocks = append(blocks, block{
-		Type:     "context",
-		Elements: []*text{mrkdwn("Owner: " + orDash(p.OwnerEmail) + " · " + link(p.PortalURL))},
-	})
-	raw, err := json.Marshal(blocks)
-	if err != nil {
-		return Message{}, fmt.Errorf("encode slack blocks: %w", err)
-	}
-	return Message{
-		Text:   fmt.Sprintf("%s on %s: %s (%s)", p.CVE, p.Asset, score, p.ScoreBand),
-		Blocks: raw,
-	}, nil
-}
-
-func mrkdwn(s string) *text {
-	return &text{Type: "mrkdwn", Text: s}
-}
-
-func yesNo(v bool) string {
-	if v {
-		return "yes"
-	}
-	return "no"
-}
-
-func orDash(s string) string {
-	if s == "" {
-		return "—"
-	}
-	return s
-}
-
-func link(url string) string {
-	if url == "" {
-		return "barbattack"
-	}
-	return "<" + url + "|Open in barbattack>"
 }
 
 // FailedDelivery is a queued message the worker gave up on, as the portal

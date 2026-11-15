@@ -242,6 +242,14 @@ _Avoid_: Run, batch, reprioritization
 Findings of a Prioritization to attend at the same time, such as those one update fixes together. The first group is attended first.
 _Avoid_: Tier, wave, bucket
 
+**Alert**:
+A Slack message about a Finding, to its Asset Owner and the Security Team, written when the Prioritizer places a new Finding or one whose Score Band rose (ADR 0033).
+_Avoid_: Notification, delivery
+
+**Initial Load**:
+A Customer's first rounds, until every open Finding has a place. Its Alerts are sent in batches of 10 (ADR 0033).
+_Avoid_: Onboarding, first sync
+
 **Action Plan**:
 Luna's output: the steps to remediate a Finding on its Asset, what mitigates it meanwhile and how to confirm the fix.
 _Avoid_: Recommendation, remediation plan
