@@ -132,9 +132,12 @@ func TestListAssetsFilters(t *testing.T) {
 		asset("5", "e", inventory.Workstation, inventory.CriticalityMedium, inventory.Internal, ""),
 	}
 	areas := []inventory.AreaRecord{areaRecord(t, "it", "IT")}
-	e.provider.Snapshot = inventory.Snapshot{Areas: areas, Records: append(active, record(t, "4", "d"))}
+	snapshot := func(records ...inventory.Record) inventory.Snapshot {
+		return inventory.Snapshot{Areas: areas, Records: records}
+	}
+	e.provider.Snapshot = snapshot(append(active, record(t, "4", "d"))...)
 	e.connect(t, e.customer)
-	e.provider.Snapshot = inventory.Snapshot{Areas: areas, Records: active}
+	e.provider.Snapshot = snapshot(active...)
 	if rec := e.sync(context.Background()); rec.Code != http.StatusOK {
 		t.Fatalf("sync = %d %s", rec.Code, rec.Body)
 	}

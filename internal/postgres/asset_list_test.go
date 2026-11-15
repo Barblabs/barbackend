@@ -67,17 +67,22 @@ func TestListAssetsTotalCountsTheAssetsListedAcrossAllPages(t *testing.T) {
 	}
 	inactive := asset("6", inventory.Workstation, inventory.CriticalityHigh, inventory.Internal, "")
 	areas := []inventory.AreaRecord{areaRecord(t, "it", "IT", false), areaRecord(t, "legacy", "Legacy", true)}
-	syncSnapshot(t, db, src.ID(), inventory.Snapshot{Areas: areas, Records: append(active, inactive)})
-	syncSnapshot(t, db, src.ID(), inventory.Snapshot{Areas: areas, Records: active})
+	snapshot := func(records []inventory.Record) inventory.Snapshot {
+		return inventory.Snapshot{Areas: areas, Records: records}
+	}
+	syncSnapshot(t, db, src.ID(), snapshot(append(active, inactive)))
+	syncSnapshot(t, db, src.ID(), snapshot(active))
 	activeOnly := true
 	admin := storeUser(t, db, "admin@example.com", tenancy.CustomerAdmin, customer)
 	workstation := inTxValue(t, db, func(tx *postgres.Tx) (postgres.AssetPage, error) {
 		return tx.ListAssets(ctx, postgres.AssetListQuery{Customer: customer, Filter: postgres.AssetFilter{Active: &activeOnly, Kind: []inventory.AssetKind{inventory.Workstation}}, Limit: 1})
 	})
 	declareInternal(t, db, customer, workstation.Assets[0].ID, admin.ID())
+	areaID := func(record string) int64 {
+		return int64(queryInt(t, conn, "SELECT id FROM customer_areas WHERE record_id = $1", record))
+	}
 	declareConfidential(t, db, customer, int64(queryInt(t, conn, "SELECT id FROM assets WHERE record_id = '1'")), admin.ID())
-	it := int64(queryInt(t, conn, "SELECT id FROM customer_areas WHERE record_id = 'it'"))
-	legacy := int64(queryInt(t, conn, "SELECT id FROM customer_areas WHERE record_id = 'legacy'"))
+	it, legacy := areaID("it"), areaID("legacy")
 
 	tests := []struct {
 		name   string
