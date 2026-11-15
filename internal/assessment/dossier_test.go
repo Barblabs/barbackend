@@ -47,6 +47,83 @@ func TestNewDossierReadsTheStoredFinding(t *testing.T) {
 	}
 }
 
+func TestNewDossierReadsAModel3ScoreAndTheDeclaredClassification(t *testing.T) {
+	t.Parallel()
+	s := stored(t)
+	if err := s.Asset.DeclareInformationClassification(inventory.ClassifiedConfidential); err != nil {
+		t.Fatal(err)
+	}
+	cvss, epss := 8.1, 0.9003
+	score, err := scoring.Model3.Compute(scoring.Inputs{
+		CVSS: &cvss, EPSS: &epss, KEVListed: true, Criticality: inventory.CriticalityLow,
+		Classification: inventory.ClassifiedConfidential, Lifecycle: inventory.LifecycleProduction,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Score = score
+
+	d, err := assessment.NewDossier(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if d.Score.ScoringModel != 3 || d.Score.Value != 0.81 || d.Score.Band != "critical" ||
+		d.Score.Exploitation == nil || *d.Score.Exploitation != 1 ||
+		d.Score.ClassificationMultiplier == nil || *d.Score.ClassificationMultiplier != 1 {
+		t.Errorf("score = %+v, want Model 3's 0.81, critical, with an Exploitation and a classification multiplier of 1", d.Score)
+	}
+	if d.Asset.Classification != "confidential" || d.Brief().Asset.Classification != "confidential" {
+		t.Errorf("classification = %q, brief %q, want confidential in both", d.Asset.Classification, d.Brief().Asset.Classification)
+	}
+	if err := d.Validate(); err != nil {
+		t.Errorf("validate = %v", err)
+	}
+}
+
+func TestADossierOfAModel2ScoreHasNoBandAndAnUnclassifiedAsset(t *testing.T) {
+	t.Parallel()
+	d := dossier(t)
+	if d.Score.Band != "" || d.Score.Exploitation != nil || d.Score.ClassificationMultiplier != nil || d.Asset.Classification != "unclassified" {
+		t.Errorf("score %+v, classification %q, want no Model 3 factors and unclassified", d.Score, d.Asset.Classification)
+	}
+	raw, err := json.Marshal(d.Score)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"band", "exploitation", "information_classification_multiplier"} {
+		if strings.Contains(string(raw), `"`+key+`"`) {
+			t.Errorf("score JSON %s has %q, want it left out", raw, key)
+		}
+	}
+}
+
+func TestADossierStoredBeforeTheClassificationReadsUnclassified(t *testing.T) {
+	t.Parallel()
+	raw, err := json.Marshal(dossier(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var old map[string]any
+	if err := json.Unmarshal(raw, &old); err != nil {
+		t.Fatal(err)
+	}
+	delete(old["asset"].(map[string]any), "information_classification")
+	if raw, err = json.Marshal(old); err != nil {
+		t.Fatal(err)
+	}
+	var got assessment.Dossier
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Asset.Classification != "unclassified" {
+		t.Errorf("classification = %q, want unclassified", got.Asset.Classification)
+	}
+	if err := got.Validate(); err != nil {
+		t.Errorf("validate = %v", err)
+	}
+}
+
 func TestNewDossierMakesKEVUnavailableWhenTheScoreFoundItStale(t *testing.T) {
 	t.Parallel()
 	s := stored(t)
@@ -140,6 +217,9 @@ func TestValidateRejectsADossierBuiltWrong(t *testing.T) {
 		{"unknown criticality code", func(d *assessment.Dossier) { d.Asset.Criticality = "critical" }, "criticality"},
 		{"unknown exposure code", func(d *assessment.Dossier) { d.Asset.Exposure = "public" }, "exposure"},
 		{"unknown lifecycle stage code", func(d *assessment.Dossier) { d.Asset.Lifecycle = "obsolete" }, "lifecycle stage"},
+		{"unknown classification code", func(d *assessment.Dossier) { d.Asset.Classification = "secret" }, "information classification"},
+		{"unknown band", func(d *assessment.Dossier) { d.Score.Band = "severe" }, "band"},
+		{"exploitation above 1", func(d *assessment.Dossier) { d.Score.Exploitation = ptr(1.5) }, "exploitation"},
 		{"unknown kind", func(d *assessment.Dossier) { d.Asset.Kind = "toaster" }, "kind"},
 		{"unknown role", func(d *assessment.Dossier) { d.Asset.Software[0].Role = "x" }, "role"},
 		{"blank data gap", func(d *assessment.Dossier) { d.Score.DataGaps = []string{""} }, "data gap"},

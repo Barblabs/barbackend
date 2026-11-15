@@ -63,9 +63,11 @@ type Summary struct {
 	Criticality      string   `json:"criticality"`
 	Exposure         string   `json:"exposure"`
 	Lifecycle        string   `json:"lifecycle_stage"`
+	Classification   string   `json:"information_classification"`
 	CriticalServices []string `json:"critical_services"`
 	Component        string   `json:"component"`
 	Score            float64  `json:"score"`
+	Band             string   `json:"band,omitempty"`
 	KEV              bool     `json:"kev"`
 	EPSS             *float64 `json:"epss"`
 	// Exploitation is the ATT&CK ids of the Techniques the Cartógrafo says
@@ -167,7 +169,9 @@ func byScore(findings []Dossier) []Dossier {
 // Changed reports whether a Finding placed when its Dossier was was must be
 // placed again now that it is now (ADR 0026): because KEV lists it now, or
 // says ransomware uses it now, because the Cartógrafo labeled it since,
-// or because its Score moved by ScoreShift or more.
+// because its Score Band changed, or because its Score moved by ScoreShift
+// or more. A Score of a Model without Bands has no Band to compare, so only
+// ScoreShift moves it (ADR 0032).
 func Changed(was, now Dossier) bool {
 	switch {
 	case was.KEV == nil && now.KEV != nil:
@@ -175,6 +179,8 @@ func Changed(was, now Dossier) bool {
 	case now.KEV != nil && now.KEV.KnownRansomwareCampaignUse == knownRansomwareUse && (was.KEV == nil || was.KEV.KnownRansomwareCampaignUse != knownRansomwareUse):
 		return true
 	case len(was.Techniques) == 0 && len(now.Techniques) > 0:
+		return true
+	case was.Score.Band != "" && now.Score.Band != "" && was.Score.Band != now.Score.Band:
 		return true
 	default:
 		return rounded(math.Abs(now.Score.Value-was.Score.Value)) >= ScoreShift
@@ -212,8 +218,9 @@ func NewStanding(l PriorityList, dossiers []Dossier) []StandingGroup {
 func summaryOf(d Dossier) Summary {
 	s := Summary{
 		Finding: d.Finding, CVE: d.CVE, Asset: d.Asset.Name, Criticality: d.Asset.Criticality, Exposure: d.Asset.Exposure,
-		Lifecycle: d.Asset.Lifecycle, CriticalServices: []string{}, Component: strings.TrimSpace(d.Component.Name + " " + d.Component.Version),
-		Score: d.Score.Value, KEV: d.KEV != nil, Exploitation: []string{},
+		Lifecycle: d.Asset.Lifecycle, Classification: d.Asset.Classification, CriticalServices: []string{},
+		Component: strings.TrimSpace(d.Component.Name + " " + d.Component.Version),
+		Score:     d.Score.Value, Band: d.Score.Band, KEV: d.KEV != nil, Exploitation: []string{},
 	}
 	for _, c := range d.Asset.CriticalServices {
 		s.CriticalServices = append(s.CriticalServices, c.Name)

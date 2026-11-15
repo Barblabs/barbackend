@@ -370,6 +370,26 @@ func TestModel3BandHoldsAFloorReachedByAProduct(t *testing.T) {
 	}
 }
 
+func TestAScoreHasTheBandOfTheModelThatScoredIt(t *testing.T) {
+	tests := []struct {
+		name   string
+		score  scoring.Score
+		want   scoring.Band
+		wantOK bool
+	}{
+		{"model 3", scoring.Score{Model: 3, Value: 0.59}, scoring.BandHigh, true},
+		{"model 2 has none", scoring.Score{Model: 2, Value: 0.59}, 0, false},
+		{"an unpublished model has none", scoring.Score{Model: 42, Value: 0.59}, 0, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got, ok := tt.score.Band(); got != tt.want || ok != tt.wantOK {
+				t.Errorf("Band = %v, %v, want %v, %v", got, ok, tt.want, tt.wantOK)
+			}
+		})
+	}
+}
+
 func TestModelsBeforeModel3HaveNoBand(t *testing.T) {
 	for _, m := range []scoring.Model{scoring.Model1, scoring.Model2} {
 		if band, ok := m.Band(1); ok {

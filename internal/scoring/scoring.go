@@ -169,6 +169,21 @@ func (b Band) String() string {
 	}
 }
 
+// models are the published Scoring Models, so a stored Score's Band is read
+// from the Model that scored it.
+var models = []Model{Model1, Model2, Model3}
+
+// Band is the Score Band of s under the Model that scored it, and false when
+// that Model has none or is not one of the published Models.
+func (s Score) Band() (Band, bool) {
+	for _, m := range models {
+		if m.version == s.Model {
+			return m.Band(s.Value)
+		}
+	}
+	return 0, false
+}
+
 // bandTolerance absorbs the float error of a product that should land on a
 // floor exactly, such as CVSS 7 on a KEV CVE and an Asset factor of 1.
 const bandTolerance = 1e-9
