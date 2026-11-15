@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"barbackend/internal/alert"
 	"barbackend/internal/postgres"
@@ -502,5 +503,69 @@ func TestABatchOfMoreThanTenIsMalformed(t *testing.T) {
 
 	if got := deliveryRow(t, conn, id); got.status != "failed" || got.failureCode == nil || *got.failureCode != "malformed_payload" {
 		t.Fatalf("row = %s/%v, want failed/malformed_payload", got.status, got.failureCode)
+	}
+}
+
+func TestAnAlertEscapesWhatItQuotesSoItCannotMentionOrForgeALink(t *testing.T) {
+	t.Parallel()
+	svc, fake, _, conn, customer := newDeliveryEnv(t)
+	installWithChannel(t, svc, customer)
+	a := finding()
+	a.Group.Reason = "Versions < 1.2 & > 1.0. <!channel> see <https://evil.test|Open in barbattack>"
+	enqueue(t, conn, customer, "channel", alert.SecurityTeam, a)
+
+	deliver(t, svc)
+
+	_, blocks := posted(t, fake)
+	var parsed []struct {
+		Text *struct{ Text string } `json:"text"`
+	}
+	if err := json.Unmarshal([]byte(blocks), &parsed); err != nil {
+		t.Fatal(err)
+	}
+	var why string
+	for _, b := range parsed {
+		if b.Text != nil && strings.HasPrefix(b.Text.Text, "*Why it matters*") {
+			why = b.Text.Text
+		}
+	}
+	if !strings.Contains(why, "Versions &lt; 1.2 &amp; &gt; 1.0. &lt;!channel&gt; see &lt;https://evil.test|Open in barbattack&gt;") {
+		t.Errorf("why it matters = %q, want the reason escaped", why)
+	}
+}
+
+func TestAnAlertStaysWithinSlacksLimits(t *testing.T) {
+	t.Parallel()
+	svc, fake, _, conn, customer := newDeliveryEnv(t)
+	installWithChannel(t, svc, customer)
+	a := finding()
+	a.Asset = strings.Repeat("a", 200)
+	a.Group.Reason = strings.Repeat("<", 4000)
+	enqueue(t, conn, customer, "channel", alert.SecurityTeam, a)
+
+	deliver(t, svc)
+
+	_, blocks := posted(t, fake)
+	var parsed []struct {
+		Type string                 `json:"type"`
+		Text *struct{ Text string } `json:"text"`
+	}
+	if err := json.Unmarshal([]byte(blocks), &parsed); err != nil {
+		t.Fatal(err)
+	}
+	for _, b := range parsed {
+		if b.Text == nil {
+			continue
+		}
+		n, limit := utf8.RuneCountInString(b.Text.Text), 3000
+		if b.Type == "header" {
+			limit = 150
+		}
+		if n > limit {
+			t.Errorf("%s text of %d characters, over Slack's %d", b.Type, n, limit)
+		}
+		if strings.HasSuffix(strings.TrimSuffix(b.Text.Text, "…"), "&l") || strings.HasSuffix(strings.TrimSuffix(b.Text.Text, "…"), "&lt") {
+			t.Errorf("%s text splits an escape: …%s", b.Type, b.Text.Text[len(b.Text.Text)-10:])
+		}
 	}
 }

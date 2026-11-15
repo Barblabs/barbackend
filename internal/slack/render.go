@@ -7,9 +7,21 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"barbackend/internal/alert"
 	"barbackend/internal/postgres"
+)
+
+// Block Kit's limits, in characters: Slack refuses a message over any of
+// them with invalid_blocks, which no retry fixes.
+const (
+	maxHeader  = 150
+	maxSection = 3000
+	maxField   = 2000
+	// maxName bounds one value a line names, such as an Asset or a group's
+	// title, so a line of ten of them stays within a section.
+	maxName = 200
 )
 
 type text struct {
@@ -41,6 +53,11 @@ var labels = map[string]string{
 	"unclassified":    "Unclassified",
 }
 
+// escaper escapes the characters Slack's mrkdwn reads as markup, so text an
+// Alert carries, which can quote a Feed, never mentions a channel or forges a
+// link.
+var escaper = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;")
+
 // render turns a delivery's payload into the message both the DM and the
 // channel copy carry. It fails when the payload is not an Alert this worker
 // knows how to render.
@@ -54,7 +71,7 @@ func render(d postgres.SlackDelivery) (Message, error) {
 		if err := complete(a); err != nil {
 			return Message{}, err
 		}
-		return message(findingText(a), findingBlocks(a))
+		return message(fit(title(a)+": "+score(a.Score), maxSection), findingBlocks(a))
 	case alert.KindBatch:
 		var b alert.Batch
 		if err := json.Unmarshal(d.Payload, &b); err != nil {
@@ -89,42 +106,36 @@ func message(fallback string, blocks []block) (Message, error) {
 	return Message{Text: fallback, Blocks: raw}, nil
 }
 
-// title is the Band, the CVE and the Asset an Alert is about.
+// title is the Band, the CVE and the Asset an Alert is about, as plain text.
 func title(a alert.Finding) string {
 	return fmt.Sprintf("%s · %s on %s", strings.ToUpper(orDash(a.Band)), a.CVE, a.Asset)
 }
 
-// findingText is the notification's text: the title and the Score.
-func findingText(a alert.Finding) string {
-	return title(a) + ": " + score(a.Score)
-}
-
 func findingBlocks(a alert.Finding) []block {
 	blocks := []block{
-		{Type: "header", Text: &text{Type: "plain_text", Text: mark(a.Band) + " " + title(a), Emoji: true}},
+		{Type: "header", Text: &text{Type: "plain_text", Text: cut(mark(a.Band)+" "+title(a), maxHeader), Emoji: true}},
 		{Type: "section", Text: mrkdwn(why(a))},
 		{Type: "section", Fields: []*text{
-			mrkdwn("*Score*\n" + score(a.Score)),
-			mrkdwn("*CVSS*\n" + cvss(a.CVSS)),
-			mrkdwn("*EPSS*\n" + epss(a.EPSS)),
-			mrkdwn("*CISA KEV*\n" + yesNo(a.KEV)),
+			field("Score", score(a.Score)),
+			field("CVSS", cvss(a.CVSS)),
+			field("EPSS", epss(a.EPSS)),
+			field("CISA KEV", yesNo(a.KEV)),
 		}},
-		{Type: "section", Text: mrkdwn("*Asset* · " + orDash(a.Component)), Fields: []*text{
-			mrkdwn("*Criticality*\n" + label(a.Criticality)),
-			mrkdwn("*Exposure*\n" + label(a.Exposure)),
-			mrkdwn("*Lifecycle*\n" + label(a.Lifecycle)),
-			mrkdwn("*Information classification*\n" + label(a.Classification)),
+		{Type: "section", Text: mrkdwn("*Asset* · " + fit(orDash(a.Component), maxName)), Fields: []*text{
+			field("Criticality", label(a.Criticality)),
+			field("Exposure", label(a.Exposure)),
+			field("Lifecycle", label(a.Lifecycle)),
+			field("Information classification", label(a.Classification)),
 		}},
 	}
 	if g := a.Group; g.Position > 0 {
-		blocks = append(blocks, block{
-			Type: "section",
-			Text: mrkdwn(fmt.Sprintf("*Why it matters* · Priority group %d of %d: %s\n>%s", g.Position, g.Of, g.Title, strings.ReplaceAll(g.Reason, "\n", "\n>"))),
-		})
+		head := fmt.Sprintf("*Why it matters* · Priority group %d of %d: %s\n", g.Position, g.Of, fit(g.Title, maxName))
+		reason := strings.Join(strings.Fields(g.Reason), " ")
+		blocks = append(blocks, block{Type: "section", Text: mrkdwn(head + ">" + fit(reason, maxSection-utf8.RuneCountInString(head)-1))})
 	}
 	return append(blocks, block{
 		Type:     "context",
-		Elements: []*text{mrkdwn("Owner: " + orDash(a.OwnerEmail) + " · " + link(a.PortalURL))},
+		Elements: []*text{mrkdwn("Owner: " + fit(orDash(a.OwnerEmail), maxName) + " · " + link(a.PortalURL))},
 	})
 }
 
@@ -153,23 +164,19 @@ func batchHeader(b alert.Batch) string {
 func batchBlocks(b alert.Batch) []block {
 	blocks := []block{{Type: "header", Text: &text{Type: "plain_text", Text: batchHeader(b), Emoji: true}}}
 	for _, a := range b.Findings {
-		line := fmt.Sprintf("%s *%d*  *%s* on %s", mark(a.Band), int(math.Round(a.Score*100)), a.CVE, a.Asset)
+		line := fmt.Sprintf("%s *%d*  *%s* on %s", mark(a.Band), percent(a.Score), fit(a.CVE, maxName), fit(a.Asset, maxName))
 		if g := a.Group; g.Position > 0 {
-			line += fmt.Sprintf(" · #%d %s", g.Position, g.Title)
+			line += fmt.Sprintf(" · #%d %s", g.Position, fit(g.Title, maxName))
 		}
 		kev := "no KEV"
 		if a.KEV {
 			kev = "KEV"
 		}
 		facts := []string{"CVSS " + cvss(a.CVSS), "EPSS " + epss(a.EPSS), kev,
-			label(a.Criticality), label(a.Exposure), label(a.Lifecycle), label(a.Classification), "Owner: " + orDash(a.OwnerEmail)}
+			label(a.Criticality), label(a.Exposure), label(a.Lifecycle), label(a.Classification), "Owner: " + fit(orDash(a.OwnerEmail), maxName)}
 		blocks = append(blocks, block{Type: "section", Text: mrkdwn(line + "\n" + strings.Join(facts, " · "))})
 	}
-	var url string
-	if len(b.Findings) > 0 {
-		url = b.Findings[0].PortalURL
-	}
-	return append(blocks, block{Type: "context", Elements: []*text{mrkdwn(link(url))}})
+	return append(blocks, block{Type: "context", Elements: []*text{mrkdwn(link(b.Findings[0].PortalURL))}})
 }
 
 // why is why the Finding is alerted.
@@ -187,9 +194,13 @@ func mark(band string) string {
 	return ":white_circle:"
 }
 
-// score is a Score from 0 to 100, as the portal shows it.
+// percent is a Score from 0 to 100, as the portal shows it.
+func percent(v float64) int {
+	return int(math.Round(v * 100))
+}
+
 func score(v float64) string {
-	return strconv.Itoa(int(math.Round(v*100))) + " / 100"
+	return strconv.Itoa(percent(v)) + " / 100"
 }
 
 func cvss(v *float64) string {
@@ -206,6 +217,7 @@ func epss(v *float64) string {
 	return strconv.FormatFloat(*v*100, 'f', 1, 64) + "%"
 }
 
+// label is how a message names a code, escaped for mrkdwn.
 func label(code string) string {
 	if l, ok := labels[code]; ok {
 		return l
@@ -213,7 +225,43 @@ func label(code string) string {
 	if code == "" {
 		return "—"
 	}
-	return strings.ToUpper(code[:1]) + strings.ReplaceAll(code[1:], "_", " ")
+	return fit(strings.ToUpper(code[:1])+strings.ReplaceAll(code[1:], "_", " "), maxName)
+}
+
+// field is a section field naming a value, the value escaped and within
+// Slack's limit.
+func field(name, value string) *text {
+	return mrkdwn("*" + name + "*\n" + fit(value, maxField-utf8.RuneCountInString(name)-3))
+}
+
+// fit is s escaped for mrkdwn, cut with an ellipsis so the escaped text holds
+// at most limit characters. It cuts s, not the escaped text, so no escape is
+// split.
+func fit(s string, limit int) string {
+	escaped := escaper.Replace(s)
+	if utf8.RuneCountInString(escaped) <= limit {
+		return escaped
+	}
+	var b strings.Builder
+	n := 0
+	for _, r := range s {
+		e := escaper.Replace(string(r))
+		if n+utf8.RuneCountInString(e) > limit-1 {
+			break
+		}
+		b.WriteString(e)
+		n += utf8.RuneCountInString(e)
+	}
+	return b.String() + "…"
+}
+
+// cut is plain text s within limit characters, ending in an ellipsis when it
+// was longer.
+func cut(s string, limit int) string {
+	if utf8.RuneCountInString(s) <= limit {
+		return s
+	}
+	return string([]rune(s)[:limit-1]) + "…"
 }
 
 func mrkdwn(s string) *text {

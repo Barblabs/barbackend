@@ -95,21 +95,21 @@ func (s *Service) DeliverDue(ctx context.Context) error {
 // deliver sends one claimed row and records what happened. It reports false
 // when ctx ended while pacing.
 func (s *Service) deliver(ctx context.Context, d postgres.SlackDelivery, lastSent map[string]time.Time) bool {
-	if d.TargetKind == "channel" && !s.pace(ctx, d.Customer.String()+"/"+d.Target, lastSent) {
-		return false
-	}
 	message, err := render(d)
 	if err != nil {
 		s.recordFailure(ctx, d, failureMalformedPayload, err, true)
 		return true
 	}
 	switch {
-	case d.TargetKind == "email" && d.Target == "":
+	case d.TargetKind == alert.TargetEmail && d.Target == "":
 		s.recordFailure(ctx, d, failureOwnerUnreachable, errors.New("the asset has no asset owner"), true)
 		return true
-	case d.TargetKind == "channel" && d.Target != alert.SecurityTeam:
+	case d.TargetKind == alert.TargetChannel && d.Target != alert.SecurityTeam:
 		s.recordFailure(ctx, d, failureMalformedPayload, fmt.Errorf("channel target %q, want %q", d.Target, alert.SecurityTeam), true)
 		return true
+	}
+	if d.TargetKind == alert.TargetChannel && !s.pace(ctx, d.Customer.String()+"/"+d.Target, lastSent) {
+		return false
 	}
 	token, err := s.token(ctx, d.Customer)
 	if errors.Is(err, ErrNotInstalled) || errors.Is(err, ErrNeedsReauthorisation) {
@@ -151,7 +151,7 @@ func (s *Service) pace(ctx context.Context, target string, lastSent map[string]t
 // user id for a DM, and the Security Team channel the installation names now
 // for a channel row (ADR 0033).
 func (s *Service) address(ctx context.Context, token string, d postgres.SlackDelivery) (string, error) {
-	if d.TargetKind != "channel" {
+	if d.TargetKind != alert.TargetChannel {
 		return s.client.LookupByEmail(ctx, token, d.Target)
 	}
 	stored, err := s.stored(ctx, d.Customer)
