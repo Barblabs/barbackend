@@ -53,7 +53,7 @@ func TestNewStandingShowsEachGroupInBrief(t *testing.T) {
 	}
 	want := assessment.Summary{
 		Finding: finding, CVE: cve, Asset: "pg-prod-01", Criticality: "high", Exposure: "unknown",
-		Lifecycle: "production", CriticalServices: []string{"Pagos en línea"}, Component: "PostgreSQL 15.6",
+		Lifecycle: "production", Classification: "unclassified", CriticalServices: []string{"Pagos en línea"}, Component: "PostgreSQL 15.6",
 		Score: 0.9131, KEV: true, EPSS: ptr(0.9003), Exploitation: []string{"T1190"},
 	}
 	if !reflect.DeepEqual(standing[1].Findings[0], want) {
@@ -175,6 +175,9 @@ func TestChanged(t *testing.T) {
 		{"ransomware used it already", func(was, now *assessment.Dossier) { was.KEV, now.KEV = ransomware("Known"), ransomware("Known") }, false},
 		{"the Cartógrafo labeled it since", func(was, _ *assessment.Dossier) { was.Techniques = nil }, true},
 		{"the Cartógrafo labeled it already", func(_, now *assessment.Dossier) { now.Techniques = append(now.Techniques, now.Techniques[0]) }, false},
+		{"its Band changed by a small move", func(was, now *assessment.Dossier) { was.Score.Band, now.Score.Band = "high", "critical" }, true},
+		{"its Band stayed", func(was, now *assessment.Dossier) { was.Score.Band, now.Score.Band = "high", "high" }, false},
+		{"a Band where there was none", func(_, now *assessment.Dossier) { now.Score.Band = "critical" }, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

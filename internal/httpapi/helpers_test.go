@@ -424,7 +424,10 @@ func (e env) prioritize(t *testing.T) agents.Prioritization {
 			}
 			ids = append(ids, id.String())
 			value := []float64{0.3, 0.6}[i]
-			_, err = tx.SaveScoreIfChanged(ctx, id, scoring.Score{Model: 2, Value: value, Factors: scoring.Factors{Alpha: 0.5, Beta: 0.5, Vulnerability: value, CriticalityMultiplier: 1, ExposureMultiplier: 1, LifecycleMultiplier: 1}})
+			exploitSignal := 0.0
+			_, err = tx.SaveScoreIfChanged(ctx, id, scoring.Score{Model: 3, Value: value, Factors: scoring.Factors{
+				Alpha: 0.5, Beta: 0, Vulnerability: value, CriticalityMultiplier: 1, ExposureMultiplier: 1, LifecycleMultiplier: 1, ExploitSignal: &exploitSignal,
+			}})
 			return err
 		})
 		if err != nil {
@@ -505,12 +508,16 @@ type findingBody struct {
 			Name             string `json:"name"`
 			Criticality      string `json:"criticality"`
 			LifecycleStage   string `json:"lifecycle_stage"`
+			Classification   string `json:"information_classification"`
 			CriticalServices []any  `json:"critical_services"`
 		} `json:"asset"`
 		ScoreDetails struct {
-			Value               float64  `json:"value"`
-			LifecycleMultiplier float64  `json:"lifecycle_multiplier"`
-			DataGaps            []string `json:"data_gaps"`
+			Value                    float64  `json:"value"`
+			LifecycleMultiplier      float64  `json:"lifecycle_multiplier"`
+			ExploitSignal            *float64 `json:"exploit_signal"`
+			ClassificationMultiplier *float64 `json:"information_classification_multiplier"`
+			Band                     *string  `json:"band"`
+			DataGaps                 []string `json:"data_gaps"`
 		} `json:"score_details"`
 		KEV *struct {
 			DateAdded string `json:"date_added"`
@@ -525,10 +532,12 @@ type findingBody struct {
 		Asset struct {
 			Criticality    string `json:"criticality"`
 			LifecycleStage string `json:"lifecycle_stage"`
+			Classification string `json:"information_classification"`
 		} `json:"asset"`
 		ScoreDetails struct {
 			Value               float64 `json:"value"`
 			LifecycleMultiplier float64 `json:"lifecycle_multiplier"`
+			Band                *string `json:"band"`
 		} `json:"score_details"`
 	} `json:"current"`
 }

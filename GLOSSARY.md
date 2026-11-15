@@ -125,11 +125,15 @@ A reason a Finding's match is uncertain, such as a version that could not be com
 _Avoid_: Dudoso, warning, uncertain boolean
 
 **Score**:
-A deterministic number from 0 to 1 that ranks how urgently a Finding should be remediated, computed from its Vulnerability's CVSS base score, EPSS probability and presence in the CISA KEV catalog, and its Asset's Criticality, Exposure and Lifecycle Stage.
+A deterministic number from 0 to 1 that ranks how urgently a Finding should be remediated, computed from its Vulnerability's CVSS base score, EPSS probability and presence in the CISA KEV catalog, and its Asset's Criticality, Exposure, Lifecycle Stage and, from Scoring Model 3, Information Classification (ADR 0032).
 _Avoid_: Risk score, priority, rating
 
+**Exploit Signal**:
+How strongly KEV and EPSS say a Vulnerability is exploited, from 0 to 1: 1 when KEV lists its CVE, else its EPSS probability over 10%, capped at 1. From Scoring Model 3 it sets how much of the CVSS base score counts (ADR 0032).
+_Avoid_: Threat (Techniques, Advisories and News are Threats), exploitation (the role of a Technique that gets an attacker in)
+
 **Score Band**:
-A named range of Scores used to decide how a Finding is reported.
+A named range of Scores: Critical, High, Medium or Low, set by the Scoring Model from Model 3 (ADR 0032). A change of Band places the Finding again in the Prioritizer's order.
 _Avoid_: Tier, severity, level
 
 **Scoring Model**:
@@ -153,7 +157,7 @@ Where an Asset is in its life: Production, Implementation, Stock, or Unknown. It
 _Avoid_: Status, environment, state
 
 **Information Classification**:
-How sensitive the data an Asset holds is: Public, Private, Confidential, or Unclassified. iTop has no field for it, so it is only declared, by a Customer Admin, and is Unclassified until then. It is shown, not scored (ADR 0031). "Private", not "Internal": Internal is an Exposure value.
+How sensitive the data an Asset holds is: Public, Private, Confidential, or Unclassified. iTop has no field for it, so it is only declared, by a Customer Admin, and is Unclassified until then. It is scored from Scoring Model 3, as the higher of it and Criticality, and does not count while Unclassified (ADR 0031, ADR 0032). "Private", not "Internal": Internal is an Exposure value.
 _Avoid_: Data classification, sensitivity
 
 ### Business

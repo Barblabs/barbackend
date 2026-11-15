@@ -202,8 +202,8 @@ func (t *Tx) OpenFindingsOfAsset(ctx context.Context, asset inventory.SourceRefe
 }
 
 // SaveScoreIfChanged stores s as the Finding's newest Score unless its latest
-// Score has the same Scoring Model, value and Data Gaps (ADR 0020). It
-// reports whether it stored one.
+// Score has the same Scoring Model, value, factors and Data Gaps (ADR 0020,
+// ADR 0032). It reports whether it stored one.
 func (t *Tx) SaveScoreIfChanged(ctx context.Context, id finding.ID, s scoring.Score) (bool, error) {
 	latest, err := t.q.LatestFindingScore(ctx, uuid.UUID(id))
 	switch {
@@ -214,16 +214,18 @@ func (t *Tx) SaveScoreIfChanged(ctx context.Context, id finding.ID, s scoring.Sc
 		return false, nil
 	}
 	scoredAt, err := t.q.InsertFindingScore(ctx, sqlcgen.InsertFindingScoreParams{
-		FindingID:             uuid.UUID(id),
-		Model:                 int16(s.Model),
-		Value:                 s.Value,
-		Alpha:                 s.Factors.Alpha,
-		Beta:                  s.Factors.Beta,
-		Gamma:                 s.Factors.Gamma,
-		Vulnerability:         s.Factors.Vulnerability,
-		CriticalityMultiplier: s.Factors.CriticalityMultiplier,
-		ExposureMultiplier:    s.Factors.ExposureMultiplier,
-		LifecycleMultiplier:   s.Factors.LifecycleMultiplier,
+		FindingID:                           uuid.UUID(id),
+		Model:                               int16(s.Model),
+		Value:                               s.Value,
+		Alpha:                               s.Factors.Alpha,
+		Beta:                                s.Factors.Beta,
+		Gamma:                               s.Factors.Gamma,
+		Vulnerability:                       s.Factors.Vulnerability,
+		CriticalityMultiplier:               s.Factors.CriticalityMultiplier,
+		ExposureMultiplier:                  s.Factors.ExposureMultiplier,
+		LifecycleMultiplier:                 s.Factors.LifecycleMultiplier,
+		ExploitSignal:                       s.Factors.ExploitSignal,
+		InformationClassificationMultiplier: s.Factors.ClassificationMultiplier,
 	})
 	if err != nil {
 		return false, fmt.Errorf("insert score of finding %s: %w", id, err)
@@ -256,23 +258,31 @@ func (t *Tx) LatestScore(ctx context.Context, id finding.ID) (scoring.Score, err
 		gaps = append(gaps, scoring.DataGap(g))
 	}
 	return scoring.Score{
-		Model: scoring.ModelVersion(row.Model),
-		Value: row.Value,
-		Factors: scoring.Factors{
-			Alpha: row.Alpha, Beta: row.Beta, Gamma: row.Gamma, Vulnerability: row.Vulnerability,
-			CriticalityMultiplier: row.CriticalityMultiplier, ExposureMultiplier: row.ExposureMultiplier,
-			LifecycleMultiplier: row.LifecycleMultiplier,
-		},
-		Gaps: gaps,
+		Model:   scoring.ModelVersion(row.Model),
+		Value:   row.Value,
+		Factors: latestFactors(row),
+		Gaps:    gaps,
 	}, nil
 }
 
+func latestFactors(row sqlcgen.LatestFindingScoreRow) scoring.Factors {
+	return scoring.Factors{
+		Alpha: row.Alpha, Beta: row.Beta, Gamma: row.Gamma, Vulnerability: row.Vulnerability,
+		CriticalityMultiplier: row.CriticalityMultiplier, ExposureMultiplier: row.ExposureMultiplier,
+		LifecycleMultiplier: row.LifecycleMultiplier,
+		ExploitSignal:       row.ExploitSignal, ClassificationMultiplier: row.InformationClassificationMultiplier,
+	}
+}
+
+// sameScore compares every stored factor, not only the value: under Model 3
+// a factor can change and leave the value as it was (ADR 0032).
 func sameScore(latest sqlcgen.LatestFindingScoreRow, s scoring.Score) bool {
 	gaps := make([]int16, len(s.Gaps))
 	for i, g := range s.Gaps {
 		gaps[i] = int16(g)
 	}
-	return latest.Model == int16(s.Model) && latest.Value == s.Value && slices.Equal(latest.Gaps, gaps)
+	return latest.Model == int16(s.Model) && latest.Value == s.Value && slices.Equal(latest.Gaps, gaps) &&
+		latestFactors(latest).Equal(s.Factors)
 }
 
 func candidate(row sqlcgen.ListActiveComponentsWithProductsRow) Candidate {
@@ -285,7 +295,7 @@ func candidate(row sqlcgen.ListActiveComponentsWithProductsRow) Candidate {
 			Version: row.Version,
 			Product: inventory.Product{Vendor: valueOrZero(row.ProductVendor), Name: valueOrZero(row.ProductName)},
 		},
-		Values: assetValues(row.CriticalityID, row.ExposureID, row.LifecycleStageID),
+		Values: assetValues(row.CriticalityID, row.ExposureID, row.LifecycleStageID, row.DeclaredInformationClassificationID),
 	}
 }
 
@@ -298,16 +308,17 @@ func openFinding(row sqlcgen.ListOpenFindingsOfVulnerabilityRow) OpenFinding {
 		},
 		ComponentName:    row.ComponentName,
 		ComponentVersion: row.ComponentVersion,
-		Values:           assetValues(row.CriticalityID, row.ExposureID, row.LifecycleStageID),
+		Values:           assetValues(row.CriticalityID, row.ExposureID, row.LifecycleStageID, row.DeclaredInformationClassificationID),
 	}
 }
 
 // assetValues reads what scoring needs of an Asset from its catalog ids, NULL
-// being Unknown.
-func assetValues(criticality, exposure, lifecycle *int16) finding.AssetValues {
+// being Unknown, or Unclassified.
+func assetValues(criticality, exposure, lifecycle, classification *int16) finding.AssetValues {
 	return finding.AssetValues{
-		Criticality: inventory.Criticality(valueOrZero(criticality)),
-		Exposure:    inventory.Exposure(valueOrZero(exposure)),
-		Lifecycle:   inventory.LifecycleStage(valueOrZero(lifecycle)),
+		Criticality:    inventory.Criticality(valueOrZero(criticality)),
+		Exposure:       inventory.Exposure(valueOrZero(exposure)),
+		Lifecycle:      inventory.LifecycleStage(valueOrZero(lifecycle)),
+		Classification: inventory.InformationClassification(valueOrZero(classification)),
 	}
 }

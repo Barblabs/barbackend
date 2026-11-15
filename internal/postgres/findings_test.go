@@ -2,6 +2,7 @@ package postgres_test
 
 import (
 	"context"
+	"reflect"
 	"slices"
 	"testing"
 
@@ -183,6 +184,83 @@ func TestOpenFindingsOfSourceReadsOnlyItsOpenFindings(t *testing.T) {
 	}
 }
 
+func TestScoringReadsTheDeclaredInformationClassification(t *testing.T) {
+	t.Parallel()
+	w := newFindingWorld(t)
+	saveMatch(t, w.db, match(t, w.payments, "1.18.0"))
+	saveMatch(t, w.db, match(t, w.lab, "1.18.0"))
+	admin := storeUser(t, w.db, "admin@example.com", tenancy.CustomerAdmin, w.customer)
+	page := inTxValue(t, w.db, func(tx *postgres.Tx) (postgres.AssetPage, error) {
+		return tx.ListAssets(context.Background(), postgres.AssetListQuery{Customer: w.customer, Limit: 10})
+	})
+	for _, a := range page.Assets {
+		if a.Asset.Ref() == w.payments {
+			declareConfidential(t, w.db, w.customer, a.ID, admin.ID())
+		}
+	}
+	want := map[inventory.SourceReference]inventory.InformationClassification{
+		w.payments: inventory.ClassifiedConfidential,
+		w.lab:      inventory.Unclassified,
+	}
+
+	candidates := inTxValue(t, w.db, func(tx *postgres.Tx) ([]postgres.Candidate, error) {
+		return tx.ComponentsWithProducts(context.Background(), []inventory.Product{{Vendor: "f5", Name: "nginx"}})
+	})
+	for _, c := range candidates {
+		if c.Values.Classification != want[c.Asset] {
+			t.Errorf("candidate on %v classification = %v, want %v", c.Asset, c.Values.Classification, want[c.Asset])
+		}
+	}
+	open := openFindingsOf(t, w.db, "CVE-2021-23017")
+	if len(open) != 2 {
+		t.Fatalf("open findings = %+v, want payments' and lab's", open)
+	}
+	for _, f := range open {
+		if f.Values.Classification != want[f.Key.Asset] {
+			t.Errorf("open finding on %v classification = %v, want %v", f.Key.Asset, f.Values.Classification, want[f.Key.Asset])
+		}
+	}
+}
+
+func TestModel3ScoresKeepTheExploitSignalAndTheClassificationMultiplier(t *testing.T) {
+	t.Parallel()
+	w := newFindingWorld(t)
+	id, _ := saveMatch(t, w.db, match(t, w.payments, "1.18.0"))
+	cvss, epss := 8.1, 0.02
+	in := scoring.Inputs{
+		CVSS: &cvss, EPSS: &epss, Criticality: inventory.CriticalityHigh, Classification: inventory.ClassifiedPrivate,
+		Exposure: inventory.Internal, Lifecycle: inventory.LifecycleProduction,
+	}
+	classified, err := scoring.Model3.Compute(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	in.Classification = inventory.Unclassified
+	unclassified, err := scoring.Model3.Compute(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, want := range []scoring.Score{classified, unclassified} {
+		inTx(t, w.db, func(tx *postgres.Tx) error {
+			if stored, err := tx.SaveScoreIfChanged(context.Background(), id, want); err != nil || !stored {
+				t.Fatalf("save %+v stored = %t, %v, want stored", want, stored, err)
+			}
+			latest, err := tx.LatestScore(context.Background(), id)
+			if !reflect.DeepEqual(latest.Factors, want.Factors) || !slices.Equal(latest.Gaps, want.Gaps) {
+				t.Errorf("latest score = %+v, want %+v", latest, want)
+			}
+			return err
+		})
+		open := inTxValue(t, w.db, func(tx *postgres.Tx) ([]postgres.CustomerFinding, error) {
+			return tx.OpenFindingsOfCustomer(context.Background(), w.customer)
+		})
+		if len(open) != 1 || !reflect.DeepEqual(open[0].Score.Factors, want.Factors) {
+			t.Errorf("open findings = %+v, want one with the factors %+v", open, want.Factors)
+		}
+	}
+}
+
 func TestSaveScoreIfChangedStoresOnlyAChangedScore(t *testing.T) {
 	t.Parallel()
 	w := newFindingWorld(t)
@@ -198,6 +276,13 @@ func TestSaveScoreIfChangedStoresOnlyAChangedScore(t *testing.T) {
 	nextModel.Model = 2
 	withGap := nextModel
 	withGap.Gaps = []scoring.DataGap{scoring.ExposureUndeclared, scoring.LifecycleUnknown}
+	// Under Model 3 a Public then Confidential Asset of High Criticality keeps
+	// its value, while its classification multiplier moves.
+	public, confidential := 0.5, 1.0
+	classified := withGap
+	classified.Model, classified.Factors.ClassificationMultiplier = 3, &public
+	reclassified := classified
+	reclassified.Factors.ClassificationMultiplier = &confidential
 
 	for i, step := range []struct {
 		score  scoring.Score
@@ -209,6 +294,10 @@ func TestSaveScoreIfChangedStoresOnlyAChangedScore(t *testing.T) {
 		{nextModel, false},
 		{withGap, true},
 		{withGap, false},
+		{classified, true},
+		{classified, false},
+		{reclassified, true},
+		{reclassified, false},
 	} {
 		inTx(t, w.db, func(tx *postgres.Tx) error {
 			stored, err := tx.SaveScoreIfChanged(context.Background(), id, step.score)
@@ -220,8 +309,8 @@ func TestSaveScoreIfChangedStoresOnlyAChangedScore(t *testing.T) {
 	}
 	inTx(t, w.db, func(tx *postgres.Tx) error {
 		latest, err := tx.LatestScore(context.Background(), id)
-		if latest.Value != 0.308 || !slices.Equal(latest.Gaps, withGap.Gaps) || latest.Factors != withGap.Factors {
-			t.Errorf("latest score = %+v, want %+v", latest, withGap)
+		if latest.Value != 0.308 || latest.Model != 3 || !slices.Equal(latest.Gaps, reclassified.Gaps) || !latest.Factors.Equal(reclassified.Factors) {
+			t.Errorf("latest score = %+v, want %+v", latest, reclassified)
 		}
 		return err
 	})

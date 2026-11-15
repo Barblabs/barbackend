@@ -9,6 +9,7 @@
       "criticality": "high",
       "exposure": "internal",
       "lifecycle_stage": "production",
+      "information_classification": "unclassified",
       "software": [
         {
           "role": "operating_system",
@@ -152,6 +153,7 @@
       "criticality": "high",
       "exposure": "internal",
       "lifecycle_stage": "production",
+      "information_classification": "unclassified",
       "software": [
         {
           "role": "operating_system",
@@ -1096,6 +1098,7 @@
       "criticality": "medium",
       "exposure": "internet_facing",
       "lifecycle_stage": "production",
+      "information_classification": "unclassified",
       "software": [
         {
           "role": "operating_system",
@@ -1306,6 +1309,7 @@
       "criticality": "medium",
       "exposure": "internet_facing",
       "lifecycle_stage": "production",
+      "information_classification": "unclassified",
       "software": [
         {
           "role": "operating_system",
@@ -1540,6 +1544,7 @@
       "criticality": "low",
       "exposure": "internal",
       "lifecycle_stage": "production",
+      "information_classification": "unclassified",
       "software": [
         {
           "role": "application",

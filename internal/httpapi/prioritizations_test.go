@@ -52,7 +52,12 @@ func TestPrioritizationLifecycle(t *testing.T) {
 	if details.Asset.LifecycleStage != "unknown" || details.ScoreDetails.LifecycleMultiplier != 1 {
 		t.Errorf("details = %+v, want the unknown stage of an Asset the CMDB gave none and its multiplier 1", details)
 	}
-	if c := first.Current; c == nil || c.Asset.Criticality != "high" || c.Asset.LifecycleStage != "unknown" || c.ScoreDetails.Value != 0.3 || c.ScoreDetails.LifecycleMultiplier != 1 {
+	if s := details.ScoreDetails; details.Asset.Classification != "unclassified" || s.Band == nil || *s.Band != "medium" ||
+		s.ExploitSignal == nil || *s.ExploitSignal != 0 || s.ClassificationMultiplier != nil {
+		t.Errorf("details = %+v, want an Unclassified Asset and a Model 3 Score of Band medium, ExploitSignal 0 and no classification multiplier", details)
+	}
+	if c := first.Current; c == nil || c.Asset.Criticality != "high" || c.Asset.LifecycleStage != "unknown" || c.Asset.Classification != "unclassified" ||
+		c.ScoreDetails.Value != 0.3 || c.ScoreDetails.LifecycleMultiplier != 1 || c.ScoreDetails.Band == nil || *c.ScoreDetails.Band != "medium" {
 		t.Errorf("current = %+v, want the open Finding as it is now", first.Current)
 	}
 	if details.KEV == nil || details.KEV.DateAdded != "2025-02-13" || details.Labeling.Outcome != "not_tried" {

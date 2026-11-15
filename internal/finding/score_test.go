@@ -32,7 +32,10 @@ func TestScoreInputsReadsEveryFeed(t *testing.T) {
 		stix2.OptionExtension(string(stixext.EPSSDefinitionID), stixext.NewEPSS(stixext.EPSS{Probability: 0.42, Percentile: 0.9})),
 		stix2.OptionExtension(string(stixext.KEVDefinitionID), stixext.NewKEV(stixext.KEV{DateAdded: "2021-12-10"})),
 	)
-	in := finding.ScoreInputs(v, finding.AssetValues{Criticality: inventory.CriticalityHigh, Exposure: inventory.Internal, Lifecycle: inventory.LifecycleStock}, false)
+	in := finding.ScoreInputs(v, finding.AssetValues{
+		Criticality: inventory.CriticalityHigh, Exposure: inventory.Internal, Lifecycle: inventory.LifecycleStock,
+		Classification: inventory.ClassifiedPrivate,
+	}, false)
 	if in.CVSS == nil || *in.CVSS != 8.1 {
 		t.Errorf("CVSS = %v, want NVD's Primary 8.1 over the Secondary", in.CVSS)
 	}
@@ -40,7 +43,7 @@ func TestScoreInputsReadsEveryFeed(t *testing.T) {
 		t.Errorf("EPSS = %v, want 0.42", in.EPSS)
 	}
 	if !in.KEVListed || in.KEVStale || in.Criticality != inventory.CriticalityHigh || in.Exposure != inventory.Internal ||
-		in.Lifecycle != inventory.LifecycleStock {
+		in.Lifecycle != inventory.LifecycleStock || in.Classification != inventory.ClassifiedPrivate {
 		t.Errorf("inputs = %+v", in)
 	}
 }

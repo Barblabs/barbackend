@@ -25,11 +25,15 @@ const (
 	FeedNVD  = "nvd"
 )
 
-const unknown = "unknown"
+const (
+	unknown      = "unknown"
+	unclassified = "unclassified"
+)
 
 var dataGaps = []string{
 	scoring.CVSSEstimated.String(), scoring.EPSSPending.String(), scoring.KEVStale.String(),
 	scoring.CriticalityUnknown.String(), scoring.ExposureUndeclared.String(), scoring.LifecycleUnknown.String(),
+	scoring.ClassificationUndeclared.String(),
 }
 
 // ErrInvalidDossier is a Dossier that names no Finding, no real CVE or no
@@ -66,12 +70,15 @@ type Dossier struct {
 
 // Asset holds what an Agent needs of an Asset, which excludes its Asset Owner.
 type Asset struct {
-	Name        string     `json:"name"`
-	Kind        string     `json:"kind"`
-	Criticality string     `json:"criticality"`
-	Exposure    string     `json:"exposure"`
-	Lifecycle   string     `json:"lifecycle_stage"`
-	Software    []Software `json:"software"`
+	Name        string `json:"name"`
+	Kind        string `json:"kind"`
+	Criticality string `json:"criticality"`
+	Exposure    string `json:"exposure"`
+	Lifecycle   string `json:"lifecycle_stage"`
+	// Classification is the declared Information Classification, or
+	// unclassified (ADR 0031).
+	Classification string     `json:"information_classification"`
+	Software       []Software `json:"software"`
 	// CriticalServices are those of the Customer's Business Context that name
 	// the Asset among the Assets that run them (ADR 0017).
 	CriticalServices []CriticalService `json:"critical_services"`
@@ -154,20 +161,28 @@ type Software struct {
 
 // Score is a Score as an Agent reads it, rounded to digits it can cite.
 type Score struct {
-	ScoringModel          int      `json:"scoring_model"`
-	Value                 float64  `json:"value"`
-	Alpha                 float64  `json:"alpha"`
-	Beta                  float64  `json:"beta"`
-	Gamma                 float64  `json:"gamma"`
-	Vulnerability         float64  `json:"vulnerability"`
-	CriticalityMultiplier float64  `json:"criticality_multiplier"`
-	ExposureMultiplier    float64  `json:"exposure_multiplier"`
-	LifecycleMultiplier   float64  `json:"lifecycle_multiplier"`
-	DataGaps              []string `json:"data_gaps"`
+	ScoringModel          int     `json:"scoring_model"`
+	Value                 float64 `json:"value"`
+	Alpha                 float64 `json:"alpha"`
+	Beta                  float64 `json:"beta"`
+	Gamma                 float64 `json:"gamma"`
+	Vulnerability         float64 `json:"vulnerability"`
+	CriticalityMultiplier float64 `json:"criticality_multiplier"`
+	ExposureMultiplier    float64 `json:"exposure_multiplier"`
+	LifecycleMultiplier   float64 `json:"lifecycle_multiplier"`
+	// ExploitSignal, the classification multiplier and the Band are set from
+	// Scoring Model 3 (ADR 0032); the multiplier is also left out when the
+	// Asset is Unclassified, which does not count.
+	ExploitSignal            *float64 `json:"exploit_signal,omitempty"`
+	ClassificationMultiplier *float64 `json:"information_classification_multiplier,omitempty"`
+	Band                     string   `json:"band,omitempty"`
+	DataGaps                 []string `json:"data_gaps"`
 }
 
 // UnmarshalJSON reads a Score stored before Scoring Model 2 had a lifecycle
 // factor with a lifecycle multiplier of 1, as Model 1 scored it (ADR 0028).
+// A Score stored before Model 3 reads with no ExploitSignal, classification
+// multiplier or Band, as Models 1 and 2 have none.
 func (s *Score) UnmarshalJSON(data []byte) error {
 	type plain Score
 	p := plain{LifecycleMultiplier: 1}
@@ -179,10 +194,11 @@ func (s *Score) UnmarshalJSON(data []byte) error {
 }
 
 // UnmarshalJSON reads an Asset stored before it had a Lifecycle Stage with an
-// unknown one (ADR 0028).
+// unknown one (ADR 0028), and one stored before Dossiers carried the
+// Information Classification as unclassified (ADR 0032).
 func (a *Asset) UnmarshalJSON(data []byte) error {
 	type plain Asset
-	p := plain{Lifecycle: unknown}
+	p := plain{Lifecycle: unknown, Classification: unclassified}
 	if err := json.Unmarshal(data, &p); err != nil {
 		return err
 	}
@@ -324,6 +340,9 @@ func (a Asset) problems() []string {
 	if _, err := inventory.ParseLifecycleStage(a.Lifecycle); err != nil && a.Lifecycle != unknown {
 		problems = append(problems, fmt.Sprintf("asset lifecycle stage %q is not production, implementation, stock or unknown", a.Lifecycle))
 	}
+	if _, err := inventory.ParseInformationClassification(a.Classification); err != nil && a.Classification != unclassified {
+		problems = append(problems, fmt.Sprintf("asset information classification %q is not confidential, private, public or unclassified", a.Classification))
+	}
 	for _, s := range a.Software {
 		if _, err := inventory.ParseSoftwareRole(s.Role); err != nil {
 			problems = append(problems, fmt.Sprintf("software %q has role %q, not operating_system or application", s.Name, s.Role))
@@ -361,7 +380,26 @@ func (s Score) problems() []string {
 			problems = append(problems, fmt.Sprintf("data gap %q is not one a Scoring Model records", gap))
 		}
 	}
+	if s.ExploitSignal != nil && !inRange(*s.ExploitSignal, 1) {
+		problems = append(problems, fmt.Sprintf("exploit signal %v is out of range", *s.ExploitSignal))
+	}
+	if m := s.ClassificationMultiplier; m != nil && (*m <= 0 || *m > 1) {
+		problems = append(problems, fmt.Sprintf("information classification multiplier %v is out of range", *m))
+	}
+	if want := bandOf(s); s.Band != want {
+		problems = append(problems, fmt.Sprintf("band %q is not %q, the Band of %v under scoring model %d", s.Band, want, s.Value, s.ScoringModel))
+	}
 	return problems
+}
+
+// bandOf is the Band the Score's own Model gives its value, blank for a Model
+// without Bands.
+func bandOf(s Score) string {
+	band, ok := scoring.Score{Model: scoring.ModelVersion(s.ScoringModel), Value: s.Value}.Band()
+	if !ok {
+		return ""
+	}
+	return band.String()
 }
 
 // Brief is what the Prioritizer reads of a Finding: enough to weigh it against
@@ -396,6 +434,7 @@ type AssetContext struct {
 	Criticality      string            `json:"criticality"`
 	Exposure         string            `json:"exposure"`
 	Lifecycle        string            `json:"lifecycle_stage"`
+	Classification   string            `json:"information_classification"`
 	CriticalServices []CriticalService `json:"critical_services"`
 }
 
@@ -430,7 +469,7 @@ func (d Dossier) Brief() Brief {
 		Description: d.Description,
 		Asset: AssetContext{
 			Name: d.Asset.Name, Kind: d.Asset.Kind, Criticality: d.Asset.Criticality, Exposure: d.Asset.Exposure,
-			Lifecycle: d.Asset.Lifecycle, CriticalServices: nonNil(d.Asset.CriticalServices),
+			Lifecycle: d.Asset.Lifecycle, Classification: d.Asset.Classification, CriticalServices: nonNil(d.Asset.CriticalServices),
 		},
 		Component:        d.Component,
 		Score:            d.Score,
@@ -488,18 +527,19 @@ func NewAsset(a *inventory.Asset) Asset {
 		software[i] = Software{Role: c.Role.Code(), Name: c.Name, Version: c.Version, ProductVendor: c.Product.Vendor, ProductName: c.Product.Name}
 	}
 	return Asset{
-		Name:        imported.Name(),
-		Kind:        imported.Kind().Code(),
-		Criticality: codeOrUnknown(imported.Criticality().Code()),
-		Exposure:    codeOrUnknown(a.Exposure().Code()),
-		Lifecycle:   codeOrUnknown(imported.Lifecycle().Code()),
-		Software:    software,
+		Name:           imported.Name(),
+		Kind:           imported.Kind().Code(),
+		Criticality:    codeOr(imported.Criticality().Code(), unknown),
+		Exposure:       codeOr(a.Exposure().Code(), unknown),
+		Lifecycle:      codeOr(imported.Lifecycle().Code(), unknown),
+		Classification: codeOr(a.InformationClassification().Code(), unclassified),
+		Software:       software,
 	}
 }
 
-func codeOrUnknown(code string) string {
+func codeOr(code, fallback string) string {
 	if code == "" {
-		return unknown
+		return fallback
 	}
 	return code
 }
@@ -509,18 +549,30 @@ func newScore(s scoring.Score) Score {
 	for i, gap := range s.Gaps {
 		gaps[i] = gap.String()
 	}
-	return Score{
-		ScoringModel:          int(s.Model),
-		Value:                 rounded(s.Value),
-		Alpha:                 rounded(s.Factors.Alpha),
-		Beta:                  rounded(s.Factors.Beta),
-		Gamma:                 rounded(s.Factors.Gamma),
-		Vulnerability:         rounded(s.Factors.Vulnerability),
-		CriticalityMultiplier: rounded(s.Factors.CriticalityMultiplier),
-		ExposureMultiplier:    rounded(s.Factors.ExposureMultiplier),
-		LifecycleMultiplier:   rounded(s.Factors.LifecycleMultiplier),
-		DataGaps:              gaps,
+	out := Score{
+		ScoringModel:             int(s.Model),
+		Value:                    rounded(s.Value),
+		Alpha:                    rounded(s.Factors.Alpha),
+		Beta:                     rounded(s.Factors.Beta),
+		Gamma:                    rounded(s.Factors.Gamma),
+		Vulnerability:            rounded(s.Factors.Vulnerability),
+		CriticalityMultiplier:    rounded(s.Factors.CriticalityMultiplier),
+		ExposureMultiplier:       rounded(s.Factors.ExposureMultiplier),
+		LifecycleMultiplier:      rounded(s.Factors.LifecycleMultiplier),
+		ExploitSignal:            roundedOrNil(s.Factors.ExploitSignal),
+		ClassificationMultiplier: roundedOrNil(s.Factors.ClassificationMultiplier),
+		DataGaps:                 gaps,
 	}
+	out.Band = bandOf(out)
+	return out
 }
 
 func rounded(v float64) float64 { return math.Round(v*1e4) / 1e4 }
+
+func roundedOrNil(v *float64) *float64 {
+	if v == nil {
+		return nil
+	}
+	r := rounded(*v)
+	return &r
+}

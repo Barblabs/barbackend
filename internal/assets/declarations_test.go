@@ -130,60 +130,98 @@ func assetOf(t *testing.T, svc *assets.Service, customer tenancy.CustomerID, rec
 	return page.Assets[i]
 }
 
-func TestDeclareExposureStoresTheCallersDeclarationAndRescoresTheAsset(t *testing.T) {
-	t.Parallel()
-	e := newEnv(t)
-	vm := e.asset(t, "vm")
-
-	got, err := e.assets.DeclareExposure(context.Background(), e.admin, vm.ID, inventory.Internal)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if got.Asset.Exposure() != inventory.Internal || got.ExposureAudit.By != e.admin.Email() {
-		t.Errorf("returned exposure %v declared %+v, want Internal by %s", got.Asset.Exposure(), got.ExposureAudit, e.admin.Email())
-	}
-	if stored := e.asset(t, "vm"); stored.Asset.Exposure() != inventory.Internal {
-		t.Errorf("stored exposure = %v, want Internal", stored.Asset.Exposure())
-	}
-	if want := []inventory.SourceReference{vm.Asset.Ref()}; !slices.Equal(e.rescorer.rescored, want) {
-		t.Errorf("rescored %v, want %v", e.rescorer.rescored, want)
-	}
+// scoredDeclaration is a value a Customer Admin declares over an Asset and
+// that the Score reads, so declaring and clearing it rescores the Asset.
+type scoredDeclaration struct {
+	name     string
+	declare  func(e env, id int64) (assets.StoredAsset, error)
+	clear    func(e env, id int64) (assets.StoredAsset, error)
+	declared func(assets.StoredAsset) bool
+	cleared  func(assets.StoredAsset) bool
+	audit    func(assets.StoredAsset) postgres.DeclarationAudit
 }
 
-func TestClearExposureFallsBackToTheImportedExposureAndRescores(t *testing.T) {
+var scoredDeclarations = []scoredDeclaration{
+	{
+		name: "exposure",
+		declare: func(e env, id int64) (assets.StoredAsset, error) {
+			return e.assets.DeclareExposure(context.Background(), e.admin, id, inventory.Internal)
+		},
+		clear: func(e env, id int64) (assets.StoredAsset, error) {
+			return e.assets.ClearExposure(context.Background(), e.admin, id)
+		},
+		declared: func(a assets.StoredAsset) bool { return a.Asset.Exposure() == inventory.Internal },
+		cleared:  func(a assets.StoredAsset) bool { return a.Asset.Exposure() == inventory.ExposureUnknown },
+		audit:    func(a assets.StoredAsset) postgres.DeclarationAudit { return a.ExposureAudit },
+	},
+	{
+		name: "information classification",
+		declare: func(e env, id int64) (assets.StoredAsset, error) {
+			return e.assets.DeclareInformationClassification(context.Background(), e.admin, id, inventory.ClassifiedConfidential)
+		},
+		clear: func(e env, id int64) (assets.StoredAsset, error) {
+			return e.assets.ClearInformationClassification(context.Background(), e.admin, id)
+		},
+		declared: func(a assets.StoredAsset) bool {
+			return a.Asset.InformationClassification() == inventory.ClassifiedConfidential
+		},
+		cleared: func(a assets.StoredAsset) bool { return a.Asset.InformationClassification() == inventory.Unclassified },
+		audit:   func(a assets.StoredAsset) postgres.DeclarationAudit { return a.InformationClassificationAudit },
+	},
+}
+
+func TestAScoredDeclarationIsStoredClearedAndRescoredEachTime(t *testing.T) {
 	t.Parallel()
-	e := newEnv(t)
-	vm := e.asset(t, "vm")
-	if _, err := e.assets.DeclareExposure(context.Background(), e.admin, vm.ID, inventory.Internal); err != nil {
-		t.Fatal(err)
-	}
+	for _, d := range scoredDeclarations {
+		t.Run(d.name, func(t *testing.T) {
+			t.Parallel()
+			e := newEnv(t)
+			vm := e.asset(t, "vm")
 
-	got, err := e.assets.ClearExposure(context.Background(), e.admin, vm.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
+			got, err := d.declare(e, vm.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !d.declared(got) || d.audit(got).By != e.admin.Email() {
+				t.Errorf("returned %+v declared %+v, want the caller's Declaration by %s", got.Asset, d.audit(got), e.admin.Email())
+			}
+			if stored := e.asset(t, "vm"); !d.declared(stored) {
+				t.Errorf("stored %+v, want the Declaration", stored.Asset)
+			}
+			if want := []inventory.SourceReference{vm.Asset.Ref()}; !slices.Equal(e.rescorer.rescored, want) {
+				t.Errorf("rescored %v, want %v", e.rescorer.rescored, want)
+			}
 
-	if got.Asset.Exposure() != inventory.ExposureUnknown || got.ExposureAudit != (postgres.DeclarationAudit{}) {
-		t.Errorf("exposure %v declared %+v, want Unknown and no Declaration", got.Asset.Exposure(), got.ExposureAudit)
-	}
-	if len(e.rescorer.rescored) != 2 {
-		t.Errorf("rescored %d times, want once per change", len(e.rescorer.rescored))
+			got, err = d.clear(e, vm.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !d.cleared(got) || d.audit(got) != (postgres.DeclarationAudit{}) {
+				t.Errorf("cleared %+v declared %+v, want no Declaration", got.Asset, d.audit(got))
+			}
+			if len(e.rescorer.rescored) != 2 {
+				t.Errorf("rescored %d times, want once per change", len(e.rescorer.rescored))
+			}
+		})
 	}
 }
 
 func TestADeclarationStandsWhenRescoringFails(t *testing.T) {
 	t.Parallel()
-	e := newEnv(t)
-	e.rescorer.err = errors.New("database went away")
-	vm := e.asset(t, "vm")
+	for _, d := range scoredDeclarations {
+		t.Run(d.name, func(t *testing.T) {
+			t.Parallel()
+			e := newEnv(t)
+			e.rescorer.err = errors.New("database went away")
+			vm := e.asset(t, "vm")
 
-	if _, err := e.assets.DeclareExposure(context.Background(), e.admin, vm.ID, inventory.Internal); !errors.Is(err, e.rescorer.err) {
-		t.Fatalf("err = %v, want the rescoring failure", err)
-	}
-
-	if stored := e.asset(t, "vm"); stored.Asset.Exposure() != inventory.Internal {
-		t.Errorf("stored exposure = %v, want the Internal declared before rescoring failed", stored.Asset.Exposure())
+			if _, err := d.declare(e, vm.ID); !errors.Is(err, e.rescorer.err) {
+				t.Fatalf("err = %v, want the rescoring failure", err)
+			}
+			if stored := e.asset(t, "vm"); !d.declared(stored) {
+				t.Errorf("stored %+v, want the Declaration made before rescoring failed", stored.Asset)
+			}
+		})
 	}
 }
 
@@ -218,50 +256,6 @@ func TestDeclaringExposureIsRefused(t *testing.T) {
 	}
 }
 
-func TestDeclareInformationClassificationStoresTheCallersDeclarationWithoutRescoring(t *testing.T) {
-	t.Parallel()
-	e := newEnv(t)
-	vm := e.asset(t, "vm")
-
-	got, err := e.assets.DeclareInformationClassification(context.Background(), e.admin, vm.ID, inventory.ClassifiedConfidential)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if got.Asset.InformationClassification() != inventory.ClassifiedConfidential || got.InformationClassificationAudit.By != e.admin.Email() {
-		t.Errorf("returned classification %v declared %+v, want Confidential by %s",
-			got.Asset.InformationClassification(), got.InformationClassificationAudit, e.admin.Email())
-	}
-	if stored := e.asset(t, "vm"); stored.Asset.InformationClassification() != inventory.ClassifiedConfidential {
-		t.Errorf("stored classification = %v, want Confidential", stored.Asset.InformationClassification())
-	}
-	if len(e.rescorer.rescored) != 0 {
-		t.Errorf("rescored %v, want nothing: Information Classification is not scored", e.rescorer.rescored)
-	}
-}
-
-func TestClearInformationClassificationLeavesTheAssetUnclassifiedWithoutRescoring(t *testing.T) {
-	t.Parallel()
-	e := newEnv(t)
-	vm := e.asset(t, "vm")
-	if _, err := e.assets.DeclareInformationClassification(context.Background(), e.admin, vm.ID, inventory.ClassifiedPublic); err != nil {
-		t.Fatal(err)
-	}
-
-	got, err := e.assets.ClearInformationClassification(context.Background(), e.admin, vm.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if got.Asset.InformationClassification() != inventory.Unclassified || got.InformationClassificationAudit != (postgres.DeclarationAudit{}) {
-		t.Errorf("classification %v declared %+v, want Unclassified and no Declaration",
-			got.Asset.InformationClassification(), got.InformationClassificationAudit)
-	}
-	if len(e.rescorer.rescored) != 0 {
-		t.Errorf("rescored %v, want nothing: Information Classification is not scored", e.rescorer.rescored)
-	}
-}
-
 func TestDeclaringInformationClassificationIsRefused(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
@@ -291,7 +285,7 @@ func TestDeclaringInformationClassificationIsRefused(t *testing.T) {
 	if _, err := e.assets.ClearInformationClassification(context.Background(), viewer, e.asset(t, "vm").ID); !errors.Is(err, tenancy.ErrNotCustomerAdmin) {
 		t.Errorf("clearing as a viewer: err = %v, want %v", err, tenancy.ErrNotCustomerAdmin)
 	}
-	if stored := e.asset(t, "vm"); stored.Asset.InformationClassification() != inventory.Unclassified {
-		t.Errorf("classification = %v, want nothing declared", stored.Asset.InformationClassification())
+	if stored := e.asset(t, "vm"); stored.Asset.InformationClassification() != inventory.Unclassified || len(e.rescorer.rescored) != 0 {
+		t.Errorf("classification %v after %d rescores, want nothing declared or rescored", stored.Asset.InformationClassification(), len(e.rescorer.rescored))
 	}
 }
