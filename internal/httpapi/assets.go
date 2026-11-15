@@ -45,7 +45,7 @@ func (h assetHandler) register(api huma.API) {
 		Method:      http.MethodPut,
 		Path:        "/assets/{id}/information-classification",
 		Summary:     "Declare an Asset's Information Classification",
-		Description: "Only a Customer Admin declares it, and only on an Active Asset. Unclassified cannot be declared: clear the Declaration instead. It is not scored, so no Finding is rescored. A Sync never changes it.",
+		Description: "Only a Customer Admin declares it, and only on an Active Asset. Unclassified cannot be declared: clear the Declaration instead. The Asset's open Findings are rescored before the response; if that fails, the request fails but the Declaration stands. A Sync never changes it.",
 		Errors:      []int{http.StatusBadRequest, http.StatusNotFound, http.StatusConflict},
 	}, h.declareInformationClassification)
 	register(api, huma.Operation{
@@ -53,7 +53,7 @@ func (h assetHandler) register(api huma.API) {
 		Method:      http.MethodDelete,
 		Path:        "/assets/{id}/information-classification",
 		Summary:     "Clear an Asset's Information Classification",
-		Description: "Only a Customer Admin clears it, even on an Inactive Asset. The Asset is Unclassified again.",
+		Description: "Only a Customer Admin clears it, even on an Inactive Asset. The Asset is Unclassified again, and its open Findings are rescored before the response.",
 		Errors:      []int{http.StatusNotFound},
 	}, h.clearInformationClassification)
 }
