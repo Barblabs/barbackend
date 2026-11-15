@@ -91,24 +91,12 @@ func (assetKindCode) Schema(huma.Registry) *huma.Schema {
 	return &huma.Schema{Type: huma.TypeString, Enum: codes(inventory.Server, inventory.VirtualMachine, inventory.Workstation, inventory.NetworkDevice)}
 }
 
-func (c assetKindCode) parse() (inventory.AssetKind, error) {
-	return inventory.ParseAssetKind(string(c))
-}
-
 const unknownFilterCode = "unknown"
 
 type criticalityFilterCode string
 
 func (criticalityFilterCode) Schema(huma.Registry) *huma.Schema {
-	enum := append(codes(inventory.CriticalityHigh, inventory.CriticalityMedium, inventory.CriticalityLow), unknownFilterCode)
-	return &huma.Schema{Type: huma.TypeString, Enum: enum}
-}
-
-func (c criticalityFilterCode) parse() (inventory.Criticality, error) {
-	if c == unknownFilterCode {
-		return inventory.CriticalityUnknown, nil
-	}
-	return inventory.ParseCriticality(string(c))
+	return &huma.Schema{Type: huma.TypeString, Enum: append(codes(inventory.CriticalityHigh, inventory.CriticalityMedium, inventory.CriticalityLow), unknownFilterCode)}
 }
 
 type exposureFilterCode string
@@ -117,38 +105,40 @@ func (exposureFilterCode) Schema(huma.Registry) *huma.Schema {
 	return &huma.Schema{Type: huma.TypeString, Enum: append(codes(inventory.InternetFacing, inventory.Internal), unknownFilterCode)}
 }
 
-func (c exposureFilterCode) parse() (inventory.Exposure, error) {
-	if c == unknownFilterCode {
-		return inventory.ExposureUnknown, nil
-	}
-	return inventory.ParseExposure(string(c))
-}
-
 func (in assetQuery) query() (assets.Query, error) {
 	q := assets.Query{Limit: int(in.Limit), Cursor: in.Cursor, Filter: assets.Filter{Active: in.Active.keep()}}
 	var err error
-	if q.Filter.Kind, err = parseEach(in.Kind, assetKindCode.parse); err != nil {
+	if q.Filter.Kind, err = parseEach(in.Kind, inventory.ParseAssetKind); err != nil {
 		return assets.Query{}, err
 	}
-	if q.Filter.Criticality, err = parseEach(in.Criticality, criticalityFilterCode.parse); err != nil {
+	if q.Filter.Criticality, err = parseEach(in.Criticality, orUnknown(inventory.CriticalityUnknown, inventory.ParseCriticality)); err != nil {
 		return assets.Query{}, err
 	}
-	if q.Filter.Exposure, err = parseEach(in.Exposure, exposureFilterCode.parse); err != nil {
+	if q.Filter.Exposure, err = parseEach(in.Exposure, orUnknown(inventory.ExposureUnknown, inventory.ParseExposure)); err != nil {
 		return assets.Query{}, err
 	}
 	return q, nil
 }
 
-func parseEach[C, T any](codes []C, parse func(C) (T, error)) ([]T, error) {
+func parseEach[C ~string, T any](codes []C, parse func(string) (T, error)) ([]T, error) {
 	var values []T
 	for _, code := range codes {
-		v, err := parse(code)
+		v, err := parse(string(code))
 		if err != nil {
 			return nil, err
 		}
 		values = append(values, v)
 	}
 	return values, nil
+}
+
+func orUnknown[T any](unknown T, parse func(string) (T, error)) func(string) (T, error) {
+	return func(code string) (T, error) {
+		if code == unknownFilterCode {
+			return unknown, nil
+		}
+		return parse(code)
+	}
 }
 
 type assetListResponse struct {
