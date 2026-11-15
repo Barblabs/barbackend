@@ -45,7 +45,7 @@ The kind `finding_batch` is `{"findings": [...]}`, at most 10 of the above for t
 
 The Score is shown from 0 to 100, as in the portal. The Band leads the message with a colour mark: red Critical, orange High, yellow Medium, white Low. A single Alert shows each value in its own field and the group's reason under "Why it matters". A batch shows one line per Finding, with its group's number and title but not its reason, and links to the portal for the rest. Messages are in English. Until the portal has a page for one Finding, `portal_url` is the portal's own address, from `PORTAL_URL`.
 
-Each Alert, single or batch, is still one row for the Asset Owner and one for the channel (ADR 0029, ADR 0030). A Finding with no Asset Owner gets a DM row with an empty target, which fails as `owner_unreachable` without calling Slack, so an admin sees it.
+Each Alert, single or batch, is still one row for the Asset Owner and one for the channel (ADR 0029, ADR 0030). A channel row's target is `security-team`, not a channel id: the worker sends it to the channel the installation names when it sends, so a row written before an admin picked a channel waits for one, as a row without an installation waits, and a channel changed since gets what was still pending. A Finding with no Asset Owner gets a DM row with an empty target, which fails as `owner_unreachable` without calling Slack, so an admin sees it.
 
 ## Considered Options
 
