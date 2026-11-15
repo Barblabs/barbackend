@@ -28,6 +28,8 @@ const (
 	advisory = "https://www.postgresql.org/support/security/CVE-2025-1094/"
 	pgFind   = "f-1"
 	osFind   = "f-2"
+	// owner is the Asset Owner of the Customer's Asset.
+	owner = "dba@example.com"
 )
 
 var (
@@ -36,6 +38,7 @@ var (
 )
 
 type env struct {
+	url      string
 	db       *postgres.DB
 	llm      *claudetest.Server
 	svc      *agents.Service
@@ -52,13 +55,14 @@ type storedFindings struct {
 
 func newEnv(t *testing.T) env {
 	t.Helper()
-	db, err := postgres.Open(context.Background(), pgtest.URL(t))
+	url := pgtest.URL(t)
+	db, err := postgres.Open(context.Background(), url)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(db.Close)
 	crew, llm := newCrew(t)
-	e := env{db: db, llm: llm, svc: agents.NewService(db, crew), found: &storedFindings{}}
+	e := env{url: url, db: db, llm: llm, svc: agents.NewService(db, crew), found: &storedFindings{}}
 	e.user, e.source = e.newCustomerWithSource(t, "pg-prod-01")
 	if e.customer, err = e.user.ActsFor(); err != nil {
 		t.Fatal(err)
@@ -204,8 +208,17 @@ func assetParams(name string) inventory.ImportedAssetParams {
 		Kind:        inventory.Server,
 		Criticality: inventory.CriticalityHigh,
 		Software:    []inventory.SoftwareComponent{ubuntu, postgreSQL},
+		Owner:       ownerEmail,
 	}
 }
+
+var ownerEmail = func() inventory.OwnerEmail {
+	o, err := inventory.NewOwnerEmail(owner)
+	if err != nil {
+		panic(err)
+	}
+	return o
+}()
 
 func newUser(t *testing.T, role tenancy.Role, customer tenancy.CustomerID) tenancy.User {
 	t.Helper()

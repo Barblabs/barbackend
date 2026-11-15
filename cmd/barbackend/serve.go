@@ -68,7 +68,7 @@ func serve(ctx context.Context, _ []string) error {
 		if err != nil {
 			return err
 		}
-		agentService := agents.NewService(db, newCrew())
+		agentService := newAgentService(db)
 		userService := users.New(db, verifier, admin)
 		agentService.OnOrderFeedback(changed.notify)
 		label := func(ctx context.Context) (agents.LabelingRun, error) {
