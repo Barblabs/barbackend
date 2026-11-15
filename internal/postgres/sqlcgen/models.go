@@ -194,17 +194,19 @@ type FindingPlacement struct {
 }
 
 type FindingScore struct {
-	FindingID             uuid.UUID
-	ScoredAt              time.Time
-	Model                 int16
-	Value                 float64
-	Alpha                 float64
-	Beta                  float64
-	Gamma                 float64
-	Vulnerability         float64
-	CriticalityMultiplier float64
-	ExposureMultiplier    float64
-	LifecycleMultiplier   float64
+	FindingID                           uuid.UUID
+	ScoredAt                            time.Time
+	Model                               int16
+	Value                               float64
+	Alpha                               float64
+	Beta                                float64
+	Gamma                               float64
+	Vulnerability                       float64
+	CriticalityMultiplier               float64
+	ExposureMultiplier                  float64
+	LifecycleMultiplier                 float64
+	Exploitation                        *float64
+	InformationClassificationMultiplier *float64
 }
 
 type FindingScoreDataGap struct {

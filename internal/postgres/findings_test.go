@@ -2,6 +2,7 @@ package postgres_test
 
 import (
 	"context"
+	"reflect"
 	"slices"
 	"testing"
 
@@ -181,6 +182,77 @@ func TestOpenFindingsOfSourceReadsOnlyItsOpenFindings(t *testing.T) {
 	if len(got) != 1 || got[0].Key.Asset != w.payments || got[0].Key.CVE != "CVE-2021-23017" {
 		t.Errorf("open findings = %+v, want payments' only", got)
 	}
+}
+
+func TestModel3ScoresKeepExploitationAndTheClassificationMultiplier(t *testing.T) {
+	t.Parallel()
+	w := newFindingWorld(t)
+	id, _ := saveMatch(t, w.db, match(t, w.payments, "1.18.0"))
+	cvss, epss := 8.1, 0.02
+	in := scoring.Inputs{
+		CVSS: &cvss, EPSS: &epss, Criticality: inventory.CriticalityHigh, Classification: inventory.ClassifiedPrivate,
+		Exposure: inventory.Internal, Lifecycle: inventory.LifecycleProduction,
+	}
+	classified, err := scoring.Model3.Compute(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	in.Classification = inventory.Unclassified
+	unclassified, err := scoring.Model3.Compute(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, want := range []scoring.Score{classified, unclassified} {
+		inTx(t, w.db, func(tx *postgres.Tx) error {
+			if stored, err := tx.SaveScoreIfChanged(context.Background(), id, want); err != nil || !stored {
+				t.Fatalf("save %+v stored = %t, %v, want stored", want, stored, err)
+			}
+			latest, err := tx.LatestScore(context.Background(), id)
+			if !reflect.DeepEqual(latest.Factors, want.Factors) || !slices.Equal(latest.Gaps, want.Gaps) {
+				t.Errorf("latest score = %+v, want %+v", latest, want)
+			}
+			return err
+		})
+		open := inTxValue(t, w.db, func(tx *postgres.Tx) ([]postgres.CustomerFinding, error) {
+			return tx.OpenFindingsOfCustomer(context.Background(), w.customer)
+		})
+		if len(open) != 1 || !reflect.DeepEqual(open[0].Score.Factors, want.Factors) {
+			t.Errorf("open findings = %+v, want one with the factors %+v", open, want.Factors)
+		}
+	}
+}
+
+func TestOnlyModel3ScoresStoreExploitation(t *testing.T) {
+	t.Parallel()
+	w := newFindingWorld(t)
+	id, _ := saveMatch(t, w.db, match(t, w.payments, "1.18.0"))
+	exploitation, multiplier := 0.2, 0.75
+	factors := scoring.Factors{Alpha: 0.81, Beta: 0.02, Vulnerability: 0.486, CriticalityMultiplier: 1, ExposureMultiplier: 0.7, LifecycleMultiplier: 1}
+
+	for _, tt := range []struct {
+		name string
+		s    scoring.Score
+	}{
+		{"model 2 with exploitation", scoring.Score{Model: 2, Value: 0.3, Factors: withFactors(factors, &exploitation, nil)}},
+		{"model 2 with a classification multiplier", scoring.Score{Model: 2, Value: 0.3, Factors: withFactors(factors, nil, &multiplier)}},
+		{"model 3 without exploitation", scoring.Score{Model: 3, Value: 0.3, Factors: factors}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			err := w.db.InTx(context.Background(), func(tx *postgres.Tx) error {
+				_, err := tx.SaveScoreIfChanged(context.Background(), id, tt.s)
+				return err
+			})
+			if err == nil {
+				t.Error("save succeeded, want the database to refuse it")
+			}
+		})
+	}
+}
+
+func withFactors(f scoring.Factors, exploitation, classification *float64) scoring.Factors {
+	f.Exploitation, f.ClassificationMultiplier = exploitation, classification
+	return f
 }
 
 func TestSaveScoreIfChangedStoresOnlyAChangedScore(t *testing.T) {

@@ -214,16 +214,18 @@ func (t *Tx) SaveScoreIfChanged(ctx context.Context, id finding.ID, s scoring.Sc
 		return false, nil
 	}
 	scoredAt, err := t.q.InsertFindingScore(ctx, sqlcgen.InsertFindingScoreParams{
-		FindingID:             uuid.UUID(id),
-		Model:                 int16(s.Model),
-		Value:                 s.Value,
-		Alpha:                 s.Factors.Alpha,
-		Beta:                  s.Factors.Beta,
-		Gamma:                 s.Factors.Gamma,
-		Vulnerability:         s.Factors.Vulnerability,
-		CriticalityMultiplier: s.Factors.CriticalityMultiplier,
-		ExposureMultiplier:    s.Factors.ExposureMultiplier,
-		LifecycleMultiplier:   s.Factors.LifecycleMultiplier,
+		FindingID:                           uuid.UUID(id),
+		Model:                               int16(s.Model),
+		Value:                               s.Value,
+		Alpha:                               s.Factors.Alpha,
+		Beta:                                s.Factors.Beta,
+		Gamma:                               s.Factors.Gamma,
+		Vulnerability:                       s.Factors.Vulnerability,
+		CriticalityMultiplier:               s.Factors.CriticalityMultiplier,
+		ExposureMultiplier:                  s.Factors.ExposureMultiplier,
+		LifecycleMultiplier:                 s.Factors.LifecycleMultiplier,
+		Exploitation:                        s.Factors.Exploitation,
+		InformationClassificationMultiplier: s.Factors.ClassificationMultiplier,
 	})
 	if err != nil {
 		return false, fmt.Errorf("insert score of finding %s: %w", id, err)
@@ -262,6 +264,7 @@ func (t *Tx) LatestScore(ctx context.Context, id finding.ID) (scoring.Score, err
 			Alpha: row.Alpha, Beta: row.Beta, Gamma: row.Gamma, Vulnerability: row.Vulnerability,
 			CriticalityMultiplier: row.CriticalityMultiplier, ExposureMultiplier: row.ExposureMultiplier,
 			LifecycleMultiplier: row.LifecycleMultiplier,
+			Exploitation:        row.Exploitation, ClassificationMultiplier: row.InformationClassificationMultiplier,
 		},
 		Gaps: gaps,
 	}, nil
