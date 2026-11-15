@@ -9,6 +9,7 @@ import (
 	"barbackend/internal/inventory"
 	"barbackend/internal/postgres"
 	"barbackend/internal/postgres/pgtest"
+	"barbackend/internal/tenancy"
 )
 
 func TestListAssetsQueryCountIsIndependentOfPageSize(t *testing.T) {
@@ -54,20 +55,25 @@ func TestListAssetsTotalCountsTheAssetsListedAcrossAllPages(t *testing.T) {
 	db, _ := newDBWithConn(t)
 	customer := newCustomer(t, db)
 	src := newSource(t, db, customer)
-	asset := func(id string, kind inventory.AssetKind, criticality inventory.Criticality) inventory.Record {
-		return record(t, id, inventory.ImportedAssetParams{Name: "asset-" + id, Kind: kind, Criticality: criticality})
+	asset := func(id string, kind inventory.AssetKind, criticality inventory.Criticality, exposure inventory.Exposure) inventory.Record {
+		return record(t, id, inventory.ImportedAssetParams{Name: "asset-" + id, Kind: kind, Criticality: criticality, Exposure: exposure})
 	}
 	active := []inventory.Record{
-		asset("1", inventory.Server, inventory.CriticalityHigh),
-		asset("2", inventory.Server, inventory.CriticalityUnknown),
-		asset("3", inventory.VirtualMachine, inventory.CriticalityLow),
-		asset("4", inventory.VirtualMachine, inventory.CriticalityUnknown),
-		asset("5", inventory.Workstation, inventory.CriticalityMedium),
+		asset("1", inventory.Server, inventory.CriticalityHigh, inventory.InternetFacing),
+		asset("2", inventory.Server, inventory.CriticalityUnknown, inventory.Internal),
+		asset("3", inventory.VirtualMachine, inventory.CriticalityLow, inventory.ExposureUnknown),
+		asset("4", inventory.VirtualMachine, inventory.CriticalityUnknown, inventory.ExposureUnknown),
+		asset("5", inventory.Workstation, inventory.CriticalityMedium, inventory.InternetFacing),
 	}
-	syncRecords(t, db, src.ID(), append(active, asset("6", inventory.Workstation, inventory.CriticalityHigh))...)
+	syncRecords(t, db, src.ID(), append(active, asset("6", inventory.Workstation, inventory.CriticalityHigh, inventory.Internal))...)
 	syncRecords(t, db, src.ID(), active...)
-
 	activeOnly := true
+	admin := storeUser(t, db, "admin@example.com", tenancy.CustomerAdmin, customer)
+	workstation := inTxValue(t, db, func(tx *postgres.Tx) (postgres.AssetPage, error) {
+		return tx.ListAssets(ctx, postgres.AssetListQuery{Customer: customer, Active: &activeOnly, Kind: []inventory.AssetKind{inventory.Workstation}, Limit: 1})
+	})
+	declareInternal(t, db, customer, workstation.Assets[0].ID, admin.ID())
+
 	tests := []struct {
 		name  string
 		query postgres.AssetListQuery
@@ -79,11 +85,16 @@ func TestListAssetsTotalCountsTheAssetsListedAcrossAllPages(t *testing.T) {
 		{"criticality", postgres.AssetListQuery{Criticality: []inventory.Criticality{inventory.CriticalityHigh}}, []string{"1", "6"}},
 		{"unknown criticality", postgres.AssetListQuery{Criticality: []inventory.Criticality{inventory.CriticalityUnknown}}, []string{"2", "4"}},
 		{"criticalities with unknown", postgres.AssetListQuery{Criticality: []inventory.Criticality{inventory.CriticalityUnknown, inventory.CriticalityLow}}, []string{"2", "3", "4"}},
+		{"exposure", postgres.AssetListQuery{Exposure: []inventory.Exposure{inventory.InternetFacing}}, []string{"1"}},
+		{"declared exposure", postgres.AssetListQuery{Exposure: []inventory.Exposure{inventory.Internal}}, []string{"2", "5", "6"}},
+		{"unknown exposure", postgres.AssetListQuery{Exposure: []inventory.Exposure{inventory.ExposureUnknown}}, []string{"3", "4"}},
+		{"exposures with unknown", postgres.AssetListQuery{Exposure: []inventory.Exposure{inventory.ExposureUnknown, inventory.Internal}}, []string{"2", "3", "4", "5", "6"}},
 		{"combination", postgres.AssetListQuery{
 			Active:      &activeOnly,
 			Kind:        []inventory.AssetKind{inventory.Server, inventory.VirtualMachine},
 			Criticality: []inventory.Criticality{inventory.CriticalityUnknown, inventory.CriticalityHigh},
-		}, []string{"1", "2", "4"}},
+			Exposure:    []inventory.Exposure{inventory.InternetFacing, inventory.ExposureUnknown},
+		}, []string{"1", "4"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

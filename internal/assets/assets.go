@@ -54,10 +54,13 @@ type Query struct {
 	// Active keeps only Active Assets when true and only Inactive ones when
 	// false.
 	Active *bool
-	// Kind and Criticality keep the Assets with any of their values.
-	// CriticalityUnknown keeps the Assets without a Criticality.
+	// Kind, Criticality and Exposure keep the Assets with any of their
+	// values. CriticalityUnknown and ExposureUnknown keep the Assets without
+	// one. Exposure is the effective one: the declared Exposure, otherwise
+	// the imported one.
 	Kind        []inventory.AssetKind
 	Criticality []inventory.Criticality
+	Exposure    []inventory.Exposure
 	// Cursor is the NextCursor of the previous page, empty for the first.
 	Cursor string
 }
@@ -89,7 +92,7 @@ func (s *Service) List(ctx context.Context, caller tenancy.User, q Query) (Page,
 	if err != nil {
 		return Page{}, err
 	}
-	query := postgres.AssetListQuery{Customer: customer, Active: q.Active, Kind: q.Kind, Criticality: q.Criticality, Limit: q.Limit}
+	query := postgres.AssetListQuery{Customer: customer, Active: q.Active, Kind: q.Kind, Criticality: q.Criticality, Exposure: q.Exposure, Limit: q.Limit}
 	if query.Limit == 0 {
 		query.Limit = DefaultLimit
 	}
@@ -124,7 +127,9 @@ func (q Query) filters() (string, error) {
 	if q.Active != nil {
 		active = fmt.Sprint(*q.Active)
 	}
-	b, err := json.Marshal(map[string]any{"active": active, "kind": canonical(q.Kind), "criticality": canonical(q.Criticality)})
+	b, err := json.Marshal(map[string]any{
+		"active": active, "kind": canonical(q.Kind), "criticality": canonical(q.Criticality), "exposure": canonical(q.Exposure),
+	})
 	return string(b), err
 }
 

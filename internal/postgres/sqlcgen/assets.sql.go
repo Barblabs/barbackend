@@ -57,6 +57,9 @@ WHERE s.customer_id = $1
   AND ((cardinality($4::smallint[]) = 0 AND NOT $5::boolean)
        OR a.criticality_id = ANY($4::smallint[])
        OR ($5::boolean AND a.criticality_id IS NULL))
+  AND ((cardinality($6::smallint[]) = 0 AND NOT $7::boolean)
+       OR coalesce(a.declared_exposure_id, a.imported_exposure_id) = ANY($6::smallint[])
+       OR ($7::boolean AND coalesce(a.declared_exposure_id, a.imported_exposure_id) IS NULL))
 `
 
 type CountCustomerAssetsParams struct {
@@ -65,6 +68,8 @@ type CountCustomerAssetsParams struct {
 	KindIds                   []int16
 	CriticalityIds            []int16
 	IncludeUnknownCriticality bool
+	ExposureIds               []int16
+	IncludeUnknownExposure    bool
 }
 
 func (q *Queries) CountCustomerAssets(ctx context.Context, arg CountCustomerAssetsParams) (int64, error) {
@@ -74,6 +79,8 @@ func (q *Queries) CountCustomerAssets(ctx context.Context, arg CountCustomerAsse
 		arg.KindIds,
 		arg.CriticalityIds,
 		arg.IncludeUnknownCriticality,
+		arg.ExposureIds,
+		arg.IncludeUnknownExposure,
 	)
 	var count int64
 	err := row.Scan(&count)
@@ -418,11 +425,14 @@ WHERE s.customer_id = $1
   AND ((cardinality($4::smallint[]) = 0 AND NOT $5::boolean)
        OR a.criticality_id = ANY($4::smallint[])
        OR ($5::boolean AND a.criticality_id IS NULL))
-  AND ($6::text IS NULL
+  AND ((cardinality($6::smallint[]) = 0 AND NOT $7::boolean)
+       OR coalesce(a.declared_exposure_id, a.imported_exposure_id) = ANY($6::smallint[])
+       OR ($7::boolean AND coalesce(a.declared_exposure_id, a.imported_exposure_id) IS NULL))
+  AND ($8::text IS NULL
        OR (a.name, a.cmdb_source_id, a.record_id)
-          > ($6::text, $7::uuid, $8::text))
+          > ($8::text, $9::uuid, $10::text))
 ORDER BY a.name, a.cmdb_source_id, a.record_id
-LIMIT $9
+LIMIT $11
 `
 
 type ListCustomerAssetsParams struct {
@@ -431,6 +441,8 @@ type ListCustomerAssetsParams struct {
 	KindIds                   []int16
 	CriticalityIds            []int16
 	IncludeUnknownCriticality bool
+	ExposureIds               []int16
+	IncludeUnknownExposure    bool
 	AfterName                 *string
 	AfterSourceID             pgtype.UUID
 	AfterRecordID             *string
@@ -473,6 +485,8 @@ func (q *Queries) ListCustomerAssets(ctx context.Context, arg ListCustomerAssets
 		arg.KindIds,
 		arg.CriticalityIds,
 		arg.IncludeUnknownCriticality,
+		arg.ExposureIds,
+		arg.IncludeUnknownExposure,
 		arg.AfterName,
 		arg.AfterSourceID,
 		arg.AfterRecordID,
