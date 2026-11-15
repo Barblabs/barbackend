@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const claimDueSlackDelivery = `-- name: ClaimDueSlackDelivery :one
@@ -116,6 +117,15 @@ type FailSlackDeliveryParams struct {
 func (q *Queries) FailSlackDelivery(ctx context.Context, arg FailSlackDeliveryParams) error {
 	_, err := q.db.Exec(ctx, failSlackDelivery, arg.FailureCode, arg.LastError, arg.ID)
 	return err
+}
+
+type InsertSlackDeliveriesParams struct {
+	CustomerID uuid.UUID
+	Kind       string
+	TargetKind string
+	Target     string
+	Payload    []byte
+	FindingID  pgtype.UUID
 }
 
 const listFailedSlackDeliveries = `-- name: ListFailedSlackDeliveries :many

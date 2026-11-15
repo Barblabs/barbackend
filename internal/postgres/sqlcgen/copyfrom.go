@@ -227,6 +227,43 @@ func (q *Queries) InsertPrioritizationFindings(ctx context.Context, arg []Insert
 	return q.db.CopyFrom(ctx, []string{"prioritization_findings"}, []string{"prioritization_id", "finding_id", "placement_id", "group_position", "score_rank"}, &iteratorForInsertPrioritizationFindings{rows: arg})
 }
 
+// iteratorForInsertSlackDeliveries implements pgx.CopyFromSource.
+type iteratorForInsertSlackDeliveries struct {
+	rows                 []InsertSlackDeliveriesParams
+	skippedFirstNextCall bool
+}
+
+func (r *iteratorForInsertSlackDeliveries) Next() bool {
+	if len(r.rows) == 0 {
+		return false
+	}
+	if !r.skippedFirstNextCall {
+		r.skippedFirstNextCall = true
+		return true
+	}
+	r.rows = r.rows[1:]
+	return len(r.rows) > 0
+}
+
+func (r iteratorForInsertSlackDeliveries) Values() ([]interface{}, error) {
+	return []interface{}{
+		r.rows[0].CustomerID,
+		r.rows[0].Kind,
+		r.rows[0].TargetKind,
+		r.rows[0].Target,
+		r.rows[0].Payload,
+		r.rows[0].FindingID,
+	}, nil
+}
+
+func (r iteratorForInsertSlackDeliveries) Err() error {
+	return nil
+}
+
+func (q *Queries) InsertSlackDeliveries(ctx context.Context, arg []InsertSlackDeliveriesParams) (int64, error) {
+	return q.db.CopyFrom(ctx, []string{"slack_deliveries"}, []string{"customer_id", "kind", "target_kind", "target", "payload", "finding_id"}, &iteratorForInsertSlackDeliveries{rows: arg})
+}
+
 // iteratorForInsertSoftwareComponents implements pgx.CopyFromSource.
 type iteratorForInsertSoftwareComponents struct {
 	rows                 []InsertSoftwareComponentsParams
