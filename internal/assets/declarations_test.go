@@ -218,7 +218,7 @@ func TestDeclaringExposureIsRefused(t *testing.T) {
 	}
 }
 
-func TestDeclareInformationClassificationStoresTheCallersDeclarationWithoutRescoring(t *testing.T) {
+func TestDeclareInformationClassificationStoresTheCallersDeclarationAndRescoresTheAsset(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
 	vm := e.asset(t, "vm")
@@ -235,12 +235,12 @@ func TestDeclareInformationClassificationStoresTheCallersDeclarationWithoutResco
 	if stored := e.asset(t, "vm"); stored.Asset.InformationClassification() != inventory.ClassifiedConfidential {
 		t.Errorf("stored classification = %v, want Confidential", stored.Asset.InformationClassification())
 	}
-	if len(e.rescorer.rescored) != 0 {
-		t.Errorf("rescored %v, want nothing: Information Classification is not scored", e.rescorer.rescored)
+	if want := []inventory.SourceReference{vm.Asset.Ref()}; !slices.Equal(e.rescorer.rescored, want) {
+		t.Errorf("rescored %v, want %v", e.rescorer.rescored, want)
 	}
 }
 
-func TestClearInformationClassificationLeavesTheAssetUnclassifiedWithoutRescoring(t *testing.T) {
+func TestClearInformationClassificationLeavesTheAssetUnclassifiedAndRescores(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
 	vm := e.asset(t, "vm")
@@ -257,8 +257,23 @@ func TestClearInformationClassificationLeavesTheAssetUnclassifiedWithoutRescorin
 		t.Errorf("classification %v declared %+v, want Unclassified and no Declaration",
 			got.Asset.InformationClassification(), got.InformationClassificationAudit)
 	}
-	if len(e.rescorer.rescored) != 0 {
-		t.Errorf("rescored %v, want nothing: Information Classification is not scored", e.rescorer.rescored)
+	if len(e.rescorer.rescored) != 2 {
+		t.Errorf("rescored %d times, want once per change", len(e.rescorer.rescored))
+	}
+}
+
+func TestAClassificationStandsWhenRescoringFails(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	e.rescorer.err = errors.New("database went away")
+	vm := e.asset(t, "vm")
+
+	if _, err := e.assets.DeclareInformationClassification(context.Background(), e.admin, vm.ID, inventory.ClassifiedPrivate); !errors.Is(err, e.rescorer.err) {
+		t.Fatalf("err = %v, want the rescoring failure", err)
+	}
+
+	if stored := e.asset(t, "vm"); stored.Asset.InformationClassification() != inventory.ClassifiedPrivate {
+		t.Errorf("stored classification = %v, want the Private declared before rescoring failed", stored.Asset.InformationClassification())
 	}
 }
 
@@ -291,7 +306,7 @@ func TestDeclaringInformationClassificationIsRefused(t *testing.T) {
 	if _, err := e.assets.ClearInformationClassification(context.Background(), viewer, e.asset(t, "vm").ID); !errors.Is(err, tenancy.ErrNotCustomerAdmin) {
 		t.Errorf("clearing as a viewer: err = %v, want %v", err, tenancy.ErrNotCustomerAdmin)
 	}
-	if stored := e.asset(t, "vm"); stored.Asset.InformationClassification() != inventory.Unclassified {
-		t.Errorf("classification = %v, want nothing declared", stored.Asset.InformationClassification())
+	if stored := e.asset(t, "vm"); stored.Asset.InformationClassification() != inventory.Unclassified || len(e.rescorer.rescored) != 0 {
+		t.Errorf("classification %v after %d rescores, want nothing declared or rescored", stored.Asset.InformationClassification(), len(e.rescorer.rescored))
 	}
 }

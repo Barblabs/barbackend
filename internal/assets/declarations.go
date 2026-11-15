@@ -38,12 +38,14 @@ func (s *Service) ClearExposure(ctx context.Context, caller tenancy.User, id int
 }
 
 // DeclareInformationClassification states how sensitive the data of the
-// Customer's Asset with id is, as the caller's Declaration. Only a Customer
-// Admin declares, never Unclassified, and only on an Active Asset. It is not
-// scored, so nothing is rescored (ADR 0031). It fails with ErrAssetNotFound,
+// Customer's Asset with id is, as the caller's Declaration, and rescores the
+// Asset's open Findings. Only a Customer Admin declares, never Unclassified,
+// and only on an Active Asset (ADR 0031, ADR 0032). The rescore runs after the
+// Declaration commits: if it fails, so does the call, but the Declaration
+// stands. It fails with ErrAssetNotFound,
 // inventory.ErrInvalidInformationClassification or inventory.ErrAssetInactive.
 func (s *Service) DeclareInformationClassification(ctx context.Context, caller tenancy.User, id int64, c inventory.InformationClassification) (StoredAsset, error) {
-	return s.changeDeclaration(ctx, caller, id, func(tx *postgres.Tx, a *inventory.Asset) error {
+	return s.changeScoredDeclaration(ctx, caller, id, func(tx *postgres.Tx, a *inventory.Asset) error {
 		if err := a.DeclareInformationClassification(c); err != nil {
 			return err
 		}
@@ -52,10 +54,12 @@ func (s *Service) DeclareInformationClassification(ctx context.Context, caller t
 }
 
 // ClearInformationClassification withdraws the Declaration of the Customer's
-// Asset with id, so it is Unclassified again. Only a Customer Admin clears it,
-// even on an Inactive Asset. It fails with ErrAssetNotFound.
+// Asset with id, so it is Unclassified again, and rescores the Asset's open
+// Findings. Only a Customer Admin clears it, even on an Inactive Asset. The
+// rescore runs after the clearing commits: if it fails, so does the call, but
+// the Declaration stays cleared. It fails with ErrAssetNotFound.
 func (s *Service) ClearInformationClassification(ctx context.Context, caller tenancy.User, id int64) (StoredAsset, error) {
-	return s.changeDeclaration(ctx, caller, id, func(tx *postgres.Tx, a *inventory.Asset) error {
+	return s.changeScoredDeclaration(ctx, caller, id, func(tx *postgres.Tx, a *inventory.Asset) error {
 		return tx.ClearInformationClassificationDeclaration(ctx, a.Ref())
 	})
 }
