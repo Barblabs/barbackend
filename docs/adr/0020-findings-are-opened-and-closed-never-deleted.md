@@ -82,7 +82,7 @@ erDiagram
 - **`component_name` and `component_version`** are copied from the matched Software Component and updated whenever it is matched again. Software Components are rewritten on every Sync and have no identity, so a Finding cannot point at one. `evidence` is the matched `affected` entry, CPE `criteria` included, so a person can see why it matched.
 - **Open or closed** is `closed_at`: null while open. There is no separate boolean that could disagree with it. `first_opened_at` never changes; `opened_at` is when the current open period began.
 - **Match Flags** (ADR 0015) are one row each in `finding_match_flags`; none means a certain match. Uncertain ("dudoso") is derived as having at least one, never stored. They are replaced every time the Finding is matched again.
-- **`finding_scores`** is the Score history of ADR 0009: the Scoring Model, the value and every factor, with its Data Gaps in `finding_score_data_gaps`. A new Score is stored only when its model, value or Data Gaps differ from the latest one, so a daily EPSS feed that changes nothing adds no row.
+- **`finding_scores`** is the Score history of ADR 0009: the Scoring Model, the value and every factor, with its Data Gaps in `finding_score_data_gaps`. A new Score is stored only when its model, value, factors or Data Gaps differ from the latest one, so a daily EPSS feed that changes nothing adds no row. Factors count since Scoring Model 3, where one can move and leave the value as it was (ADR 0032).
 
 `match_flags`, `finding_close_reasons` and `score_data_gaps` are catalog tables keyed by Go constants (ADR 0006): the Match Flags of `matching`, the Data Gaps of `scoring`, and these close reasons of `finding`:
 

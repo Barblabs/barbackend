@@ -212,6 +212,23 @@ type Factors struct {
 	ClassificationMultiplier *float64
 }
 
+// Equal reports whether f and g hold the same factors, comparing the
+// optional ones by value.
+func (f Factors) Equal(g Factors) bool {
+	plainF, plainG := f, g
+	plainF.ExploitSignal, plainF.ClassificationMultiplier = nil, nil
+	plainG.ExploitSignal, plainG.ClassificationMultiplier = nil, nil
+	return plainF == plainG && sameOptional(f.ExploitSignal, g.ExploitSignal) &&
+		sameOptional(f.ClassificationMultiplier, g.ClassificationMultiplier)
+}
+
+func sameOptional(a, b *float64) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
+}
+
 // Impact is the Asset's impact multiplier: Criticality's, or the
 // Information Classification's when it is higher (ADR 0032).
 func (f Factors) Impact() float64 {

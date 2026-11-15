@@ -276,6 +276,13 @@ func TestSaveScoreIfChangedStoresOnlyAChangedScore(t *testing.T) {
 	nextModel.Model = 2
 	withGap := nextModel
 	withGap.Gaps = []scoring.DataGap{scoring.ExposureUndeclared, scoring.LifecycleUnknown}
+	// Under Model 3 a Public then Confidential Asset of High Criticality keeps
+	// its value, while its classification multiplier moves.
+	public, confidential := 0.5, 1.0
+	classified := withGap
+	classified.Model, classified.Factors.ClassificationMultiplier = 3, &public
+	reclassified := classified
+	reclassified.Factors.ClassificationMultiplier = &confidential
 
 	for i, step := range []struct {
 		score  scoring.Score
@@ -287,6 +294,10 @@ func TestSaveScoreIfChangedStoresOnlyAChangedScore(t *testing.T) {
 		{nextModel, false},
 		{withGap, true},
 		{withGap, false},
+		{classified, true},
+		{classified, false},
+		{reclassified, true},
+		{reclassified, false},
 	} {
 		inTx(t, w.db, func(tx *postgres.Tx) error {
 			stored, err := tx.SaveScoreIfChanged(context.Background(), id, step.score)
@@ -298,8 +309,8 @@ func TestSaveScoreIfChangedStoresOnlyAChangedScore(t *testing.T) {
 	}
 	inTx(t, w.db, func(tx *postgres.Tx) error {
 		latest, err := tx.LatestScore(context.Background(), id)
-		if latest.Value != 0.308 || !slices.Equal(latest.Gaps, withGap.Gaps) || latest.Factors != withGap.Factors {
-			t.Errorf("latest score = %+v, want %+v", latest, withGap)
+		if latest.Value != 0.308 || latest.Model != 3 || !slices.Equal(latest.Gaps, reclassified.Gaps) || !latest.Factors.Equal(reclassified.Factors) {
+			t.Errorf("latest score = %+v, want %+v", latest, reclassified)
 		}
 		return err
 	})

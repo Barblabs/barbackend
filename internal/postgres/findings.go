@@ -202,8 +202,8 @@ func (t *Tx) OpenFindingsOfAsset(ctx context.Context, asset inventory.SourceRefe
 }
 
 // SaveScoreIfChanged stores s as the Finding's newest Score unless its latest
-// Score has the same Scoring Model, value and Data Gaps (ADR 0020). It
-// reports whether it stored one.
+// Score has the same Scoring Model, value, factors and Data Gaps (ADR 0020,
+// ADR 0032). It reports whether it stored one.
 func (t *Tx) SaveScoreIfChanged(ctx context.Context, id finding.ID, s scoring.Score) (bool, error) {
 	latest, err := t.q.LatestFindingScore(ctx, uuid.UUID(id))
 	switch {
@@ -258,24 +258,31 @@ func (t *Tx) LatestScore(ctx context.Context, id finding.ID) (scoring.Score, err
 		gaps = append(gaps, scoring.DataGap(g))
 	}
 	return scoring.Score{
-		Model: scoring.ModelVersion(row.Model),
-		Value: row.Value,
-		Factors: scoring.Factors{
-			Alpha: row.Alpha, Beta: row.Beta, Gamma: row.Gamma, Vulnerability: row.Vulnerability,
-			CriticalityMultiplier: row.CriticalityMultiplier, ExposureMultiplier: row.ExposureMultiplier,
-			LifecycleMultiplier: row.LifecycleMultiplier,
-			ExploitSignal:       row.ExploitSignal, ClassificationMultiplier: row.InformationClassificationMultiplier,
-		},
-		Gaps: gaps,
+		Model:   scoring.ModelVersion(row.Model),
+		Value:   row.Value,
+		Factors: latestFactors(row),
+		Gaps:    gaps,
 	}, nil
 }
 
+func latestFactors(row sqlcgen.LatestFindingScoreRow) scoring.Factors {
+	return scoring.Factors{
+		Alpha: row.Alpha, Beta: row.Beta, Gamma: row.Gamma, Vulnerability: row.Vulnerability,
+		CriticalityMultiplier: row.CriticalityMultiplier, ExposureMultiplier: row.ExposureMultiplier,
+		LifecycleMultiplier: row.LifecycleMultiplier,
+		ExploitSignal:       row.ExploitSignal, ClassificationMultiplier: row.InformationClassificationMultiplier,
+	}
+}
+
+// sameScore compares every stored factor, not only the value: under Model 3
+// a factor can change and leave the value as it was (ADR 0032).
 func sameScore(latest sqlcgen.LatestFindingScoreRow, s scoring.Score) bool {
 	gaps := make([]int16, len(s.Gaps))
 	for i, g := range s.Gaps {
 		gaps[i] = int16(g)
 	}
-	return latest.Model == int16(s.Model) && latest.Value == s.Value && slices.Equal(latest.Gaps, gaps)
+	return latest.Model == int16(s.Model) && latest.Value == s.Value && slices.Equal(latest.Gaps, gaps) &&
+		latestFactors(latest).Equal(s.Factors)
 }
 
 func candidate(row sqlcgen.ListActiveComponentsWithProductsRow) Candidate {

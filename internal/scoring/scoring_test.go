@@ -390,6 +390,33 @@ func TestAScoreHasTheBandOfTheModelThatScoredIt(t *testing.T) {
 	}
 }
 
+func TestFactorsEqualComparesTheOptionalOnesByValue(t *testing.T) {
+	base := scoring.Factors{Alpha: 0.81, CriticalityMultiplier: 1, ExposureMultiplier: 1, LifecycleMultiplier: 1}
+	with := func(signal, classification *float64) scoring.Factors {
+		f := base
+		f.ExploitSignal, f.ClassificationMultiplier = signal, classification
+		return f
+	}
+	tests := []struct {
+		name string
+		a, b scoring.Factors
+		want bool
+	}{
+		{"both without", base, base, true},
+		{"equal values at different addresses", with(ptr(0.2), ptr(0.5)), with(ptr(0.2), ptr(0.5)), true},
+		{"a classification multiplier moved", with(ptr(0.2), ptr(0.5)), with(ptr(0.2), ptr(1)), false},
+		{"one is unclassified", with(ptr(0.2), nil), with(ptr(0.2), ptr(0.5)), false},
+		{"a plain factor moved", base, scoring.Factors{Alpha: 0.9, CriticalityMultiplier: 1, ExposureMultiplier: 1, LifecycleMultiplier: 1}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.a.Equal(tt.b); got != tt.want {
+				t.Errorf("Equal = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestModelsBeforeModel3HaveNoBand(t *testing.T) {
 	for _, m := range []scoring.Model{scoring.Model1, scoring.Model2} {
 		if band, ok := m.Band(1); ok {
