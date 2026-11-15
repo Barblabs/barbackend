@@ -4,6 +4,7 @@ package scoring
 import (
 	"errors"
 	"fmt"
+	"math"
 
 	"barbackend/internal/inventory"
 )
@@ -184,15 +185,19 @@ func (s Score) Band() (Band, bool) {
 	return 0, false
 }
 
-// bandTolerance absorbs the float error of a product that should land on a
-// floor exactly, such as CVSS 7 on a KEV CVE and an Asset factor of 1.
-const bandTolerance = 1e-9
+// bandDigits is how many decimals of a Score its Band is read from: those
+// the Dossier and the API show, so a Score shown as 0.7 is never High, and
+// the float error of a product that lands on a floor, such as CVSS 7 on a
+// KEV CVE and an Asset factor of 1, does not move it (ADR 0032).
+const bandDigits = 4
 
 // Band is the Score Band of value under m, and false for a Model that has
 // none (Models 1 and 2).
 func (m Model) Band(value float64) (Band, bool) {
+	scale := math.Pow10(bandDigits)
+	shown := math.Round(value*scale) / scale
 	for _, b := range m.bands {
-		if value >= b.floor-bandTolerance {
+		if shown >= b.floor {
 			return b.band, true
 		}
 	}

@@ -342,6 +342,8 @@ func TestModel3Band(t *testing.T) {
 	}{
 		{1, scoring.BandCritical},
 		{0.70, scoring.BandCritical},
+		{0.69996, scoring.BandCritical},
+		{0.69994, scoring.BandHigh},
 		{0.6999, scoring.BandHigh},
 		{0.40, scoring.BandHigh},
 		{0.3999, scoring.BandMedium},
