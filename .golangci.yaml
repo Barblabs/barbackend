@@ -162,6 +162,20 @@ linters:
               desc: assessment is pure and does no I/O (ADR 0016)
             - pkg: github.com/jackc/pgx
               desc: assessment is pure and does no I/O (ADR 0016)
+        alert:
+          list-mode: lax
+          files:
+            - "**/internal/alert/**"
+          allow:
+            - barbackend/internal/alert
+            - barbackend/internal/scoring
+          deny:
+            - pkg: barbackend/internal
+              desc: alert is a pure domain package that imports only scoring (ADR 0033)
+            - pkg: net/http
+              desc: alert is pure and does no I/O (ADR 0033)
+            - pkg: github.com/jackc/pgx
+              desc: alert is pure and does no I/O (ADR 0033)
         claude:
           list-mode: lax
           files:
@@ -180,6 +194,7 @@ linters:
             - "!$test"
           allow:
             - barbackend/internal/agents
+            - barbackend/internal/alert
             - barbackend/internal/assessment
             - barbackend/internal/business
             - barbackend/internal/claude
@@ -324,12 +339,13 @@ linters:
             - "**/internal/slack/**"
           allow:
             - barbackend/internal/slack
+            - barbackend/internal/alert
             - barbackend/internal/encryption
             - barbackend/internal/postgres
             - barbackend/internal/tenancy
           deny:
             - pkg: barbackend/internal
-              desc: the slack use case calls only encryption, postgres and tenancy (ADR 0008, ADR 0029)
+              desc: the slack use case calls only alert, encryption, postgres and tenancy (ADR 0008, ADR 0029, ADR 0033)
         postgres:
           list-mode: lax
           files:

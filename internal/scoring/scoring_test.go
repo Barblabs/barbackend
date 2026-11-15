@@ -433,3 +433,16 @@ func TestModel2RejectsOutOfRangeLifecycleStage(t *testing.T) {
 		t.Errorf("err = %v, want %v", err, inventory.ErrInvalidLifecycleStage)
 	}
 }
+
+func TestParseBandReadsWhatStringWrites(t *testing.T) {
+	for _, b := range []scoring.Band{scoring.BandLow, scoring.BandMedium, scoring.BandHigh, scoring.BandCritical} {
+		if got, ok := scoring.ParseBand(b.String()); !ok || got != b {
+			t.Errorf("ParseBand(%q) = %v, %v; want %v", b.String(), got, ok, b)
+		}
+	}
+	for _, name := range []string{"", "Critical", "severe"} {
+		if got, ok := scoring.ParseBand(name); ok {
+			t.Errorf("ParseBand(%q) = %v, want none", name, got)
+		}
+	}
+}

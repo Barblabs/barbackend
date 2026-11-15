@@ -187,6 +187,17 @@ func (b Band) String() string {
 	}
 }
 
+// ParseBand is the Band named name, as String writes it, and false for any
+// other name.
+func ParseBand(name string) (Band, bool) {
+	for _, b := range []Band{BandLow, BandMedium, BandHigh, BandCritical} {
+		if b.String() == name {
+			return b, true
+		}
+	}
+	return 0, false
+}
+
 // models are the published Scoring Models, so a stored Score's Band is read
 // from the Model that scored it.
 var models = []Model{Model1, Model2, Model3}
