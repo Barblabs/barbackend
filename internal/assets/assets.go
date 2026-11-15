@@ -4,11 +4,13 @@
 package assets
 
 import (
+	"cmp"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 
 	"barbackend/internal/inventory"
 	"barbackend/internal/postgres"
@@ -46,14 +48,16 @@ func New(db *postgres.DB, rescorer Rescorer) *Service {
 }
 
 // Query selects a page of a Customer's Assets. A zero Limit takes
-// DefaultLimit; a nil filter keeps every value.
+// DefaultLimit; a nil or empty filter keeps every value.
 type Query struct {
 	Limit int
 	// Active keeps only Active Assets when true and only Inactive ones when
 	// false.
-	Active      *bool
-	Kind        *inventory.AssetKind
-	Criticality *inventory.Criticality
+	Active *bool
+	// Kind and Criticality keep the Assets with any of their values.
+	// CriticalityUnknown keeps the Assets without a Criticality.
+	Kind        []inventory.AssetKind
+	Criticality []inventory.Criticality
 	// Cursor is the NextCursor of the previous page, empty for the first.
 	Cursor string
 }
@@ -85,13 +89,7 @@ func (s *Service) List(ctx context.Context, caller tenancy.User, q Query) (Page,
 	if err != nil {
 		return Page{}, err
 	}
-	query := postgres.AssetListQuery{Customer: customer, Active: q.Active, Limit: q.Limit}
-	if q.Kind != nil {
-		query.Kind = []inventory.AssetKind{*q.Kind}
-	}
-	if q.Criticality != nil {
-		query.Criticality = []inventory.Criticality{*q.Criticality}
-	}
+	query := postgres.AssetListQuery{Customer: customer, Active: q.Active, Kind: q.Kind, Criticality: q.Criticality, Limit: q.Limit}
 	if query.Limit == 0 {
 		query.Limit = DefaultLimit
 	}
@@ -126,15 +124,12 @@ func (q Query) filters() (string, error) {
 	if q.Active != nil {
 		active = fmt.Sprint(*q.Active)
 	}
-	var kind, criticality string
-	if q.Kind != nil {
-		kind = q.Kind.Code()
-	}
-	if q.Criticality != nil {
-		criticality = q.Criticality.Code()
-	}
-	b, err := json.Marshal(map[string]string{"active": active, "kind": kind, "criticality": criticality})
+	b, err := json.Marshal(map[string]any{"active": active, "kind": canonical(q.Kind), "criticality": canonical(q.Criticality)})
 	return string(b), err
+}
+
+func canonical[T cmp.Ordered](values []T) []T {
+	return slices.Compact(slices.Sorted(slices.Values(values)))
 }
 
 func encodeCursor(c cursor) string {
