@@ -108,6 +108,11 @@ WHERE s.customer_id = @customer_id
   AND (cardinality(@criticality_ids::smallint[]) = 0 OR coalesce(a.criticality_id, 0) = ANY(@criticality_ids::smallint[]))
   AND (cardinality(@exposure_ids::smallint[]) = 0
        OR coalesce(a.declared_exposure_id, a.imported_exposure_id, 0) = ANY(@exposure_ids::smallint[]))
+  AND (cardinality(@information_classification_ids::smallint[]) = 0
+       OR coalesce(a.declared_information_classification_id, 0) = ANY(@information_classification_ids::smallint[]))
+  AND (cardinality(@area_ids::bigint[]) = 0
+       OR (a.cmdb_source_id, a.area_record_id) IN
+          (SELECT cmdb_source_id, record_id FROM customer_areas WHERE id = ANY(@area_ids::bigint[])))
   AND (sqlc.narg(after_name)::text IS NULL
        OR (a.name, a.cmdb_source_id, a.record_id)
           > (sqlc.narg(after_name)::text, sqlc.narg(after_source_id)::uuid, sqlc.narg(after_record_id)::text))
@@ -123,7 +128,12 @@ WHERE s.customer_id = @customer_id
   AND (cardinality(@kind_ids::smallint[]) = 0 OR a.kind_id = ANY(@kind_ids::smallint[]))
   AND (cardinality(@criticality_ids::smallint[]) = 0 OR coalesce(a.criticality_id, 0) = ANY(@criticality_ids::smallint[]))
   AND (cardinality(@exposure_ids::smallint[]) = 0
-       OR coalesce(a.declared_exposure_id, a.imported_exposure_id, 0) = ANY(@exposure_ids::smallint[]));
+       OR coalesce(a.declared_exposure_id, a.imported_exposure_id, 0) = ANY(@exposure_ids::smallint[]))
+  AND (cardinality(@information_classification_ids::smallint[]) = 0
+       OR coalesce(a.declared_information_classification_id, 0) = ANY(@information_classification_ids::smallint[]))
+  AND (cardinality(@area_ids::bigint[]) = 0
+       OR (a.cmdb_source_id, a.area_record_id) IN
+          (SELECT cmdb_source_id, record_id FROM customer_areas WHERE id = ANY(@area_ids::bigint[])));
 
 -- Assets by their references, as ListAssets reads them. The two arrays are
 -- parallel: element i of each names one Asset.

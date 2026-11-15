@@ -1,7 +1,6 @@
 package httpapi_test
 
 import (
-	"fmt"
 	"net/http"
 	"reflect"
 	"testing"
@@ -15,14 +14,6 @@ type assetInformationClassification struct {
 	Value      *string    `json:"value"`
 	DeclaredBy *string    `json:"declared_by"`
 	DeclaredAt *time.Time `json:"declared_at"`
-}
-
-func informationClassificationPath(id int64) string {
-	return fmt.Sprintf("/assets/%d/information-classification", id)
-}
-
-func informationClassificationBody(value string) map[string]string {
-	return map[string]string{"information_classification": value}
 }
 
 func TestDeclaringAnInformationClassificationKeepsItThroughASync(t *testing.T) {

@@ -30,6 +30,14 @@ type AssetFilter struct {
 	Kind        []inventory.AssetKind
 	Criticality []inventory.Criticality
 	Exposure    []inventory.Exposure
+	// InformationClassification keeps the Assets with any of its values, which
+	// is only ever declared (ADR 0031), so Unclassified keeps the Assets
+	// without a Declaration.
+	InformationClassification []inventory.InformationClassification
+	// Area keeps the Assets in any of the Areas with those ids, as GET /areas
+	// returns them. An id that is not one of the Customer's Areas matches no
+	// Asset.
+	Area []int64
 }
 
 // AssetListQuery selects one page of a Customer's Assets, sorted by name,
@@ -57,9 +65,11 @@ type AssetPage struct {
 func (t *Tx) ListAssets(ctx context.Context, q AssetListQuery) (AssetPage, error) {
 	filter := sqlcgen.CountCustomerAssetsParams{
 		CustomerID: uuid.UUID(q.Customer), Active: q.Filter.Active,
-		KindIds:        catalogIDs(q.Filter.Kind),
-		CriticalityIds: catalogIDs(q.Filter.Criticality),
-		ExposureIds:    catalogIDs(q.Filter.Exposure),
+		KindIds:                      catalogIDs(q.Filter.Kind),
+		CriticalityIds:               catalogIDs(q.Filter.Criticality),
+		ExposureIds:                  catalogIDs(q.Filter.Exposure),
+		InformationClassificationIds: catalogIDs(q.Filter.InformationClassification),
+		AreaIds:                      areaIDs(q.Filter.Area),
 	}
 	total, err := t.q.CountCustomerAssets(ctx, filter)
 	if err != nil {
@@ -68,6 +78,7 @@ func (t *Tx) ListAssets(ctx context.Context, q AssetListQuery) (AssetPage, error
 	params := sqlcgen.ListCustomerAssetsParams{
 		CustomerID: filter.CustomerID, Active: filter.Active,
 		KindIds: filter.KindIds, CriticalityIds: filter.CriticalityIds, ExposureIds: filter.ExposureIds,
+		InformationClassificationIds: filter.InformationClassificationIds, AreaIds: filter.AreaIds,
 		// One extra row tells whether another page follows.
 		PageSize: int32(q.Limit + 1),
 	}
@@ -122,6 +133,13 @@ func catalogIDs[T ~int](values []T) []int16 {
 		ids = append(ids, int16(v))
 	}
 	return ids
+}
+
+// areaIDs is never nil, for the reason catalogIDs is not: a nil slice reaches
+// pgx as NULL, whose cardinality is NULL rather than 0.
+func areaIDs(values []int64) []int64 {
+	ids := make([]int64, 0, len(values))
+	return append(ids, values...)
 }
 
 func ptr[T any](v T) *T { return &v }

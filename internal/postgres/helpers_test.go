@@ -349,3 +349,12 @@ func storeVulnerability(t *testing.T, db *postgres.DB, cve string, modified time
 		return tx.StoreVulnerability(context.Background(), postgres.StoredVulnerability{CVE: cve, Object: object, Modified: modified})
 	})
 }
+
+func areaRecord(t *testing.T, id, name string, inactive bool) inventory.AreaRecord {
+	t.Helper()
+	imported, err := inventory.NewImportedArea(inventory.ImportedAreaParams{Name: name, Inactive: inactive})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return inventory.AreaRecord{RecordID: id, Imported: imported}
+}

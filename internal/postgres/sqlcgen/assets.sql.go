@@ -57,14 +57,21 @@ WHERE s.customer_id = $1
   AND (cardinality($4::smallint[]) = 0 OR coalesce(a.criticality_id, 0) = ANY($4::smallint[]))
   AND (cardinality($5::smallint[]) = 0
        OR coalesce(a.declared_exposure_id, a.imported_exposure_id, 0) = ANY($5::smallint[]))
+  AND (cardinality($6::smallint[]) = 0
+       OR coalesce(a.declared_information_classification_id, 0) = ANY($6::smallint[]))
+  AND (cardinality($7::bigint[]) = 0
+       OR (a.cmdb_source_id, a.area_record_id) IN
+          (SELECT cmdb_source_id, record_id FROM customer_areas WHERE id = ANY($7::bigint[])))
 `
 
 type CountCustomerAssetsParams struct {
-	CustomerID     uuid.UUID
-	Active         *bool
-	KindIds        []int16
-	CriticalityIds []int16
-	ExposureIds    []int16
+	CustomerID                   uuid.UUID
+	Active                       *bool
+	KindIds                      []int16
+	CriticalityIds               []int16
+	ExposureIds                  []int16
+	InformationClassificationIds []int16
+	AreaIds                      []int64
 }
 
 func (q *Queries) CountCustomerAssets(ctx context.Context, arg CountCustomerAssetsParams) (int64, error) {
@@ -74,6 +81,8 @@ func (q *Queries) CountCustomerAssets(ctx context.Context, arg CountCustomerAsse
 		arg.KindIds,
 		arg.CriticalityIds,
 		arg.ExposureIds,
+		arg.InformationClassificationIds,
+		arg.AreaIds,
 	)
 	var count int64
 	err := row.Scan(&count)
@@ -418,23 +427,30 @@ WHERE s.customer_id = $1
   AND (cardinality($4::smallint[]) = 0 OR coalesce(a.criticality_id, 0) = ANY($4::smallint[]))
   AND (cardinality($5::smallint[]) = 0
        OR coalesce(a.declared_exposure_id, a.imported_exposure_id, 0) = ANY($5::smallint[]))
-  AND ($6::text IS NULL
+  AND (cardinality($6::smallint[]) = 0
+       OR coalesce(a.declared_information_classification_id, 0) = ANY($6::smallint[]))
+  AND (cardinality($7::bigint[]) = 0
+       OR (a.cmdb_source_id, a.area_record_id) IN
+          (SELECT cmdb_source_id, record_id FROM customer_areas WHERE id = ANY($7::bigint[])))
+  AND ($8::text IS NULL
        OR (a.name, a.cmdb_source_id, a.record_id)
-          > ($6::text, $7::uuid, $8::text))
+          > ($8::text, $9::uuid, $10::text))
 ORDER BY a.name, a.cmdb_source_id, a.record_id
-LIMIT $9
+LIMIT $11
 `
 
 type ListCustomerAssetsParams struct {
-	CustomerID     uuid.UUID
-	Active         *bool
-	KindIds        []int16
-	CriticalityIds []int16
-	ExposureIds    []int16
-	AfterName      *string
-	AfterSourceID  pgtype.UUID
-	AfterRecordID  *string
-	PageSize       int32
+	CustomerID                   uuid.UUID
+	Active                       *bool
+	KindIds                      []int16
+	CriticalityIds               []int16
+	ExposureIds                  []int16
+	InformationClassificationIds []int16
+	AreaIds                      []int64
+	AfterName                    *string
+	AfterSourceID                pgtype.UUID
+	AfterRecordID                *string
+	PageSize                     int32
 }
 
 type ListCustomerAssetsRow struct {
@@ -473,6 +489,8 @@ func (q *Queries) ListCustomerAssets(ctx context.Context, arg ListCustomerAssets
 		arg.KindIds,
 		arg.CriticalityIds,
 		arg.ExposureIds,
+		arg.InformationClassificationIds,
+		arg.AreaIds,
 		arg.AfterName,
 		arg.AfterSourceID,
 		arg.AfterRecordID,

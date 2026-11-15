@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -590,4 +591,12 @@ func imported(t *testing.T, p inventory.ImportedAssetParams) inventory.ImportedA
 		t.Fatal(err)
 	}
 	return a
+}
+
+func informationClassificationPath(id int64) string {
+	return fmt.Sprintf("/assets/%d/information-classification", id)
+}
+
+func informationClassificationBody(value string) map[string]string {
+	return map[string]string{"information_classification": value}
 }

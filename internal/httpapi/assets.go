@@ -59,12 +59,14 @@ func (h assetHandler) register(api huma.API) {
 }
 
 type assetQuery struct {
-	Limit       pageSize                `query:"limit" doc:"Page size"`
-	Cursor      string                  `query:"cursor" doc:"next_cursor of the previous page"`
-	Active      activeFilter            `query:"active" enum:"true,false,all" default:"true"`
-	Kind        []assetKindCode         `query:"kind,explode" doc:"Asset Kind codes, as repeated keys; an Asset of any of them matches"`
-	Criticality []criticalityFilterCode `query:"criticality,explode" doc:"Criticality codes, as repeated keys; an Asset with any of them matches, and unknown matches an Asset without a Criticality"`
-	Exposure    []exposureFilterCode    `query:"exposure,explode" doc:"Exposure codes, as repeated keys, matched against the effective Exposure (exposure.value); an Asset with any of them matches, and unknown matches an Asset without one"`
+	Limit                     pageSize                              `query:"limit" doc:"Page size"`
+	Cursor                    string                                `query:"cursor" doc:"next_cursor of the previous page"`
+	Active                    activeFilter                          `query:"active" enum:"true,false,all" default:"true"`
+	Kind                      []assetKindCode                       `query:"kind,explode" doc:"Asset Kind codes, as repeated keys; an Asset of any of them matches"`
+	Criticality               []criticalityFilterCode               `query:"criticality,explode" doc:"Criticality codes, as repeated keys; an Asset with any of them matches, and unknown matches an Asset without a Criticality"`
+	Exposure                  []exposureFilterCode                  `query:"exposure,explode" doc:"Exposure codes, as repeated keys, matched against the effective Exposure (exposure.value); an Asset with any of them matches, and unknown matches an Asset without one"`
+	InformationClassification []informationClassificationFilterCode `query:"information_classification,explode" doc:"Information Classification codes, as repeated keys; an Asset with any of them matches, and unclassified matches an Asset without a Declaration"`
+	Area                      []int64                               `query:"area,explode" doc:"Area ids, as in GET /areas, as repeated keys; an Asset in any of them matches"`
 }
 
 type activeFilter string
@@ -91,7 +93,10 @@ func (assetKindCode) Schema(huma.Registry) *huma.Schema {
 	return &huma.Schema{Type: huma.TypeString, Enum: codes(inventory.Server, inventory.VirtualMachine, inventory.Workstation, inventory.NetworkDevice)}
 }
 
-const unknownFilterCode = "unknown"
+const (
+	unknownFilterCode      = "unknown"
+	unclassifiedFilterCode = "unclassified"
+)
 
 type criticalityFilterCode string
 
@@ -105,18 +110,28 @@ func (exposureFilterCode) Schema(huma.Registry) *huma.Schema {
 	return &huma.Schema{Type: huma.TypeString, Enum: append(codes(inventory.InternetFacing, inventory.Internal), unknownFilterCode)}
 }
 
+type informationClassificationFilterCode string
+
+func (informationClassificationFilterCode) Schema(huma.Registry) *huma.Schema {
+	return &huma.Schema{Type: huma.TypeString, Enum: append(codes(inventory.ClassifiedPublic, inventory.ClassifiedPrivate, inventory.ClassifiedConfidential), unclassifiedFilterCode)}
+}
+
 func (in assetQuery) query() (assets.Query, error) {
 	q := assets.Query{Limit: int(in.Limit), Cursor: in.Cursor, Filter: assets.Filter{Active: in.Active.keep()}}
 	var err error
 	if q.Filter.Kind, err = parseEach(in.Kind, inventory.ParseAssetKind); err != nil {
 		return assets.Query{}, err
 	}
-	if q.Filter.Criticality, err = parseEach(in.Criticality, orUnknown(inventory.CriticalityUnknown, inventory.ParseCriticality)); err != nil {
+	if q.Filter.Criticality, err = parseEach(in.Criticality, orUnknown(unknownFilterCode, inventory.CriticalityUnknown, inventory.ParseCriticality)); err != nil {
 		return assets.Query{}, err
 	}
-	if q.Filter.Exposure, err = parseEach(in.Exposure, orUnknown(inventory.ExposureUnknown, inventory.ParseExposure)); err != nil {
+	if q.Filter.Exposure, err = parseEach(in.Exposure, orUnknown(unknownFilterCode, inventory.ExposureUnknown, inventory.ParseExposure)); err != nil {
 		return assets.Query{}, err
 	}
+	if q.Filter.InformationClassification, err = parseEach(in.InformationClassification, orUnknown(unclassifiedFilterCode, inventory.Unclassified, inventory.ParseInformationClassification)); err != nil {
+		return assets.Query{}, err
+	}
+	q.Filter.Area = in.Area
 	return q, nil
 }
 
@@ -132,12 +147,12 @@ func parseEach[C ~string, T any](codes []C, parse func(string) (T, error)) ([]T,
 	return values, nil
 }
 
-func orUnknown[T any](unknown T, parse func(string) (T, error)) func(string) (T, error) {
-	return func(code string) (T, error) {
-		if code == unknownFilterCode {
+func orUnknown[T any](code string, unknown T, parse func(string) (T, error)) func(string) (T, error) {
+	return func(in string) (T, error) {
+		if in == code {
 			return unknown, nil
 		}
-		return parse(code)
+		return parse(in)
 	}
 }
 
