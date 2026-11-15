@@ -63,22 +63,13 @@ type AssetPage struct {
 // Sources, Disconnected ones included, with their Software Components loaded
 // in one further query whatever the page size.
 func (t *Tx) ListAssets(ctx context.Context, q AssetListQuery) (AssetPage, error) {
-	filter := sqlcgen.CountCustomerAssetsParams{
+	params := sqlcgen.ListCustomerAssetsParams{
 		CustomerID: uuid.UUID(q.Customer), Active: q.Filter.Active,
 		KindIds:                      catalogIDs(q.Filter.Kind),
 		CriticalityIds:               catalogIDs(q.Filter.Criticality),
 		ExposureIds:                  catalogIDs(q.Filter.Exposure),
 		InformationClassificationIds: catalogIDs(q.Filter.InformationClassification),
 		AreaIds:                      areaIDs(q.Filter.Area),
-	}
-	total, err := t.q.CountCustomerAssets(ctx, filter)
-	if err != nil {
-		return AssetPage{}, fmt.Errorf("count assets of customer %s: %w", q.Customer, err)
-	}
-	params := sqlcgen.ListCustomerAssetsParams{
-		CustomerID: filter.CustomerID, Active: filter.Active,
-		KindIds: filter.KindIds, CriticalityIds: filter.CriticalityIds, ExposureIds: filter.ExposureIds,
-		InformationClassificationIds: filter.InformationClassificationIds, AreaIds: filter.AreaIds,
 		// One extra row tells whether another page follows.
 		PageSize: int32(q.Limit + 1),
 	}
@@ -91,7 +82,12 @@ func (t *Tx) ListAssets(ctx context.Context, q AssetListQuery) (AssetPage, error
 	if err != nil {
 		return AssetPage{}, fmt.Errorf("list assets of customer %s: %w", q.Customer, err)
 	}
-	page := AssetPage{Total: int(total)}
+	// total rides every matching row, counted before the page keyset narrows
+	// them; no rows means no match, so a total of zero.
+	page := AssetPage{}
+	if len(rows) > 0 {
+		page.Total = int(rows[0].Total)
+	}
 	if len(rows) > q.Limit {
 		page.More = true
 		rows = rows[:q.Limit]
@@ -102,11 +98,30 @@ func (t *Tx) ListAssets(ctx context.Context, q AssetListQuery) (AssetPage, error
 	}
 	page.Assets = make([]StoredAsset, len(rows))
 	for i, row := range rows {
-		if page.Assets[i], err = restoreAsset(sqlcgen.ListAssetsRow(row), software); err != nil {
+		if page.Assets[i], err = restoreAsset(assetRow(row), software); err != nil {
 			return AssetPage{}, err
 		}
 	}
 	return page, nil
+}
+
+// assetRow drops the window total so a listed row restores as ListAssets reads
+// it.
+func assetRow(row sqlcgen.ListCustomerAssetsRow) sqlcgen.ListAssetsRow {
+	return sqlcgen.ListAssetsRow{
+		ID: row.ID, CmdbSourceID: row.CmdbSourceID, RecordID: row.RecordID,
+		Name: row.Name, Description: row.Description, KindID: row.KindID,
+		HardwareVendor: row.HardwareVendor, HardwareModel: row.HardwareModel, CriticalityID: row.CriticalityID,
+		ImportedOwner: row.ImportedOwner, DeclaredOwner: row.DeclaredOwner,
+		ImportedExposureID: row.ImportedExposureID, DeclaredExposureID: row.DeclaredExposureID,
+		LifecycleStageID: row.LifecycleStageID, AreaRecordID: row.AreaRecordID,
+		Retired: row.Retired, InactiveSince: row.InactiveSince,
+		AreaID: row.AreaID, AreaName: row.AreaName,
+		ExposureDeclaredBy: row.ExposureDeclaredBy, ExposureDeclaredAt: row.ExposureDeclaredAt,
+		DeclaredInformationClassificationID: row.DeclaredInformationClassificationID,
+		InformationClassificationDeclaredBy: row.InformationClassificationDeclaredBy,
+		InformationClassificationDeclaredAt: row.InformationClassificationDeclaredAt,
+	}
 }
 
 func (t *Tx) softwareOf(ctx context.Context, rows []sqlcgen.ListCustomerAssetsRow) (map[inventory.SourceReference][]inventory.SoftwareComponent, error) {

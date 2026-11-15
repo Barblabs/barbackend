@@ -47,48 +47,6 @@ func (q *Queries) ClearAssetInformationClassification(ctx context.Context, arg C
 	return err
 }
 
-const countCustomerAssets = `-- name: CountCustomerAssets :one
-SELECT count(*)
-FROM assets a
-JOIN cmdb_sources s ON s.id = a.cmdb_source_id
-WHERE s.customer_id = $1
-  AND ($2::boolean IS NULL OR (a.inactive_since IS NULL) = $2::boolean)
-  AND (cardinality($3::smallint[]) = 0 OR a.kind_id = ANY($3::smallint[]))
-  AND (cardinality($4::smallint[]) = 0 OR coalesce(a.criticality_id, 0) = ANY($4::smallint[]))
-  AND (cardinality($5::smallint[]) = 0
-       OR coalesce(a.declared_exposure_id, a.imported_exposure_id, 0) = ANY($5::smallint[]))
-  AND (cardinality($6::smallint[]) = 0
-       OR coalesce(a.declared_information_classification_id, 0) = ANY($6::smallint[]))
-  AND (cardinality($7::bigint[]) = 0
-       OR (a.cmdb_source_id, a.area_record_id) IN
-          (SELECT cmdb_source_id, record_id FROM customer_areas WHERE id = ANY($7::bigint[])))
-`
-
-type CountCustomerAssetsParams struct {
-	CustomerID                   uuid.UUID
-	Active                       *bool
-	KindIds                      []int16
-	CriticalityIds               []int16
-	ExposureIds                  []int16
-	InformationClassificationIds []int16
-	AreaIds                      []int64
-}
-
-func (q *Queries) CountCustomerAssets(ctx context.Context, arg CountCustomerAssetsParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countCustomerAssets,
-		arg.CustomerID,
-		arg.Active,
-		arg.KindIds,
-		arg.CriticalityIds,
-		arg.ExposureIds,
-		arg.InformationClassificationIds,
-		arg.AreaIds,
-	)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
 const deactivateAssets = `-- name: DeactivateAssets :execrows
 UPDATE assets
 SET inactive_since = coalesce(inactive_since, now())
@@ -406,40 +364,57 @@ func (q *Queries) ListAssetsByReference(ctx context.Context, arg ListAssetsByRef
 }
 
 const listCustomerAssets = `-- name: ListCustomerAssets :many
-SELECT a.id, a.cmdb_source_id, a.record_id, a.name, a.description, a.kind_id,
-       a.hardware_vendor, a.hardware_model, a.criticality_id,
-       imported_owner.email AS imported_owner, declared_owner.email AS declared_owner,
-       a.imported_exposure_id, a.declared_exposure_id, a.lifecycle_stage_id, a.area_record_id, a.retired, a.inactive_since,
-       area.id AS area_id, area.name AS area_name,
-       exposure_declarer.email AS exposure_declared_by, a.exposure_declared_at,
-       a.declared_information_classification_id,
-       information_classification_declarer.email AS information_classification_declared_by, a.information_classification_declared_at
-FROM assets a
-JOIN cmdb_sources s ON s.id = a.cmdb_source_id
-LEFT JOIN asset_owners imported_owner ON imported_owner.id = a.imported_owner_id
-LEFT JOIN asset_owners declared_owner ON declared_owner.id = a.declared_owner_id
-LEFT JOIN customer_areas area ON area.cmdb_source_id = a.cmdb_source_id AND area.record_id = a.area_record_id
-LEFT JOIN users exposure_declarer ON exposure_declarer.id = a.exposure_declared_by
-LEFT JOIN users information_classification_declarer ON information_classification_declarer.id = a.information_classification_declared_by
-WHERE s.customer_id = $1
-  AND ($2::boolean IS NULL OR (a.inactive_since IS NULL) = $2::boolean)
-  AND (cardinality($3::smallint[]) = 0 OR a.kind_id = ANY($3::smallint[]))
-  AND (cardinality($4::smallint[]) = 0 OR coalesce(a.criticality_id, 0) = ANY($4::smallint[]))
-  AND (cardinality($5::smallint[]) = 0
-       OR coalesce(a.declared_exposure_id, a.imported_exposure_id, 0) = ANY($5::smallint[]))
-  AND (cardinality($6::smallint[]) = 0
-       OR coalesce(a.declared_information_classification_id, 0) = ANY($6::smallint[]))
-  AND (cardinality($7::bigint[]) = 0
-       OR (a.cmdb_source_id, a.area_record_id) IN
-          (SELECT cmdb_source_id, record_id FROM customer_areas WHERE id = ANY($7::bigint[])))
-  AND ($8::text IS NULL
-       OR (a.name, a.cmdb_source_id, a.record_id)
-          > ($8::text, $9::uuid, $10::text))
-ORDER BY a.name, a.cmdb_source_id, a.record_id
-LIMIT $11
+WITH matching AS (
+    SELECT a.id, a.cmdb_source_id, a.record_id, a.name, a.description, a.kind_id,
+           a.hardware_vendor, a.hardware_model, a.criticality_id,
+           imported_owner.email AS imported_owner, declared_owner.email AS declared_owner,
+           a.imported_exposure_id, a.declared_exposure_id, a.lifecycle_stage_id, a.area_record_id, a.retired, a.inactive_since,
+           area.id AS area_id, area.name AS area_name,
+           exposure_declarer.email AS exposure_declared_by, a.exposure_declared_at,
+           a.declared_information_classification_id,
+           information_classification_declarer.email AS information_classification_declared_by, a.information_classification_declared_at,
+           count(*) OVER () AS total
+    FROM assets a
+    JOIN cmdb_sources s ON s.id = a.cmdb_source_id
+    LEFT JOIN asset_owners imported_owner ON imported_owner.id = a.imported_owner_id
+    LEFT JOIN asset_owners declared_owner ON declared_owner.id = a.declared_owner_id
+    LEFT JOIN customer_areas area ON area.cmdb_source_id = a.cmdb_source_id AND area.record_id = a.area_record_id
+    LEFT JOIN users exposure_declarer ON exposure_declarer.id = a.exposure_declared_by
+    LEFT JOIN users information_classification_declarer ON information_classification_declarer.id = a.information_classification_declared_by
+    WHERE s.customer_id = $5
+      AND ($6::boolean IS NULL OR (a.inactive_since IS NULL) = $6::boolean)
+      AND (cardinality($7::smallint[]) = 0 OR a.kind_id = ANY($7::smallint[]))
+      AND (cardinality($8::smallint[]) = 0 OR coalesce(a.criticality_id, 0) = ANY($8::smallint[]))
+      AND (cardinality($9::smallint[]) = 0
+           OR coalesce(a.declared_exposure_id, a.imported_exposure_id, 0) = ANY($9::smallint[]))
+      AND (cardinality($10::smallint[]) = 0
+           OR coalesce(a.declared_information_classification_id, 0) = ANY($10::smallint[]))
+      AND (cardinality($11::bigint[]) = 0
+           OR (a.cmdb_source_id, a.area_record_id) IN
+              (SELECT cmdb_source_id, record_id FROM customer_areas WHERE id = ANY($11::bigint[])))
+)
+SELECT id, cmdb_source_id, record_id, name, description, kind_id,
+       hardware_vendor, hardware_model, criticality_id,
+       imported_owner, declared_owner,
+       imported_exposure_id, declared_exposure_id, lifecycle_stage_id, area_record_id, retired, inactive_since,
+       area_id, area_name,
+       exposure_declared_by, exposure_declared_at,
+       declared_information_classification_id,
+       information_classification_declared_by, information_classification_declared_at,
+       total
+FROM matching
+WHERE $1::text IS NULL
+   OR (name, cmdb_source_id, record_id)
+      > ($1::text, $2::uuid, $3::text)
+ORDER BY name, cmdb_source_id, record_id
+LIMIT $4
 `
 
 type ListCustomerAssetsParams struct {
+	AfterName                    *string
+	AfterSourceID                pgtype.UUID
+	AfterRecordID                *string
+	PageSize                     int32
 	CustomerID                   uuid.UUID
 	Active                       *bool
 	KindIds                      []int16
@@ -447,10 +422,6 @@ type ListCustomerAssetsParams struct {
 	ExposureIds                  []int16
 	InformationClassificationIds []int16
 	AreaIds                      []int64
-	AfterName                    *string
-	AfterSourceID                pgtype.UUID
-	AfterRecordID                *string
-	PageSize                     int32
 }
 
 type ListCustomerAssetsRow struct {
@@ -478,12 +449,20 @@ type ListCustomerAssetsRow struct {
 	DeclaredInformationClassificationID *int16
 	InformationClassificationDeclaredBy *string
 	InformationClassificationDeclaredAt *time.Time
+	Total                               int64
 }
 
 // The keyset condition and the ORDER BY both use (name, cmdb_source_id,
 // record_id), so a page boundary is exact even between equal names.
+// matching holds the Customer's Assets that pass every value filter, so the
+// filter lives once; total counts them before the page keyset narrows the
+// rows, and so counts every match whatever page is read.
 func (q *Queries) ListCustomerAssets(ctx context.Context, arg ListCustomerAssetsParams) ([]ListCustomerAssetsRow, error) {
 	rows, err := q.db.Query(ctx, listCustomerAssets,
+		arg.AfterName,
+		arg.AfterSourceID,
+		arg.AfterRecordID,
+		arg.PageSize,
 		arg.CustomerID,
 		arg.Active,
 		arg.KindIds,
@@ -491,10 +470,6 @@ func (q *Queries) ListCustomerAssets(ctx context.Context, arg ListCustomerAssets
 		arg.ExposureIds,
 		arg.InformationClassificationIds,
 		arg.AreaIds,
-		arg.AfterName,
-		arg.AfterSourceID,
-		arg.AfterRecordID,
-		arg.PageSize,
 	)
 	if err != nil {
 		return nil, err
@@ -528,6 +503,7 @@ func (q *Queries) ListCustomerAssets(ctx context.Context, arg ListCustomerAssets
 			&i.DeclaredInformationClassificationID,
 			&i.InformationClassificationDeclaredBy,
 			&i.InformationClassificationDeclaredAt,
+			&i.Total,
 		); err != nil {
 			return nil, err
 		}
