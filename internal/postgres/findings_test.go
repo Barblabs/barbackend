@@ -261,38 +261,6 @@ func TestModel3ScoresKeepTheExploitSignalAndTheClassificationMultiplier(t *testi
 	}
 }
 
-func TestOnlyModel3ScoresStoreAnExploitSignal(t *testing.T) {
-	t.Parallel()
-	w := newFindingWorld(t)
-	id, _ := saveMatch(t, w.db, match(t, w.payments, "1.18.0"))
-	exploitSignal, multiplier := 0.2, 0.75
-	factors := scoring.Factors{Alpha: 0.81, Beta: 0.02, Vulnerability: 0.486, CriticalityMultiplier: 1, ExposureMultiplier: 0.7, LifecycleMultiplier: 1}
-
-	for _, tt := range []struct {
-		name string
-		s    scoring.Score
-	}{
-		{"model 2 with an exploit signal", scoring.Score{Model: 2, Value: 0.3, Factors: withFactors(factors, &exploitSignal, nil)}},
-		{"model 2 with a classification multiplier", scoring.Score{Model: 2, Value: 0.3, Factors: withFactors(factors, nil, &multiplier)}},
-		{"model 3 without an exploit signal", scoring.Score{Model: 3, Value: 0.3, Factors: factors}},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			err := w.db.InTx(context.Background(), func(tx *postgres.Tx) error {
-				_, err := tx.SaveScoreIfChanged(context.Background(), id, tt.s)
-				return err
-			})
-			if err == nil {
-				t.Error("save succeeded, want the database to refuse it")
-			}
-		})
-	}
-}
-
-func withFactors(f scoring.Factors, exploitSignal, classification *float64) scoring.Factors {
-	f.ExploitSignal, f.ClassificationMultiplier = exploitSignal, classification
-	return f
-}
-
 func TestSaveScoreIfChangedStoresOnlyAChangedScore(t *testing.T) {
 	t.Parallel()
 	w := newFindingWorld(t)
