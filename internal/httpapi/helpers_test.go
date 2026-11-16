@@ -37,6 +37,7 @@ import (
 	"barbackend/internal/slack/slacktest"
 	"barbackend/internal/stixext"
 	"barbackend/internal/tenancy"
+	"barbackend/internal/tenancy/tenancytest"
 	"barbackend/internal/users"
 	"github.com/TcM1911/stix2"
 	"github.com/google/uuid"
@@ -230,7 +231,7 @@ func newKey(t *testing.T) encryption.Key {
 // connect connects a CMDB Source for customer, running its first Sync.
 func (e env) connect(t *testing.T, customer tenancy.CustomerID) inventory.CMDBSourceID {
 	t.Helper()
-	if _, err := e.cmdb.Connect(context.Background(), viewerOf(customer), providertest.Name, providertest.Login); err != nil {
+	if _, err := e.cmdb.Connect(context.Background(), tenancytest.CustomerAdmin(customer), providertest.Name, providertest.Login); err != nil {
 		t.Fatal(err)
 	}
 	var stored postgres.StoredCMDBSource
@@ -248,6 +249,17 @@ func (e env) do(req *http.Request) *httptest.ResponseRecorder {
 	if req.Header.Get("Authorization") == "" {
 		req.Header.Set("Authorization", "Bearer "+e.token)
 	}
+	return e.send(req)
+}
+
+// adminToken signs in a new Customer Admin of the env's Customer.
+func (e env) adminToken(t *testing.T) string {
+	t.Helper()
+	return "Bearer " + e.signIn(t, e.newUser(t, tenancy.CustomerAdmin, e.customer))
+}
+
+func (e env) as(token string, req *http.Request) *httptest.ResponseRecorder {
+	req.Header.Set("Authorization", token)
 	return e.send(req)
 }
 
@@ -285,13 +297,13 @@ func validLogin() map[string]string {
 	return map[string]string{"provider": string(providertest.Name), "url": "http://cmdb", "user": "admin", "password": providertest.Secret}
 }
 
-func (e env) postLogin(path string, login map[string]string) *httptest.ResponseRecorder {
-	return e.sendLogin(http.MethodPost, path, login)
+func (e env) postLogin(token, path string, login map[string]string) *httptest.ResponseRecorder {
+	return e.sendLogin(token, http.MethodPost, path, login)
 }
 
-func (e env) sendLogin(method, path string, login map[string]string) *httptest.ResponseRecorder {
+func (e env) sendLogin(token, method, path string, login map[string]string) *httptest.ResponseRecorder {
 	body, _ := json.Marshal(login)
-	return e.do(httptest.NewRequest(method, path, strings.NewReader(string(body))))
+	return e.as(token, httptest.NewRequest(method, path, strings.NewReader(string(body))))
 }
 
 type syncResult struct {
@@ -375,14 +387,6 @@ func (e env) holdSyncLock(t *testing.T, src inventory.CMDBSourceID) (release fun
 	}
 }
 
-func viewerOf(customer tenancy.CustomerID) tenancy.User {
-	u, err := tenancy.NewUser(tenancy.UserID(uuid.New()), "viewer@example.com", tenancy.Viewer, customer)
-	if err != nil {
-		panic(err)
-	}
-	return u
-}
-
 // prioritize stores two Findings on the Customer's pg-prod-01 and their
 // Prioritization, in which the Prioritizer puts the one of CVE-2025-1094 first
 // though the other has the higher Score.
@@ -452,7 +456,7 @@ func (e env) prioritize(t *testing.T) agents.Prioritization {
 	if _, err := e.agents.Prioritize(ctx, e.customer); err != nil {
 		t.Fatal(err)
 	}
-	p, err := e.agents.Latest(ctx, viewerOf(e.customer))
+	p, err := e.agents.Latest(ctx, tenancytest.Viewer(e.customer))
 	if err != nil {
 		t.Fatal(err)
 	}

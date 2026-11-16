@@ -202,7 +202,7 @@ func TestListAssetsIncludesAssetsOfDisconnectedSourcesOnlyWhenInactiveAllowed(t 
 	e := newEnv(t)
 	e.provider.Snapshot = inventory.Snapshot{Records: []inventory.Record{record(t, "1", "old")}}
 	e.connect(t, e.customer)
-	if rec := e.do(httptest.NewRequest(http.MethodDelete, "/cmdb/source", nil)); rec.Code != http.StatusNoContent {
+	if rec := e.disconnect(e.adminToken(t)); rec.Code != http.StatusNoContent {
 		t.Fatalf("disconnect = %d %s", rec.Code, rec.Body)
 	}
 	e.provider.Snapshot = inventory.Snapshot{Records: []inventory.Record{record(t, "1", "new")}}

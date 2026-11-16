@@ -246,6 +246,13 @@ func (u User) DeclareAssetValues() (CustomerID, error) {
 	return u.customerAdmin()
 }
 
+// ManageCMDBSource returns the Customer whose CMDB Source u manages: testing
+// a login, connecting one, replacing its login and disconnecting it. It fails
+// with ErrNotCustomerAdmin for anyone but a Customer Admin.
+func (u User) ManageCMDBSource() (CustomerID, error) {
+	return u.customerAdmin()
+}
+
 func (u User) customerAdmin() (CustomerID, error) {
 	if u.role != CustomerAdmin {
 		return CustomerID{}, ErrNotCustomerAdmin

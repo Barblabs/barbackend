@@ -273,11 +273,11 @@ A barbattack staff User who creates, renames, deactivates and reactivates Custom
 _Avoid_: Super admin, superadmin, staff
 
 **Customer Admin**:
-A User who manages the Users of their own Customer, including other Customer Admins. Every Customer has at least one.
+A User who controls their own Customer's configuration: its Users, including other Customer Admins, its CMDB Source, its Areas, its Declarations, its Business Context and its Slack. Every Customer has at least one.
 _Avoid_: Tenant admin, org admin, owner
 
 **Viewer**:
-A User of a Customer who is not a Customer Admin and cannot manage Users.
+A User of a Customer who is not a Customer Admin. A Viewer reads the Customer's data and can trigger a Sync, but changes none of its configuration.
 _Avoid_: Member, regular user, analyst
 
 **Asset Owner**:

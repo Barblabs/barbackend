@@ -8,6 +8,7 @@ import (
 
 	"barbackend/internal/cmdb/provider/providertest"
 	"barbackend/internal/inventory"
+	"barbackend/internal/tenancy/tenancytest"
 )
 
 // syncedSources records the CMDB Sources OnSynced was called with.
@@ -37,7 +38,7 @@ func TestOnSyncedRunsAfterEverySyncThatCommits(t *testing.T) {
 	e.cmdb.OnSynced(synced.hook)
 
 	customer, source := e.connect(t)
-	if _, err := e.cmdb.SyncConnected(context.Background(), viewerOf(customer)); err != nil {
+	if _, err := e.cmdb.SyncConnected(context.Background(), tenancytest.Viewer(customer)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -54,7 +55,7 @@ func TestOnSyncedDoesNotRunAfterAFailedSync(t *testing.T) {
 	e.provider.Err = errors.New("cmdb is down")
 
 	customer := e.newCustomer(t)
-	if _, err := e.cmdb.Connect(context.Background(), viewerOf(customer), providertest.Name, providertest.Login); err != nil {
+	if _, err := e.cmdb.Connect(context.Background(), tenancytest.CustomerAdmin(customer), providertest.Name, providertest.Login); err != nil {
 		t.Fatal(err)
 	}
 
@@ -70,7 +71,7 @@ func TestOnSyncedErrorLeavesTheSyncSucceeded(t *testing.T) {
 	e.cmdb.OnSynced(synced.hook)
 
 	customer, _ := e.connect(t)
-	if _, err := e.cmdb.SyncConnected(context.Background(), viewerOf(customer)); err != nil {
+	if _, err := e.cmdb.SyncConnected(context.Background(), tenancytest.Viewer(customer)); err != nil {
 		t.Errorf("SyncConnected = %v, want the Sync to succeed whatever OnSynced returns", err)
 	}
 	if n := e.failedRuns(t); n != 0 {

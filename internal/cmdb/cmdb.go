@@ -101,7 +101,7 @@ func (s *Service) create(ctx context.Context, customer tenancy.CustomerID, name 
 // TestLogin checks a login against its CMDB and stores nothing. A CMDB that
 // cannot be reached or rejects the login is a *Failure.
 func (s *Service) TestLogin(ctx context.Context, caller tenancy.User, name inventory.CMDBProvider, login Login) error {
-	if _, err := caller.ActsFor(); err != nil {
+	if _, err := caller.ManageCMDBSource(); err != nil {
 		return err
 	}
 	_, _, err := s.checkLogin(ctx, name, login)
@@ -115,7 +115,7 @@ func (s *Service) TestLogin(ctx context.Context, caller tenancy.User, name inven
 // the admin fixes the CMDB and syncs again without reconnecting. Like
 // SyncConnected, it outlives ctx.
 func (s *Service) Connect(ctx context.Context, caller tenancy.User, name inventory.CMDBProvider, login Login) (ConnectedSource, error) {
-	customer, err := caller.ActsFor()
+	customer, err := caller.ManageCMDBSource()
 	if err != nil {
 		return ConnectedSource{}, err
 	}
@@ -141,7 +141,7 @@ func (s *Service) Connect(ctx context.Context, caller tenancy.User, name invento
 // The login is for the source's own CMDB Provider: another provider's Record
 // IDs would not match the Assets.
 func (s *Service) UpdateLogin(ctx context.Context, caller tenancy.User, login Login) (ConnectedSource, error) {
-	customer, err := caller.ActsFor()
+	customer, err := caller.ManageCMDBSource()
 	if err != nil {
 		return ConnectedSource{}, err
 	}
@@ -169,7 +169,7 @@ func (s *Service) UpdateLogin(ctx context.Context, caller tenancy.User, login Lo
 // inventory.ErrNotConnected when there is none, and with
 // inventory.ErrSyncInProgress while a Sync of it commits.
 func (s *Service) Disconnect(ctx context.Context, caller tenancy.User) error {
-	customer, err := caller.ActsFor()
+	customer, err := caller.ManageCMDBSource()
 	if err != nil {
 		return err
 	}

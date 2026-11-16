@@ -31,7 +31,7 @@ func (h cmdbSourceHandler) register(api huma.API) {
 		Method:      http.MethodPost,
 		Path:        "/cmdb/source",
 		Summary:     "Connect a CMDB Source and run its first Sync",
-		Description: "A failed first Sync is reported in last_sync_failure and leaves the CMDB Source connected.",
+		Description: "Only a Customer Admin connects it. A failed first Sync is reported in last_sync_failure and leaves the CMDB Source connected.",
 		Errors:      []int{http.StatusBadRequest, http.StatusConflict, http.StatusUnprocessableEntity},
 	}, h.connect)
 	register(api, huma.Operation{
@@ -39,6 +39,7 @@ func (h cmdbSourceHandler) register(api huma.API) {
 		Method:      http.MethodPut,
 		Path:        "/cmdb/source",
 		Summary:     "Replace the login of the Connected CMDB Source",
+		Description: "Only a Customer Admin replaces it.",
 		Errors:      []int{http.StatusBadRequest, http.StatusNotFound, http.StatusUnprocessableEntity},
 	}, h.update)
 	register(api, huma.Operation{
@@ -46,6 +47,7 @@ func (h cmdbSourceHandler) register(api huma.API) {
 		Method:      http.MethodDelete,
 		Path:        "/cmdb/source",
 		Summary:     "Disconnect the Connected CMDB Source",
+		Description: "Only a Customer Admin disconnects it. Its Assets become Inactive.",
 		Errors:      []int{http.StatusNotFound},
 	}, h.disconnect)
 	register(api, huma.Operation{
@@ -53,7 +55,7 @@ func (h cmdbSourceHandler) register(api huma.API) {
 		Method:      http.MethodPost,
 		Path:        "/cmdb/source/test",
 		Summary:     "Check a CMDB Source login without storing it",
-		Description: "A login the CMDB rejects is a 200 with ok false and the reason.",
+		Description: "Only a Customer Admin checks one. A login the CMDB rejects is a 200 with ok false and the reason.",
 		Errors:      []int{http.StatusBadRequest},
 	}, h.test)
 	register(api, huma.Operation{
@@ -61,6 +63,7 @@ func (h cmdbSourceHandler) register(api huma.API) {
 		Method:      http.MethodPost,
 		Path:        "/cmdb/source/sync",
 		Summary:     "Sync the Connected CMDB Source",
+		Description: "Any User of the Customer triggers it.",
 		Errors:      []int{http.StatusNotFound, http.StatusConflict, http.StatusBadGateway},
 	}, h.sync)
 }
