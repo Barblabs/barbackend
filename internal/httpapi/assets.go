@@ -66,6 +66,7 @@ type assetQuery struct {
 	Criticality               []criticalityFilterCode               `query:"criticality,explode" doc:"Criticality codes, as repeated keys; an Asset with any of them matches, and unknown matches an Asset without a Criticality"`
 	Exposure                  []exposureFilterCode                  `query:"exposure,explode" doc:"Exposure codes, as repeated keys, matched against the effective Exposure (exposure.value); an Asset with any of them matches, and unknown matches an Asset without one"`
 	InformationClassification []informationClassificationFilterCode `query:"information_classification,explode" doc:"Information Classification codes, as repeated keys; an Asset with any of them matches, and unclassified matches an Asset without a Declaration"`
+	Lifecycle                 []lifecycleFilterCode                 `query:"lifecycle_stage,explode" doc:"Lifecycle stage codes, as repeated keys; an Asset with any of them matches, and unknown matches an Asset without one, a retired Asset included"`
 	Area                      []int64                               `query:"area,explode" doc:"Area ids, as in GET /areas, as repeated keys; an Asset in any of them matches"`
 }
 
@@ -116,6 +117,12 @@ func (informationClassificationFilterCode) Schema(huma.Registry) *huma.Schema {
 	return &huma.Schema{Type: huma.TypeString, Enum: append(codes(inventory.ClassifiedPublic, inventory.ClassifiedPrivate, inventory.ClassifiedConfidential), unclassifiedFilterCode)}
 }
 
+type lifecycleFilterCode string
+
+func (lifecycleFilterCode) Schema(huma.Registry) *huma.Schema {
+	return &huma.Schema{Type: huma.TypeString, Enum: append(codes(inventory.LifecycleProduction, inventory.LifecycleImplementation, inventory.LifecycleStock), unknownFilterCode)}
+}
+
 func (in assetQuery) query() (assets.Query, error) {
 	q := assets.Query{Limit: int(in.Limit), Cursor: in.Cursor, Filter: assets.Filter{Active: in.Active.keep()}}
 	var err error
@@ -129,6 +136,9 @@ func (in assetQuery) query() (assets.Query, error) {
 		return assets.Query{}, err
 	}
 	if q.Filter.InformationClassification, err = parseEach(in.InformationClassification, orUnknown(unclassifiedFilterCode, inventory.Unclassified, inventory.ParseInformationClassification)); err != nil {
+		return assets.Query{}, err
+	}
+	if q.Filter.Lifecycle, err = parseEach(in.Lifecycle, orUnknown(unknownFilterCode, inventory.LifecycleUnknown, inventory.ParseLifecycleStage)); err != nil {
 		return assets.Query{}, err
 	}
 	q.Filter.Area = in.Area

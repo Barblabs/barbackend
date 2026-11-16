@@ -37,6 +37,35 @@ func TestOpenAPIListsEveryRoute(t *testing.T) {
 	}
 }
 
+func TestOpenAPIListsTheLifecycleStageFilterValues(t *testing.T) {
+	t.Parallel()
+	rec := newEnv(t).send(httptest.NewRequest(http.MethodGet, "/openapi.json", nil))
+
+	spec := decode[struct {
+		Paths map[string]map[string]struct {
+			Parameters []struct {
+				Name   string `json:"name"`
+				In     string `json:"in"`
+				Schema struct {
+					Items struct {
+						Enum []string `json:"enum"`
+					} `json:"items"`
+				} `json:"schema"`
+			} `json:"parameters"`
+		} `json:"paths"`
+	}](t, rec, http.StatusOK)
+
+	for _, p := range spec.Paths["/assets"]["get"].Parameters {
+		if p.Name == "lifecycle_stage" && p.In == "query" {
+			if want := []string{"production", "implementation", "stock", "unknown"}; !slices.Equal(p.Schema.Items.Enum, want) {
+				t.Errorf("lifecycle_stage enum = %v, want %v", p.Schema.Items.Enum, want)
+			}
+			return
+		}
+	}
+	t.Error("GET /assets lacks the lifecycle_stage query parameter")
+}
+
 func TestOpenAPIDeclaresBearerAuthentication(t *testing.T) {
 	t.Parallel()
 	rec := newEnv(t).send(httptest.NewRequest(http.MethodGet, "/openapi.json", nil))

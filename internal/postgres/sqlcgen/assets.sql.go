@@ -389,9 +389,10 @@ WITH matching AS (
            OR coalesce(a.declared_exposure_id, a.imported_exposure_id, 0) = ANY($9::smallint[]))
       AND (cardinality($10::smallint[]) = 0
            OR coalesce(a.declared_information_classification_id, 0) = ANY($10::smallint[]))
-      AND (cardinality($11::bigint[]) = 0
+      AND (cardinality($11::smallint[]) = 0 OR coalesce(a.lifecycle_stage_id, 0) = ANY($11::smallint[]))
+      AND (cardinality($12::bigint[]) = 0
            OR (a.cmdb_source_id, a.area_record_id) IN
-              (SELECT cmdb_source_id, record_id FROM customer_areas WHERE id = ANY($11::bigint[])))
+              (SELECT cmdb_source_id, record_id FROM customer_areas WHERE id = ANY($12::bigint[])))
 )
 SELECT id, cmdb_source_id, record_id, name, description, kind_id,
        hardware_vendor, hardware_model, criticality_id,
@@ -421,6 +422,7 @@ type ListCustomerAssetsParams struct {
 	CriticalityIds               []int16
 	ExposureIds                  []int16
 	InformationClassificationIds []int16
+	LifecycleStageIds            []int16
 	AreaIds                      []int64
 }
 
@@ -469,6 +471,7 @@ func (q *Queries) ListCustomerAssets(ctx context.Context, arg ListCustomerAssets
 		arg.CriticalityIds,
 		arg.ExposureIds,
 		arg.InformationClassificationIds,
+		arg.LifecycleStageIds,
 		arg.AreaIds,
 	)
 	if err != nil {

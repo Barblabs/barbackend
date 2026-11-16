@@ -55,17 +55,23 @@ func TestListAssetsTotalCountsTheAssetsListedAcrossAllPages(t *testing.T) {
 	db, conn := newDBWithConn(t)
 	customer := newCustomer(t, db)
 	src := newSource(t, db, customer)
-	asset := func(id string, kind inventory.AssetKind, criticality inventory.Criticality, exposure inventory.Exposure, area string) inventory.Record {
-		return record(t, id, inventory.ImportedAssetParams{Name: "asset-" + id, Kind: kind, Criticality: criticality, Exposure: exposure, Area: area})
+	params := func(id string, kind inventory.AssetKind, criticality inventory.Criticality, exposure inventory.Exposure, lifecycle inventory.LifecycleStage, area string) inventory.ImportedAssetParams {
+		return inventory.ImportedAssetParams{Name: "asset-" + id, Kind: kind, Criticality: criticality, Exposure: exposure, Lifecycle: lifecycle, Area: area}
+	}
+	asset := func(id string, kind inventory.AssetKind, criticality inventory.Criticality, exposure inventory.Exposure, lifecycle inventory.LifecycleStage, area string) inventory.Record {
+		return record(t, id, params(id, kind, criticality, exposure, lifecycle, area))
 	}
 	active := []inventory.Record{
-		asset("1", inventory.Server, inventory.CriticalityHigh, inventory.InternetFacing, "it"),
-		asset("2", inventory.Server, inventory.CriticalityUnknown, inventory.Internal, "it"),
-		asset("3", inventory.VirtualMachine, inventory.CriticalityLow, inventory.ExposureUnknown, "legacy"),
-		asset("4", inventory.VirtualMachine, inventory.CriticalityUnknown, inventory.ExposureUnknown, ""),
-		asset("5", inventory.Workstation, inventory.CriticalityMedium, inventory.InternetFacing, "legacy"),
+		asset("1", inventory.Server, inventory.CriticalityHigh, inventory.InternetFacing, inventory.LifecycleProduction, "it"),
+		asset("2", inventory.Server, inventory.CriticalityUnknown, inventory.Internal, inventory.LifecycleProduction, "it"),
+		asset("3", inventory.VirtualMachine, inventory.CriticalityLow, inventory.ExposureUnknown, inventory.LifecycleImplementation, "legacy"),
+		asset("4", inventory.VirtualMachine, inventory.CriticalityUnknown, inventory.ExposureUnknown, inventory.LifecycleUnknown, ""),
+		asset("5", inventory.Workstation, inventory.CriticalityMedium, inventory.InternetFacing, inventory.LifecycleStock, "legacy"),
 	}
-	inactive := asset("6", inventory.Workstation, inventory.CriticalityHigh, inventory.Internal, "")
+	// A retired Asset has no lifecycle stage (ADR 0028).
+	retired := params("6", inventory.Workstation, inventory.CriticalityHigh, inventory.Internal, inventory.LifecycleUnknown, "")
+	retired.Retired = true
+	inactive := record(t, "6", retired)
 	areas := []inventory.AreaRecord{areaRecord(t, "it", "IT", false), areaRecord(t, "legacy", "Legacy", true)}
 	snapshot := func(records []inventory.Record) inventory.Snapshot {
 		return inventory.Snapshot{Areas: areas, Records: records}
@@ -102,6 +108,13 @@ func TestListAssetsTotalCountsTheAssetsListedAcrossAllPages(t *testing.T) {
 		{"confidential", postgres.AssetFilter{InformationClassification: []inventory.InformationClassification{inventory.ClassifiedConfidential}}, []string{"1"}},
 		{"unclassified", postgres.AssetFilter{InformationClassification: []inventory.InformationClassification{inventory.Unclassified}}, []string{"2", "3", "4", "5", "6"}},
 		{"classifications with unclassified", postgres.AssetFilter{InformationClassification: []inventory.InformationClassification{inventory.ClassifiedConfidential, inventory.Unclassified}}, []string{"1", "2", "3", "4", "5", "6"}},
+		{"lifecycle stage", postgres.AssetFilter{Lifecycle: []inventory.LifecycleStage{inventory.LifecycleProduction}}, []string{"1", "2"}},
+		{"lifecycle stages", postgres.AssetFilter{Lifecycle: []inventory.LifecycleStage{inventory.LifecycleImplementation, inventory.LifecycleStock}}, []string{"3", "5"}},
+		{"unknown lifecycle stage", postgres.AssetFilter{Lifecycle: []inventory.LifecycleStage{inventory.LifecycleUnknown}}, []string{"4", "6"}},
+		{"lifecycle stage and criticality", postgres.AssetFilter{
+			Lifecycle:   []inventory.LifecycleStage{inventory.LifecycleProduction, inventory.LifecycleUnknown},
+			Criticality: []inventory.Criticality{inventory.CriticalityHigh},
+		}, []string{"1", "6"}},
 		{"area", postgres.AssetFilter{Area: []int64{it}}, []string{"1", "2"}},
 		{"areas", postgres.AssetFilter{Area: []int64{it, legacy}}, []string{"1", "2", "3", "5"}},
 		{"inactive area", postgres.AssetFilter{Area: []int64{legacy}}, []string{"3", "5"}},

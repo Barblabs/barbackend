@@ -122,14 +122,14 @@ func TestListAssetsSurvivesADeactivationBetweenPages(t *testing.T) {
 func TestListAssetsFilters(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
-	asset := func(id, name string, k inventory.AssetKind, c inventory.Criticality, x inventory.Exposure, area string) inventory.Record {
-		return inventory.Record{RecordID: id, Imported: imported(t, inventory.ImportedAssetParams{Name: name, Kind: k, Criticality: c, Exposure: x, Area: area})}
+	asset := func(id, name string, k inventory.AssetKind, c inventory.Criticality, x inventory.Exposure, l inventory.LifecycleStage, area string) inventory.Record {
+		return inventory.Record{RecordID: id, Imported: imported(t, inventory.ImportedAssetParams{Name: name, Kind: k, Criticality: c, Exposure: x, Lifecycle: l, Area: area})}
 	}
 	active := []inventory.Record{
-		asset("1", "a", inventory.Server, inventory.CriticalityHigh, inventory.InternetFacing, "it"),
-		asset("2", "b", inventory.Server, inventory.CriticalityLow, inventory.Internal, "it"),
+		asset("1", "a", inventory.Server, inventory.CriticalityHigh, inventory.InternetFacing, inventory.LifecycleProduction, "it"),
+		asset("2", "b", inventory.Server, inventory.CriticalityLow, inventory.Internal, inventory.LifecycleImplementation, "it"),
 		record(t, "3", "c"),
-		asset("5", "e", inventory.Workstation, inventory.CriticalityMedium, inventory.Internal, ""),
+		asset("5", "e", inventory.Workstation, inventory.CriticalityMedium, inventory.Internal, inventory.LifecycleStock, ""),
 	}
 	areas := []inventory.AreaRecord{areaRecord(t, "it", "IT")}
 	snapshot := func(records ...inventory.Record) inventory.Snapshot {
@@ -162,6 +162,10 @@ func TestListAssetsFilters(t *testing.T) {
 		{"unknown exposure", url.Values{"exposure": {"unknown"}}, []string{"3"}},
 		{"confidential", url.Values{"information_classification": {"confidential"}}, []string{"1"}},
 		{"unclassified", url.Values{"information_classification": {"unclassified"}}, []string{"2", "3", "5"}},
+		{"lifecycle stage", url.Values{"lifecycle_stage": {"production"}}, []string{"1"}},
+		{"lifecycle stages", url.Values{"lifecycle_stage": {"implementation", "stock"}}, []string{"2", "5"}},
+		{"unknown lifecycle stage", url.Values{"lifecycle_stage": {"unknown"}}, []string{"3"}},
+		{"lifecycle stage and kind", url.Values{"lifecycle_stage": {"implementation", "stock"}, "kind": {"server"}}, []string{"2"}},
 		{"area", url.Values{"area": {it}}, []string{"1", "2"}},
 		{"classification and area", url.Values{"information_classification": {"confidential"}, "area": {it}}, []string{"1"}},
 		{"kind and inactive", url.Values{"kind": {"virtual_machine"}, "active": {"all"}}, []string{"3", "4"}},
@@ -302,11 +306,14 @@ func TestListAssetsRejectsInvalidRequests(t *testing.T) {
 		{"unknown criticality", url.Values{"criticality": {"vital"}}},
 		{"one unknown kind among several", url.Values{"kind": {"server", "toaster"}}},
 		{"unlisted exposure", url.Values{"exposure": {"cloud"}}},
+		{"unlisted lifecycle stage", url.Values{"lifecycle_stage": {"obsolete"}}},
+		{"retired as lifecycle stage", url.Values{"lifecycle_stage": {"retired"}}},
 		{"bad active", url.Values{"active": {"maybe"}}},
 		{"malformed cursor", url.Values{"cursor": {"not-a-cursor"}}},
 		{"cursor with other filters", url.Values{"cursor": {*page.NextCursor}, "kind": {"server"}}},
 		{"cursor with other active", url.Values{"cursor": {*page.NextCursor}, "active": {"all"}}},
 		{"cursor with other exposure", url.Values{"cursor": {*page.NextCursor}, "exposure": {"unknown"}}},
+		{"cursor with other lifecycle stage", url.Values{"cursor": {*page.NextCursor}, "lifecycle_stage": {"unknown"}}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
