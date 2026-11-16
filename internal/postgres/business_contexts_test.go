@@ -8,6 +8,7 @@ import (
 
 	"barbackend/internal/business"
 	"barbackend/internal/postgres"
+	"barbackend/internal/postgres/pgtest"
 	"barbackend/internal/tenancy"
 	"github.com/google/uuid"
 )
@@ -19,8 +20,7 @@ func newAdmin(t *testing.T, db *postgres.DB, customer tenancy.CustomerID) tenanc
 		t.Fatal(err)
 	}
 	inTx(t, db, func(tx *postgres.Tx) error {
-		_, err := tx.CreateUser(context.Background(), u, uuid.NewString())
-		return err
+		return pgtest.CreateUser(context.Background(), tx, u, uuid.NewString())
 	})
 	return u
 }

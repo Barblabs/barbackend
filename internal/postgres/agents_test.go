@@ -10,6 +10,7 @@ import (
 	"barbackend/internal/assessment"
 	"barbackend/internal/finding"
 	"barbackend/internal/postgres"
+	"barbackend/internal/postgres/pgtest"
 	"barbackend/internal/tenancy"
 	"github.com/google/uuid"
 )
@@ -24,8 +25,7 @@ func TestConversationHistoryAndClaim(t *testing.T) {
 		t.Fatal(err)
 	}
 	inTx(t, db, func(tx *postgres.Tx) error {
-		_, err := tx.CreateUser(ctx, user, uuid.NewString())
-		return err
+		return pgtest.CreateUser(ctx, tx, user, uuid.NewString())
 	})
 	owner := postgres.ConversationOwner{Customer: customer, User: user.ID()}
 	id := uuid.New()
@@ -201,8 +201,7 @@ func TestPlansAndFeedbackHoldForAFindingAcrossTheChain(t *testing.T) {
 		t.Fatal(err)
 	}
 	inTx(t, w.db, func(tx *postgres.Tx) error {
-		_, err := tx.CreateUser(ctx, author, uuid.NewString())
-		return err
+		return pgtest.CreateUser(ctx, tx, author, uuid.NewString())
 	})
 
 	holds := func(customer tenancy.CustomerID, finding uuid.UUID) (bool, error) {

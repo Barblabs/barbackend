@@ -31,8 +31,7 @@ func TestUserBySubRestoresTheStoredUser(t *testing.T) {
 			}
 			sub := uuid.NewString()
 			inTx(t, db, func(tx *postgres.Tx) error {
-				_, err := tx.CreateUser(context.Background(), want, sub)
-				return err
+				return pgtest.CreateUser(context.Background(), tx, want, sub)
 			})
 
 			var got tenancy.User

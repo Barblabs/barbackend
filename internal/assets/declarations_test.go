@@ -74,8 +74,7 @@ func (e env) storeUser(t *testing.T, role tenancy.Role) tenancy.User {
 		t.Fatal(err)
 	}
 	inTx(t, e.db, func(tx *postgres.Tx) error {
-		_, err := tx.CreateUser(context.Background(), u, uuid.NewString())
-		return err
+		return pgtest.CreateUser(context.Background(), tx, u, uuid.NewString())
 	})
 	return u
 }

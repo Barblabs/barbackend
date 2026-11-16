@@ -27,19 +27,10 @@ type StoredUser struct {
 	Disabled time.Time
 }
 
-// CreateUser stores a User with the Cognito sub that signs them in.
-func (t *Tx) CreateUser(ctx context.Context, u tenancy.User, sub string) (StoredUser, error) {
-	created, err := t.insertUser(ctx, u, &sub)
-	if err != nil {
-		return StoredUser{}, err
-	}
-	return StoredUser{User: u, Sub: sub, Created: created}, nil
-}
-
 // CreatePendingUser stores a User who cannot sign in until their Invitation
 // is sent, with the Invitation claimed by the caller until claimedUntil.
 func (t *Tx) CreatePendingUser(ctx context.Context, u tenancy.User, claimedUntil time.Time) (StoredUser, Invitation, error) {
-	created, err := t.insertUser(ctx, u, nil)
+	created, err := t.insertUser(ctx, u)
 	if err != nil {
 		return StoredUser{}, Invitation{}, err
 	}
@@ -55,14 +46,13 @@ func (t *Tx) CreatePendingUser(ctx context.Context, u tenancy.User, claimedUntil
 	return StoredUser{User: pending, Created: created}, Invitation{User: u.ID(), Email: u.Email(), Attempt: int(attempts)}, nil
 }
 
-func (t *Tx) insertUser(ctx context.Context, u tenancy.User, sub *string) (time.Time, error) {
+func (t *Tx) insertUser(ctx context.Context, u tenancy.User) (time.Time, error) {
 	var customer pgtype.UUID
 	if id, ok := u.Customer(); ok {
 		customer = customerUUID(id)
 	}
 	created, err := t.q.InsertUser(ctx, sqlcgen.InsertUserParams{
 		ID:         uuid.UUID(u.ID()),
-		CognitoSub: sub,
 		Email:      u.Email(),
 		CustomerID: customer,
 		RoleID:     int16(u.Role()),

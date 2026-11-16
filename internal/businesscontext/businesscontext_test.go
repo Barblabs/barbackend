@@ -36,8 +36,7 @@ func TestOnlyASaveThatStoresNotifies(t *testing.T) {
 		if _, err := tx.CreateCustomer(ctx, customer); err != nil {
 			return err
 		}
-		_, err := tx.CreateUser(ctx, admin, uuid.NewString())
-		return err
+		return pgtest.CreateUser(ctx, tx, admin, uuid.NewString())
 	})
 	if err != nil {
 		t.Fatal(err)

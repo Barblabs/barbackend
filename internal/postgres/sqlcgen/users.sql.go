@@ -188,14 +188,13 @@ func (q *Queries) GetUserBySub(ctx context.Context, cognitoSub *string) (GetUser
 }
 
 const insertUser = `-- name: InsertUser :one
-INSERT INTO users (id, cognito_sub, email, customer_id, role_id)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO users (id, email, customer_id, role_id)
+VALUES ($1, $2, $3, $4)
 RETURNING created_at
 `
 
 type InsertUserParams struct {
 	ID         uuid.UUID
-	CognitoSub *string
 	Email      string
 	CustomerID pgtype.UUID
 	RoleID     int16
@@ -204,7 +203,6 @@ type InsertUserParams struct {
 func (q *Queries) InsertUser(ctx context.Context, arg InsertUserParams) (time.Time, error) {
 	row := q.db.QueryRow(ctx, insertUser,
 		arg.ID,
-		arg.CognitoSub,
 		arg.Email,
 		arg.CustomerID,
 		arg.RoleID,

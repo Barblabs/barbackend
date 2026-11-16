@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"barbackend/internal/postgres"
+	"barbackend/internal/postgres/pgtest"
 	"barbackend/internal/tenancy"
 	"github.com/google/uuid"
 )
@@ -66,7 +67,7 @@ func TestByEmailResolvesAnOperatorsInput(t *testing.T) {
 		if _, err := tx.CreateCustomer(ctx, customer); err != nil {
 			return err
 		}
-		if _, err := tx.CreateUser(ctx, viewer, uuid.NewString()); err != nil {
+		if err := pgtest.CreateUser(ctx, tx, viewer, uuid.NewString()); err != nil {
 			return err
 		}
 		_, err := tx.DisableUser(ctx, customer.ID(), viewer.ID())
