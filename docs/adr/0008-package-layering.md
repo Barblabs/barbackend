@@ -14,7 +14,7 @@ internal/
       <provider>/      adapters                    -> cmdb/provider, inventory, own subpackages
   agents/              use case on the Agents      -> alert, assessment, business, claude, inventory, postgres, tenancy
   businesscontext/     use cases on the Business Context -> business, postgres, tenancy
-  findings/            use case turning Feeds and Syncs into Findings -> finding, inventory, matching, postgres, scoring, stixext
+  findings/            use cases turning Feeds and Syncs into Findings, and counting them -> finding, inventory, matching, postgres, scoring, stixext, tenancy
   slack/               use cases on Slack          -> alert, encryption, postgres, tenancy
   advisories/          use case linking Advisories to Vulnerabilities -> postgres, stixext
   techniques/          use case keeping the ATT&CK catalog -> postgres
@@ -48,7 +48,7 @@ New features get a home before they get code:
 - **Slack alerts**: the use-case package `internal/slack` installs the app and sends the queued messages; the Prioritizer, in `internal/agents`, writes the Alerts it sends, as the types of the pure domain package `internal/alert`, which both import (ADR 0029, ADR 0030, ADR 0033).
 - **Customers and Users**: Customer, User and Role are a pure domain package, `internal/tenancy`, which takes `CustomerID` out of `inventory`. It sits below `inventory`, since every CMDB Source belongs to a Customer, so it cannot also hold the use cases: they call `postgres`, which stores Users and so imports `tenancy`. Authenticating and creating Users is the use-case package `internal/users`, which also manages Customers, since creating a Customer creates its first Customer Admin in the same transaction, and Cognito is an adapter, `internal/cognito`, that `users` calls (ADR 0013).
 - **Threat matching**: the pure domain package `internal/matching`, which imports `inventory` and reads Feed objects through `stixext` (ADR 0010), never the reverse.
-- **Findings**: the pure domain package `internal/finding` holds what identifies a Finding, what a match makes of it and why it is closed, so `postgres` can store it; the use-case package `internal/findings` reacts to Feeds and Syncs by calling `matching`, `scoring` and `postgres` (ADR 0020).
+- **Findings**: the pure domain package `internal/finding` holds what identifies a Finding, what a match makes of it and why it is closed, so `postgres` can store it; the use-case package `internal/findings` reacts to Feeds and Syncs by calling `matching`, `scoring` and `postgres` (ADR 0020), and counts a Customer's Findings over time for the Users who read them, taking the Customer from `tenancy` as every Customer-scoped use case does.
 - **Advisories**: the use-case package `internal/advisories` keeps the Advisories that name a stored Vulnerability and links them by CVE, with its queries in `postgres` (ADR 0022). It is not part of `internal/findings`, which turns Feeds into Findings: an Advisory is about a Vulnerability, not a Finding.
 - **ATT&CK catalog**: the use-case package `internal/techniques` stores the Techniques, Mitigations and their relationships from the ATT&CK Feed, with its queries in `postgres` (ADR 0023).
 - **Business Context**: the pure domain package `internal/business`, which imports no other layer, and the use-case package `internal/businesscontext`, which reads and saves it. The Drafter is an Agent, so it lives in `internal/agents`, which reads the Business Context through `postgres`, never through `businesscontext` (ADR 0017).

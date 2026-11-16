@@ -11,6 +11,7 @@ import (
 	"barbackend/internal/postgres/pgtest"
 	"barbackend/internal/scoring"
 	"barbackend/internal/stixext"
+	"barbackend/internal/tenancy"
 	"github.com/TcM1911/stix2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -23,6 +24,7 @@ func TestMain(m *testing.M) { pgtest.Main(m) }
 type world struct {
 	db       *postgres.DB
 	conn     *pgx.Conn
+	customer tenancy.CustomerID
 	source   inventory.CMDBSourceID
 	findings *findings.Service
 }
@@ -37,6 +39,7 @@ func newWorld(t *testing.T) world {
 	t.Cleanup(db.Close)
 	w := world{db: db, conn: pgtest.Conn(t, url), source: inventory.CMDBSourceID(uuid.New())}
 	customer := uuid.New()
+	w.customer = tenancy.CustomerID(customer)
 	w.exec(t, `INSERT INTO customers (id, name) VALUES ($1, $2)`, customer, customer.String())
 	w.exec(t, `INSERT INTO cmdb_sources (id, customer_id, provider, settings, credentials) VALUES ($1, $2, 'itop', '{}', '')`, uuid.UUID(w.source), customer)
 	w.findings = findings.New(db, scoring.Model2, time.Hour)
