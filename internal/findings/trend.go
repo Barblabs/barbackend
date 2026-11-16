@@ -30,16 +30,26 @@ func (s *Service) WeeklyTrend(ctx context.Context, caller tenancy.User, weeks in
 	if err != nil {
 		return nil, err
 	}
+	since, weeks, err := s.window(weeks)
+	if err != nil {
+		return nil, err
+	}
+	return postgres.InTxValue(ctx, s.db, func(tx *postgres.Tx) ([]Week, error) {
+		return tx.FindingWeeksOfCustomer(ctx, customer, since, weeks)
+	})
+}
+
+// window is when the last weeks ISO weeks start, the current one included,
+// and how many they are: DefaultTrendWeeks for a zero weeks. It fails with
+// ErrInvalidTrend.
+func (s *Service) window(weeks int) (time.Time, int, error) {
 	if weeks == 0 {
 		weeks = DefaultTrendWeeks
 	}
 	if weeks < 1 || weeks > MaxTrendWeeks {
-		return nil, fmt.Errorf("%w: weeks must be a number from 1 to %d", ErrInvalidTrend, MaxTrendWeeks)
+		return time.Time{}, 0, fmt.Errorf("%w: weeks must be a number from 1 to %d", ErrInvalidTrend, MaxTrendWeeks)
 	}
-	since := weekStart(s.now()).AddDate(0, 0, -7*(weeks-1))
-	return postgres.InTxValue(ctx, s.db, func(tx *postgres.Tx) ([]Week, error) {
-		return tx.FindingWeeksOfCustomer(ctx, customer, since, weeks)
-	})
+	return weekStart(s.now()).AddDate(0, 0, -7*(weeks-1)), weeks, nil
 }
 
 // weekStart is the Monday of t's ISO week, at midnight UTC.
