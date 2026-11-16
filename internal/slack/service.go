@@ -148,7 +148,7 @@ func (s *Service) Channels(ctx context.Context, caller tenancy.User) ([]Channel,
 	if err != nil {
 		return nil, err
 	}
-	token, err := s.token(ctx, customer)
+	_, token, err := s.sendable(ctx, customer)
 	if err != nil {
 		return nil, err
 	}
@@ -186,30 +186,17 @@ func (s *Service) SendTest(ctx context.Context, caller tenancy.User) (TestResult
 	if err != nil {
 		return TestResult{}, err
 	}
-	stored, err := s.stored(ctx, customer)
-	if errors.Is(err, postgres.ErrNotFound) {
-		return TestResult{}, ErrNotInstalled
-	}
+	stored, token, err := s.sendable(ctx, customer)
 	if err != nil {
 		return TestResult{}, err
-	}
-	switch State(stored.State) {
-	case Removed:
-		return TestResult{}, ErrNotInstalled
-	case NeedsReauthorisation:
-		return TestResult{}, ErrNeedsReauthorisation
 	}
 	if stored.ChannelID == "" {
 		return TestResult{}, ErrNoChannel
 	}
-	token, err := s.token(ctx, customer)
-	if err != nil {
-		return TestResult{}, err
-	}
 	err = s.client.PostMessage(ctx, token, Message{Channel: stored.ChannelID, Text: TestMessage})
 	var api *APIError
 	if errors.As(err, &api) {
-		if api.Code == "invalid_auth" || api.Code == "token_revoked" {
+		if authRevoked(api.Code) {
 			s.needsReauthorisation(ctx, customer)
 		}
 		return TestResult{OK: false, Error: api.Code}, nil
@@ -246,29 +233,36 @@ func (s *Service) stored(ctx context.Context, customer tenancy.CustomerID) (post
 	})
 }
 
-// token is the decrypted bot token of an installation that can send.
-func (s *Service) token(ctx context.Context, customer tenancy.CustomerID) (string, error) {
+// sendable is the Customer's installation when it can send, with its bot
+// token decrypted. It fails with ErrNotInstalled or ErrNeedsReauthorisation.
+func (s *Service) sendable(ctx context.Context, customer tenancy.CustomerID) (postgres.StoredSlackInstallation, string, error) {
 	stored, err := s.stored(ctx, customer)
 	if errors.Is(err, postgres.ErrNotFound) {
-		return "", ErrNotInstalled
+		return postgres.StoredSlackInstallation{}, "", ErrNotInstalled
 	}
 	if err != nil {
-		return "", err
+		return postgres.StoredSlackInstallation{}, "", err
 	}
 	switch State(stored.State) {
 	case Removed:
-		return "", ErrNotInstalled
+		return postgres.StoredSlackInstallation{}, "", ErrNotInstalled
 	case NeedsReauthorisation:
-		return "", ErrNeedsReauthorisation
+		return postgres.StoredSlackInstallation{}, "", ErrNeedsReauthorisation
 	}
 	if stored.BotToken == nil {
-		return "", ErrNotInstalled
+		return postgres.StoredSlackInstallation{}, "", ErrNotInstalled
 	}
 	token, err := s.key.Open(stored.BotToken, owner(customer))
 	if err != nil {
-		return "", fmt.Errorf("open slack token of customer %s: %w", customer, err)
+		return postgres.StoredSlackInstallation{}, "", fmt.Errorf("open slack token of customer %s: %w", customer, err)
 	}
-	return string(token), nil
+	return stored, string(token), nil
+}
+
+// authRevoked reports whether a Slack error means the bot token no longer
+// works, so the installation needs re-authorisation (ADR 0029).
+func authRevoked(code string) bool {
+	return code == "invalid_auth" || code == "token_revoked"
 }
 
 func installation(stored postgres.StoredSlackInstallation) *Installation {

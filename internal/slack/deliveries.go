@@ -97,29 +97,29 @@ func (s *Service) DeliverDue(ctx context.Context) error {
 func (s *Service) deliver(ctx context.Context, d postgres.SlackDelivery, lastSent map[string]time.Time) bool {
 	message, err := render(d)
 	if err != nil {
-		s.recordFailure(ctx, d, failureMalformedPayload, err, true)
+		s.giveUp(ctx, d, failureMalformedPayload, err)
 		return true
 	}
 	switch {
 	case d.TargetKind == alert.TargetEmail && d.Target == "":
-		s.recordFailure(ctx, d, failureOwnerUnreachable, errors.New("the asset has no asset owner"), true)
+		s.giveUp(ctx, d, failureOwnerUnreachable, errors.New("the asset has no asset owner"))
 		return true
 	case d.TargetKind == alert.TargetChannel && d.Target != alert.SecurityTeam:
-		s.recordFailure(ctx, d, failureMalformedPayload, fmt.Errorf("channel target %q, want %q", d.Target, alert.SecurityTeam), true)
+		s.giveUp(ctx, d, failureMalformedPayload, fmt.Errorf("channel target %q, want %q", d.Target, alert.SecurityTeam))
 		return true
 	}
 	if d.TargetKind == alert.TargetChannel && !s.pace(ctx, d.Customer.String()+"/"+d.Target, lastSent) {
 		return false
 	}
-	token, err := s.token(ctx, d.Customer)
+	installation, token, err := s.sendable(ctx, d.Customer)
 	if errors.Is(err, ErrNotInstalled) || errors.Is(err, ErrNeedsReauthorisation) {
 		return true
 	}
 	if err != nil {
-		s.recordFailure(ctx, d, failureSlackError, err, false)
+		s.retry(ctx, d, failureSlackError, err)
 		return true
 	}
-	message.Channel, err = s.address(ctx, token, d)
+	message.Channel, err = s.address(ctx, token, installation, d)
 	if errors.Is(err, errNoChannel) {
 		return true
 	}
@@ -150,18 +150,14 @@ func (s *Service) pace(ctx context.Context, target string, lastSent map[string]t
 // address resolves a row's target to where chat.postMessage sends it: a Slack
 // user id for a DM, and the Security Team channel the installation names now
 // for a channel row (ADR 0033).
-func (s *Service) address(ctx context.Context, token string, d postgres.SlackDelivery) (string, error) {
+func (s *Service) address(ctx context.Context, token string, installation postgres.StoredSlackInstallation, d postgres.SlackDelivery) (string, error) {
 	if d.TargetKind != alert.TargetChannel {
 		return s.client.LookupByEmail(ctx, token, d.Target)
 	}
-	stored, err := s.stored(ctx, d.Customer)
-	if err != nil {
-		return "", err
-	}
-	if stored.ChannelID == "" {
+	if installation.ChannelID == "" {
 		return "", errNoChannel
 	}
-	return stored.ChannelID, nil
+	return installation.ChannelID, nil
 }
 
 // markSent records that Slack accepted the message; the next poll deletes it.
@@ -188,41 +184,40 @@ func (s *Service) recordAPIError(ctx context.Context, d postgres.SlackDelivery, 
 				return tx.DelaySlackDelivery(ctx, d.ID, s.now().Add(wait))
 			})
 			return
-		case api.Code == "invalid_auth" || api.Code == "token_revoked":
-			s.record(ctx, d, func(ctx context.Context, tx *postgres.Tx) error {
-				return tx.FailSlackDelivery(ctx, d.ID, failureAuthRevoked, cause.Error())
-			})
+		case authRevoked(api.Code):
+			s.giveUp(ctx, d, failureAuthRevoked, cause)
 			s.needsReauthorisation(ctx, d.Customer)
 			return
 		case api.Code == "users_not_found":
-			s.record(ctx, d, func(ctx context.Context, tx *postgres.Tx) error {
-				return tx.FailSlackDelivery(ctx, d.ID, failureOwnerUnreachable, cause.Error())
-			})
+			s.giveUp(ctx, d, failureOwnerUnreachable, cause)
 			return
 		case api.Code == "messages_tab_disabled":
 			// The app's own Messages tab is off in its Slack configuration,
 			// so no DM can be created until an admin turns it on. Retrying
 			// now would only burn the attempts.
-			s.record(ctx, d, func(ctx context.Context, tx *postgres.Tx) error {
-				return tx.FailSlackDelivery(ctx, d.ID, failureSlackError, cause.Error())
-			})
+			s.giveUp(ctx, d, failureSlackError, cause)
 			return
 		case channelGone(api.Code):
-			s.recordFailure(ctx, d, failureChannelUnreachable, cause, false)
+			s.retry(ctx, d, failureChannelUnreachable, cause)
 			return
 		}
 	}
-	s.recordFailure(ctx, d, failureSlackError, cause, false)
+	s.retry(ctx, d, failureSlackError, cause)
 }
 
-// recordFailure counts a failed attempt and either schedules the next one or
-// gives up. Terminal failures are recorded once.
-func (s *Service) recordFailure(ctx context.Context, d postgres.SlackDelivery, code string, cause error, terminal bool) {
+// giveUp records a failure no retry fixes; the row stays failed.
+func (s *Service) giveUp(ctx context.Context, d postgres.SlackDelivery, code string, cause error) {
+	s.record(ctx, d, func(ctx context.Context, tx *postgres.Tx) error {
+		return tx.FailSlackDelivery(ctx, d.ID, code, cause.Error())
+	})
+}
+
+// retry counts a failed attempt and schedules the next one, or gives up with
+// code on the last attempt.
+func (s *Service) retry(ctx context.Context, d postgres.SlackDelivery, code string, cause error) {
 	attempts := d.Attempts + 1
-	if terminal || attempts >= maxDeliveryAttempts {
-		s.record(ctx, d, func(ctx context.Context, tx *postgres.Tx) error {
-			return tx.FailSlackDelivery(ctx, d.ID, code, cause.Error())
-		})
+	if attempts >= maxDeliveryAttempts {
+		s.giveUp(ctx, d, code, cause)
 		return
 	}
 	wait := deliveryRetry[min(int(attempts), len(deliveryRetry))-1]
