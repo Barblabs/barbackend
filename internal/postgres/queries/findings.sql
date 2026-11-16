@@ -197,3 +197,24 @@ JOIN LATERAL (
     LIMIT 1
 ) s ON true
 WHERE src.customer_id = @customer_id AND f.id = @id;
+
+-- How many Findings of a Customer's Assets were first opened and how many were
+-- closed in each ISO week, in UTC, from since on. A Finding reopened after
+-- it was closed counts only its latest close: findings keeps no history.
+-- name: CountFindingsOfCustomerByWeek :many
+SELECT e.week::timestamptz AS week,
+       (count(*) FILTER (WHERE e.opened))::integer AS opened,
+       (count(*) FILTER (WHERE NOT e.opened))::integer AS closed
+FROM (
+    SELECT date_trunc('week', f.first_opened_at, 'UTC') AS week, true AS opened
+    FROM findings f
+    JOIN cmdb_sources src ON src.id = f.cmdb_source_id
+    WHERE src.customer_id = @customer_id AND f.first_opened_at >= @since
+    UNION ALL
+    SELECT date_trunc('week', f.closed_at, 'UTC') AS week, false AS opened
+    FROM findings f
+    JOIN cmdb_sources src ON src.id = f.cmdb_source_id
+    WHERE src.customer_id = @customer_id AND f.closed_at >= @since
+) e
+GROUP BY e.week
+ORDER BY e.week;

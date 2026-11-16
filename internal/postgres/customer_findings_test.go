@@ -5,6 +5,7 @@ import (
 	"errors"
 	"slices"
 	"testing"
+	"time"
 
 	"barbackend/internal/finding"
 	"barbackend/internal/inventory"
@@ -84,5 +85,22 @@ func TestOpenFindingsOfCustomerReadWhatTheirDossiersNeed(t *testing.T) {
 	})
 	if !errors.Is(err, postgres.ErrNotFound) {
 		t.Errorf("another Customer's finding: err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestFindingWeeksOfCustomerCountOnlyItsOwnFindings(t *testing.T) {
+	t.Parallel()
+	w := newFindingWorld(t)
+	saveMatch(t, w.db, match(t, w.payments, "1.18.0"))
+	other := newSource(t, w.db, newCustomer(t, w.db))
+	syncRecords(t, w.db, other.ID(), w.paymentsRecord(t))
+	saveMatch(t, w.db, match(t, inventory.SourceReference{Source: other.ID(), RecordID: "1"}, "1.18.0"))
+
+	weeks := inTxValue(t, w.db, func(tx *postgres.Tx) ([]postgres.FindingWeek, error) {
+		return tx.FindingWeeksOfCustomer(context.Background(), w.customer, time.Now().AddDate(0, 0, -14))
+	})
+
+	if len(weeks) != 1 || weeks[0].Opened != 1 || weeks[0].Closed != 0 || weeks[0].Start.Weekday() != time.Monday {
+		t.Errorf("weeks = %+v, want one week starting on a Monday with the Customer's one Finding opened", weeks)
 	}
 }

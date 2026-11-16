@@ -55,6 +55,59 @@ func (q *Queries) CloseFindingsOfInactiveAssets(ctx context.Context, arg CloseFi
 	return result.RowsAffected(), nil
 }
 
+const countFindingsOfCustomerByWeek = `-- name: CountFindingsOfCustomerByWeek :many
+SELECT e.week::timestamptz AS week,
+       (count(*) FILTER (WHERE e.opened))::integer AS opened,
+       (count(*) FILTER (WHERE NOT e.opened))::integer AS closed
+FROM (
+    SELECT date_trunc('week', f.first_opened_at, 'UTC') AS week, true AS opened
+    FROM findings f
+    JOIN cmdb_sources src ON src.id = f.cmdb_source_id
+    WHERE src.customer_id = $1 AND f.first_opened_at >= $2
+    UNION ALL
+    SELECT date_trunc('week', f.closed_at, 'UTC') AS week, false AS opened
+    FROM findings f
+    JOIN cmdb_sources src ON src.id = f.cmdb_source_id
+    WHERE src.customer_id = $1 AND f.closed_at >= $2
+) e
+GROUP BY e.week
+ORDER BY e.week
+`
+
+type CountFindingsOfCustomerByWeekParams struct {
+	CustomerID uuid.UUID
+	Since      time.Time
+}
+
+type CountFindingsOfCustomerByWeekRow struct {
+	Week   time.Time
+	Opened int32
+	Closed int32
+}
+
+// How many Findings of a Customer's Assets were first opened and how many were
+// closed in each ISO week, in UTC, from since on. A Finding reopened after
+// it was closed counts only its latest close: findings keeps no history.
+func (q *Queries) CountFindingsOfCustomerByWeek(ctx context.Context, arg CountFindingsOfCustomerByWeekParams) ([]CountFindingsOfCustomerByWeekRow, error) {
+	rows, err := q.db.Query(ctx, countFindingsOfCustomerByWeek, arg.CustomerID, arg.Since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CountFindingsOfCustomerByWeekRow
+	for rows.Next() {
+		var i CountFindingsOfCustomerByWeekRow
+		if err := rows.Scan(&i.Week, &i.Opened, &i.Closed); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const deleteFindingMatchFlags = `-- name: DeleteFindingMatchFlags :exec
 DELETE FROM finding_match_flags
 WHERE finding_id = $1

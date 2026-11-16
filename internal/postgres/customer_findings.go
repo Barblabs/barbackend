@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"barbackend/internal/finding"
 	"barbackend/internal/inventory"
@@ -36,6 +37,31 @@ func (t *Tx) OpenFindingsOfCustomer(ctx context.Context, customer tenancy.Custom
 		return nil, fmt.Errorf("list open findings of customer %s: %w", customer, err)
 	}
 	return t.customerFindings(ctx, rows)
+}
+
+// FindingWeek is how many Findings of a Customer's Assets were first opened
+// and how many were closed in one ISO week, in UTC.
+type FindingWeek struct {
+	// Start is the Monday the week starts on, at midnight UTC.
+	Start  time.Time
+	Opened int
+	Closed int
+}
+
+// FindingWeeksOfCustomer are the weeks from since on in which a Finding of
+// the Customer's Assets was first opened or closed, oldest first; weeks
+// without either are left out. A reopened Finding counts only its latest
+// close, since a Finding keeps no history of its closes.
+func (t *Tx) FindingWeeksOfCustomer(ctx context.Context, customer tenancy.CustomerID, since time.Time) ([]FindingWeek, error) {
+	rows, err := t.q.CountFindingsOfCustomerByWeek(ctx, sqlcgen.CountFindingsOfCustomerByWeekParams{CustomerID: uuid.UUID(customer), Since: since})
+	if err != nil {
+		return nil, fmt.Errorf("count findings of customer %s by week: %w", customer, err)
+	}
+	weeks := make([]FindingWeek, len(rows))
+	for i, row := range rows {
+		weeks[i] = FindingWeek{Start: row.Week.UTC(), Opened: int(row.Opened), Closed: int(row.Closed)}
+	}
+	return weeks, nil
 }
 
 // FindingOfCustomer is one Finding of the Customer's Assets, open or closed.
