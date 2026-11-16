@@ -48,6 +48,14 @@ func (h findingHandler) register(api huma.API) {
 		Description: "Each list is ordered by its open Findings' Score Bands, most Critical first, then by how many it has. A component is a Product at one version, so updating it closes its Findings. A Finding not scored yet is left out.",
 		Errors:      []int{http.StatusBadRequest},
 	}, h.top)
+	register(api, huma.Operation{
+		OperationID: "get-findings-attack-matrix",
+		Method:      http.MethodGet,
+		Path:        "/findings/attack-matrix",
+		Summary:     "Count the Customer's open Findings by ATT&CK tactic and Technique",
+		Description: "The Cartógrafo labels a CVE with up to 5 ATT&CK Techniques, each exploiting it, its primary impact or a secondary impact; a Finding has the labels of its CVE. These labels are inferred by a model and must be shown as such. Every tactic of the stored catalog is there, in attack order; a Finding counts once in each tactic and each Technique it has, so the tactics do not add up to the Findings: coverage tells how many Findings have a labeled CVE. With role, only the labels of that role count, but coverage does not change. A Finding not scored yet is left out.",
+		Errors:      []int{http.StatusBadRequest},
+	}, h.attackMatrix)
 }
 
 type weeklyTrendQuery struct {
@@ -176,6 +184,55 @@ func (h findingHandler) top(ctx context.Context, caller tenancy.User, in *topQue
 		resp.CVEs[i] = cveCountResponse{CVEID: c.CVE, KEV: c.KEV, EPSS: c.EPSS, Findings: c.Bands.Total(), Assets: c.Assets, bandCountsResponse: newBandCounts(c.Bands)}
 	}
 	return &body[topResponse]{Body: resp}, nil
+}
+
+type attackMatrixQuery struct {
+	Role  string   `query:"role" enum:"exploitation,primary_impact,secondary_impact" doc:"Count only the labels of this role"`
+	Limit topLimit `query:"limit" doc:"How many Techniques"`
+}
+
+type attackMatrixResponse struct {
+	Coverage   coverageResponse         `json:"coverage"`
+	Tactics    []tacticCountResponse    `json:"tactics"`
+	Techniques []techniqueCountResponse `json:"techniques" doc:"Those with the most open Findings, most first"`
+}
+
+type coverageResponse struct {
+	Labeled int `json:"labeled" doc:"Open Findings whose CVE has a label, whatever its role"`
+	Open    int `json:"open"`
+}
+
+type tacticCountResponse struct {
+	Tactic string `json:"tactic" doc:"ATT&CK tactic short name, such as initial-access"`
+	bandCountsResponse
+}
+
+type techniqueCountResponse struct {
+	AttackID string   `json:"attack_id"`
+	Name     string   `json:"name"`
+	Tactics  []string `json:"tactics"`
+	Roles    []string `json:"roles" doc:"The roles it is labeled with on these Findings' CVEs"`
+	Findings int      `json:"findings"`
+	bandCountsResponse
+}
+
+func (h findingHandler) attackMatrix(ctx context.Context, caller tenancy.User, in *attackMatrixQuery) (*body[attackMatrixResponse], error) {
+	m, err := h.findings.AttackMatrix(ctx, caller, in.Role, int(in.Limit))
+	if err != nil {
+		return nil, err
+	}
+	resp := attackMatrixResponse{
+		Coverage:   coverageResponse{Labeled: m.Labeled, Open: m.Open},
+		Tactics:    make([]tacticCountResponse, len(m.Tactics)),
+		Techniques: make([]techniqueCountResponse, len(m.Techniques)),
+	}
+	for i, t := range m.Tactics {
+		resp.Tactics[i] = tacticCountResponse{Tactic: t.Tactic, bandCountsResponse: newBandCounts(t.Bands)}
+	}
+	for i, t := range m.Techniques {
+		resp.Techniques[i] = techniqueCountResponse{AttackID: t.AttackID, Name: t.Name, Tactics: t.Tactics, Roles: t.Roles, Findings: t.Bands.Total(), bandCountsResponse: newBandCounts(t.Bands)}
+	}
+	return &body[attackMatrixResponse]{Body: resp}, nil
 }
 
 type weeklyTrendResponse struct {

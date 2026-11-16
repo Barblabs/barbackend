@@ -89,9 +89,24 @@ func TestFindingCountsRefuseAnUnknownGroupingAndTooLongALimit(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
 
-	for _, path := range []string{"/findings/breakdown?by=kind", "/findings/top?limit=51"} {
+	for _, path := range []string{"/findings/breakdown?by=kind", "/findings/top?limit=51", "/findings/attack-matrix?role=lateral"} {
 		if rec := e.do(httptest.NewRequest(http.MethodGet, path, nil)); rec.Code != http.StatusBadRequest {
 			t.Errorf("%s = %d %s, want 400", path, rec.Code, rec.Body)
 		}
+	}
+}
+
+func TestAttackMatrixOfACustomerWithoutFindingsHasNoCoverage(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+
+	got := decode[struct {
+		Coverage   map[string]int `json:"coverage"`
+		Tactics    *[]struct{}    `json:"tactics"`
+		Techniques *[]struct{}    `json:"techniques"`
+	}](t, e.do(httptest.NewRequest(http.MethodGet, "/findings/attack-matrix", nil)), http.StatusOK)
+
+	if got.Coverage["open"] != 0 || got.Coverage["labeled"] != 0 || got.Tactics == nil || got.Techniques == nil || len(*got.Techniques) != 0 {
+		t.Errorf("matrix = %+v, want no coverage, lists and no Techniques", got)
 	}
 }
