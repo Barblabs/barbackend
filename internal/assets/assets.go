@@ -122,7 +122,8 @@ func canonicalFilters(f Filter) (string, error) {
 	}
 	b, err := json.Marshal(map[string]any{
 		"active": active, "kind": canonical(f.Kind), "criticality": canonical(f.Criticality), "exposure": canonical(f.Exposure),
-		"information_classification": canonical(f.InformationClassification), "area": canonical(f.Area),
+		"information_classification": canonical(f.InformationClassification), "lifecycle_stage": canonical(f.Lifecycle),
+		"area": canonical(f.Area),
 	})
 	return string(b), err
 }

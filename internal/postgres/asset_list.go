@@ -34,6 +34,10 @@ type AssetFilter struct {
 	// is only ever declared (ADR 0031), so Unclassified keeps the Assets
 	// without a Declaration.
 	InformationClassification []inventory.InformationClassification
+	// Lifecycle keeps the Assets with any of its stages. LifecycleUnknown
+	// keeps the Assets without one, which includes every retired Asset
+	// (ADR 0028).
+	Lifecycle []inventory.LifecycleStage
 	// Area keeps the Assets in any of the Areas with those ids, as GET /areas
 	// returns them. An id that is not one of the Customer's Areas matches no
 	// Asset.
@@ -69,6 +73,7 @@ func (t *Tx) ListAssets(ctx context.Context, q AssetListQuery) (AssetPage, error
 		CriticalityIds:               catalogIDs(q.Filter.Criticality),
 		ExposureIds:                  catalogIDs(q.Filter.Exposure),
 		InformationClassificationIds: catalogIDs(q.Filter.InformationClassification),
+		LifecycleStageIds:            catalogIDs(q.Filter.Lifecycle),
 		AreaIds:                      areaIDs(q.Filter.Area),
 		// One extra row tells whether another page follows.
 		PageSize: int32(q.Limit + 1),

@@ -115,6 +115,7 @@ WITH matching AS (
            OR coalesce(a.declared_exposure_id, a.imported_exposure_id, 0) = ANY(@exposure_ids::smallint[]))
       AND (cardinality(@information_classification_ids::smallint[]) = 0
            OR coalesce(a.declared_information_classification_id, 0) = ANY(@information_classification_ids::smallint[]))
+      AND (cardinality(@lifecycle_stage_ids::smallint[]) = 0 OR coalesce(a.lifecycle_stage_id, 0) = ANY(@lifecycle_stage_ids::smallint[]))
       AND (cardinality(@area_ids::bigint[]) = 0
            OR (a.cmdb_source_id, a.area_record_id) IN
               (SELECT cmdb_source_id, record_id FROM customer_areas WHERE id = ANY(@area_ids::bigint[])))
