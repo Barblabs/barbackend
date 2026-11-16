@@ -26,26 +26,6 @@ func (q *Queries) CountLabelingsSince(ctx context.Context, since time.Time) (int
 	return column_1, err
 }
 
-const getVulnerabilityLabeling = `-- name: GetVulnerabilityLabeling :one
-SELECT cve_id, outcome, attempts, model, prompt_hash, labeled_at
-FROM vulnerability_labelings
-WHERE cve_id = $1
-`
-
-func (q *Queries) GetVulnerabilityLabeling(ctx context.Context, cveID string) (VulnerabilityLabeling, error) {
-	row := q.db.QueryRow(ctx, getVulnerabilityLabeling, cveID)
-	var i VulnerabilityLabeling
-	err := row.Scan(
-		&i.CveID,
-		&i.Outcome,
-		&i.Attempts,
-		&i.Model,
-		&i.PromptHash,
-		&i.LabeledAt,
-	)
-	return i, err
-}
-
 const insertVulnerabilityTechnique = `-- name: InsertVulnerabilityTechnique :exec
 INSERT INTO vulnerability_techniques (cve_id, attack_id, role, evidence, rationale)
 VALUES ($1, $2, $3, $4, $5)
@@ -123,47 +103,6 @@ func (q *Queries) ListTechniquesOfVulnerabilities(ctx context.Context, cveIds []
 		var i VulnerabilityTechnique
 		if err := rows.Scan(
 			&i.CveID,
-			&i.AttackID,
-			&i.Role,
-			&i.Evidence,
-			&i.Rationale,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listTechniquesOfVulnerability = `-- name: ListTechniquesOfVulnerability :many
-SELECT attack_id, role, evidence, rationale
-FROM vulnerability_techniques
-WHERE cve_id = $1
-ORDER BY array_position(ARRAY['exploitation', 'primary_impact', 'secondary_impact'], role), attack_id
-`
-
-type ListTechniquesOfVulnerabilityRow struct {
-	AttackID  string
-	Role      string
-	Evidence  string
-	Rationale string
-}
-
-// The Techniques of a Vulnerability, how it is exploited first and what
-// follows after.
-func (q *Queries) ListTechniquesOfVulnerability(ctx context.Context, cveID string) ([]ListTechniquesOfVulnerabilityRow, error) {
-	rows, err := q.db.Query(ctx, listTechniquesOfVulnerability, cveID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListTechniquesOfVulnerabilityRow
-	for rows.Next() {
-		var i ListTechniquesOfVulnerabilityRow
-		if err := rows.Scan(
 			&i.AttackID,
 			&i.Role,
 			&i.Evidence,

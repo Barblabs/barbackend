@@ -391,33 +391,6 @@ func (q *Queries) ListActiveComponentsWithProducts(ctx context.Context, arg List
 	return items, nil
 }
 
-const listFindingMatchFlags = `-- name: ListFindingMatchFlags :many
-SELECT flag_id
-FROM finding_match_flags
-WHERE finding_id = $1
-ORDER BY flag_id
-`
-
-func (q *Queries) ListFindingMatchFlags(ctx context.Context, findingID uuid.UUID) ([]int16, error) {
-	rows, err := q.db.Query(ctx, listFindingMatchFlags, findingID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []int16
-	for rows.Next() {
-		var flag_id int16
-		if err := rows.Scan(&flag_id); err != nil {
-			return nil, err
-		}
-		items = append(items, flag_id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listOpenFindingsOfAsset = `-- name: ListOpenFindingsOfAsset :many
 SELECT f.id, f.cmdb_source_id, f.record_id, f.product_vendor, f.product_name, f.cve_id,
        f.component_name, f.component_version, a.criticality_id,

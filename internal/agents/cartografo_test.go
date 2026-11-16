@@ -69,16 +69,24 @@ func technique(attackID, role, evidence string) map[string]any {
 	return map[string]any{"attack_id": attackID, "role": role, "evidence": evidence, "rationale": "Encaja con el CVE."}
 }
 
-func labelingOf(t *testing.T, e env) postgres.Labeling {
+func threatsOf(t *testing.T, e env) postgres.Threats {
 	t.Helper()
-	var l postgres.Labeling
-	if err := e.db.InTx(context.Background(), func(tx *postgres.Tx) (err error) {
-		l, err = tx.LabelingOf(context.Background(), labeledCVE)
-		return err
-	}); err != nil {
+	threats, err := postgres.InTxValue(context.Background(), e.db, func(tx *postgres.Tx) (map[string]postgres.Threats, error) {
+		return tx.ThreatsOf(context.Background(), []string{labeledCVE})
+	})
+	if err != nil {
 		t.Fatal(err)
 	}
-	return l
+	return threats[labeledCVE]
+}
+
+func labelingOf(t *testing.T, e env) postgres.Labeling {
+	t.Helper()
+	l := threatsOf(t, e).Labeling
+	if l == nil {
+		t.Fatalf("%s has no labeling", labeledCVE)
+	}
+	return *l
 }
 
 func runCartografo(t *testing.T, e env) agents.LabelingRun {
@@ -101,14 +109,8 @@ func TestTheCartografoLabelsAStoredVulnerability(t *testing.T) {
 	if run := runCartografo(t, e); run != (agents.LabelingRun{Labeled: 1}) {
 		t.Errorf("run = %+v, want one labeled", run)
 	}
-	var got []postgres.TechniqueLabel
-	if err := e.db.InTx(context.Background(), func(tx *postgres.Tx) (err error) {
-		got, err = tx.TechniquesOf(context.Background(), labeledCVE)
-		return err
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 2 || got[0].AttackID != "T1110.001" || got[0].Evidence != guessQuote || got[1].AttackID != "T1078" {
+	got := threatsOf(t, e).Techniques
+	if len(got) != 2 || got[0].Label.AttackID != "T1110.001" || got[0].Label.Evidence != guessQuote || got[1].Label.AttackID != "T1078" {
 		t.Errorf("techniques = %+v, want T1110.001 then T1078 with their quotes", got)
 	}
 	if l := labelingOf(t, e); l.Outcome != assessment.LabelingLabeled || l.Model != "claude-haiku-5-5" || l.PromptHash == "" {
@@ -196,12 +198,8 @@ func TestTheCartografoWithoutACatalogLabelsNothing(t *testing.T) {
 	if run := runCartografo(t, e); run != (agents.LabelingRun{}) || len(e.llm.Requests()) != 0 {
 		t.Errorf("run = %+v after %d requests, want nothing asked", run, len(e.llm.Requests()))
 	}
-	err := e.db.InTx(context.Background(), func(tx *postgres.Tx) error {
-		_, err := tx.LabelingOf(context.Background(), labeledCVE)
-		return err
-	})
-	if !errors.Is(err, postgres.ErrNotFound) {
-		t.Errorf("labeling err = %v, want none stored: no attempt is spent", err)
+	if l := threatsOf(t, e).Labeling; l != nil {
+		t.Errorf("labeling = %+v, want none stored: no attempt is spent", l)
 	}
 }
 
@@ -220,12 +218,8 @@ func TestAModelThatCannotBeCalledStopsTheRunAndSpendsNoAttempt(t *testing.T) {
 	if n := len(e.llm.Requests()); n != 1 {
 		t.Errorf("%d requests, want the run stopped after the first", n)
 	}
-	err = e.db.InTx(context.Background(), func(tx *postgres.Tx) error {
-		_, err := tx.LabelingOf(context.Background(), labeledCVE)
-		return err
-	})
-	if !errors.Is(err, postgres.ErrNotFound) {
-		t.Errorf("labeling err = %v, want none stored: an outage is not the Vulnerability's failure", err)
+	if l := threatsOf(t, e).Labeling; l != nil {
+		t.Errorf("labeling = %+v, want none stored: an outage is not the Vulnerability's failure", l)
 	}
 }
 

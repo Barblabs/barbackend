@@ -108,8 +108,7 @@ The pure domain package `internal/finding` holds what `postgres` stores: a Findi
 | `SaveMatch` | opens, updates or reopens the Finding of a `Match` in one statement and replaces its Match Flags, in one transaction; it returns the Finding's `ID` and the `Outcome` |
 | `CloseFinding`, `CloseFindingsOfInactiveAssets` | close one open Finding, or the open Findings of a CMDB Source's Inactive Assets |
 | `OpenFindingsOfVulnerability`, `OpenFindingsOfSource` | read the open Findings to rescore or to match again |
-| `MatchFlags` | read the Match Flags of a Finding |
-| `SaveScoreIfChanged`, `LatestScore` | store a Score unless the latest has the same Scoring Model, value and Data Gaps; read the latest |
+| `SaveScoreIfChanged` | store a Score unless the latest has the same Scoring Model, value and Data Gaps |
 
 - **One statement opens, updates or reopens.** `SaveMatch` is an `INSERT ... ON CONFLICT DO UPDATE` on the Finding's key, so two matches of the same Finding at once cannot both insert it. What the Finding was before (absent, open or closed) is read in the same statement, so the `Outcome` needs no second query.
 - **Times come from Postgres.** `first_opened_at`, `opened_at` and `closed_at` are the transaction's time, so `first_opened_at <= opened_at <= closed_at` holds whatever the application's clock says. A Score's `scored_at` is the statement's own time, so two Scores of one Finding in one transaction never share it.

@@ -123,20 +123,6 @@ func (t *Tx) replaceMatchFlags(ctx context.Context, id uuid.UUID, flags []matchi
 	return nil
 }
 
-// MatchFlags is the Match Flags of the Finding's current match, in catalog
-// order; none means a certain match.
-func (t *Tx) MatchFlags(ctx context.Context, id finding.ID) ([]matching.Flag, error) {
-	ids, err := t.q.ListFindingMatchFlags(ctx, uuid.UUID(id))
-	if err != nil {
-		return nil, fmt.Errorf("list match flags of finding %s: %w", id, err)
-	}
-	flags := make([]matching.Flag, len(ids))
-	for i, id := range ids {
-		flags[i] = matching.Flag(id)
-	}
-	return flags, nil
-}
-
 // CloseFinding closes an open Finding for reason. It reports false, changing
 // nothing, when the Finding was already closed.
 func (t *Tx) CloseFinding(ctx context.Context, id finding.ID, reason finding.CloseReason) (bool, error) {
@@ -241,28 +227,6 @@ func (t *Tx) SaveScoreIfChanged(ctx context.Context, id finding.ID, s scoring.Sc
 		return false, fmt.Errorf("insert data gaps of finding %s: %w", id, err)
 	}
 	return true, nil
-}
-
-// LatestScore is the Finding's newest Score. It fails with ErrNotFound when
-// the Finding was never scored.
-func (t *Tx) LatestScore(ctx context.Context, id finding.ID) (scoring.Score, error) {
-	row, err := t.q.LatestFindingScore(ctx, uuid.UUID(id))
-	if errors.Is(err, pgx.ErrNoRows) {
-		return scoring.Score{}, fmt.Errorf("score of finding %s: %w", id, ErrNotFound)
-	}
-	if err != nil {
-		return scoring.Score{}, fmt.Errorf("latest score of finding %s: %w", id, err)
-	}
-	var gaps []scoring.DataGap
-	for _, g := range row.Gaps {
-		gaps = append(gaps, scoring.DataGap(g))
-	}
-	return scoring.Score{
-		Model:   scoring.ModelVersion(row.Model),
-		Value:   row.Value,
-		Factors: latestFactors(row),
-		Gaps:    gaps,
-	}, nil
 }
 
 func latestFactors(row sqlcgen.LatestFindingScoreRow) scoring.Factors {

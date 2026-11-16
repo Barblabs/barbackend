@@ -28,19 +28,6 @@ WHERE vulnerability_labelings.outcome = 'failed';
 INSERT INTO vulnerability_techniques (cve_id, attack_id, role, evidence, rationale)
 VALUES (@cve_id, @attack_id, @role, @evidence, @rationale);
 
--- name: GetVulnerabilityLabeling :one
-SELECT cve_id, outcome, attempts, model, prompt_hash, labeled_at
-FROM vulnerability_labelings
-WHERE cve_id = @cve_id;
-
--- The Techniques of a Vulnerability, how it is exploited first and what
--- follows after.
--- name: ListTechniquesOfVulnerability :many
-SELECT attack_id, role, evidence, rationale
-FROM vulnerability_techniques
-WHERE cve_id = @cve_id
-ORDER BY array_position(ARRAY['exploitation', 'primary_impact', 'secondary_impact'], role), attack_id;
-
 -- How many Labelings were attempted since a moment, so the Cartógrafo's
 -- daily cap holds across restarts of serve (ADR 0024). A Labeling counts once,
 -- at its last attempt.

@@ -23,9 +23,20 @@ func unlabeled(t *testing.T, db *postgres.DB, limit, maxAttempts int) []string {
 	})
 }
 
+func threatsOf(t *testing.T, db *postgres.DB, cve string) postgres.Threats {
+	t.Helper()
+	return inTxValue(t, db, func(tx *postgres.Tx) (map[string]postgres.Threats, error) {
+		return tx.ThreatsOf(context.Background(), []string{cve})
+	})[cve]
+}
+
 func labelingOf(t *testing.T, db *postgres.DB, cve string) postgres.Labeling {
 	t.Helper()
-	return inTxValue(t, db, func(tx *postgres.Tx) (postgres.Labeling, error) { return tx.LabelingOf(context.Background(), cve) })
+	l := threatsOf(t, db, cve).Labeling
+	if l == nil {
+		t.Fatalf("%s has no labeling", cve)
+	}
+	return *l
 }
 
 func TestStoreLabelingKeepsItsTechniquesInTheOrderOfAnAttack(t *testing.T) {
@@ -38,10 +49,8 @@ func TestStoreLabelingKeepsItsTechniquesInTheOrderOfAnAttack(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got := inTxValue(t, db, func(tx *postgres.Tx) ([]postgres.TechniqueLabel, error) {
-		return tx.TechniquesOf(context.Background(), "CVE-2026-0001")
-	})
-	if len(got) != 2 || got[0].AttackID != "T1190" || got[1].AttackID != "T1059" {
+	got := threatsOf(t, db, "CVE-2026-0001").Techniques
+	if len(got) != 2 || got[0].Label.AttackID != "T1190" || got[1].Label.AttackID != "T1059" {
 		t.Errorf("techniques = %+v, want T1190 (exploitation) before T1059 (primary_impact)", got)
 	}
 	if l := labelingOf(t, db, "CVE-2026-0001"); l.Outcome != assessment.LabelingLabeled || l.Attempts != 1 || l.Model != cartografo || l.PromptHash != promptHash {
@@ -152,18 +161,5 @@ func TestLabelingsSinceCountsTheAttemptsAfterAMoment(t *testing.T) {
 	}
 	if got := count(time.Now().Add(time.Minute)); got != 0 {
 		t.Errorf("labelings since a minute from now = %d, want 0", got)
-	}
-}
-
-func TestLabelingOfAVulnerabilityNotTriedIsNotFound(t *testing.T) {
-	t.Parallel()
-	db := storedCVEs(t, "CVE-2026-0001")
-
-	err := db.InTx(context.Background(), func(tx *postgres.Tx) error {
-		_, err := tx.LabelingOf(context.Background(), "CVE-2026-0001")
-		return err
-	})
-	if !errors.Is(err, postgres.ErrNotFound) {
-		t.Errorf("err = %v, want ErrNotFound", err)
 	}
 }
