@@ -211,7 +211,6 @@ func (h customerHandler) slackDeliveries(ctx context.Context, caller tenancy.Use
 	return &body[slackDeliveriesResponse]{Body: resp}, nil
 }
 
-// timeOrNull is null for the zero time, which the domain uses for "never".
 func timeOrNull(t time.Time) *time.Time {
 	if t.IsZero() {
 		return nil

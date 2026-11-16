@@ -259,13 +259,12 @@ type closeTimeResponse struct {
 func newCloseTime(band string, c findings.CloseTime) closeTimeResponse {
 	resp := closeTimeResponse{Band: band, Closed: c.Closed}
 	if c.Closed > 0 {
-		resp.MedianDays, resp.AverageDays = ptr(days(c.Median)), ptr(days(c.Average))
+		resp.MedianDays, resp.AverageDays = ptr(roundedDays(c.Median)), ptr(roundedDays(c.Average))
 	}
 	return resp
 }
 
-// days is d in days, to two decimals.
-func days(d time.Duration) float64 { return math.Round(d.Hours()/24*100) / 100 }
+func roundedDays(d time.Duration) float64 { return math.Round(d.Hours()/24*100) / 100 }
 
 func (h findingHandler) timeToClose(ctx context.Context, caller tenancy.User, in *weeklyTrendQuery) (*body[timeToCloseResponse], error) {
 	t, err := h.findings.TimeToClose(ctx, caller, int(in.Weeks))
