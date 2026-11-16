@@ -53,6 +53,19 @@ func TestNewUserNormalizesEmail(t *testing.T) {
 	}
 }
 
+func TestANewUserSignsInOnceInvited(t *testing.T) {
+	u, err := tenancy.NewUser(userID, "a@example.com", tenancy.Viewer, customer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := u.SignIn(); !errors.Is(err, tenancy.ErrUserPending) {
+		t.Errorf("SignIn before the Invitation = %v, want %v", err, tenancy.ErrUserPending)
+	}
+	if err := u.Invited().SignIn(); err != nil {
+		t.Errorf("SignIn once invited = %v, want nil", err)
+	}
+}
+
 func TestSignIn(t *testing.T) {
 	tests := []struct {
 		name  string

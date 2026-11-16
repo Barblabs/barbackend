@@ -3,6 +3,8 @@ package postgres
 import (
 	"context"
 
+	"barbackend/internal/finding"
+	"barbackend/internal/matching"
 	"barbackend/internal/tenancy"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -31,6 +33,16 @@ func (f queryTracer) TraceQueryStart(ctx context.Context, _ *pgx.Conn, data pgx.
 }
 
 func (queryTracer) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQueryEndData) {}
+
+// MatchFlags is the Match Flags of the Finding's current match, in catalog
+// order; none means a certain match.
+func (db *DB) MatchFlags(ctx context.Context, id finding.ID) ([]matching.Flag, error) {
+	rows, err := db.pool.Query(ctx, "SELECT flag_id FROM finding_match_flags WHERE finding_id = $1 ORDER BY flag_id", uuid.UUID(id))
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, pgx.RowTo[matching.Flag])
+}
 
 func (db *DB) CreateCustomer(ctx context.Context, id tenancy.CustomerID) error {
 	_, err := db.pool.Exec(ctx, "INSERT INTO customers (id, name) VALUES ($1, $2)", uuid.UUID(id), id.String())

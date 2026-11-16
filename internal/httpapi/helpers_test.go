@@ -162,8 +162,7 @@ func (e env) newUser(t *testing.T, role tenancy.Role, customer tenancy.CustomerI
 	}
 	sub := uuid.NewString()
 	if err := e.db.InTx(context.Background(), func(tx *postgres.Tx) error {
-		_, err := tx.CreateUser(context.Background(), u, sub)
-		return err
+		return pgtest.CreateUser(context.Background(), tx, u, sub)
 	}); err != nil {
 		t.Fatal(err)
 	}

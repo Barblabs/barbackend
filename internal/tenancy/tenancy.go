@@ -127,7 +127,8 @@ type User struct {
 // NewUser keeps the email in the canonical form of ADR 0003, trimmed and
 // lowercased, and does not check its syntax: that belongs to the edge that
 // receives it. A Platform Admin has no Customer and every other role has one;
-// the zero CustomerID means none.
+// the zero CustomerID means none. A new User is pending until their
+// Invitation is sent.
 func NewUser(id UserID, email string, role Role, customer CustomerID) (User, error) {
 	email = CanonicalEmail(email)
 	switch {
@@ -142,7 +143,7 @@ func NewUser(id UserID, email string, role Role, customer CustomerID) (User, err
 	case role != PlatformAdmin && customer == CustomerID{}:
 		return User{}, fmt.Errorf("%w: a %s belongs to a customer", ErrInvalidUser, role)
 	}
-	return User{id: id, email: email, role: role, customer: customer}, nil
+	return User{id: id, email: email, role: role, customer: customer, pending: true}, nil
 }
 
 // CanonicalEmail is the form of ADR 0003, in which Users are stored.
@@ -174,6 +175,12 @@ func (u User) Role() Role { return u.role }
 
 // Pending is a User whose Invitation has not been sent yet.
 func (u User) Pending() bool { return u.pending }
+
+// Invited is the User once their Invitation is sent.
+func (u User) Invited() User {
+	u.pending = false
+	return u
+}
 
 // Customer is the Customer the User belongs to; a Platform Admin belongs to
 // none.

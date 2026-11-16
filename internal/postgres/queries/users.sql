@@ -1,6 +1,6 @@
 -- name: InsertUser :one
-INSERT INTO users (id, cognito_sub, email, customer_id, role_id)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO users (id, email, customer_id, role_id)
+VALUES ($1, $2, $3, $4)
 RETURNING created_at;
 
 -- name: InsertUserInvitation :one

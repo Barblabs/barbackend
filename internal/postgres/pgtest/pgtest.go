@@ -168,6 +168,15 @@ func Conn(t *testing.T, url string) *pgx.Conn {
 	return conn
 }
 
+// CreateUser stores u as a User whose Invitation was sent and whom the
+// Cognito sub signs in, as users.Service leaves them once Cognito succeeds.
+func CreateUser(ctx context.Context, tx *postgres.Tx, u tenancy.User, sub string) error {
+	if _, _, err := tx.CreatePendingUser(ctx, u, time.Time{}); err != nil {
+		return err
+	}
+	return tx.CompleteInvitation(ctx, u.ID(), sub)
+}
+
 // LockCustomer locks the Customer as Tx.LockCustomer does, in a transaction
 // on conn that holds the lock until the test ends it.
 func LockCustomer(t *testing.T, conn *pgx.Conn, customer tenancy.CustomerID) pgx.Tx {

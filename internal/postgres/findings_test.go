@@ -102,13 +102,9 @@ func TestSaveMatchOpensUpdatesAndReopensTheSameFinding(t *testing.T) {
 	if len(open) != 1 || open[0].ComponentVersion != "1.19.0" || open[0].Key.Vendor != "f5" || open[0].Values.Criticality != inventory.CriticalityHigh {
 		t.Fatalf("open findings = %+v, want payments at 1.19.0", open)
 	}
-	inTx(t, w.db, func(tx *postgres.Tx) error {
-		flags, err := tx.MatchFlags(ctx, id)
-		if len(flags) != 0 {
-			t.Errorf("flags = %v, want them replaced by none", flags)
-		}
-		return err
-	})
+	if flags, err := w.db.MatchFlags(ctx, id); err != nil || len(flags) != 0 {
+		t.Errorf("flags = %v, %v, want them replaced by none", flags, err)
+	}
 
 	inTx(t, w.db, func(tx *postgres.Tx) error {
 		_, err := tx.CloseFinding(ctx, id, finding.NoLongerAffected)
@@ -121,13 +117,9 @@ func TestSaveMatchOpensUpdatesAndReopensTheSameFinding(t *testing.T) {
 	if outcome != finding.Reopened || reopened != id {
 		t.Fatalf("match after closing = %v %v, want reopened %v", outcome, reopened, id)
 	}
-	inTx(t, w.db, func(tx *postgres.Tx) error {
-		flags, err := tx.MatchFlags(ctx, id)
-		if !slices.Equal(flags, []matching.Flag{matching.DistroBackport}) {
-			t.Errorf("flags = %v, want distro_backport", flags)
-		}
-		return err
-	})
+	if flags, err := w.db.MatchFlags(ctx, id); err != nil || !slices.Equal(flags, []matching.Flag{matching.DistroBackport}) {
+		t.Errorf("flags = %v, %v, want distro_backport", flags, err)
+	}
 }
 
 func TestCloseFindingClosesOnlyAnOpenFinding(t *testing.T) {
@@ -246,17 +238,10 @@ func TestModel3ScoresKeepTheExploitSignalAndTheClassificationMultiplier(t *testi
 			if stored, err := tx.SaveScoreIfChanged(context.Background(), id, want); err != nil || !stored {
 				t.Fatalf("save %+v stored = %t, %v, want stored", want, stored, err)
 			}
-			latest, err := tx.LatestScore(context.Background(), id)
-			if !reflect.DeepEqual(latest.Factors, want.Factors) || !slices.Equal(latest.Gaps, want.Gaps) {
-				t.Errorf("latest score = %+v, want %+v", latest, want)
-			}
-			return err
+			return nil
 		})
-		open := inTxValue(t, w.db, func(tx *postgres.Tx) ([]postgres.CustomerFinding, error) {
-			return tx.OpenFindingsOfCustomer(context.Background(), w.customer)
-		})
-		if len(open) != 1 || !reflect.DeepEqual(open[0].Score.Factors, want.Factors) {
-			t.Errorf("open findings = %+v, want one with the factors %+v", open, want.Factors)
+		if latest := latestScore(t, w); !reflect.DeepEqual(latest.Factors, want.Factors) || !slices.Equal(latest.Gaps, want.Gaps) {
+			t.Errorf("latest score = %+v, want %+v", latest, want)
 		}
 	}
 }
@@ -307,11 +292,18 @@ func TestSaveScoreIfChangedStoresOnlyAChangedScore(t *testing.T) {
 			return err
 		})
 	}
-	inTx(t, w.db, func(tx *postgres.Tx) error {
-		latest, err := tx.LatestScore(context.Background(), id)
-		if latest.Value != 0.308 || latest.Model != 3 || !slices.Equal(latest.Gaps, reclassified.Gaps) || !latest.Factors.Equal(reclassified.Factors) {
-			t.Errorf("latest score = %+v, want %+v", latest, reclassified)
-		}
-		return err
+	if latest := latestScore(t, w); latest.Value != 0.308 || latest.Model != 3 || !slices.Equal(latest.Gaps, reclassified.Gaps) || !latest.Factors.Equal(reclassified.Factors) {
+		t.Errorf("latest score = %+v, want %+v", latest, reclassified)
+	}
+}
+
+func latestScore(t *testing.T, w findingWorld) scoring.Score {
+	t.Helper()
+	open := inTxValue(t, w.db, func(tx *postgres.Tx) ([]postgres.CustomerFinding, error) {
+		return tx.OpenFindingsOfCustomer(context.Background(), w.customer)
 	})
+	if len(open) != 1 {
+		t.Fatalf("open findings = %+v, want one", open)
+	}
+	return open[0].Score
 }

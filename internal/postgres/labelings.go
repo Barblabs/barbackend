@@ -2,13 +2,11 @@ package postgres
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
 	"barbackend/internal/assessment"
 	"barbackend/internal/postgres/sqlcgen"
-	"github.com/jackc/pgx/v5"
 )
 
 // Labeling is the Cartógrafo's last attempt to label a Vulnerability.
@@ -91,34 +89,4 @@ func (t *Tx) recordLabeling(ctx context.Context, cve, outcome, model, promptHash
 		return fmt.Errorf("record %s labeling of %s: %w", outcome, cve, ErrLabeled)
 	}
 	return nil
-}
-
-// LabelingOf is the Labeling of the Vulnerability of cve. It fails with
-// ErrNotFound when the Cartógrafo has not tried to label it yet.
-func (t *Tx) LabelingOf(ctx context.Context, cve string) (Labeling, error) {
-	row, err := t.q.GetVulnerabilityLabeling(ctx, cve)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return Labeling{}, fmt.Errorf("labeling of %s: %w", cve, ErrNotFound)
-	}
-	if err != nil {
-		return Labeling{}, fmt.Errorf("get labeling of %s: %w", cve, err)
-	}
-	return Labeling{
-		CVE: row.CveID, Outcome: row.Outcome, Attempts: int(row.Attempts),
-		Model: row.Model, PromptHash: row.PromptHash, LabeledAt: row.LabeledAt,
-	}, nil
-}
-
-// TechniquesOf is the labels of the Vulnerability of cve: how it is exploited
-// first, then what that gives and what follows.
-func (t *Tx) TechniquesOf(ctx context.Context, cve string) ([]TechniqueLabel, error) {
-	rows, err := t.q.ListTechniquesOfVulnerability(ctx, cve)
-	if err != nil {
-		return nil, fmt.Errorf("list techniques of %s: %w", cve, err)
-	}
-	out := make([]TechniqueLabel, len(rows))
-	for i, row := range rows {
-		out[i] = TechniqueLabel{AttackID: row.AttackID, Role: row.Role, Evidence: row.Evidence, Rationale: row.Rationale}
-	}
-	return out, nil
 }

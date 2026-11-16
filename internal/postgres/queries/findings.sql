@@ -116,12 +116,6 @@ WHERE finding_id = @finding_id;
 -- name: InsertFindingMatchFlags :copyfrom
 INSERT INTO finding_match_flags (finding_id, flag_id) VALUES ($1, $2);
 
--- name: ListFindingMatchFlags :many
-SELECT flag_id
-FROM finding_match_flags
-WHERE finding_id = @finding_id
-ORDER BY flag_id;
-
 -- The latest Score of a Finding, with its Data Gaps in catalog order.
 -- name: LatestFindingScore :one
 SELECT s.scored_at, s.model, s.value, s.alpha, s.beta, s.gamma, s.vulnerability,

@@ -140,5 +140,5 @@ func (s *Service) invite(ctx context.Context, u tenancy.User, before func(*postg
 		log.Printf("users: %v", err)
 		return stored, nil
 	}
-	return StoredUser{User: u, Sub: sub, Created: stored.Created}, nil
+	return StoredUser{User: u.Invited(), Sub: sub, Created: stored.Created}, nil
 }

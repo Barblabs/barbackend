@@ -330,8 +330,7 @@ func storeUser(t *testing.T, db *postgres.DB, email string, role tenancy.Role, c
 		t.Fatal(err)
 	}
 	inTx(t, db, func(tx *postgres.Tx) error {
-		_, err := tx.CreateUser(context.Background(), u, uuid.NewString())
-		return err
+		return pgtest.CreateUser(context.Background(), tx, u, uuid.NewString())
 	})
 	return u
 }

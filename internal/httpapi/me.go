@@ -49,7 +49,7 @@ func (h meHandler) get(ctx context.Context, caller tenancy.User, _ *struct{}) (*
 		return nil, err
 	}
 	resp := meResponse{ID: p.User.ID().String(), Email: p.User.Email(), Role: callerRole(p.User.Role().Code())}
-	if p.Customer != (tenancy.Customer{}) {
+	if _, ok := p.User.Customer(); ok {
 		resp.Customer = &meCustomer{ID: p.Customer.ID().String(), Name: p.Customer.Name()}
 	}
 	return &body[meResponse]{Body: resp}, nil

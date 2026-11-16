@@ -101,7 +101,7 @@ func (e env) newCustomerWithSource(t *testing.T, assetName string) (tenancy.User
 		if _, err := tx.CreateCustomer(ctx, customer); err != nil {
 			return err
 		}
-		if _, err := tx.CreateUser(ctx, user, uuid.NewString()); err != nil {
+		if err := pgtest.CreateUser(ctx, tx, user, uuid.NewString()); err != nil {
 			return err
 		}
 		return tx.CreateCMDBSource(ctx, source, []byte(`{}`), []byte{})
