@@ -218,3 +218,21 @@ FROM (
 ) e
 GROUP BY e.week
 ORDER BY e.week;
+
+-- The latest Score of every open Finding of a Customer's Assets, with its
+-- Asset, for counting them by Score Band. A Finding not scored yet is left
+-- out, as in ListOpenFindingsOfCustomer. Ordered as Assets are listed.
+-- name: ListOpenFindingScoresByAssetOfCustomer :many
+SELECT a.id AS asset_id, a.name AS asset_name, s.model, s.value
+FROM findings f
+JOIN cmdb_sources src ON src.id = f.cmdb_source_id
+JOIN assets a ON a.cmdb_source_id = f.cmdb_source_id AND a.record_id = f.record_id
+JOIN LATERAL (
+    SELECT sc.model, sc.value
+    FROM finding_scores sc
+    WHERE sc.finding_id = f.id
+    ORDER BY sc.scored_at DESC
+    LIMIT 1
+) s ON true
+WHERE src.customer_id = @customer_id AND f.closed_at IS NULL
+ORDER BY a.name, a.cmdb_source_id, a.record_id;

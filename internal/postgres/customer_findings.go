@@ -64,6 +64,49 @@ func (t *Tx) FindingWeeksOfCustomer(ctx context.Context, customer tenancy.Custom
 	return weeks, nil
 }
 
+// AssetFindingBands counts an Asset's open Findings by the Score Band of
+// their latest Score.
+type AssetFindingBands struct {
+	// AssetID is the Asset's handle, as StoredAsset.ID.
+	AssetID                     int64
+	AssetName                   string
+	Critical, High, Medium, Low int
+	// Unbanded counts the Findings whose latest Score is from a Scoring
+	// Model without Bands, before Model 3 (ADR 0032).
+	Unbanded int
+}
+
+// FindingBandsByAssetOfCustomer is, for every Asset of the Customer with an
+// open scored Finding, how many it has in each Score Band, ordered as Assets
+// are listed. A Finding not scored yet is left out.
+func (t *Tx) FindingBandsByAssetOfCustomer(ctx context.Context, customer tenancy.CustomerID) ([]AssetFindingBands, error) {
+	rows, err := t.q.ListOpenFindingScoresByAssetOfCustomer(ctx, uuid.UUID(customer))
+	if err != nil {
+		return nil, fmt.Errorf("list open finding scores of customer %s: %w", customer, err)
+	}
+	var assets []AssetFindingBands
+	for _, row := range rows {
+		if len(assets) == 0 || assets[len(assets)-1].AssetID != row.AssetID {
+			assets = append(assets, AssetFindingBands{AssetID: row.AssetID, AssetName: row.AssetName})
+		}
+		counts := &assets[len(assets)-1]
+		band, ok := scoring.Score{Model: scoring.ModelVersion(row.Model), Value: row.Value}.Band()
+		switch {
+		case !ok:
+			counts.Unbanded++
+		case band == scoring.BandCritical:
+			counts.Critical++
+		case band == scoring.BandHigh:
+			counts.High++
+		case band == scoring.BandMedium:
+			counts.Medium++
+		default:
+			counts.Low++
+		}
+	}
+	return assets, nil
+}
+
 // FindingOfCustomer is one Finding of the Customer's Assets, open or closed.
 // It fails with ErrNotFound when the Customer has no such Finding with a
 // Score.
