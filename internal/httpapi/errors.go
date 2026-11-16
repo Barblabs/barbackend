@@ -120,7 +120,7 @@ func apiError(err error) *codedError {
 		return &codedError{status: http.StatusNotFound, Code: assetNotFound, Message: "asset not found"}
 	case errors.Is(err, inventory.ErrAssetInactive):
 		return &codedError{status: http.StatusConflict, Code: assetInactive, Message: "an inactive asset cannot be declared"}
-	case errors.Is(err, assets.ErrInvalidQuery), errors.Is(err, findings.ErrInvalidTrend), errors.Is(err, findings.ErrInvalidCount):
+	case errors.Is(err, assets.ErrInvalidQuery), errors.Is(err, findings.ErrInvalidTrend), errors.Is(err, findings.ErrInvalidCount), errors.Is(err, users.ErrInvalidDays):
 		return &codedError{status: http.StatusBadRequest, Code: invalidRequest, Message: err.Error()}
 	case errors.Is(err, slack.ErrInvalidState):
 		return &codedError{status: http.StatusBadRequest, Code: invalidState, Message: "the Slack authorization state is invalid or has expired"}

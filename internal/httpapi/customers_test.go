@@ -173,3 +173,33 @@ func TestPlatformAdminSeesTheStatsOfEveryCustomer(t *testing.T) {
 		t.Errorf("other Customer = %+v, want active, no Users and no CMDB Source", c)
 	}
 }
+
+func TestPlatformAdminSeesSyncHealthAndSlackDeliveries(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	staff := e.platformAdmin(t)
+
+	health := decode[struct {
+		Days []struct {
+			Date      string `json:"date"`
+			Succeeded int    `json:"succeeded"`
+		} `json:"days"`
+	}](t, e.asUser(staff, http.MethodGet, "/customers/sync-health?days=7", nil), http.StatusOK)
+	deliveries := decode[struct {
+		Customers []struct {
+			ID   string `json:"id"`
+			Sent int    `json:"sent"`
+		} `json:"customers"`
+	}](t, e.asUser(staff, http.MethodGet, "/customers/slack-deliveries", nil), http.StatusOK)
+	tooMany := e.asUser(staff, http.MethodGet, "/customers/sync-health?days=91", nil)
+
+	if len(health.Days) != 7 || health.Days[6].Date != time.Now().UTC().Format(time.DateOnly) {
+		t.Errorf("sync health = %+v, want 7 days ending today", health.Days)
+	}
+	if len(deliveries.Customers) != 1 || deliveries.Customers[0].ID != e.customer.String() || deliveries.Customers[0].Sent != 0 {
+		t.Errorf("slack deliveries = %+v, want the env's Customer with nothing sent", deliveries.Customers)
+	}
+	if tooMany.Code != http.StatusBadRequest {
+		t.Errorf("91 days = %d %s, want 400", tooMany.Code, tooMany.Body)
+	}
+}

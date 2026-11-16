@@ -38,6 +38,22 @@ func (h customerHandler) register(api huma.API) {
 		Description: "Its enabled Users and how its CMDB Source last synced, for a Platform Admin to watch over Customers: never their Assets or Findings.",
 	}, h.stats)
 	register(api, huma.Operation{
+		OperationID: "get-customers-sync-health",
+		Method:      http.MethodGet,
+		Path:        "/customers/sync-health",
+		Summary:     "Count every Customer's Syncs by day",
+		Description: "How many Syncs of every Customer's CMDB Source succeeded and failed on each of the last days days, in UTC and today included, oldest first, with zeros for days without a Sync.",
+		Errors:      []int{http.StatusBadRequest},
+	}, h.syncHealth)
+	register(api, huma.Operation{
+		OperationID: "get-customers-slack-deliveries",
+		Method:      http.MethodGet,
+		Path:        "/customers/slack-deliveries",
+		Summary:     "Count each Customer's Slack messages by status",
+		Description: "How many Slack messages each Customer queued in the last days days, in UTC and today included, were sent, have failed for good and are still pending, by name, every Customer included: never what they say.",
+		Errors:      []int{http.StatusBadRequest},
+	}, h.slackDeliveries)
+	register(api, huma.Operation{
 		OperationID: "rename-customer",
 		Method:      http.MethodPatch,
 		Path:        "/customers/{id}",
@@ -85,6 +101,38 @@ type customerStatsResponse struct {
 
 type customerStatsListResponse struct {
 	Customers []customerStatsResponse `json:"customers"`
+}
+
+type operationDaysQuery struct {
+	Days operationDays `query:"days" doc:"How many days, today included"`
+}
+
+type operationDays int
+
+func (operationDays) Schema(huma.Registry) *huma.Schema {
+	return &huma.Schema{Type: huma.TypeInteger, Minimum: ptr(1.0), Maximum: ptr(float64(users.MaxOperationDays)), Default: users.DefaultOperationDays}
+}
+
+type syncHealthResponse struct {
+	Days []syncDayResponse `json:"days"`
+}
+
+type syncDayResponse struct {
+	Date      string `json:"date" format:"date" doc:"The day, in UTC"`
+	Succeeded int    `json:"succeeded"`
+	Failed    int    `json:"failed"`
+}
+
+type slackDeliveriesResponse struct {
+	Customers []customerSlackDeliveriesResponse `json:"customers"`
+}
+
+type customerSlackDeliveriesResponse struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Sent    int    `json:"sent"`
+	Failed  int    `json:"failed" doc:"Failed for good: a Customer Admin can retry them"`
+	Pending int    `json:"pending"`
 }
 
 type createCustomerRequest struct {
@@ -137,6 +185,30 @@ func (h customerHandler) stats(ctx context.Context, caller tenancy.User, _ *stru
 		})
 	}
 	return &body[customerStatsListResponse]{Body: resp}, nil
+}
+
+func (h customerHandler) syncHealth(ctx context.Context, caller tenancy.User, in *operationDaysQuery) (*body[syncHealthResponse], error) {
+	days, err := h.users.SyncHealth(ctx, caller, int(in.Days))
+	if err != nil {
+		return nil, err
+	}
+	resp := syncHealthResponse{Days: make([]syncDayResponse, len(days))}
+	for i, d := range days {
+		resp.Days[i] = syncDayResponse{Date: d.Start.Format(time.DateOnly), Succeeded: d.Succeeded, Failed: d.Failed}
+	}
+	return &body[syncHealthResponse]{Body: resp}, nil
+}
+
+func (h customerHandler) slackDeliveries(ctx context.Context, caller tenancy.User, in *operationDaysQuery) (*body[slackDeliveriesResponse], error) {
+	counted, err := h.users.SlackDeliveries(ctx, caller, int(in.Days))
+	if err != nil {
+		return nil, err
+	}
+	resp := slackDeliveriesResponse{Customers: make([]customerSlackDeliveriesResponse, len(counted))}
+	for i, c := range counted {
+		resp.Customers[i] = customerSlackDeliveriesResponse{ID: c.Customer.String(), Name: c.Name, Sent: c.Sent, Failed: c.Failed, Pending: c.Pending}
+	}
+	return &body[slackDeliveriesResponse]{Body: resp}, nil
 }
 
 // timeOrNull is null for the zero time, which the domain uses for "never".

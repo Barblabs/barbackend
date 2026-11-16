@@ -74,6 +74,8 @@ var platformOperations = []struct{ method, path string }{
 	{http.MethodPost, "/customers"},
 	{http.MethodGet, "/customers"},
 	{http.MethodGet, "/customers/stats"},
+	{http.MethodGet, "/customers/sync-health"},
+	{http.MethodGet, "/customers/slack-deliveries"},
 	{http.MethodPatch, "/customers/" + uuid.Nil.String()},
 	{http.MethodPost, "/customers/" + uuid.Nil.String() + "/deactivate"},
 	{http.MethodPost, "/customers/" + uuid.Nil.String() + "/reactivate"},
