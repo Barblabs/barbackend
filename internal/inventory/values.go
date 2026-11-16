@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"barbackend/internal/tenancy"
 )
 
 var (
@@ -238,7 +240,7 @@ func NewOwnerEmail(s string) (OwnerEmail, error) {
 	if blank(s) {
 		return OwnerEmail{}, ErrEmptyOwnerEmail
 	}
-	return OwnerEmail{address: strings.ToLower(strings.TrimSpace(s))}, nil
+	return OwnerEmail{address: tenancy.CanonicalEmail(s)}, nil
 }
 
 func (o OwnerEmail) String() string { return o.address }
