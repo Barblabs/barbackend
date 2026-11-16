@@ -294,13 +294,12 @@ func openDossiers(ctx context.Context, tx *postgres.Tx, customer tenancy.Custome
 	if err != nil || len(found) == 0 {
 		return nil, nil, err
 	}
-	cves := make([]string, 0, len(found))
-	for _, f := range found {
-		if !slices.Contains(cves, f.CVE) {
-			cves = append(cves, f.CVE)
-		}
+	cves := make([]string, len(found))
+	for i, f := range found {
+		cves[i] = f.CVE
 	}
-	threats, err := tx.ThreatsOf(ctx, cves)
+	slices.Sort(cves)
+	threats, err := tx.ThreatsOf(ctx, slices.Compact(cves))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -408,6 +407,9 @@ func advisoryText(a postgres.StoredAdvisory) (title, description string, err err
 func techniquesOf(labels []postgres.LabeledTechnique) []assessment.Technique {
 	var out []assessment.Technique
 	for _, l := range labels {
+		if len(out) == assessment.MaxTechniques {
+			break
+		}
 		t := assessment.Technique{
 			AttackID: l.Label.AttackID, Tactics: []string{}, Role: l.Label.Role,
 			Evidence: l.Label.Evidence, Rationale: l.Label.Rationale, Mitigations: []assessment.Mitigation{},
@@ -421,7 +423,7 @@ func techniquesOf(labels []postgres.LabeledTechnique) []assessment.Technique {
 		for _, m := range l.Mitigations {
 			t.Mitigations = append(t.Mitigations, assessment.Mitigation{AttackID: m.AttackID, Name: m.Name, Advice: m.Advice})
 		}
-		if len(out) == assessment.MaxTechniques || slices.ContainsFunc(out, func(o assessment.Technique) bool { return o.AttackID == t.AttackID }) {
+		if slices.ContainsFunc(out, func(o assessment.Technique) bool { return o.AttackID == t.AttackID }) {
 			continue
 		}
 		out = append(out, t)

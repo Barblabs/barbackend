@@ -56,6 +56,8 @@ func serve(ctx context.Context, _ []string) error {
 	}
 
 	return withDB(ctx, func(db *postgres.DB) error {
+		ctx, stopBackground := context.WithCancel(ctx)
+		defer stopBackground()
 		// What changes a Customer's Findings, or how they are weighed, wakes
 		// the Prioritizer (ADR 0026): Feeds, Syncs, a Business Context save,
 		// a User's Feedback on the order and a Cartógrafo run that labeled.
@@ -97,7 +99,7 @@ func serve(ctx context.Context, _ []string) error {
 		}()
 		sources := cmdb.New(db, providers(), key, ctx, syncTimeout)
 		sources.OnSynced(found.AfterSync)
-		return listen(ctx, backgroundDone, httpapi.New(httpapi.Config{
+		return listen(ctx, stopBackground, backgroundDone, httpapi.New(httpapi.Config{
 			Agents:          agentService,
 			Areas:           areas.New(db),
 			Assets:          assets.New(db, found),
@@ -111,7 +113,7 @@ func serve(ctx context.Context, _ []string) error {
 	})
 }
 
-func listen(ctx context.Context, backgroundDone <-chan struct{}, handler http.Handler) error {
+func listen(ctx context.Context, stopBackground context.CancelFunc, backgroundDone <-chan struct{}, handler http.Handler) error {
 	srv := &http.Server{
 		Addr:              listenAddr(),
 		Handler:           handler,
@@ -123,7 +125,10 @@ func listen(ctx context.Context, backgroundDone <-chan struct{}, handler http.Ha
 
 	select {
 	case err := <-serveErr:
-		return err
+		stopBackground()
+		waitCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), shutdownTimeout)
+		defer cancel()
+		return errors.Join(err, awaitBackground(waitCtx, backgroundDone))
 	case <-ctx.Done():
 	}
 	shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), shutdownTimeout)
@@ -131,15 +136,22 @@ func listen(ctx context.Context, backgroundDone <-chan struct{}, handler http.Ha
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		return err
 	}
-	select {
-	case <-backgroundDone:
-	case <-shutdownCtx.Done():
-		return errors.New("the feeds, the cartografo, the prioritizer or the invitations did not stop")
+	if err := awaitBackground(shutdownCtx, backgroundDone); err != nil {
+		return err
 	}
 	if err := <-serveErr; !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
 	return nil
+}
+
+func awaitBackground(ctx context.Context, done <-chan struct{}) error {
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return errors.New("the feeds, the cartografo, the prioritizer, the invitations or the slack deliveries did not stop")
+	}
 }
 
 func allowedOrigins() []string {
