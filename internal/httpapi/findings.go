@@ -20,7 +20,7 @@ func (h findingHandler) register(api huma.API) {
 		Method:      http.MethodGet,
 		Path:        "/findings/weekly-trend",
 		Summary:     "Count the Customer's Findings opened and closed each week",
-		Description: "One entry per ISO week, in UTC, oldest first and the current week last, with zeros for weeks where nothing happened. opened counts Findings first opened that week; closed counts Findings closed that week. A Finding closed and then reopened keeps no record of that close, so it is not counted as closed.",
+		Description: "One entry per ISO week, in UTC, oldest first and the current week last, with zeros for weeks where nothing happened. opened counts Findings first opened that week; closed counts Findings closed that week; open_at_end counts those still open when it ended. A Finding closed and then reopened keeps no record of that close, so it is not counted as closed, and counts as open while it was closed.",
 		Errors:      []int{http.StatusBadRequest},
 	}, h.weeklyTrend)
 }
@@ -44,6 +44,7 @@ type weekResponse struct {
 	StartsOn string `json:"starts_on" format:"date" doc:"The Monday the week starts on"`
 	Opened   int    `json:"opened"`
 	Closed   int    `json:"closed"`
+	OpenAt   int    `json:"open_at_end" doc:"Findings open when the week ended, or open now for the current week: the backlog"`
 }
 
 func (h findingHandler) weeklyTrend(ctx context.Context, caller tenancy.User, in *weeklyTrendQuery) (*body[weeklyTrendResponse], error) {
@@ -54,7 +55,7 @@ func (h findingHandler) weeklyTrend(ctx context.Context, caller tenancy.User, in
 	resp := weeklyTrendResponse{Weeks: make([]weekResponse, len(weeks))}
 	for i, w := range weeks {
 		year, week := w.Start.ISOWeek()
-		resp.Weeks[i] = weekResponse{Week: fmt.Sprintf("%d-W%02d", year, week), StartsOn: w.Start.Format("2006-01-02"), Opened: w.Opened, Closed: w.Closed}
+		resp.Weeks[i] = weekResponse{Week: fmt.Sprintf("%d-W%02d", year, week), StartsOn: w.Start.Format("2006-01-02"), Opened: w.Opened, Closed: w.Closed, OpenAt: w.OpenAtEnd}
 	}
 	return &body[weeklyTrendResponse]{Body: resp}, nil
 }

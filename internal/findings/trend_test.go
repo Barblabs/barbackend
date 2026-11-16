@@ -33,15 +33,15 @@ func TestWeeklyTrendCountsFirstOpensAndClosesInEveryWeek(t *testing.T) {
 	}
 
 	want := []findings.Week{
-		{Start: time.Date(2026, time.November, 2, 0, 0, 0, 0, time.UTC), Opened: 1},
-		{Start: time.Date(2026, time.November, 9, 0, 0, 0, 0, time.UTC), Closed: 1},
-		{Start: time.Date(2026, time.November, 16, 0, 0, 0, 0, time.UTC), Opened: 1, Closed: 1},
+		{Start: time.Date(2026, time.November, 2, 0, 0, 0, 0, time.UTC), Opened: 1, OpenAtEnd: 2},
+		{Start: time.Date(2026, time.November, 9, 0, 0, 0, 0, time.UTC), Closed: 1, OpenAtEnd: 1},
+		{Start: time.Date(2026, time.November, 16, 0, 0, 0, 0, time.UTC), Opened: 1, Closed: 1, OpenAtEnd: 1},
 	}
 	if len(trend) != len(want) {
 		t.Fatalf("trend = %+v, want %+v", trend, want)
 	}
 	for i := range want {
-		if !trend[i].Start.Equal(want[i].Start) || trend[i].Opened != want[i].Opened || trend[i].Closed != want[i].Closed {
+		if !trend[i].Start.Equal(want[i].Start) || trend[i].Opened != want[i].Opened || trend[i].Closed != want[i].Closed || trend[i].OpenAtEnd != want[i].OpenAtEnd {
 			t.Errorf("week %d = %+v, want %+v", i, trend[i], want[i])
 		}
 	}
