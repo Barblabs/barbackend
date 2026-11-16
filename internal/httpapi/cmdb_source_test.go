@@ -339,6 +339,39 @@ func TestDisconnectCMDBSourceWithoutConnectedSource(t *testing.T) {
 	}
 }
 
+func TestOnlyACustomerAdminConfiguresTheCMDBSource(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	e.connect(t, e.customer)
+	_, before := e.getCMDBSource(t)
+	login := validLogin()
+	login["url"], login["password"] = "http://169.254.169.254", "viewer-secret"
+	for _, op := range []struct {
+		method, path string
+		body         map[string]string
+	}{
+		{http.MethodPost, "/cmdb/source/test", login},
+		{http.MethodPost, "/cmdb/source", login},
+		{http.MethodPut, "/cmdb/source", login},
+		{http.MethodDelete, "/cmdb/source", nil},
+	} {
+		rec := e.sendLogin("Bearer "+e.token, op.method, op.path, op.body)
+
+		if rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), `"code":"forbidden"`) {
+			t.Errorf("a Viewer's %s %s = %d %s, want 403 forbidden", op.method, op.path, rec.Code, rec.Body)
+		}
+	}
+	if e.provider.Secret == "viewer-secret" {
+		t.Error("the provider checked the Viewer's login, want it never reached")
+	}
+	if _, after := e.getCMDBSource(t); after != before {
+		t.Errorf("a Viewer's GET /cmdb/source = %s, want it unchanged from %s", after, before)
+	}
+	if rec := e.sync(context.Background()); rec.Code != http.StatusOK {
+		t.Errorf("a Viewer's sync = %d %s, want 200", rec.Code, rec.Body)
+	}
+}
+
 func TestLoginEndpointsDoNotEchoTheBodyInErrors(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
