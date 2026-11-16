@@ -382,6 +382,7 @@ linters:
             - barbackend/internal/assets
             - barbackend/internal/businesscontext
             - barbackend/internal/cmdb
+            - barbackend/internal/findings
             - barbackend/internal/slack
             - barbackend/internal/users
           deny:

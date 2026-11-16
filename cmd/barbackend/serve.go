@@ -103,6 +103,7 @@ func serve(ctx context.Context, _ []string) error {
 			Assets:          assets.New(db, found),
 			BusinessContext: businessContext,
 			CMDB:            sources,
+			Findings:        found,
 			Slack:           slackService,
 			Users:           userService,
 			AllowedOrigins:  allowedOrigins(),
