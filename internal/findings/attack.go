@@ -96,7 +96,6 @@ func (s *Service) AttackMatrix(ctx context.Context, caller tenancy.User, role st
 	return tally.done(limit), nil
 }
 
-// matrixTally adds Findings up into an AttackMatrix.
 type matrixTally struct {
 	matrix     AttackMatrix
 	techniques map[string]*TechniqueCount
@@ -115,7 +114,7 @@ func (t *matrixTally) count(f postgres.OpenFindingFact, labels []postgres.CVETec
 	}
 	for i := range t.matrix.Tactics {
 		if slices.Contains(tactics, t.matrix.Tactics[i].Tactic) {
-			t.matrix.Tactics[i].Bands.add(f)
+			t.matrix.Tactics[i].Bands.Add(f.Score)
 		}
 	}
 	var counted []string
@@ -124,7 +123,7 @@ func (t *matrixTally) count(f postgres.OpenFindingFact, labels []postgres.CVETec
 		technique.Roles = appendNew(technique.Roles, l.Role)
 		if !slices.Contains(counted, technique.AttackID) {
 			counted = append(counted, technique.AttackID)
-			technique.Bands.add(f)
+			technique.Bands.Add(f.Score)
 		}
 	}
 }
@@ -152,7 +151,6 @@ func (t *matrixTally) done(limit int) AttackMatrix {
 	return t.matrix
 }
 
-// appendNew appends the values not already in values.
 func appendNew(values []string, more ...string) []string {
 	for _, v := range more {
 		if !slices.Contains(values, v) {

@@ -446,3 +446,17 @@ func TestParseBandReadsWhatStringWrites(t *testing.T) {
 		}
 	}
 }
+
+func TestBandCountsCountEachScoreInItsBandAndOlderModelsApart(t *testing.T) {
+	var counts scoring.BandCounts
+	for _, s := range []scoring.Score{
+		{Model: 3, Value: 0.9}, {Model: 3, Value: 0.71}, {Model: 3, Value: 0.5}, {Model: 3, Value: 0.25}, {Model: 3, Value: 0.05}, {Model: 2, Value: 0.9},
+	} {
+		counts.Add(s)
+	}
+
+	want := scoring.BandCounts{Critical: 2, High: 1, Medium: 1, Low: 1, Unbanded: 1}
+	if counts != want || counts.Total() != 6 {
+		t.Errorf("counts = %+v (total %d), want %+v (total 6)", counts, counts.Total(), want)
+	}
+}

@@ -187,6 +187,33 @@ func (b Band) String() string {
 	}
 }
 
+// BandCounts counts Scores by their Band.
+type BandCounts struct {
+	Critical, High, Medium, Low int
+	// Unbanded counts the Scores of a Model without Bands, before Model 3.
+	Unbanded int
+}
+
+// Add counts s in its Band.
+func (c *BandCounts) Add(s Score) {
+	band, ok := s.Band()
+	switch {
+	case !ok:
+		c.Unbanded++
+	case band == BandCritical:
+		c.Critical++
+	case band == BandHigh:
+		c.High++
+	case band == BandMedium:
+		c.Medium++
+	default:
+		c.Low++
+	}
+}
+
+// Total is every Score counted.
+func (c BandCounts) Total() int { return c.Critical + c.High + c.Medium + c.Low + c.Unbanded }
+
 // ParseBand is the Band named name, as String writes it, and false for any
 // other name.
 func ParseBand(name string) (Band, bool) {

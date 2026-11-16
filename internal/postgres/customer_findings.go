@@ -75,12 +75,9 @@ const week = 168 * time.Hour
 // their latest Score.
 type AssetFindingBands struct {
 	// AssetID is the Asset's handle, as StoredAsset.ID.
-	AssetID                     int64
-	AssetName                   string
-	Critical, High, Medium, Low int
-	// Unbanded counts the Findings whose latest Score is from a Scoring
-	// Model without Bands, before Model 3 (ADR 0032).
-	Unbanded int
+	AssetID   int64
+	AssetName string
+	scoring.BandCounts
 }
 
 // FindingBandsByAssetOfCustomer is, for every Asset of the Customer with an
@@ -96,20 +93,7 @@ func (t *Tx) FindingBandsByAssetOfCustomer(ctx context.Context, customer tenancy
 		if len(assets) == 0 || assets[len(assets)-1].AssetID != row.AssetID {
 			assets = append(assets, AssetFindingBands{AssetID: row.AssetID, AssetName: row.AssetName})
 		}
-		counts := &assets[len(assets)-1]
-		band, ok := scoring.Score{Model: scoring.ModelVersion(row.Model), Value: row.Value}.Band()
-		switch {
-		case !ok:
-			counts.Unbanded++
-		case band == scoring.BandCritical:
-			counts.Critical++
-		case band == scoring.BandHigh:
-			counts.High++
-		case band == scoring.BandMedium:
-			counts.Medium++
-		default:
-			counts.Low++
-		}
+		assets[len(assets)-1].Add(latestScore(row.Model, row.Value))
 	}
 	return assets, nil
 }
@@ -129,10 +113,8 @@ type OpenFindingFact struct {
 	CVE     string
 	KEV     bool
 	EPSS    *float64
-	Band    scoring.Band
-	// Banded is false when the latest Score is from a Scoring Model without
-	// Bands; Band is then zero.
-	Banded bool
+	// Score is the latest Score's Model and value, which give its Band.
+	Score scoring.Score
 }
 
 // AreaRef names an Area by its handle, as in GET /areas.
@@ -162,6 +144,7 @@ func (t *Tx) OpenFindingFactsOfCustomer(ctx context.Context, customer tenancy.Cu
 			Version:     row.ComponentVersion,
 			CVE:         row.CveID,
 			KEV:         row.Kev,
+			Score:       latestScore(row.Model, row.Value),
 		}
 		if row.AreaID != nil {
 			f.Area = &AreaRef{ID: *row.AreaID, Name: valueOrZero(row.AreaName)}
@@ -169,20 +152,16 @@ func (t *Tx) OpenFindingFactsOfCustomer(ctx context.Context, customer tenancy.Cu
 		if p, ok := row.Epss.(float64); ok {
 			f.EPSS = &p
 		}
-		f.Band, f.Banded = scoring.Score{Model: scoring.ModelVersion(row.Model), Value: row.Value}.Band()
 		facts[i] = f
 	}
 	return facts, nil
 }
 
 // ClosedFinding is a closed Finding: when it was last opened and closed,
-// and the Score Band of its latest Score.
+// and its latest Score's Model and value, which give its Band.
 type ClosedFinding struct {
 	Opened, Closed time.Time
-	Band           scoring.Band
-	// Banded is false when the latest Score is from a Scoring Model without
-	// Bands; Band is then zero.
-	Banded bool
+	Score          scoring.Score
 }
 
 // FindingsOfCustomerClosedSince is the scored Findings of the Customer's
@@ -194,11 +173,13 @@ func (t *Tx) FindingsOfCustomerClosedSince(ctx context.Context, customer tenancy
 	}
 	closed := make([]ClosedFinding, len(rows))
 	for i, row := range rows {
-		c := ClosedFinding{Opened: row.OpenedAt, Closed: valueOrZero(row.ClosedAt)}
-		c.Band, c.Banded = scoring.Score{Model: scoring.ModelVersion(row.Model), Value: row.Value}.Band()
-		closed[i] = c
+		closed[i] = ClosedFinding{Opened: row.OpenedAt, Closed: valueOrZero(row.ClosedAt), Score: latestScore(row.Model, row.Value)}
 	}
 	return closed, nil
+}
+
+func latestScore(model int16, value float64) scoring.Score {
+	return scoring.Score{Model: scoring.ModelVersion(model), Value: value}
 }
 
 // FindingOfCustomer is one Finding of the Customer's Assets, open or closed.

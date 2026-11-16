@@ -48,14 +48,15 @@ func (s *Service) TimeToClose(ctx context.Context, caller tenancy.User, weeks in
 	var critical, high, medium, low, unbanded []time.Duration
 	for _, c := range closed {
 		took := c.Closed.Sub(c.Opened)
+		band, banded := c.Score.Band()
 		switch {
-		case !c.Banded:
+		case !banded:
 			unbanded = append(unbanded, took)
-		case c.Band == scoring.BandCritical:
+		case band == scoring.BandCritical:
 			critical = append(critical, took)
-		case c.Band == scoring.BandHigh:
+		case band == scoring.BandHigh:
 			high = append(high, took)
-		case c.Band == scoring.BandMedium:
+		case band == scoring.BandMedium:
 			medium = append(medium, took)
 		default:
 			low = append(low, took)

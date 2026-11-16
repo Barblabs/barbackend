@@ -27,33 +27,8 @@ var ErrInvalidCount = errors.New("invalid finding count")
 type AreaRef = postgres.AreaRef
 
 // BandCounts counts open Findings by the Score Band of their latest Score.
-type BandCounts struct {
-	Critical, High, Medium, Low int
-	// Unbanded counts those whose latest Score is from a Scoring Model
-	// without Bands, before Model 3 (ADR 0032).
-	Unbanded int
-}
+type BandCounts = scoring.BandCounts
 
-func (c *BandCounts) add(f postgres.OpenFindingFact) {
-	switch {
-	case !f.Banded:
-		c.Unbanded++
-	case f.Band == scoring.BandCritical:
-		c.Critical++
-	case f.Band == scoring.BandHigh:
-		c.High++
-	case f.Band == scoring.BandMedium:
-		c.Medium++
-	default:
-		c.Low++
-	}
-}
-
-// Total is every Finding counted.
-func (c BandCounts) Total() int { return c.Critical + c.High + c.Medium + c.Low + c.Unbanded }
-
-// moreSevere orders counts with more Critical first, then more High, Medium
-// and Low.
 func moreSevere(a, b BandCounts) int {
 	return cmp.Or(
 		cmp.Compare(b.Critical, a.Critical), cmp.Compare(b.High, a.High),
@@ -80,11 +55,11 @@ func (s *Service) Summary(ctx context.Context, caller tenancy.User) (Summary, er
 	}
 	var sum Summary
 	for _, f := range facts {
-		sum.Bands.add(f)
+		sum.Bands.Add(f.Score)
 		if f.KEV {
 			sum.KEV++
 		}
-		if f.Banded && f.Band == scoring.BandCritical && f.Exposure == inventory.InternetFacing {
+		if band, _ := f.Score.Band(); band == scoring.BandCritical && f.Exposure == inventory.InternetFacing {
 			sum.CriticalInternetFacing++
 		}
 	}
@@ -126,13 +101,13 @@ func (s *Service) Breakdown(ctx context.Context, caller tenancy.User, by Groupin
 	case ByExposure:
 		groups := []Group{{Exposure: inventory.InternetFacing}, {Exposure: inventory.Internal}, {Exposure: inventory.ExposureUnknown}}
 		for _, f := range facts {
-			groups[slices.IndexFunc(groups, func(g Group) bool { return g.Exposure == f.Exposure })].Bands.add(f)
+			groups[slices.IndexFunc(groups, func(g Group) bool { return g.Exposure == f.Exposure })].Bands.Add(f.Score)
 		}
 		return groups, nil
 	case ByCriticality:
 		groups := []Group{{Criticality: inventory.CriticalityHigh}, {Criticality: inventory.CriticalityMedium}, {Criticality: inventory.CriticalityLow}, {Criticality: inventory.CriticalityUnknown}}
 		for _, f := range facts {
-			groups[slices.IndexFunc(groups, func(g Group) bool { return g.Criticality == f.Criticality })].Bands.add(f)
+			groups[slices.IndexFunc(groups, func(g Group) bool { return g.Criticality == f.Criticality })].Bands.Add(f.Score)
 		}
 		return groups, nil
 	default:
@@ -150,7 +125,7 @@ func byArea(facts []postgres.OpenFindingFact) []Group {
 			groups = append(groups, Group{Area: f.Area})
 			i = len(groups) - 1
 		}
-		groups[i].Bands.add(f)
+		groups[i].Bands.Add(f.Score)
 	}
 	slices.SortFunc(groups, func(a, b Group) int {
 		switch {
@@ -215,13 +190,13 @@ func (s *Service) Top(ctx context.Context, caller tenancy.User, limit int) (Top,
 			components[key] = &ComponentCount{Product: f.Product, Version: f.Version}
 			componentAssets[key] = map[int64]bool{}
 		}
-		components[key].Bands.add(f)
+		components[key].Bands.Add(f.Score)
 		componentAssets[key][f.AssetID] = true
 		if cves[f.CVE] == nil {
 			cves[f.CVE] = &CVECount{CVE: f.CVE, KEV: f.KEV, EPSS: f.EPSS}
 			cveAssets[f.CVE] = map[int64]bool{}
 		}
-		cves[f.CVE].Bands.add(f)
+		cves[f.CVE].Bands.Add(f.Score)
 		cveAssets[f.CVE][f.AssetID] = true
 	}
 	var top Top

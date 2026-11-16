@@ -201,10 +201,10 @@ func TestOpenFindingFactsOfCustomerReadWhatTheDashboardCountsBy(t *testing.T) {
 	if p.Product != (inventory.Product{Vendor: "f5", Name: "nginx"}) || p.Version != "1.18.0" || p.CVE != "CVE-2021-23017" {
 		t.Errorf("payments product facts = %+v", p)
 	}
-	if !p.KEV || p.EPSS == nil || *p.EPSS != 0.97 || !p.Banded || p.Band != scoring.BandCritical {
+	if band, _ := p.Score.Band(); !p.KEV || p.EPSS == nil || *p.EPSS != 0.97 || band != scoring.BandCritical {
 		t.Errorf("payments threat facts = %+v, want in KEV, EPSS 0.97 and Critical", p)
 	}
-	if l.Banded || l.Criticality != inventory.CriticalityLow || l.Exposure != inventory.ExposureUnknown {
+	if _, banded := l.Score.Band(); banded || l.Criticality != inventory.CriticalityLow || l.Exposure != inventory.ExposureUnknown {
 		t.Errorf("lab facts = %+v, want unbanded, Low and Unknown", l)
 	}
 }
@@ -237,7 +237,7 @@ func TestFindingsOfCustomerClosedSinceReadOnlyItsClosedOnes(t *testing.T) {
 		return tx.FindingsOfCustomerClosedSince(context.Background(), w.customer, time.Now().Add(time.Minute))
 	})
 
-	if len(closed) != 1 || !closed[0].Banded || closed[0].Band != scoring.BandCritical || closed[0].Closed.Before(closed[0].Opened) {
+	if len(closed) != 1 || closed[0].Score.Model != 3 || closed[0].Score.Value != 0.75 || closed[0].Closed.Before(closed[0].Opened) {
 		t.Errorf("closed = %+v, want the Customer's one closed Finding, Critical", closed)
 	}
 	if len(later) != 0 {
