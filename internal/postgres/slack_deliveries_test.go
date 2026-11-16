@@ -192,3 +192,37 @@ func TestEnqueueSlackDeliveriesQueuesRowsDueNowNamingTheirFinding(t *testing.T) 
 		t.Errorf("%d batch rows naming no Finding, want 1", n)
 	}
 }
+
+func TestSlackDeliveriesByCustomerCountTheQueuedSinceByStatus(t *testing.T) {
+	t.Parallel()
+	db, conn := newDBWithConn(t)
+	acme, err := storeCustomer(db, "acme")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := storeCustomer(db, "Beta"); err != nil {
+		t.Fatal(err)
+	}
+	a := acme.Customer.ID()
+	now := time.Now()
+	for _, status := range []string{"sent", "failed", "pending"} {
+		insertSlackDelivery(t, conn, a, "email", "ana@acme.example", status, 1, now)
+	}
+	old := insertSlackDelivery(t, conn, a, "email", "ana@acme.example", "sent", 1, now)
+	if _, err := conn.Exec(context.Background(), "UPDATE slack_deliveries SET created_at = now() - interval '40 days' WHERE id = $1", old); err != nil {
+		t.Fatal(err)
+	}
+
+	got := inTxValue(t, db, func(tx *postgres.Tx) ([]postgres.CustomerSlackDeliveries, error) {
+		return tx.SlackDeliveriesByCustomer(context.Background(), now.AddDate(0, 0, -30))
+	})
+
+	want := []postgres.CustomerSlackDeliveries{{Customer: a, Name: "acme", Sent: 1, Failed: 1, Pending: 1}, {Name: "Beta"}}
+	if len(got) != 2 {
+		t.Fatalf("deliveries = %+v, want %+v", got, want)
+	}
+	got[1].Customer = tenancy.CustomerID{}
+	if got[0] != want[0] || got[1] != want[1] {
+		t.Errorf("deliveries = %+v, want %+v, the old one left out", got, want)
+	}
+}

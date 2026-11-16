@@ -73,3 +73,15 @@ WHERE customer_id = @customer_id
 -- name: InsertSlackDeliveries :copyfrom
 INSERT INTO slack_deliveries (id, customer_id, kind, target_kind, target, payload, finding_id)
 VALUES ($1, $2, $3, $4, $5, $6, $7);
+
+-- How many Slack messages each Customer queued from since on were sent, have
+-- failed for good and are still pending, every Customer included, by name.
+-- name: CountSlackDeliveriesByCustomer :many
+SELECT c.id, c.name,
+       (count(d.id) FILTER (WHERE d.status = 'sent'))::integer AS sent,
+       (count(d.id) FILTER (WHERE d.status = 'failed'))::integer AS failed,
+       (count(d.id) FILTER (WHERE d.status = 'pending'))::integer AS pending
+FROM customers c
+LEFT JOIN slack_deliveries d ON d.customer_id = c.id AND d.created_at >= @since
+GROUP BY c.id, c.name
+ORDER BY lower(c.name);

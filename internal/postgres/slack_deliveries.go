@@ -192,3 +192,25 @@ func deref(s *string) string {
 	}
 	return *s
 }
+
+// CustomerSlackDeliveries is how many Slack messages one Customer queued
+// were sent, have failed for good and are still pending.
+type CustomerSlackDeliveries struct {
+	Customer              tenancy.CustomerID
+	Name                  string
+	Sent, Failed, Pending int
+}
+
+// SlackDeliveriesByCustomer counts the Slack messages every Customer queued
+// from since on, by name, Customers without any included.
+func (t *Tx) SlackDeliveriesByCustomer(ctx context.Context, since time.Time) ([]CustomerSlackDeliveries, error) {
+	rows, err := t.q.CountSlackDeliveriesByCustomer(ctx, since)
+	if err != nil {
+		return nil, fmt.Errorf("count slack deliveries by customer since %s: %w", since, err)
+	}
+	out := make([]CustomerSlackDeliveries, len(rows))
+	for i, row := range rows {
+		out[i] = CustomerSlackDeliveries{Customer: tenancy.CustomerID(row.ID), Name: row.Name, Sent: int(row.Sent), Failed: int(row.Failed), Pending: int(row.Pending)}
+	}
+	return out, nil
+}
