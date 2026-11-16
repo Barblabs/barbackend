@@ -53,6 +53,7 @@ var operations = []struct{ method, path string }{
 	{http.MethodPost, "/cmdb/source/test"},
 	{http.MethodPost, "/cmdb/source/sync"},
 	{http.MethodGet, "/assets"},
+	{http.MethodGet, "/assets/findings-summary"},
 	{http.MethodGet, "/findings/weekly-trend"},
 	{http.MethodGet, "/areas"},
 	{http.MethodGet, "/prioritizations"},

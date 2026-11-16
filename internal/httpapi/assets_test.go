@@ -13,6 +13,19 @@ import (
 	"barbackend/internal/inventory"
 )
 
+func TestFindingsSummaryOfACustomerWithoutFindingsIsAnEmptyList(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+
+	got := decode[struct {
+		Assets *[]struct{} `json:"assets"`
+	}](t, e.do(httptest.NewRequest(http.MethodGet, "/assets/findings-summary", nil)), http.StatusOK)
+
+	if got.Assets == nil || len(*got.Assets) != 0 {
+		t.Errorf("assets = %v, want an empty list, not null", got.Assets)
+	}
+}
+
 type assetList struct {
 	Assets     []asset `json:"assets"`
 	NextCursor *string `json:"next_cursor"`
