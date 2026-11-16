@@ -265,3 +265,20 @@ JOIN LATERAL (
 ) s ON true
 WHERE src.customer_id = @customer_id AND f.closed_at IS NULL
 ORDER BY f.id;
+
+-- The Findings of a Customer's Assets closed from since on, with when they
+-- were last opened and their latest Score, for how long closing them took. A
+-- Finding not scored is left out.
+-- name: ListFindingsOfCustomerClosedSince :many
+SELECT f.opened_at, f.closed_at, s.model, s.value
+FROM findings f
+JOIN cmdb_sources src ON src.id = f.cmdb_source_id
+JOIN LATERAL (
+    SELECT sc.model, sc.value
+    FROM finding_scores sc
+    WHERE sc.finding_id = f.id
+    ORDER BY sc.scored_at DESC
+    LIMIT 1
+) s ON true
+WHERE src.customer_id = @customer_id AND f.closed_at >= @since
+ORDER BY f.closed_at;

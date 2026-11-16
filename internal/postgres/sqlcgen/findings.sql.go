@@ -451,6 +451,61 @@ func (q *Queries) ListActiveComponentsWithProducts(ctx context.Context, arg List
 	return items, nil
 }
 
+const listFindingsOfCustomerClosedSince = `-- name: ListFindingsOfCustomerClosedSince :many
+SELECT f.opened_at, f.closed_at, s.model, s.value
+FROM findings f
+JOIN cmdb_sources src ON src.id = f.cmdb_source_id
+JOIN LATERAL (
+    SELECT sc.model, sc.value
+    FROM finding_scores sc
+    WHERE sc.finding_id = f.id
+    ORDER BY sc.scored_at DESC
+    LIMIT 1
+) s ON true
+WHERE src.customer_id = $1 AND f.closed_at >= $2
+ORDER BY f.closed_at
+`
+
+type ListFindingsOfCustomerClosedSinceParams struct {
+	CustomerID uuid.UUID
+	Since      *time.Time
+}
+
+type ListFindingsOfCustomerClosedSinceRow struct {
+	OpenedAt time.Time
+	ClosedAt *time.Time
+	Model    int16
+	Value    float64
+}
+
+// The Findings of a Customer's Assets closed from since on, with when they
+// were last opened and their latest Score, for how long closing them took. A
+// Finding not scored is left out.
+func (q *Queries) ListFindingsOfCustomerClosedSince(ctx context.Context, arg ListFindingsOfCustomerClosedSinceParams) ([]ListFindingsOfCustomerClosedSinceRow, error) {
+	rows, err := q.db.Query(ctx, listFindingsOfCustomerClosedSince, arg.CustomerID, arg.Since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListFindingsOfCustomerClosedSinceRow
+	for rows.Next() {
+		var i ListFindingsOfCustomerClosedSinceRow
+		if err := rows.Scan(
+			&i.OpenedAt,
+			&i.ClosedAt,
+			&i.Model,
+			&i.Value,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOpenFindingFactsOfCustomer = `-- name: ListOpenFindingFactsOfCustomer :many
 SELECT f.id, a.id AS asset_id, a.criticality_id,
        coalesce(a.declared_exposure_id, a.imported_exposure_id) AS exposure_id,

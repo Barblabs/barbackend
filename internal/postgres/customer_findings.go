@@ -175,6 +175,32 @@ func (t *Tx) OpenFindingFactsOfCustomer(ctx context.Context, customer tenancy.Cu
 	return facts, nil
 }
 
+// ClosedFinding is a closed Finding: when it was last opened and closed,
+// and the Score Band of its latest Score.
+type ClosedFinding struct {
+	Opened, Closed time.Time
+	Band           scoring.Band
+	// Banded is false when the latest Score is from a Scoring Model without
+	// Bands; Band is then zero.
+	Banded bool
+}
+
+// FindingsOfCustomerClosedSince is the scored Findings of the Customer's
+// Assets closed from since on, oldest close first.
+func (t *Tx) FindingsOfCustomerClosedSince(ctx context.Context, customer tenancy.CustomerID, since time.Time) ([]ClosedFinding, error) {
+	rows, err := t.q.ListFindingsOfCustomerClosedSince(ctx, sqlcgen.ListFindingsOfCustomerClosedSinceParams{CustomerID: uuid.UUID(customer), Since: &since})
+	if err != nil {
+		return nil, fmt.Errorf("list findings of customer %s closed since %s: %w", customer, since, err)
+	}
+	closed := make([]ClosedFinding, len(rows))
+	for i, row := range rows {
+		c := ClosedFinding{Opened: row.OpenedAt, Closed: valueOrZero(row.ClosedAt)}
+		c.Band, c.Banded = scoring.Score{Model: scoring.ModelVersion(row.Model), Value: row.Value}.Band()
+		closed[i] = c
+	}
+	return closed, nil
+}
+
 // FindingOfCustomer is one Finding of the Customer's Assets, open or closed.
 // It fails with ErrNotFound when the Customer has no such Finding with a
 // Score.
