@@ -39,6 +39,17 @@ func (s *Service) Customers(ctx context.Context, caller tenancy.User) ([]StoredC
 	return postgres.InTxValue(ctx, s.db, func(tx *postgres.Tx) ([]StoredCustomer, error) { return tx.Customers(ctx) })
 }
 
+type CustomerStats = postgres.CustomerStats
+
+// CustomerStats is what a Platform Admin sees of every Customer to watch
+// over them: never their Assets or Findings (ADR 0013).
+func (s *Service) CustomerStats(ctx context.Context, caller tenancy.User) ([]CustomerStats, error) {
+	if err := caller.ManageCustomers(); err != nil {
+		return nil, err
+	}
+	return postgres.InTxValue(ctx, s.db, func(tx *postgres.Tx) ([]CustomerStats, error) { return tx.CustomerStats(ctx) })
+}
+
 func (s *Service) RenameCustomer(ctx context.Context, caller tenancy.User, id tenancy.CustomerID, name string) (StoredCustomer, error) {
 	return s.changeCustomer(ctx, caller, func(tx *postgres.Tx) (StoredCustomer, error) {
 		c, err := tenancy.NewCustomer(id, name)

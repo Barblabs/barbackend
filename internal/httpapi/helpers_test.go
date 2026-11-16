@@ -66,6 +66,7 @@ var operations = []struct{ method, path string }{
 var platformOperations = []struct{ method, path string }{
 	{http.MethodPost, "/customers"},
 	{http.MethodGet, "/customers"},
+	{http.MethodGet, "/customers/stats"},
 	{http.MethodPatch, "/customers/" + uuid.Nil.String()},
 	{http.MethodPost, "/customers/" + uuid.Nil.String() + "/deactivate"},
 	{http.MethodPost, "/customers/" + uuid.Nil.String() + "/reactivate"},

@@ -31,6 +31,13 @@ func (h customerHandler) register(api huma.API) {
 		Summary:     "List every Customer, by name",
 	}, h.list)
 	register(api, huma.Operation{
+		OperationID: "list-customer-stats",
+		Method:      http.MethodGet,
+		Path:        "/customers/stats",
+		Summary:     "Count what every Customer has, by name",
+		Description: "Its enabled Users and how its CMDB Source last synced, for a Platform Admin to watch over Customers: never their Assets or Findings.",
+	}, h.stats)
+	register(api, huma.Operation{
 		OperationID: "rename-customer",
 		Method:      http.MethodPatch,
 		Path:        "/customers/{id}",
@@ -66,6 +73,20 @@ type customerListResponse struct {
 	Customers []customerResponse `json:"customers"`
 }
 
+type customerStatsResponse struct {
+	ID                   string     `json:"id"`
+	Name                 string     `json:"name"`
+	Active               bool       `json:"active" doc:"False for a Deactivated Customer"`
+	UserCount            int        `json:"user_count" doc:"Its Users who are not disabled, those still invited included"`
+	CMDBConnected        bool       `json:"cmdb_connected" doc:"Whether it has a connected CMDB Source"`
+	CMDBLastSync         *time.Time `json:"cmdb_last_sync" doc:"When the latest successful Sync of its connected CMDB Source finished, null if none succeeded"`
+	CMDBLastSyncFailedAt *time.Time `json:"cmdb_last_sync_failed_at" doc:"When its latest Sync finished, set only while that Sync failed"`
+}
+
+type customerStatsListResponse struct {
+	Customers []customerStatsResponse `json:"customers"`
+}
+
 type createCustomerRequest struct {
 	_          struct{} `additionalProperties:"true"`
 	Name       string   `json:"name" minLength:"1"`
@@ -96,6 +117,34 @@ func (h customerHandler) list(ctx context.Context, caller tenancy.User, _ *struc
 		resp.Customers = append(resp.Customers, newCustomerResponse(c))
 	}
 	return &body[customerListResponse]{Body: resp}, nil
+}
+
+func (h customerHandler) stats(ctx context.Context, caller tenancy.User, _ *struct{}) (*body[customerStatsListResponse], error) {
+	stats, err := h.users.CustomerStats(ctx, caller)
+	if err != nil {
+		return nil, err
+	}
+	resp := customerStatsListResponse{Customers: make([]customerStatsResponse, 0, len(stats))}
+	for _, s := range stats {
+		resp.Customers = append(resp.Customers, customerStatsResponse{
+			ID:                   s.Customer.Customer.ID().String(),
+			Name:                 s.Customer.Customer.Name(),
+			Active:               s.Customer.Deactivated.IsZero(),
+			UserCount:            s.Users,
+			CMDBConnected:        s.Connected,
+			CMDBLastSync:         timeOrNull(s.LastSync),
+			CMDBLastSyncFailedAt: timeOrNull(s.LastSyncFailed),
+		})
+	}
+	return &body[customerStatsListResponse]{Body: resp}, nil
+}
+
+// timeOrNull is null for the zero time, which the domain uses for "never".
+func timeOrNull(t time.Time) *time.Time {
+	if t.IsZero() {
+		return nil
+	}
+	return &t
 }
 
 func (h customerHandler) rename(ctx context.Context, caller tenancy.User, in *renameCustomerInput) (*body[customerResponse], error) {

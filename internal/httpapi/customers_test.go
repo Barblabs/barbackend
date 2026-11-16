@@ -139,3 +139,37 @@ func TestCustomerManagementErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestPlatformAdminSeesTheStatsOfEveryCustomer(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	e.connect(t, e.customer)
+	other := e.newCustomer(t)
+
+	got := decode[struct {
+		Customers []struct {
+			ID                   string     `json:"id"`
+			Active               bool       `json:"active"`
+			UserCount            int        `json:"user_count"`
+			CMDBConnected        bool       `json:"cmdb_connected"`
+			CMDBLastSync         *time.Time `json:"cmdb_last_sync"`
+			CMDBLastSyncFailedAt *time.Time `json:"cmdb_last_sync_failed_at"`
+		} `json:"customers"`
+	}](t, e.asUser(e.platformAdmin(t), http.MethodGet, "/customers/stats", nil), http.StatusOK)
+
+	byID := map[string]int{}
+	for i, c := range got.Customers {
+		byID[c.ID] = i
+	}
+	connected, ok := byID[e.customer.String()]
+	empty, okOther := byID[other.String()]
+	if len(got.Customers) != 2 || !ok || !okOther {
+		t.Fatalf("customers = %+v, want the env's Customer and the other one", got.Customers)
+	}
+	if c := got.Customers[connected]; !c.Active || c.UserCount != 1 || !c.CMDBConnected || c.CMDBLastSync == nil || c.CMDBLastSyncFailedAt != nil {
+		t.Errorf("connected Customer = %+v, want active, 1 User, connected and synced", c)
+	}
+	if c := got.Customers[empty]; !c.Active || c.UserCount != 0 || c.CMDBConnected || c.CMDBLastSync != nil {
+		t.Errorf("other Customer = %+v, want active, no Users and no CMDB Source", c)
+	}
+}
