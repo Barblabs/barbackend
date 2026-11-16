@@ -163,3 +163,35 @@ func TestReadingALabelStopsOnARevocationCycle(t *testing.T) {
 		t.Errorf("T1100 = %+v, want a revoked Technique after the bounded walk", got.Current)
 	}
 }
+
+func TestTechniquesOfCVEsReadEachLabelAsItsCurrentTechnique(t *testing.T) {
+	t.Parallel()
+	const labeled, failed = "CVE-2025-1094", "CVE-2024-6387"
+	db := storedCVEs(t, labeled, failed)
+	storeCatalog(t, db)
+	if err := storeLabeling(db, labeled,
+		postgres.TechniqueLabel{AttackID: "T9999", Role: "secondary_impact", Evidence: "it says so somewhere", Rationale: "r"},
+		postgres.TechniqueLabel{AttackID: "T1100", Role: "primary_impact", Evidence: "it says so somewhere", Rationale: "r"},
+		postgres.TechniqueLabel{AttackID: "T1190", Role: "exploitation", Evidence: "it says so somewhere", Rationale: "r"},
+	); err != nil {
+		t.Fatal(err)
+	}
+	if err := storeFailedLabeling(db, failed); err != nil {
+		t.Fatal(err)
+	}
+
+	got := inTxValue(t, db, func(tx *postgres.Tx) (map[string][]postgres.CVETechnique, error) {
+		return tx.TechniquesOfCVEs(context.Background(), []string{labeled, failed})
+	})
+
+	techniques := got[labeled]
+	if len(got) != 1 || len(techniques) != 2 {
+		t.Fatalf("techniques = %+v, want two of the labeled CVE, and none for the one the catalog does not hold", got)
+	}
+	if e := techniques[0]; e.Role != "exploitation" || e.Technique.AttackID != "T1190" || len(e.Technique.Tactics) != 1 {
+		t.Errorf("first = %+v, want T1190 exploiting it, with its tactic", e)
+	}
+	if i := techniques[1]; i.Role != "primary_impact" || i.Technique.AttackID != "T1505.003" {
+		t.Errorf("second = %+v, want revoked T1100 read as T1505.003", i)
+	}
+}

@@ -79,6 +79,44 @@ func (t *Tx) ThreatsOf(ctx context.Context, cves []string) (map[string]Threats, 
 	return out, nil
 }
 
+// CVETechnique is a Technique label of a Vulnerability, read as the current
+// Technique of the stored catalog (ADR 0023).
+type CVETechnique struct {
+	Role      string
+	Technique CatalogTechnique
+}
+
+// TechniquesOfCVEs is the labels of the stored Vulnerabilities of cves, by
+// CVE ID, each read as its current Technique, so a revoked one reads as what
+// replaced it. A label whose ATT&CK id the catalog does not hold is left out,
+// since its tactics are unknown. It reads one Technique per distinct ATT&CK
+// id, not per label.
+func (t *Tx) TechniquesOfCVEs(ctx context.Context, cves []string) (map[string][]CVETechnique, error) {
+	labels, err := t.q.ListTechniquesOfVulnerabilities(ctx, cves)
+	if err != nil {
+		return nil, fmt.Errorf("list techniques of %d vulnerabilities: %w", len(cves), err)
+	}
+	current := map[string]*CatalogTechnique{}
+	out := make(map[string][]CVETechnique, len(cves))
+	for _, l := range labels {
+		technique, read := current[l.AttackID]
+		if !read {
+			stored, err := t.currentTechnique(ctx, l.AttackID)
+			if err != nil && !errors.Is(err, ErrNotFound) {
+				return nil, err
+			}
+			if err == nil {
+				technique = &CatalogTechnique{AttackID: stored.AttackID, Name: stored.Name, Tactics: stored.Tactics}
+			}
+			current[l.AttackID] = technique
+		}
+		if technique != nil {
+			out[l.CveID] = append(out[l.CveID], CVETechnique{Role: l.Role, Technique: *technique})
+		}
+	}
+	return out, nil
+}
+
 // currentTechniques reads the current Technique of each distinct ATT&CK id
 // the labels name, and the Mitigations of those Techniques by STIX id.
 func (t *Tx) currentTechniques(ctx context.Context, labels []sqlcgen.VulnerabilityTechnique) (map[string]AttackTechnique, map[string][]TechniqueMitigation, error) {
