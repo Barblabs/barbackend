@@ -37,6 +37,7 @@ import (
 	"barbackend/internal/slack/slacktest"
 	"barbackend/internal/stixext"
 	"barbackend/internal/tenancy"
+	"barbackend/internal/tenancy/tenancytest"
 	"barbackend/internal/users"
 	"github.com/TcM1911/stix2"
 	"github.com/google/uuid"
@@ -230,7 +231,7 @@ func newKey(t *testing.T) encryption.Key {
 // connect connects a CMDB Source for customer, running its first Sync.
 func (e env) connect(t *testing.T, customer tenancy.CustomerID) inventory.CMDBSourceID {
 	t.Helper()
-	if _, err := e.cmdb.Connect(context.Background(), adminOf(customer), providertest.Name, providertest.Login); err != nil {
+	if _, err := e.cmdb.Connect(context.Background(), tenancytest.CustomerAdmin(customer), providertest.Name, providertest.Login); err != nil {
 		t.Fatal(err)
 	}
 	var stored postgres.StoredCMDBSource
@@ -386,22 +387,6 @@ func (e env) holdSyncLock(t *testing.T, src inventory.CMDBSourceID) (release fun
 	}
 }
 
-func viewerOf(customer tenancy.CustomerID) tenancy.User {
-	return userOf(customer, tenancy.Viewer)
-}
-
-func adminOf(customer tenancy.CustomerID) tenancy.User {
-	return userOf(customer, tenancy.CustomerAdmin)
-}
-
-func userOf(customer tenancy.CustomerID, role tenancy.Role) tenancy.User {
-	u, err := tenancy.NewUser(tenancy.UserID(uuid.New()), "user@example.com", role, customer)
-	if err != nil {
-		panic(err)
-	}
-	return u
-}
-
 // prioritize stores two Findings on the Customer's pg-prod-01 and their
 // Prioritization, in which the Prioritizer puts the one of CVE-2025-1094 first
 // though the other has the higher Score.
@@ -471,7 +456,7 @@ func (e env) prioritize(t *testing.T) agents.Prioritization {
 	if _, err := e.agents.Prioritize(ctx, e.customer); err != nil {
 		t.Fatal(err)
 	}
-	p, err := e.agents.Latest(ctx, viewerOf(e.customer))
+	p, err := e.agents.Latest(ctx, tenancytest.Viewer(e.customer))
 	if err != nil {
 		t.Fatal(err)
 	}

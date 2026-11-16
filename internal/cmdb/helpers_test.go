@@ -16,6 +16,7 @@ import (
 	"barbackend/internal/postgres"
 	"barbackend/internal/postgres/pgtest"
 	"barbackend/internal/tenancy"
+	"barbackend/internal/tenancy/tenancytest"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -64,7 +65,7 @@ func newKey(t *testing.T) encryption.Key {
 func (e env) connect(t *testing.T) (tenancy.CustomerID, inventory.CMDBSourceID) {
 	t.Helper()
 	customer := e.newCustomer(t)
-	if _, err := e.cmdb.Connect(context.Background(), adminOf(customer), providertest.Name, providertest.Login); err != nil {
+	if _, err := e.cmdb.Connect(context.Background(), tenancytest.CustomerAdmin(customer), providertest.Name, providertest.Login); err != nil {
 		t.Fatal(err)
 	}
 	return customer, e.connected(t, customer).Source.ID()
@@ -84,7 +85,7 @@ func (e env) connected(t *testing.T, customer tenancy.CustomerID) postgres.Store
 
 func (e env) connectedSource(t *testing.T, customer tenancy.CustomerID) cmdb.ConnectedSource {
 	t.Helper()
-	src, err := e.cmdb.ConnectedSource(context.Background(), viewerOf(customer))
+	src, err := e.cmdb.ConnectedSource(context.Background(), tenancytest.Viewer(customer))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -181,20 +182,4 @@ func record(t *testing.T, id, name string) inventory.Record {
 		t.Fatal(err)
 	}
 	return inventory.Record{RecordID: id, Imported: imported}
-}
-
-func viewerOf(customer tenancy.CustomerID) tenancy.User {
-	return userOf(customer, tenancy.Viewer)
-}
-
-func adminOf(customer tenancy.CustomerID) tenancy.User {
-	return userOf(customer, tenancy.CustomerAdmin)
-}
-
-func userOf(customer tenancy.CustomerID, role tenancy.Role) tenancy.User {
-	u, err := tenancy.NewUser(tenancy.UserID(uuid.New()), "user@example.com", role, customer)
-	if err != nil {
-		panic(err)
-	}
-	return u
 }
