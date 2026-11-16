@@ -10,6 +10,7 @@ import (
 
 	"barbackend/internal/inventory"
 	"barbackend/internal/postgres"
+	"github.com/google/uuid"
 )
 
 func TestSyncRunRoundTrip(t *testing.T) {
@@ -124,5 +125,41 @@ func TestRecordFailedSyncRejectsSucceededRun(t *testing.T) {
 	}
 	if n := queryInt(t, conn, "SELECT count(*) FROM sync_runs"); n != 0 {
 		t.Errorf("sync runs = %d, want 0", n)
+	}
+}
+
+func TestSyncDaysCountEveryDayIncludingQuietOnes(t *testing.T) {
+	t.Parallel()
+	db, conn := newDBWithConn(t)
+	src := newSource(t, db, newCustomer(t, db))
+	since := time.Date(2026, time.November, 10, 0, 0, 0, 0, time.UTC)
+	for _, run := range []struct {
+		finished time.Time
+		outcome  inventory.SyncOutcome
+	}{
+		{since.Add(30 * time.Hour), inventory.SyncSucceeded},
+		{since.Add(40 * time.Hour), inventory.SyncSucceeded},
+		{since.Add(50 * time.Hour), inventory.SyncFailed},
+		{since.Add(-time.Hour), inventory.SyncFailed},
+	} {
+		if _, err := conn.Exec(context.Background(), `
+			INSERT INTO sync_runs (cmdb_source_id, started_at, finished_at, outcome_id, created, updated, deactivated, reactivated, skipped, skipped_records)
+			VALUES ($1, $2, $2, $3, 0, 0, 0, 0, 0, '[]')`, uuid.UUID(src.ID()), run.finished, int16(run.outcome)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	days := inTxValue(t, db, func(tx *postgres.Tx) ([]postgres.SyncDay, error) {
+		return tx.SyncDays(context.Background(), since, 3)
+	})
+
+	want := []postgres.SyncDay{{Start: since}, {Start: since.Add(24 * time.Hour), Succeeded: 2}, {Start: since.Add(48 * time.Hour), Failed: 1}}
+	if len(days) != len(want) {
+		t.Fatalf("days = %+v, want %+v", days, want)
+	}
+	for i := range want {
+		if !days[i].Start.Equal(want[i].Start) || days[i].Succeeded != want[i].Succeeded || days[i].Failed != want[i].Failed {
+			t.Errorf("day %d = %+v, want %+v", i, days[i], want[i])
+		}
 	}
 }
