@@ -12,6 +12,7 @@ import (
 	"barbackend/internal/assets"
 	"barbackend/internal/businesscontext"
 	"barbackend/internal/cmdb"
+	"barbackend/internal/findings"
 	"barbackend/internal/slack"
 	"barbackend/internal/users"
 	"github.com/danielgtaylor/huma/v2"
@@ -25,6 +26,7 @@ type Config struct {
 	Assets          *assets.Service
 	BusinessContext *businesscontext.Service
 	CMDB            *cmdb.Service
+	Findings        *findings.Service
 	Slack           *slack.Service
 	Users           *users.Service
 	// AllowedOrigins may call the API from a browser.
@@ -45,6 +47,7 @@ func New(cfg Config) http.Handler {
 	router.GET("/slack/install/callback", slackHandler{slack: cfg.Slack}.callback)
 	cmdbSourceHandler{cmdb: cfg.CMDB}.register(api)
 	assetHandler{assets: cfg.Assets}.register(api)
+	findingHandler{findings: cfg.Findings}.register(api)
 	areaHandler{areas: cfg.Areas}.register(api)
 	prioritizationHandler{agents: cfg.Agents}.register(api)
 	analistaHandler{agents: cfg.Agents}.register(api)

@@ -1,6 +1,6 @@
 // Package assets holds the use cases on a Customer's Assets: listing them
-// across all its CMDB Sources and declaring their Exposure and Information
-// Classification (ADR 0008).
+// across all its CMDB Sources, counting their open Findings by Score Band and
+// declaring their Exposure and Information Classification (ADR 0008).
 package assets
 
 import (
@@ -111,6 +111,21 @@ func (s *Service) List(ctx context.Context, caller tenancy.User, q Query) (Page,
 		result.NextCursor = encodeCursor(cursor{Name: last.Imported().Name(), Source: uuid.UUID(last.Ref().Source), Record: last.Ref().RecordID, Filters: filters})
 	}
 	return result, nil
+}
+
+type FindingBands = postgres.AssetFindingBands
+
+// FindingsSummary counts the open Findings of each of the Customer's Assets
+// that has a scored one by the Score Band of their latest Score, ordered as
+// List orders Assets.
+func (s *Service) FindingsSummary(ctx context.Context, caller tenancy.User) ([]FindingBands, error) {
+	customer, err := caller.ActsFor()
+	if err != nil {
+		return nil, err
+	}
+	return postgres.InTxValue(ctx, s.db, func(tx *postgres.Tx) ([]FindingBands, error) {
+		return tx.FindingBandsByAssetOfCustomer(ctx, customer)
+	})
 }
 
 // canonicalFilters is the form of f a cursor carries. encoding/json sorts map

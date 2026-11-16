@@ -55,6 +55,66 @@ func (q *Queries) CloseFindingsOfInactiveAssets(ctx context.Context, arg CloseFi
 	return result.RowsAffected(), nil
 }
 
+const countFindingsOfCustomerByWeek = `-- name: CountFindingsOfCustomerByWeek :many
+SELECT w.start::timestamptz AS week,
+       (SELECT count(*) FROM findings f JOIN cmdb_sources src ON src.id = f.cmdb_source_id
+        WHERE src.customer_id = $1
+          AND f.first_opened_at >= w.start AND f.first_opened_at < w.start + interval '168 hours')::integer AS opened,
+       (SELECT count(*) FROM findings f JOIN cmdb_sources src ON src.id = f.cmdb_source_id
+        WHERE src.customer_id = $1
+          AND f.closed_at >= w.start AND f.closed_at < w.start + interval '168 hours')::integer AS closed,
+       (SELECT count(*) FROM findings f JOIN cmdb_sources src ON src.id = f.cmdb_source_id
+        WHERE src.customer_id = $1
+          AND f.first_opened_at < w.start + interval '168 hours'
+          AND (f.closed_at IS NULL OR f.closed_at >= w.start + interval '168 hours'))::integer AS open_at_end
+FROM generate_series($2::timestamptz, $3::timestamptz, interval '168 hours') AS w(start)
+ORDER BY w.start
+`
+
+type CountFindingsOfCustomerByWeekParams struct {
+	CustomerID uuid.UUID
+	Since      time.Time
+	LastStart  time.Time
+}
+
+type CountFindingsOfCustomerByWeekRow struct {
+	Week      time.Time
+	Opened    int32
+	Closed    int32
+	OpenAtEnd int32
+}
+
+// Every week from the one starting at since to the one starting at
+// last_start, each 168 hours long so no daylight saving change moves it: how
+// many Findings of a Customer's Assets were first opened and how many were
+// closed in it, and how many were open when it ended. A Finding reopened after
+// it was closed counts only its latest close, and counts as open while it was
+// closed before: findings keeps no history.
+func (q *Queries) CountFindingsOfCustomerByWeek(ctx context.Context, arg CountFindingsOfCustomerByWeekParams) ([]CountFindingsOfCustomerByWeekRow, error) {
+	rows, err := q.db.Query(ctx, countFindingsOfCustomerByWeek, arg.CustomerID, arg.Since, arg.LastStart)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CountFindingsOfCustomerByWeekRow
+	for rows.Next() {
+		var i CountFindingsOfCustomerByWeekRow
+		if err := rows.Scan(
+			&i.Week,
+			&i.Opened,
+			&i.Closed,
+			&i.OpenAtEnd,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const deleteFindingMatchFlags = `-- name: DeleteFindingMatchFlags :exec
 DELETE FROM finding_match_flags
 WHERE finding_id = $1
@@ -380,6 +440,200 @@ func (q *Queries) ListActiveComponentsWithProducts(ctx context.Context, arg List
 			&i.ExposureID,
 			&i.LifecycleStageID,
 			&i.DeclaredInformationClassificationID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listFindingsOfCustomerClosedSince = `-- name: ListFindingsOfCustomerClosedSince :many
+SELECT f.opened_at, f.closed_at, s.model, s.value
+FROM findings f
+JOIN cmdb_sources src ON src.id = f.cmdb_source_id
+JOIN LATERAL (
+    SELECT sc.model, sc.value
+    FROM finding_scores sc
+    WHERE sc.finding_id = f.id
+    ORDER BY sc.scored_at DESC
+    LIMIT 1
+) s ON true
+WHERE src.customer_id = $1 AND f.closed_at >= $2
+ORDER BY f.closed_at
+`
+
+type ListFindingsOfCustomerClosedSinceParams struct {
+	CustomerID uuid.UUID
+	Since      *time.Time
+}
+
+type ListFindingsOfCustomerClosedSinceRow struct {
+	OpenedAt time.Time
+	ClosedAt *time.Time
+	Model    int16
+	Value    float64
+}
+
+// The Findings of a Customer's Assets closed from since on, with when they
+// were last opened and their latest Score, for how long closing them took. A
+// Finding not scored is left out.
+func (q *Queries) ListFindingsOfCustomerClosedSince(ctx context.Context, arg ListFindingsOfCustomerClosedSinceParams) ([]ListFindingsOfCustomerClosedSinceRow, error) {
+	rows, err := q.db.Query(ctx, listFindingsOfCustomerClosedSince, arg.CustomerID, arg.Since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListFindingsOfCustomerClosedSinceRow
+	for rows.Next() {
+		var i ListFindingsOfCustomerClosedSinceRow
+		if err := rows.Scan(
+			&i.OpenedAt,
+			&i.ClosedAt,
+			&i.Model,
+			&i.Value,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOpenFindingFactsOfCustomer = `-- name: ListOpenFindingFactsOfCustomer :many
+SELECT f.id, a.id AS asset_id, a.criticality_id,
+       coalesce(a.declared_exposure_id, a.imported_exposure_id) AS exposure_id,
+       ar.id AS area_id, ar.name AS area_name,
+       f.product_vendor, f.product_name, f.component_version, f.cve_id,
+       ((v.object -> 'extensions' -> $1::text) IS NOT NULL)::boolean AS kev,
+       CASE WHEN v.object -> 'extensions' ? $2::text
+            THEN (v.object -> 'extensions' -> $2::text ->> 'probability')::double precision END AS epss,
+       s.model, s.value
+FROM findings f
+JOIN cmdb_sources src ON src.id = f.cmdb_source_id
+JOIN assets a ON a.cmdb_source_id = f.cmdb_source_id AND a.record_id = f.record_id
+LEFT JOIN customer_areas ar ON ar.cmdb_source_id = a.cmdb_source_id AND ar.record_id = a.area_record_id
+JOIN vulnerabilities v ON v.cve_id = f.cve_id
+JOIN LATERAL (
+    SELECT sc.model, sc.value
+    FROM finding_scores sc
+    WHERE sc.finding_id = f.id
+    ORDER BY sc.scored_at DESC
+    LIMIT 1
+) s ON true
+WHERE src.customer_id = $3 AND f.closed_at IS NULL
+ORDER BY f.id
+`
+
+type ListOpenFindingFactsOfCustomerParams struct {
+	KevExtensionID  string
+	EpssExtensionID string
+	CustomerID      uuid.UUID
+}
+
+type ListOpenFindingFactsOfCustomerRow struct {
+	ID               uuid.UUID
+	AssetID          int64
+	CriticalityID    *int16
+	ExposureID       *int16
+	AreaID           *int64
+	AreaName         *string
+	ProductVendor    string
+	ProductName      string
+	ComponentVersion string
+	CveID            string
+	Kev              bool
+	Epss             interface{}
+	Model            int16
+	Value            float64
+}
+
+// One row per open scored Finding of a Customer's Assets with what the
+// dashboard counts it by: its Asset's Criticality, effective Exposure and
+// Area, its Product and version, its CVE, whether KEV lists it and its EPSS
+// probability, and its latest Score. The extension ids are the kev/1 and
+// epss/1 extension definitions (ADR 0010).
+func (q *Queries) ListOpenFindingFactsOfCustomer(ctx context.Context, arg ListOpenFindingFactsOfCustomerParams) ([]ListOpenFindingFactsOfCustomerRow, error) {
+	rows, err := q.db.Query(ctx, listOpenFindingFactsOfCustomer, arg.KevExtensionID, arg.EpssExtensionID, arg.CustomerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOpenFindingFactsOfCustomerRow
+	for rows.Next() {
+		var i ListOpenFindingFactsOfCustomerRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AssetID,
+			&i.CriticalityID,
+			&i.ExposureID,
+			&i.AreaID,
+			&i.AreaName,
+			&i.ProductVendor,
+			&i.ProductName,
+			&i.ComponentVersion,
+			&i.CveID,
+			&i.Kev,
+			&i.Epss,
+			&i.Model,
+			&i.Value,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOpenFindingScoresByAssetOfCustomer = `-- name: ListOpenFindingScoresByAssetOfCustomer :many
+SELECT a.id AS asset_id, a.name AS asset_name, s.model, s.value
+FROM findings f
+JOIN cmdb_sources src ON src.id = f.cmdb_source_id
+JOIN assets a ON a.cmdb_source_id = f.cmdb_source_id AND a.record_id = f.record_id
+JOIN LATERAL (
+    SELECT sc.model, sc.value
+    FROM finding_scores sc
+    WHERE sc.finding_id = f.id
+    ORDER BY sc.scored_at DESC
+    LIMIT 1
+) s ON true
+WHERE src.customer_id = $1 AND f.closed_at IS NULL
+ORDER BY a.name, a.cmdb_source_id, a.record_id
+`
+
+type ListOpenFindingScoresByAssetOfCustomerRow struct {
+	AssetID   int64
+	AssetName string
+	Model     int16
+	Value     float64
+}
+
+// The latest Score of every open Finding of a Customer's Assets, with its
+// Asset, for counting them by Score Band. A Finding not scored yet is left
+// out, as in ListOpenFindingsOfCustomer. Ordered as Assets are listed.
+func (q *Queries) ListOpenFindingScoresByAssetOfCustomer(ctx context.Context, customerID uuid.UUID) ([]ListOpenFindingScoresByAssetOfCustomerRow, error) {
+	rows, err := q.db.Query(ctx, listOpenFindingScoresByAssetOfCustomer, customerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOpenFindingScoresByAssetOfCustomerRow
+	for rows.Next() {
+		var i ListOpenFindingScoresByAssetOfCustomerRow
+		if err := rows.Scan(
+			&i.AssetID,
+			&i.AssetName,
+			&i.Model,
+			&i.Value,
 		); err != nil {
 			return nil, err
 		}

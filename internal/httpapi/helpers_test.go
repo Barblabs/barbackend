@@ -53,6 +53,13 @@ var operations = []struct{ method, path string }{
 	{http.MethodPost, "/cmdb/source/test"},
 	{http.MethodPost, "/cmdb/source/sync"},
 	{http.MethodGet, "/assets"},
+	{http.MethodGet, "/assets/findings-summary"},
+	{http.MethodGet, "/findings/weekly-trend"},
+	{http.MethodGet, "/findings/summary"},
+	{http.MethodGet, "/findings/breakdown"},
+	{http.MethodGet, "/findings/top"},
+	{http.MethodGet, "/findings/attack-matrix"},
+	{http.MethodGet, "/findings/time-to-close"},
 	{http.MethodGet, "/areas"},
 	{http.MethodGet, "/prioritizations"},
 	{http.MethodGet, "/business-context"},
@@ -66,6 +73,9 @@ var operations = []struct{ method, path string }{
 var platformOperations = []struct{ method, path string }{
 	{http.MethodPost, "/customers"},
 	{http.MethodGet, "/customers"},
+	{http.MethodGet, "/customers/stats"},
+	{http.MethodGet, "/customers/sync-health"},
+	{http.MethodGet, "/customers/slack-deliveries"},
 	{http.MethodPatch, "/customers/" + uuid.Nil.String()},
 	{http.MethodPost, "/customers/" + uuid.Nil.String() + "/deactivate"},
 	{http.MethodPost, "/customers/" + uuid.Nil.String() + "/reactivate"},
@@ -134,8 +144,9 @@ func newEnv(t *testing.T) env {
 	slackService := slack.New(db, slackAPI.Client, key)
 	llm := claudetest.New(t)
 	agentService := agents.NewService(db, agents.NewCrew(llm.Client(), agents.DefaultModels()))
+	found := findings.New(db, scoring.Model2, time.Hour)
 	router := httpapi.New(httpapi.Config{
-		Agents: agentService, Areas: areas.New(db), Assets: assets.New(db, findings.New(db, scoring.Model2, time.Hour)), BusinessContext: businesscontext.New(db), CMDB: svc,
+		Agents: agentService, Areas: areas.New(db), Assets: assets.New(db, found), BusinessContext: businesscontext.New(db), CMDB: svc, Findings: found,
 		Slack: slackService, Users: users.New(db, pool.Verifier(t), admin), AllowedOrigins: []string{allowedOrigin},
 	})
 	e := env{db: db, conn: pgtest.Conn(t, url), pool: pool, provider: p, admin: admin, cmdb: svc, key: key, slack: slackService, slackAPI: slackAPI, llm: llm, agents: agentService, router: router}

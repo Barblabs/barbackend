@@ -70,6 +70,53 @@ func (q *Queries) ClaimDueSlackDelivery(ctx context.Context, arg ClaimDueSlackDe
 	return i, err
 }
 
+const countSlackDeliveriesByCustomer = `-- name: CountSlackDeliveriesByCustomer :many
+SELECT c.id, c.name,
+       (count(d.id) FILTER (WHERE d.status = 'sent'))::integer AS sent,
+       (count(d.id) FILTER (WHERE d.status = 'failed'))::integer AS failed,
+       (count(d.id) FILTER (WHERE d.status = 'pending'))::integer AS pending
+FROM customers c
+LEFT JOIN slack_deliveries d ON d.customer_id = c.id AND d.created_at >= $1
+GROUP BY c.id, c.name
+ORDER BY lower(c.name)
+`
+
+type CountSlackDeliveriesByCustomerRow struct {
+	ID      uuid.UUID
+	Name    string
+	Sent    int32
+	Failed  int32
+	Pending int32
+}
+
+// How many Slack messages each Customer queued from since on were sent, have
+// failed for good and are still pending, every Customer included, by name.
+func (q *Queries) CountSlackDeliveriesByCustomer(ctx context.Context, since time.Time) ([]CountSlackDeliveriesByCustomerRow, error) {
+	rows, err := q.db.Query(ctx, countSlackDeliveriesByCustomer, since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CountSlackDeliveriesByCustomerRow
+	for rows.Next() {
+		var i CountSlackDeliveriesByCustomerRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Sent,
+			&i.Failed,
+			&i.Pending,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const delaySlackDelivery = `-- name: DelaySlackDelivery :exec
 UPDATE slack_deliveries
 SET next_attempt_at = $1

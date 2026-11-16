@@ -25,6 +25,13 @@ func (h assetHandler) register(api huma.API) {
 		Errors:      []int{http.StatusBadRequest},
 	}, h.list)
 	register(api, huma.Operation{
+		OperationID: "get-assets-findings-summary",
+		Method:      http.MethodGet,
+		Path:        "/assets/findings-summary",
+		Summary:     "Count each Asset's open Findings by Score Band",
+		Description: "Every Asset of the Customer with an open scored Finding, ordered as GET /assets lists them, with its open Findings counted by the Score Band of their latest Score. A Finding not scored yet is left out.",
+	}, h.findingsSummary)
+	register(api, huma.Operation{
 		OperationID: "declare-asset-exposure",
 		Method:      http.MethodPut,
 		Path:        "/assets/{id}/exposure",
@@ -192,6 +199,20 @@ type assetResponse struct {
 	InactiveSince             *time.Time                        `json:"inactive_since"`
 }
 
+type assetFindingsSummaryResponse struct {
+	Assets []assetFindingBandsResponse `json:"assets"`
+}
+
+type assetFindingBandsResponse struct {
+	ID       int64  `json:"id" doc:"The Asset's handle, as in GET /assets"`
+	Name     string `json:"name"`
+	Critical int    `json:"critical"`
+	High     int    `json:"high"`
+	Medium   int    `json:"medium"`
+	Low      int    `json:"low"`
+	Unbanded int    `json:"unbanded" doc:"Open Findings whose latest Score is from a Scoring Model before 3, which has no Score Bands; they get one when rescored"`
+}
+
 type hardwareResponse struct {
 	Vendor string `json:"vendor"`
 	Model  string `json:"model"`
@@ -279,6 +300,18 @@ func (h assetHandler) list(ctx context.Context, caller tenancy.User, in *assetQu
 		return nil, err
 	}
 	return &body[assetListResponse]{Body: newAssetListResponse(page)}, nil
+}
+
+func (h assetHandler) findingsSummary(ctx context.Context, caller tenancy.User, _ *struct{}) (*body[assetFindingsSummaryResponse], error) {
+	summary, err := h.assets.FindingsSummary(ctx, caller)
+	if err != nil {
+		return nil, err
+	}
+	resp := assetFindingsSummaryResponse{Assets: make([]assetFindingBandsResponse, len(summary))}
+	for i, a := range summary {
+		resp.Assets[i] = assetFindingBandsResponse{ID: a.AssetID, Name: a.AssetName, Critical: a.Critical, High: a.High, Medium: a.Medium, Low: a.Low, Unbanded: a.Unbanded}
+	}
+	return &body[assetFindingsSummaryResponse]{Body: resp}, nil
 }
 
 func newAssetListResponse(page assets.Page) assetListResponse {

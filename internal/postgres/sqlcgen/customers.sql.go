@@ -67,6 +67,76 @@ func (q *Queries) InsertCustomer(ctx context.Context, arg InsertCustomerParams) 
 	return created_at, err
 }
 
+const listCustomerStats = `-- name: ListCustomerStats :many
+SELECT c.id, c.name, c.created_at, c.deactivated_at,
+       (SELECT count(*) FROM users u WHERE u.customer_id = c.id AND u.disabled_at IS NULL)::integer AS user_count,
+       (src.id IS NOT NULL)::boolean AS cmdb_connected,
+       latest.outcome_id AS latest_sync_outcome_id,
+       latest.finished_at AS latest_sync_finished_at,
+       succeeded.finished_at AS last_succeeded_sync_finished_at
+FROM customers c
+LEFT JOIN cmdb_sources src ON src.customer_id = c.id AND src.disconnected_at IS NULL
+LEFT JOIN sync_runs latest ON latest.cmdb_source_id = src.id
+    AND NOT EXISTS (
+        SELECT 1
+        FROM sync_runs newer
+        WHERE newer.cmdb_source_id = src.id AND (newer.started_at, newer.id) > (latest.started_at, latest.id)
+    )
+LEFT JOIN sync_runs succeeded ON succeeded.cmdb_source_id = src.id AND succeeded.outcome_id = $1
+    AND NOT EXISTS (
+        SELECT 1
+        FROM sync_runs newer
+        WHERE newer.cmdb_source_id = src.id AND newer.outcome_id = $1
+          AND (newer.started_at, newer.id) > (succeeded.started_at, succeeded.id)
+    )
+ORDER BY lower(c.name)
+`
+
+type ListCustomerStatsRow struct {
+	ID                          uuid.UUID
+	Name                        string
+	CreatedAt                   time.Time
+	DeactivatedAt               *time.Time
+	UserCount                   int32
+	CmdbConnected               bool
+	LatestSyncOutcomeID         *int16
+	LatestSyncFinishedAt        *time.Time
+	LastSucceededSyncFinishedAt *time.Time
+}
+
+// What a Platform Admin sees of every Customer: how many enabled Users it
+// has and how its connected CMDB Source last synced, never its Assets or
+// Findings (ADR 0013).
+func (q *Queries) ListCustomerStats(ctx context.Context, succeededOutcomeID int16) ([]ListCustomerStatsRow, error) {
+	rows, err := q.db.Query(ctx, listCustomerStats, succeededOutcomeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCustomerStatsRow
+	for rows.Next() {
+		var i ListCustomerStatsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.CreatedAt,
+			&i.DeactivatedAt,
+			&i.UserCount,
+			&i.CmdbConnected,
+			&i.LatestSyncOutcomeID,
+			&i.LatestSyncFinishedAt,
+			&i.LastSucceededSyncFinishedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listCustomers = `-- name: ListCustomers :many
 SELECT id, name, created_at, deactivated_at
 FROM customers

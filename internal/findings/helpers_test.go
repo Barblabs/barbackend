@@ -11,6 +11,7 @@ import (
 	"barbackend/internal/postgres/pgtest"
 	"barbackend/internal/scoring"
 	"barbackend/internal/stixext"
+	"barbackend/internal/tenancy"
 	"github.com/TcM1911/stix2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -23,6 +24,7 @@ func TestMain(m *testing.M) { pgtest.Main(m) }
 type world struct {
 	db       *postgres.DB
 	conn     *pgx.Conn
+	customer tenancy.CustomerID
 	source   inventory.CMDBSourceID
 	findings *findings.Service
 }
@@ -37,6 +39,7 @@ func newWorld(t *testing.T) world {
 	t.Cleanup(db.Close)
 	w := world{db: db, conn: pgtest.Conn(t, url), source: inventory.CMDBSourceID(uuid.New())}
 	customer := uuid.New()
+	w.customer = tenancy.CustomerID(customer)
 	w.exec(t, `INSERT INTO customers (id, name) VALUES ($1, $2)`, customer, customer.String())
 	w.exec(t, `INSERT INTO cmdb_sources (id, customer_id, provider, settings, credentials) VALUES ($1, $2, 'itop', '{}', '')`, uuid.UUID(w.source), customer)
 	w.findings = findings.New(db, scoring.Model2, time.Hour)
@@ -234,4 +237,59 @@ func matchedPayments(t *testing.T) (world, storedFinding) {
 	w.sync(t, server(t, "payments", inventory.CriticalityHigh, app("Nginx", "f5", "nginx", "1.18.0")))
 	w.handleNVD(t, nvdVulnerability(t, "CVE-2021-23017", "Analyzed", nginxBefore1201))
 	return w, w.mustFinding(t, "payments", "CVE-2021-23017")
+}
+
+const opensslCVE = "CVE-2022-0778"
+
+var opensslBefore3 = stixext.Affected{Vendor: "openssl", Product: "openssl", Version: "*", Update: "*", VersionStartIncluding: "1.0.2", VersionEndExcluding: "3.0.0"}
+
+// countedWorld has three open Findings: Critical nginx and Medium OpenSSL on
+// the Internet-facing, High-Criticality "a", and High nginx on "b", of Low
+// Criticality and Unknown Exposure. KEV lists nginx's CVE.
+func countedWorld(t *testing.T) world {
+	t.Helper()
+	w := newWorld(t)
+	w.sync(t,
+		server(t, "a", inventory.CriticalityHigh, app("Nginx", "f5", "nginx", "1.18.0"), app("OpenSSL", "openssl", "openssl", "1.1.1")),
+		server(t, "b", inventory.CriticalityLow, app("Nginx", "f5", "nginx", "1.18.0")),
+	)
+	w.handleNVD(t, nvdVulnerability(t, "CVE-2021-23017", "Analyzed", nginxBefore1201), nvdVulnerability(t, opensslCVE, "Analyzed", opensslBefore3))
+	w.declareExposure(t, "a", inventory.InternetFacing)
+	w.setScore(t, "a", "CVE-2021-23017", 0.75)
+	w.setScore(t, "a", opensslCVE, 0.25)
+	w.setScore(t, "b", "CVE-2021-23017", 0.45)
+	w.exec(t, `UPDATE vulnerabilities SET object = jsonb_set(object, ARRAY['extensions', $1::text], '{"extension_type":"property-extension"}') WHERE cve_id = $2`,
+		string(stixext.KEVDefinitionID), "CVE-2021-23017")
+	return w
+}
+
+// setScore makes every Score of the record's Finding of cve one of Scoring
+// Model 3 with that value, which has Score Bands.
+func (w world) setScore(t *testing.T, record, cve string, value float64) {
+	t.Helper()
+	w.exec(t, `UPDATE finding_scores SET model = 3, value = $1 WHERE finding_id = (SELECT id FROM findings WHERE record_id = $2 AND cve_id = $3)`, value, record, cve)
+}
+
+// setHistory sets when the record's only Finding was first opened and, unless
+// closed is zero, when it was closed.
+func (w world) setHistory(t *testing.T, record string, opened, closed time.Time) {
+	t.Helper()
+	var closedAt *time.Time
+	if !closed.IsZero() {
+		closedAt = &closed
+	}
+	w.exec(t, `
+		UPDATE findings
+		SET first_opened_at = $1, opened_at = $1, closed_at = $2,
+		    close_reason_id = CASE WHEN $2::timestamptz IS NULL THEN NULL ELSE 1 END
+		WHERE record_id = $3`, opened, closedAt, record)
+}
+
+func (w world) viewer(t *testing.T) tenancy.User {
+	t.Helper()
+	u, err := tenancy.NewUser(tenancy.UserID(uuid.New()), "viewer@example.com", tenancy.Viewer, w.customer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return u
 }
