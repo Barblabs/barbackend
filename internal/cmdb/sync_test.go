@@ -183,7 +183,7 @@ func TestSyncOfSourceDisconnectedWhileItRunsChangesNothing(t *testing.T) {
 	}
 	e.provider.Snapshot = inventory.Snapshot{Records: []inventory.Record{record(t, "a", "renamed"), record(t, "b", "vm-b")}}
 	e.provider.BeforeSnapshot = func() {
-		if err := e.cmdb.Disconnect(context.Background(), viewerOf(customer)); err != nil {
+		if err := e.cmdb.Disconnect(context.Background(), adminOf(customer)); err != nil {
 			t.Error(err)
 		}
 	}
@@ -289,7 +289,7 @@ func TestSyncOfDisconnectedSourceFails(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
 	customer, _ := e.connect(t)
-	if err := e.cmdb.Disconnect(context.Background(), viewerOf(customer)); err != nil {
+	if err := e.cmdb.Disconnect(context.Background(), adminOf(customer)); err != nil {
 		t.Fatal(err)
 	}
 

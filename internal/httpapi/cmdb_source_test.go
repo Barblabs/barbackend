@@ -45,9 +45,10 @@ func TestTestCMDBSourceCredentials(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			e := newEnv(t)
+			admin := e.adminToken(t)
 			e.provider.CheckErr = tt.checkErr
 
-			rec := e.postLogin("/cmdb/source/test", validLogin())
+			rec := e.postLogin(admin, "/cmdb/source/test", validLogin())
 
 			if rec.Code != http.StatusOK || rec.Body.String() != tt.want {
 				t.Errorf("response = %d %s, want 200 %s", rec.Code, rec.Body, tt.want)
@@ -84,6 +85,7 @@ func TestLoginEndpointsRejectInvalidRequests(t *testing.T) {
 		{"missing password", func(l map[string]string) { delete(l, "password") }, false, "invalid_request"},
 	}
 	e := newEnv(t)
+	admin := e.adminToken(t)
 	e.connect(t, e.customer)
 	for _, ep := range loginEndpoints {
 		for _, tt := range tests {
@@ -95,7 +97,7 @@ func TestLoginEndpointsRejectInvalidRequests(t *testing.T) {
 				login := validLogin()
 				tt.edit(login)
 
-				rec := e.sendLogin(ep.method, ep.path, login)
+				rec := e.sendLogin(admin, ep.method, ep.path, login)
 
 				if got := decode[codedError](t, rec, http.StatusBadRequest); got.Code != tt.code || got.Error == "" {
 					t.Errorf("body = %s, want code %s with an error", rec.Body, tt.code)
@@ -108,9 +110,10 @@ func TestLoginEndpointsRejectInvalidRequests(t *testing.T) {
 func TestTestCMDBSourceCredentialsHidesInternalErrors(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
+	admin := e.adminToken(t)
 	e.provider.CheckErr = errors.New("check broke")
 
-	rec := e.postLogin("/cmdb/source/test", validLogin())
+	rec := e.postLogin(admin, "/cmdb/source/test", validLogin())
 
 	if rec.Code != http.StatusInternalServerError || strings.Contains(rec.Body.String(), "check broke") {
 		t.Errorf("response = %d %s, want 500 without the cause", rec.Code, rec.Body)
@@ -120,8 +123,9 @@ func TestTestCMDBSourceCredentialsHidesInternalErrors(t *testing.T) {
 func TestLoginEndpointsRejectMalformedJSON(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
+	admin := e.adminToken(t)
 	for _, ep := range loginEndpoints {
-		rec := e.do(httptest.NewRequest(ep.method, ep.path, strings.NewReader(`{"provider":`)))
+		rec := e.as(admin, httptest.NewRequest(ep.method, ep.path, strings.NewReader(`{"provider":`)))
 
 		if rec.Code != http.StatusBadRequest {
 			t.Errorf("%s %s: response = %d %s, want 400", ep.method, ep.path, rec.Code, rec.Body)
@@ -208,9 +212,10 @@ func TestSyncCMDBSourceWhileAnotherSyncRuns(t *testing.T) {
 func TestConnectCMDBSource(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
+	admin := e.adminToken(t)
 	e.provider.Snapshot = inventory.Snapshot{Records: []inventory.Record{record(t, "a", "vm-a")}}
 
-	rec := e.postLogin("/cmdb/source", validLogin())
+	rec := e.postLogin(admin, "/cmdb/source", validLogin())
 
 	got := decode[cmdbSource](t, rec, http.StatusOK)
 	if got.Provider != "fake" || got.URL != "http://cmdb" || got.User != "admin" || got.LastSync == nil || got.LastSyncFailure != nil {
@@ -224,9 +229,10 @@ func TestConnectCMDBSource(t *testing.T) {
 func TestConnectCMDBSourceWithRejectedCredentials(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
+	admin := e.adminToken(t)
 	e.provider.CheckErr = &provider.Failure{Code: provider.InvalidCredentials, Message: "the cmdb rejected the user or password"}
 
-	rec := e.postLogin("/cmdb/source", validLogin())
+	rec := e.postLogin(admin, "/cmdb/source", validLogin())
 
 	if want := `{"code":"invalid_credentials","error":"the cmdb rejected the user or password"}`; rec.Code != http.StatusUnprocessableEntity || rec.Body.String() != want {
 		t.Errorf("response = %d %s, want 422 %s", rec.Code, rec.Body, want)
@@ -236,9 +242,10 @@ func TestConnectCMDBSourceWithRejectedCredentials(t *testing.T) {
 func TestConnectCMDBSourceWithFailedFirstSync(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
+	admin := e.adminToken(t)
 	e.provider.Err = errors.New("cmdb unreachable")
 
-	rec := e.postLogin("/cmdb/source", validLogin())
+	rec := e.postLogin(admin, "/cmdb/source", validLogin())
 
 	got := decode[cmdbSource](t, rec, http.StatusOK)
 	if got.LastSync != nil || got.LastSyncFailure == nil || !strings.Contains(got.LastSyncFailure.Error, "cmdb unreachable") {
@@ -249,11 +256,12 @@ func TestConnectCMDBSourceWithFailedFirstSync(t *testing.T) {
 func TestConnectCMDBSourceWhenAlreadyConnected(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
+	admin := e.adminToken(t)
 	e.connect(t, e.customer)
 	login := validLogin()
 	login["url"] = "http://other-cmdb"
 
-	rec := e.postLogin("/cmdb/source", login)
+	rec := e.postLogin(admin, "/cmdb/source", login)
 
 	got := decode[codedError](t, rec, http.StatusConflict)
 	if got.Code != "already_connected" {
@@ -268,9 +276,10 @@ func rotatedLogin() map[string]string {
 func TestUpdateCMDBSource(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
+	admin := e.adminToken(t)
 	e.connect(t, e.customer)
 
-	rec := e.sendLogin(http.MethodPut, "/cmdb/source", rotatedLogin())
+	rec := e.sendLogin(admin, http.MethodPut, "/cmdb/source", rotatedLogin())
 
 	got := decode[cmdbSource](t, rec, http.StatusOK)
 	if got.URL != "http://new-cmdb" || got.User != "new-admin" || got.LastSync == nil {
@@ -287,25 +296,27 @@ func TestUpdateCMDBSource(t *testing.T) {
 func TestUpdateCMDBSourceWithoutConnectedSource(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
+	admin := e.adminToken(t)
 	e.connect(t, e.newCustomer(t))
 
-	rec := e.sendLogin(http.MethodPut, "/cmdb/source", rotatedLogin())
+	rec := e.sendLogin(admin, http.MethodPut, "/cmdb/source", rotatedLogin())
 
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("response = %d %s, want 404", rec.Code, rec.Body)
 	}
 }
 
-func (e env) disconnect() *httptest.ResponseRecorder {
-	return e.do(httptest.NewRequest(http.MethodDelete, "/cmdb/source", nil))
+func (e env) disconnect(token string) *httptest.ResponseRecorder {
+	return e.as(token, httptest.NewRequest(http.MethodDelete, "/cmdb/source", nil))
 }
 
 func TestDisconnectCMDBSource(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
+	admin := e.adminToken(t)
 	e.connect(t, e.customer)
 
-	rec := e.disconnect()
+	rec := e.disconnect(admin)
 
 	if rec.Code != http.StatusNoContent || rec.Body.Len() != 0 {
 		t.Errorf("response = %d %s, want 204 with no body", rec.Code, rec.Body)
@@ -318,9 +329,10 @@ func TestDisconnectCMDBSource(t *testing.T) {
 func TestDisconnectCMDBSourceWithoutConnectedSource(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
+	admin := e.adminToken(t)
 	e.connect(t, e.newCustomer(t))
 
-	rec := e.disconnect()
+	rec := e.disconnect(admin)
 
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("response = %d %s, want 404", rec.Code, rec.Body)
@@ -330,8 +342,9 @@ func TestDisconnectCMDBSourceWithoutConnectedSource(t *testing.T) {
 func TestLoginEndpointsDoNotEchoTheBodyInErrors(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
+	admin := e.adminToken(t)
 	for _, ep := range loginEndpoints {
-		rec := e.do(httptest.NewRequest(ep.method, ep.path, strings.NewReader(`{"password":"hunter2",`)))
+		rec := e.as(admin, httptest.NewRequest(ep.method, ep.path, strings.NewReader(`{"password":"hunter2",`)))
 
 		got := decode[codedError](t, rec, http.StatusBadRequest)
 		if got.Code != "invalid_request" || strings.Contains(got.Error, "hunter2") {

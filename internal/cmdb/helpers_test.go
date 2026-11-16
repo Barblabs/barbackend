@@ -64,7 +64,7 @@ func newKey(t *testing.T) encryption.Key {
 func (e env) connect(t *testing.T) (tenancy.CustomerID, inventory.CMDBSourceID) {
 	t.Helper()
 	customer := e.newCustomer(t)
-	if _, err := e.cmdb.Connect(context.Background(), viewerOf(customer), providertest.Name, providertest.Login); err != nil {
+	if _, err := e.cmdb.Connect(context.Background(), adminOf(customer), providertest.Name, providertest.Login); err != nil {
 		t.Fatal(err)
 	}
 	return customer, e.connected(t, customer).Source.ID()
@@ -184,7 +184,15 @@ func record(t *testing.T, id, name string) inventory.Record {
 }
 
 func viewerOf(customer tenancy.CustomerID) tenancy.User {
-	u, err := tenancy.NewUser(tenancy.UserID(uuid.New()), "viewer@example.com", tenancy.Viewer, customer)
+	return userOf(customer, tenancy.Viewer)
+}
+
+func adminOf(customer tenancy.CustomerID) tenancy.User {
+	return userOf(customer, tenancy.CustomerAdmin)
+}
+
+func userOf(customer tenancy.CustomerID, role tenancy.Role) tenancy.User {
+	u, err := tenancy.NewUser(tenancy.UserID(uuid.New()), "user@example.com", role, customer)
 	if err != nil {
 		panic(err)
 	}

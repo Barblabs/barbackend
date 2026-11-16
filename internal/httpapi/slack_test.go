@@ -23,16 +23,6 @@ type slackStatus struct {
 	State       string `json:"state"`
 }
 
-func (e env) adminToken(t *testing.T) string {
-	t.Helper()
-	return "Bearer " + e.signIn(t, e.newUser(t, tenancy.CustomerAdmin, e.customer))
-}
-
-func (e env) as(token string, req *http.Request) *httptest.ResponseRecorder {
-	req.Header.Set("Authorization", token)
-	return e.send(req)
-}
-
 func (e env) startSlack(t *testing.T, token string) string {
 	t.Helper()
 	rec := e.as(token, httptest.NewRequest(http.MethodPost, "/slack/install/start", nil))

@@ -54,7 +54,7 @@ func TestOnSyncedDoesNotRunAfterAFailedSync(t *testing.T) {
 	e.provider.Err = errors.New("cmdb is down")
 
 	customer := e.newCustomer(t)
-	if _, err := e.cmdb.Connect(context.Background(), viewerOf(customer), providertest.Name, providertest.Login); err != nil {
+	if _, err := e.cmdb.Connect(context.Background(), adminOf(customer), providertest.Name, providertest.Login); err != nil {
 		t.Fatal(err)
 	}
 
