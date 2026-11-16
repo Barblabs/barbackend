@@ -193,11 +193,9 @@ type Top struct {
 // first, then by how many Findings it has. A zero limit takes
 // DefaultTopLimit. It fails with ErrInvalidCount.
 func (s *Service) Top(ctx context.Context, caller tenancy.User, limit int) (Top, error) {
-	if limit == 0 {
-		limit = DefaultTopLimit
-	}
-	if limit < 1 || limit > MaxTopLimit {
-		return Top{}, fmt.Errorf("%w: limit must be a number from 1 to %d", ErrInvalidCount, MaxTopLimit)
+	limit, err := topLimit(limit)
+	if err != nil {
+		return Top{}, err
 	}
 	facts, err := s.openFacts(ctx, caller)
 	if err != nil {
@@ -245,6 +243,18 @@ func (s *Service) Top(ctx context.Context, caller tenancy.User, limit int) (Top,
 	top.Components = top.Components[:min(limit, len(top.Components))]
 	top.CVEs = top.CVEs[:min(limit, len(top.CVEs))]
 	return top, nil
+}
+
+// topLimit is limit, or DefaultTopLimit for zero. It fails with
+// ErrInvalidCount out of range.
+func topLimit(limit int) (int, error) {
+	if limit == 0 {
+		return DefaultTopLimit, nil
+	}
+	if limit < 1 || limit > MaxTopLimit {
+		return 0, fmt.Errorf("%w: limit must be a number from 1 to %d", ErrInvalidCount, MaxTopLimit)
+	}
+	return limit, nil
 }
 
 func (s *Service) openFacts(ctx context.Context, caller tenancy.User) ([]postgres.OpenFindingFact, error) {
