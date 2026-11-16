@@ -98,12 +98,16 @@ func TestFindingWeeksOfCustomerCountOnlyItsOwnFindings(t *testing.T) {
 	syncRecords(t, w.db, other.ID(), w.paymentsRecord(t))
 	saveMatch(t, w.db, match(t, inventory.SourceReference{Source: other.ID(), RecordID: "1"}, "1.18.0"))
 
+	since := time.Now().Add(-time.Hour).Truncate(time.Microsecond)
 	weeks := inTxValue(t, w.db, func(tx *postgres.Tx) ([]postgres.FindingWeek, error) {
-		return tx.FindingWeeksOfCustomer(context.Background(), w.customer, time.Now().AddDate(0, 0, -14))
+		return tx.FindingWeeksOfCustomer(context.Background(), w.customer, since.Add(-168*time.Hour), 2)
 	})
 
-	if len(weeks) != 1 || weeks[0].Opened != 1 || weeks[0].Closed != 0 || weeks[0].Start.Weekday() != time.Monday {
-		t.Errorf("weeks = %+v, want one week starting on a Monday with the Customer's one Finding opened", weeks)
+	if len(weeks) != 2 || !weeks[1].Start.Equal(since) {
+		t.Fatalf("weeks = %+v, want two, the last starting at %v", weeks, since)
+	}
+	if weeks[0].Opened != 0 || weeks[0].OpenAtEnd != 0 || weeks[1].Opened != 1 || weeks[1].Closed != 0 || weeks[1].OpenAtEnd != 1 {
+		t.Errorf("weeks = %+v, want the Customer's one Finding opened and open in the last week only", weeks)
 	}
 }
 

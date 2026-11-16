@@ -40,29 +40,36 @@ func (t *Tx) OpenFindingsOfCustomer(ctx context.Context, customer tenancy.Custom
 }
 
 // FindingWeek is how many Findings of a Customer's Assets were first opened
-// and how many were closed in one ISO week, in UTC.
+// and how many were closed in one week, and how many were open when it ended.
 type FindingWeek struct {
-	// Start is the Monday the week starts on, at midnight UTC.
-	Start  time.Time
-	Opened int
-	Closed int
+	// Start is when the week starts; it lasts 168 hours.
+	Start     time.Time
+	Opened    int
+	Closed    int
+	OpenAtEnd int
 }
 
-// FindingWeeksOfCustomer are the weeks from since on in which a Finding of
-// the Customer's Assets was first opened or closed, oldest first; weeks
-// without either are left out. A reopened Finding counts only its latest
-// close, since a Finding keeps no history of its closes.
-func (t *Tx) FindingWeeksOfCustomer(ctx context.Context, customer tenancy.CustomerID, since time.Time) ([]FindingWeek, error) {
-	rows, err := t.q.CountFindingsOfCustomerByWeek(ctx, sqlcgen.CountFindingsOfCustomerByWeekParams{CustomerID: uuid.UUID(customer), Since: since})
+// FindingWeeksOfCustomer are the weeks ahead of since, weeks of them, oldest
+// first, each counted even when nothing happened in it. A reopened Finding
+// counts only its latest close, and as open while it was closed before, since
+// a Finding keeps no history of its closes.
+func (t *Tx) FindingWeeksOfCustomer(ctx context.Context, customer tenancy.CustomerID, since time.Time, weeks int) ([]FindingWeek, error) {
+	rows, err := t.q.CountFindingsOfCustomerByWeek(ctx, sqlcgen.CountFindingsOfCustomerByWeekParams{
+		CustomerID: uuid.UUID(customer),
+		Since:      since,
+		LastStart:  since.Add(time.Duration(weeks-1) * week),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("count findings of customer %s by week: %w", customer, err)
 	}
-	weeks := make([]FindingWeek, len(rows))
+	counted := make([]FindingWeek, len(rows))
 	for i, row := range rows {
-		weeks[i] = FindingWeek{Start: row.Week.UTC(), Opened: int(row.Opened), Closed: int(row.Closed)}
+		counted[i] = FindingWeek{Start: row.Week.UTC(), Opened: int(row.Opened), Closed: int(row.Closed), OpenAtEnd: int(row.OpenAtEnd)}
 	}
-	return weeks, nil
+	return counted, nil
 }
+
+const week = 168 * time.Hour
 
 // AssetFindingBands counts an Asset's open Findings by the Score Band of
 // their latest Score.

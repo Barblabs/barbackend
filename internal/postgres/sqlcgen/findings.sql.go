@@ -56,40 +56,42 @@ func (q *Queries) CloseFindingsOfInactiveAssets(ctx context.Context, arg CloseFi
 }
 
 const countFindingsOfCustomerByWeek = `-- name: CountFindingsOfCustomerByWeek :many
-SELECT e.week::timestamptz AS week,
-       (count(*) FILTER (WHERE e.opened))::integer AS opened,
-       (count(*) FILTER (WHERE NOT e.opened))::integer AS closed
-FROM (
-    SELECT date_trunc('week', f.first_opened_at, 'UTC') AS week, true AS opened
-    FROM findings f
-    JOIN cmdb_sources src ON src.id = f.cmdb_source_id
-    WHERE src.customer_id = $1 AND f.first_opened_at >= $2
-    UNION ALL
-    SELECT date_trunc('week', f.closed_at, 'UTC') AS week, false AS opened
-    FROM findings f
-    JOIN cmdb_sources src ON src.id = f.cmdb_source_id
-    WHERE src.customer_id = $1 AND f.closed_at >= $2
-) e
-GROUP BY e.week
-ORDER BY e.week
+SELECT w.start::timestamptz AS week,
+       (SELECT count(*) FROM findings f JOIN cmdb_sources src ON src.id = f.cmdb_source_id
+        WHERE src.customer_id = $1
+          AND f.first_opened_at >= w.start AND f.first_opened_at < w.start + interval '168 hours')::integer AS opened,
+       (SELECT count(*) FROM findings f JOIN cmdb_sources src ON src.id = f.cmdb_source_id
+        WHERE src.customer_id = $1
+          AND f.closed_at >= w.start AND f.closed_at < w.start + interval '168 hours')::integer AS closed,
+       (SELECT count(*) FROM findings f JOIN cmdb_sources src ON src.id = f.cmdb_source_id
+        WHERE src.customer_id = $1
+          AND f.first_opened_at < w.start + interval '168 hours'
+          AND (f.closed_at IS NULL OR f.closed_at >= w.start + interval '168 hours'))::integer AS open_at_end
+FROM generate_series($2::timestamptz, $3::timestamptz, interval '168 hours') AS w(start)
+ORDER BY w.start
 `
 
 type CountFindingsOfCustomerByWeekParams struct {
 	CustomerID uuid.UUID
 	Since      time.Time
+	LastStart  time.Time
 }
 
 type CountFindingsOfCustomerByWeekRow struct {
-	Week   time.Time
-	Opened int32
-	Closed int32
+	Week      time.Time
+	Opened    int32
+	Closed    int32
+	OpenAtEnd int32
 }
 
-// How many Findings of a Customer's Assets were first opened and how many were
-// closed in each ISO week, in UTC, from since on. A Finding reopened after
-// it was closed counts only its latest close: findings keeps no history.
+// Every week from the one starting at since to the one starting at
+// last_start, each 168 hours long so no daylight saving change moves it: how
+// many Findings of a Customer's Assets were first opened and how many were
+// closed in it, and how many were open when it ended. A Finding reopened after
+// it was closed counts only its latest close, and counts as open while it was
+// closed before: findings keeps no history.
 func (q *Queries) CountFindingsOfCustomerByWeek(ctx context.Context, arg CountFindingsOfCustomerByWeekParams) ([]CountFindingsOfCustomerByWeekRow, error) {
-	rows, err := q.db.Query(ctx, countFindingsOfCustomerByWeek, arg.CustomerID, arg.Since)
+	rows, err := q.db.Query(ctx, countFindingsOfCustomerByWeek, arg.CustomerID, arg.Since, arg.LastStart)
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +99,12 @@ func (q *Queries) CountFindingsOfCustomerByWeek(ctx context.Context, arg CountFi
 	var items []CountFindingsOfCustomerByWeekRow
 	for rows.Next() {
 		var i CountFindingsOfCustomerByWeekRow
-		if err := rows.Scan(&i.Week, &i.Opened, &i.Closed); err != nil {
+		if err := rows.Scan(
+			&i.Week,
+			&i.Opened,
+			&i.Closed,
+			&i.OpenAtEnd,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
