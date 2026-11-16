@@ -40,7 +40,7 @@ func TestUserBySubRestoresTheStoredUser(t *testing.T) {
 				return err
 			})
 
-			if got != want {
+			if got != want.Invited() {
 				t.Errorf("user = %+v, want %+v", got, want)
 			}
 		})

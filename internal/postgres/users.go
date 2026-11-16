@@ -38,12 +38,7 @@ func (t *Tx) CreatePendingUser(ctx context.Context, u tenancy.User, claimedUntil
 	if err != nil {
 		return StoredUser{}, Invitation{}, fmt.Errorf("insert invitation of user %s: %w", u.ID(), err)
 	}
-	customer, _ := u.Customer()
-	pending, err := tenancy.RestoreUser(u.ID(), u.Email(), u.Role(), customer, tenancy.UserState{Pending: true})
-	if err != nil {
-		return StoredUser{}, Invitation{}, err
-	}
-	return StoredUser{User: pending, Created: created}, Invitation{User: u.ID(), Email: u.Email(), Attempt: int(attempts)}, nil
+	return StoredUser{User: u, Created: created}, Invitation{User: u.ID(), Email: u.Email(), Attempt: int(attempts)}, nil
 }
 
 func (t *Tx) insertUser(ctx context.Context, u tenancy.User) (time.Time, error) {
