@@ -83,27 +83,3 @@ func TestWeeklyTrendRefusesWeeksOutOfRangeAndPlatformAdmins(t *testing.T) {
 		t.Errorf("platform admin: err = %v, want ErrNoCustomer", err)
 	}
 }
-
-// setHistory sets when the record's only Finding was first opened and, unless
-// closed is zero, when it was closed.
-func (w world) setHistory(t *testing.T, record string, opened, closed time.Time) {
-	t.Helper()
-	var closedAt *time.Time
-	if !closed.IsZero() {
-		closedAt = &closed
-	}
-	w.exec(t, `
-		UPDATE findings
-		SET first_opened_at = $1, opened_at = $1, closed_at = $2,
-		    close_reason_id = CASE WHEN $2::timestamptz IS NULL THEN NULL ELSE 1 END
-		WHERE record_id = $3`, opened, closedAt, record)
-}
-
-func (w world) viewer(t *testing.T) tenancy.User {
-	t.Helper()
-	u, err := tenancy.NewUser(tenancy.UserID(uuid.New()), "viewer@example.com", tenancy.Viewer, w.customer)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return u
-}

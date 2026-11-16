@@ -357,3 +357,16 @@ func areaRecord(t *testing.T, id, name string, inactive bool) inventory.AreaReco
 	}
 	return inventory.AreaRecord{RecordID: id, Imported: imported}
 }
+
+func storeCustomer(db *postgres.DB, name string) (postgres.StoredCustomer, error) {
+	c, err := tenancy.NewCustomer(tenancy.CustomerID(uuid.New()), name)
+	if err != nil {
+		return postgres.StoredCustomer{}, err
+	}
+	var stored postgres.StoredCustomer
+	err = db.InTx(context.Background(), func(tx *postgres.Tx) (err error) {
+		stored, err = tx.CreateCustomer(context.Background(), c)
+		return err
+	})
+	return stored, err
+}

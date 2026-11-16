@@ -9,21 +9,7 @@ import (
 	"barbackend/internal/inventory"
 	"barbackend/internal/postgres"
 	"barbackend/internal/tenancy"
-	"github.com/google/uuid"
 )
-
-func storeCustomer(db *postgres.DB, name string) (postgres.StoredCustomer, error) {
-	c, err := tenancy.NewCustomer(tenancy.CustomerID(uuid.New()), name)
-	if err != nil {
-		return postgres.StoredCustomer{}, err
-	}
-	var stored postgres.StoredCustomer
-	err = db.InTx(context.Background(), func(tx *postgres.Tx) (err error) {
-		stored, err = tx.CreateCustomer(context.Background(), c)
-		return err
-	})
-	return stored, err
-}
 
 func TestCustomerNamesAreUniqueRegardlessOfCase(t *testing.T) {
 	t.Parallel()

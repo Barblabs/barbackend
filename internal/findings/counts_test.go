@@ -7,32 +7,7 @@ import (
 
 	"barbackend/internal/findings"
 	"barbackend/internal/inventory"
-	"barbackend/internal/stixext"
 )
-
-const opensslCVE = "CVE-2022-0778"
-
-var opensslBefore3 = stixext.Affected{Vendor: "openssl", Product: "openssl", Version: "*", Update: "*", VersionStartIncluding: "1.0.2", VersionEndExcluding: "3.0.0"}
-
-// countedWorld has three open Findings: Critical nginx and Medium OpenSSL on
-// the Internet-facing, High-Criticality "a", and High nginx on "b", of Low
-// Criticality and Unknown Exposure. KEV lists nginx's CVE.
-func countedWorld(t *testing.T) world {
-	t.Helper()
-	w := newWorld(t)
-	w.sync(t,
-		server(t, "a", inventory.CriticalityHigh, app("Nginx", "f5", "nginx", "1.18.0"), app("OpenSSL", "openssl", "openssl", "1.1.1")),
-		server(t, "b", inventory.CriticalityLow, app("Nginx", "f5", "nginx", "1.18.0")),
-	)
-	w.handleNVD(t, nvdVulnerability(t, "CVE-2021-23017", "Analyzed", nginxBefore1201), nvdVulnerability(t, opensslCVE, "Analyzed", opensslBefore3))
-	w.declareExposure(t, "a", inventory.InternetFacing)
-	w.setScore(t, "a", "CVE-2021-23017", 0.75)
-	w.setScore(t, "a", opensslCVE, 0.25)
-	w.setScore(t, "b", "CVE-2021-23017", 0.45)
-	w.exec(t, `UPDATE vulnerabilities SET object = jsonb_set(object, ARRAY['extensions', $1::text], '{"extension_type":"property-extension"}') WHERE cve_id = $2`,
-		string(stixext.KEVDefinitionID), "CVE-2021-23017")
-	return w
-}
 
 func TestSummaryCountsOpenFindingsByBandKEVAndCriticalInternetFacing(t *testing.T) {
 	t.Parallel()
@@ -134,11 +109,4 @@ func TestCountsRefuseALimitOrGroupingOutOfRange(t *testing.T) {
 	if _, err := w.findings.Breakdown(context.Background(), w.viewer(t), 0); !errors.Is(err, findings.ErrInvalidCount) {
 		t.Errorf("grouping 0: err = %v, want ErrInvalidCount", err)
 	}
-}
-
-// setScore makes every Score of the record's Finding of cve one of Scoring
-// Model 3 with that value, which has Score Bands.
-func (w world) setScore(t *testing.T, record, cve string, value float64) {
-	t.Helper()
-	w.exec(t, `UPDATE finding_scores SET model = 3, value = $1 WHERE finding_id = (SELECT id FROM findings WHERE record_id = $2 AND cve_id = $3)`, value, record, cve)
 }
