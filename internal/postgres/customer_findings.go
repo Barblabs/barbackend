@@ -114,6 +114,67 @@ func (t *Tx) FindingBandsByAssetOfCustomer(ctx context.Context, customer tenancy
 	return assets, nil
 }
 
+// OpenFindingFact is an open scored Finding of a Customer's Assets with what
+// the dashboard counts it by.
+type OpenFindingFact struct {
+	ID          finding.ID
+	AssetID     int64
+	Criticality inventory.Criticality
+	// Exposure is the Asset's effective Exposure: declared, else imported.
+	Exposure inventory.Exposure
+	// Area is nil for an Asset in no Area.
+	Area    *AreaRef
+	Product inventory.Product
+	Version string
+	CVE     string
+	KEV     bool
+	EPSS    *float64
+	Band    scoring.Band
+	// Banded is false when the latest Score is from a Scoring Model without
+	// Bands; Band is then zero.
+	Banded bool
+}
+
+// AreaRef names an Area by its handle, as in GET /areas.
+type AreaRef struct {
+	ID   int64
+	Name string
+}
+
+// OpenFindingFactsOfCustomer is every open scored Finding of the Customer's
+// Assets, read in one query. kevExtension and epssExtension are the ids of
+// the kev/1 and epss/1 extension definitions.
+func (t *Tx) OpenFindingFactsOfCustomer(ctx context.Context, customer tenancy.CustomerID, kevExtension, epssExtension string) ([]OpenFindingFact, error) {
+	rows, err := t.q.ListOpenFindingFactsOfCustomer(ctx, sqlcgen.ListOpenFindingFactsOfCustomerParams{
+		KevExtensionID: kevExtension, EpssExtensionID: epssExtension, CustomerID: uuid.UUID(customer),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list open finding facts of customer %s: %w", customer, err)
+	}
+	facts := make([]OpenFindingFact, len(rows))
+	for i, row := range rows {
+		f := OpenFindingFact{
+			ID:          finding.ID(row.ID),
+			AssetID:     row.AssetID,
+			Criticality: inventory.Criticality(valueOrZero(row.CriticalityID)),
+			Exposure:    inventory.Exposure(valueOrZero(row.ExposureID)),
+			Product:     inventory.Product{Vendor: row.ProductVendor, Name: row.ProductName},
+			Version:     row.ComponentVersion,
+			CVE:         row.CveID,
+			KEV:         row.Kev,
+		}
+		if row.AreaID != nil {
+			f.Area = &AreaRef{ID: *row.AreaID, Name: valueOrZero(row.AreaName)}
+		}
+		if p, ok := row.Epss.(float64); ok {
+			f.EPSS = &p
+		}
+		f.Band, f.Banded = scoring.Score{Model: scoring.ModelVersion(row.Model), Value: row.Value}.Band()
+		facts[i] = f
+	}
+	return facts, nil
+}
+
 // FindingOfCustomer is one Finding of the Customer's Assets, open or closed.
 // It fails with ErrNotFound when the Customer has no such Finding with a
 // Score.
