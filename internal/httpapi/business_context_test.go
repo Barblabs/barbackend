@@ -40,24 +40,6 @@ type fields struct {
 	} `json:"footprint"`
 }
 
-// contextFields is a Business Context as the dashboard sends it: every field,
-// most of them not stated.
-func contextFields(summary string) map[string]any {
-	return map[string]any{
-		"profile": map[string]any{
-			"summary": summary, "mission": "", "vision": "", "sectors": []string{"retail"},
-			"organization_type": "", "employees": "50_249", "annual_revenue": "",
-		},
-		"geography": map[string]any{"headquarters": "mx", "countries": []string{"CO"}},
-		"operations": map[string]any{
-			"critical_services": []map[string]any{{"name": "Tienda en línea", "description": "", "impact": "high", "max_downtime": "4h_24h", "assets": []string{"web-01"}}},
-			"data_categories":   []string{"payment_cards"}, "regulations": []string{}, "environments": []string{},
-		},
-		"footprint": map[string]any{"domains": []string{"https://www.Zapatos.mx/"}, "brands": []string{}, "technologies": []string{}, "third_parties": []string{}},
-		"risk":      map[string]any{"appetite": "", "concerns": []string{}, "past_incidents": "", "constraints": "", "notes": ""},
-	}
-}
-
 func saveRequest(version int, summary string) map[string]any {
 	return map[string]any{"version": version, "context": contextFields(summary)}
 }
