@@ -67,6 +67,24 @@ JOIN action_plans a ON a.finding_id = pf.finding_id
 WHERE pf.prioritization_id = @prioritization_id AND p.customer_id = @customer_id
 ORDER BY a.finding_id, a.created_at DESC, a.id;
 
+-- Counts one more failed attempt of Luna, on her own, at the Action Plan of
+-- a Finding as that placement of it (ADR 0034).
+-- name: RecordActionPlanFailure :exec
+INSERT INTO action_plan_failures (placement_id, attempts)
+VALUES (@placement_id, 1)
+ON CONFLICT (placement_id) DO UPDATE
+SET attempts = action_plan_failures.attempts + 1,
+    failed_at = now();
+
+-- The failed attempts at the Action Plan of each Finding of a Prioritization,
+-- as the placement it has there.
+-- name: ListActionPlanFailures :many
+SELECT pf.finding_id, f.attempts
+FROM prioritization_findings pf
+JOIN prioritizations p ON p.id = pf.prioritization_id
+JOIN action_plan_failures f ON f.placement_id = pf.placement_id
+WHERE pf.prioritization_id = @prioritization_id AND p.customer_id = @customer_id;
+
 -- name: InsertPrioritizationFeedback :one
 INSERT INTO prioritization_feedback (id, prioritization_id, finding_id, author_id, verdict_id, note, via_analista)
 SELECT @id::uuid, p.id, @finding_id::uuid, @author_id::uuid, @verdict_id::smallint, @note::text, @via_analista::boolean

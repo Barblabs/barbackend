@@ -19,6 +19,12 @@ type ActionPlan struct {
 	CreatedAt        time.Time
 }
 
+type ActionPlanFailure struct {
+	PlacementID uuid.UUID
+	Attempts    int32
+	FailedAt    time.Time
+}
+
 type Advisory struct {
 	ID          string
 	Feed        string

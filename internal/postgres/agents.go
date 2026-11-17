@@ -264,6 +264,30 @@ func (t *Tx) LatestPlans(ctx context.Context, customer tenancy.CustomerID, prior
 	return plans, nil
 }
 
+// RecordPlanFailure counts one more attempt in which Luna, on her own, did
+// not write the Action Plan of a Finding as that placement of it (ADR 0034).
+func (t *Tx) RecordPlanFailure(ctx context.Context, placement uuid.UUID) error {
+	if err := t.q.RecordActionPlanFailure(ctx, placement); err != nil {
+		return fmt.Errorf("record a failed plan of placement %s: %w", placement, err)
+	}
+	return nil
+}
+
+// PlanFailures is, by Finding of the Customer's Prioritization, how many
+// attempts at its Action Plan failed as the placement it has there; one with
+// none is missing.
+func (t *Tx) PlanFailures(ctx context.Context, customer tenancy.CustomerID, prioritization uuid.UUID) (map[uuid.UUID]int, error) {
+	rows, err := t.q.ListActionPlanFailures(ctx, sqlcgen.ListActionPlanFailuresParams{PrioritizationID: prioritization, CustomerID: uuid.UUID(customer)})
+	if err != nil {
+		return nil, fmt.Errorf("list failed plans of prioritization %s: %w", prioritization, err)
+	}
+	out := make(map[uuid.UUID]int, len(rows))
+	for _, row := range rows {
+		out[row.FindingID] = int(row.Attempts)
+	}
+	return out, nil
+}
+
 // StoredFeedback is a User's verdict on a Finding of a Prioritization.
 type StoredFeedback struct {
 	ID          uuid.UUID

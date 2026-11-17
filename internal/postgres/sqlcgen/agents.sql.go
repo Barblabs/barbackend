@@ -287,6 +287,46 @@ type InsertPrioritizationFindingsParams struct {
 	ScoreRank        int32
 }
 
+const listActionPlanFailures = `-- name: ListActionPlanFailures :many
+SELECT pf.finding_id, f.attempts
+FROM prioritization_findings pf
+JOIN prioritizations p ON p.id = pf.prioritization_id
+JOIN action_plan_failures f ON f.placement_id = pf.placement_id
+WHERE pf.prioritization_id = $1 AND p.customer_id = $2
+`
+
+type ListActionPlanFailuresParams struct {
+	PrioritizationID uuid.UUID
+	CustomerID       uuid.UUID
+}
+
+type ListActionPlanFailuresRow struct {
+	FindingID uuid.UUID
+	Attempts  int32
+}
+
+// The failed attempts at the Action Plan of each Finding of a Prioritization,
+// as the placement it has there.
+func (q *Queries) ListActionPlanFailures(ctx context.Context, arg ListActionPlanFailuresParams) ([]ListActionPlanFailuresRow, error) {
+	rows, err := q.db.Query(ctx, listActionPlanFailures, arg.PrioritizationID, arg.CustomerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListActionPlanFailuresRow
+	for rows.Next() {
+		var i ListActionPlanFailuresRow
+		if err := rows.Scan(&i.FindingID, &i.Attempts); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listLatestActionPlans = `-- name: ListLatestActionPlans :many
 SELECT DISTINCT ON (a.finding_id) a.id, a.finding_id, a.content, a.created_at
 FROM prioritization_findings pf
@@ -546,6 +586,21 @@ func (q *Queries) PrioritizationHolds(ctx context.Context, arg PrioritizationHol
 	var holds bool
 	err := row.Scan(&holds)
 	return holds, err
+}
+
+const recordActionPlanFailure = `-- name: RecordActionPlanFailure :exec
+INSERT INTO action_plan_failures (placement_id, attempts)
+VALUES ($1, 1)
+ON CONFLICT (placement_id) DO UPDATE
+SET attempts = action_plan_failures.attempts + 1,
+    failed_at = now()
+`
+
+// Counts one more failed attempt of Luna, on her own, at the Action Plan of
+// a Finding as that placement of it (ADR 0034).
+func (q *Queries) RecordActionPlanFailure(ctx context.Context, placementID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, recordActionPlanFailure, placementID)
+	return err
 }
 
 const releaseAnalistaConversation = `-- name: ReleaseAnalistaConversation :exec
