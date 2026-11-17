@@ -15,7 +15,7 @@ Every test runs against a fake Messages API (`claudetest`).
 
 ## 2. A spending limit per Customer
 
-Every round, Action Plan and Analista turn is a paid model request. Rounds run on their own whenever a Customer's Findings change (ADR 0026), and any signed-in User of a Customer can ask for Action Plans and talk with the Analista without limit. Decide a limit per Customer (requests or tokens per day), enforce it in the `agents` use case before calling the model, answer 429 with a stable code when it is reached, and record usage per Customer so the portal can show it. A round over the limit should wait for the next day, not drop the Findings it would place.
+Every round, Action Plan and Analista turn is a paid model request. Rounds run on their own whenever a Customer's Findings change (ADR 0026), and Luna writes the Action Plan of every open Finding after them, and again whenever one changes (ADR 0034). Any signed-in User of a Customer can also ask for Action Plans and talk with the Analista without limit. Decide a limit per Customer (requests or tokens per day), enforce it in the `agents` use case before calling the model, answer 429 with a stable code when it is reached, and record usage per Customer so the portal can show it. A round over the limit should wait for the next day, not drop the Findings it would place.
 
 ## 3. The dashboard
 

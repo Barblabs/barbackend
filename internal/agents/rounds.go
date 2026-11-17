@@ -64,17 +64,9 @@ func (s *Service) Prioritize(ctx context.Context, customer tenancy.CustomerID) (
 // keep the others waiting. A Customer whose round fails is logged and left
 // until the next run. Only a cancelled context stops it.
 func (s *Service) PrioritizeAll(ctx context.Context) error {
-	customers, err := postgres.InTxValue(ctx, s.db, func(tx *postgres.Tx) ([]postgres.StoredCustomer, error) {
-		return tx.Customers(ctx)
-	})
+	pending, err := s.activeCustomers(ctx)
 	if err != nil {
 		return err
-	}
-	var pending []tenancy.CustomerID
-	for _, c := range customers {
-		if c.Deactivated.IsZero() {
-			pending = append(pending, c.Customer.ID())
-		}
 	}
 	for range maxRounds {
 		pending = slices.DeleteFunc(pending, func(customer tenancy.CustomerID) bool {

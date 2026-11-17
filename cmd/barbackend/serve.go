@@ -81,9 +81,18 @@ func serve(ctx context.Context, _ []string) error {
 			}
 			return run, err
 		}
+		// Each run of the Prioritizer wakes Luna, who writes the Action Plans
+		// that its order leaves due (ADR 0034), in her own goroutine, so a
+		// long run of hers does not hold the next order back.
+		prioritized := newWakeup()
+		prioritize := func(ctx context.Context) error {
+			err := agentService.PrioritizeAll(ctx)
+			prioritized.notify()
+			return err
+		}
 		// The Feeds, the Cartógrafo, the Reader and the Editor, the
-		// Prioritizer, the Invitations and the Slack deliveries run in the
-		// background, and all stop before the database closes.
+		// Prioritizer, Luna, the Invitations and the Slack deliveries run in
+		// the background, and all stop before the database closes.
 		slackService := slack.New(db, slackAPI, key)
 		backgroundDone := make(chan struct{})
 		go func() {
@@ -96,8 +105,9 @@ func serve(ctx context.Context, _ []string) error {
 				newsHourly(ctx, read, agentService.DigestNews, newsRunDelay, newsRunInterval)
 			})
 			wg.Go(func() {
-				prioritizeOnChange(ctx, changed, agentService.PrioritizeAll, prioritizeQuiet, prioritizeMaxWait, prioritizeInterval)
+				prioritizeOnChange(ctx, changed, prioritize, prioritizeQuiet, prioritizeMaxWait, prioritizeInterval)
 			})
+			wg.Go(func() { planOnNotice(ctx, prioritized, agentService.PlanAll) })
 			wg.Go(func() { userService.SendInvitations(ctx, invitationInterval) })
 			wg.Go(func() { slackService.RunDeliveries(ctx) })
 			wg.Wait()
@@ -155,7 +165,7 @@ func awaitBackground(ctx context.Context, done <-chan struct{}) error {
 	case <-done:
 		return nil
 	case <-ctx.Done():
-		return errors.New("the feeds, the cartografo, the news, the prioritizer, the invitations or the slack deliveries did not stop")
+		return errors.New("the feeds, the cartografo, the news, the prioritizer, luna, the invitations or the slack deliveries did not stop")
 	}
 }
 
