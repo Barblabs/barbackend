@@ -12,8 +12,9 @@ internal/
   cmdb/                use cases on CMDB Sources   -> cmdb/provider, encryption, inventory, postgres
     provider/          CMDB Provider seam          -> inventory
       <provider>/      adapters                    -> cmdb/provider, inventory, own subpackages
-  agents/              use case on the Agents      -> alert, assessment, business, claude, inventory, postgres, tenancy
+  agents/              use case on the Agents      -> alert, assessment, business, claude, inventory, news, postgres, tenancy
   businesscontext/     use cases on the Business Context -> business, postgres, tenancy
+  newsitems/           use case storing News Items -> news, postgres, stixext
   findings/            use cases turning Feeds and Syncs into Findings, and counting them -> finding, inventory, matching, postgres, scoring, stixext, tenancy
   slack/               use cases on Slack          -> alert, encryption, postgres, tenancy
   advisories/          use case linking Advisories to Vulnerabilities -> postgres, stixext
@@ -31,6 +32,7 @@ internal/
   matching/            pure domain                 -> inventory, stixext
   assessment/          pure domain                 -> inventory, scoring, stixext
   business/            pure domain                 -> nothing internal
+  news/                pure domain                 -> business, inventory, stixext
   scoring/             pure domain                 -> inventory
   stixext/             barbattack's STIX conventions -> nothing internal
   inventory/           pure domain                 -> tenancy
@@ -54,7 +56,7 @@ New features get a home before they get code:
 - **Business Context**: the pure domain package `internal/business`, which imports no other layer, and the use-case package `internal/businesscontext`, which reads and saves it. The Drafter is an Agent, so it lives in `internal/agents`, which reads the Business Context through `postgres`, never through `businesscontext` (ADR 0017).
 - **News Items**: Feed adapters like any other, `internal/feeds/rss` for every text Feed and one package per structured Feed. The use-case package `internal/newsitems` stores what they emit through `ingest.Feed.Handle`, as `internal/advisories` does for Advisories, with its queries in `postgres`. The pure domain package `internal/news` holds the News Item, the Reported Attack, the rules of Relevance and the Reader's verifier, and imports `business`, `inventory` and `stixext`. The Reader and the Editor are Agents, so they live in `internal/agents` (ADR 0025).
 
-The direction is enforced by `depguard` rules in `.golangci.yaml`, which deny all of `barbackend/internal` to a layer and allow back only the layers below it, so a new use-case package is forbidden to `inventory`, `cmdb/provider` and `postgres` without touching the config. `internal/httpapi` may import only the domain packages `inventory`, `tenancy` and `business` and the use-case packages it serves, listed by name, so serving a new use case means adding it to that list. It is denied `cmdb/provider` by name, since allowing `cmdb` would otherwise allow everything under it; for the same reason, every layer allowed `business` is denied `businesscontext` by name. Its tests are exempt, because they wire a real router on Postgres as `cmd` does, and so are those of `internal/agents`, which store Findings and Scores as the Findings pipeline does (ADR 0026). Only `cmd` and `internal/httpapi` may import gin.
+The direction is enforced by `depguard` rules in `.golangci.yaml`, which deny all of `barbackend/internal` to a layer and allow back only the layers below it, so a new use-case package is forbidden to `inventory`, `cmdb/provider` and `postgres` without touching the config. `internal/httpapi` may import only the domain packages `inventory`, `tenancy`, `business` and `news` and the use-case packages it serves, listed by name, so serving a new use case means adding it to that list. It is denied `cmdb/provider` by name, since allowing `cmdb` would otherwise allow everything under it; for the same reason, every layer allowed `business` is denied `businesscontext` by name. Its tests are exempt, because they wire a real router on Postgres as `cmd` does, and so are those of `internal/agents`, which store Findings and Scores as the Findings pipeline does (ADR 0026). Only `cmd` and `internal/httpapi` may import gin.
 
 ## Considered Options
 

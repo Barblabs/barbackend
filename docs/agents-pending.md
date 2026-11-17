@@ -34,17 +34,12 @@ The review of the Agents found structural changes that were left out to keep the
 - **Rename `internal/assessment`**, which is no longer a domain term (for example to `internal/dossier`), updating ADR 0008, ADR 0016 and depguard.
 - **`Crew` holds the Analista's client and model**: move them to `Service`, since the Crew is the Prioritizer and Luna.
 
-## 5. News Items reach the Security Team
+## 5. News Items: what ADR 0025 still lacks
 
-ADR 0025 is not built: no News Item is stored, and no Feed of news is pulled.
+News Items are stored, read by the Reader and matched by rules, and each Customer gets a daily News Digest from the Editor, at `GET /news-digests`. What is left:
 
-- **Store News Items**: a `HandleNews` handler on `ingest.Feed.Handle`, as `HandleAWS` is (ADR 0022), in the use-case package `internal/newsitems`. It stores every News Item on receipt, with its Feed, published date and CVE IDs extracted, and the victim `identity` objects it refers to, one row per STIX id, in one transaction.
-- **`internal/feeds/rss`**: one adapter configured per text Feed (name, URL, interval, language), with the Feeds of ADR 0025 registered. `aws` keeps its own adapter and its Advisories (ADR 0022).
-- **`internal/feeds/ransomwarelive`**: leak-site victims as `identity` objects with `sectors` and `victim/1`, and the table that maps its sector names to `business.Sectors()`. Check its terms of use and rate limits first.
-- **`internal/news`**: the Relevance rules (Named, Finding, Footprint, Peer), tested on fixed Business Contexts, Assets and open Findings. Finding relevance reads the CVEs of the Customer's open Findings (`closed_at IS NULL`, ADR 0020); Footprint compares Products as CPE tokens (ADR 0019). With ransomware.live alone, Peer relevance works without a model.
-- **The Reader**: its prompt, schema and verifier, and a job in `serve` that reads the stored News Items it has not read, with a daily cap and its attempts counted as the Cartógrafo's are (ADR 0024), its reading stored with its Run.
-- **The Editor and the News Digest**: one per Customer and day with news, stored with the Business Context version it read; `GET /news-digests` and `GET /news-digests/{id}`; the dashboard renders it as plain text with the labels code writes.
+- **Named notices on Slack**: one `slack_deliveries` row of a news `kind` to the Security Team channel per Named News Item, the moment its digest is written, rather than waiting for someone to open the digest.
 - **The Dossier gains News Items** that name its Vulnerability, beside its Advisories (ADR 0026), and a round of the Prioritizer places a Finding again when one arrives.
-- **Named notices on Slack**: one `slack_deliveries` row of a news `kind` to the Security Team channel per Named News Item, once #96 and #105 exist.
-
-Done when a Customer with a stated sector gets a stored News Digest whose Peer items come from ransomware.live and the Reader, each labeled as context, with tests.
+- **Run both Agents against Anthropic's API** on a week of real news, with item 1, and tune the prompts on what the verifiers reject and on reasons the Security Team finds empty.
+- **Retention**: a News Item no Customer found relevant is kept for ever; decide how long to keep it once the tables' growth is measured.
+- **ransomware.live in production**: confirm its terms allow polling it from a commercial product before deploying the Feed.

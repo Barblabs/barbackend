@@ -34,8 +34,21 @@ Text is compared case-insensitively after trimming. A Product of an Asset is CPE
 
 Both follow ADR 0016: one structured-output call each, no tools, what they read in the user message as data, a verifier without a model, one retry told what was wrong, and a Run that records the model and the hash of the prompt. They run on `claude-haiku-5-5`, overridable with `READER_MODEL` and `EDITOR_MODEL`.
 
-- **The Reader**: every quote must appear in the News Item's title or text once whitespace is collapsed; every CVE ID, victim, attacker and Product it states must appear in one of its quotes; sectors must be codes of `business.Sectors()`, countries ISO 3166-1 alpha-2 and kinds of attack codes of `business.Concerns()`, the vocabularies a Customer states its Business Context in (ADR 0017); and it writes no URL. **It cannot judge a sector, a country or a CPE token inferred from a quote**, such as "a Monterrey auto-parts maker" read as `automotive` and `MX`, or "FortiOS" as `fortinet`/`fortios`, so a Peer or a Footprint is only as good as that inference, which is one more reason both are only context. It runs as a job in `serve`, never inside a Feed's transaction, under a daily cap, as the Cartógrafo does (ADR 0024): a News Item it fails on twice or refuses keeps only what its adapter found and is tried again in a later run, at most 3 times, and a model that cannot be called spends no attempt. What it states is stored as an Agent's output beside the News Item, not as STIX (ADR 0010).
-- **The Editor**: every relevant News Item appears exactly once, under its Relevance; a reason cites by JSON pointer only the News Item, what the Reader stated of it and the Business Context; and it names no CVE, version or URL those do not. A digest without a verified Editor is still stored and shown, in the rules' order and without reasons, because the rules, not the Editor, decide what a Customer sees.
+- **The Reader**: every quote must appear in the News Item's title or text once whitespace is collapsed; every CVE ID, victim, attacker and Product it states must appear in one of its quotes; sectors must be codes of `business.Sectors()`, countries ISO 3166-1 alpha-2 and kinds of attack codes of `business.Concerns()`, the vocabularies a Customer states its Business Context in (ADR 0017); and it writes no URL. **It cannot judge a sector, a country or a CPE token inferred from a quote**, such as "a Monterrey auto-parts maker" read as `automotive` and `MX`, or "FortiOS" as `fortinet`/`fortios`, so a Peer or a Footprint is only as good as that inference, which is one more reason both are only context. It runs as a job in `serve`, never inside a Feed's transaction, on the articles of the last 7 days and at most 300 a day (`agents.MaxReadingsPerDay`), as the Cartógrafo does (ADR 0024): a News Item it fails on twice or refuses keeps only what its adapter found and is tried again in a later run, at most 3 times, and a model that cannot be called spends no attempt. What it states is stored as an Agent's output beside the News Item, not as STIX (ADR 0010).
+- **The Editor**: it is given each News Item under a key and must answer every key exactly once; code then orders its answer within each Relevance, so it can neither add, drop nor move a News Item. Each reason is at most 320 characters, cites by JSON pointer each value of the Business Context it relies on, which must be there, names no CVE ID its News Item does not, has no URL and none of a list of filler phrases ("es importante", "mantenerse alerta", "buenas prácticas"…) that say nothing about the Customer. A digest without a verified Editor is still stored and shown, in the rules' order and without reasons, because the rules, not the Editor, decide what a Customer sees.
+
+## When it runs, what it stores and where it is served
+
+A job in `serve` runs every hour, 20 minutes after `serve` starts so the Feeds' first pulls are stored: the Reader reads, and then each active Customer whose last News Digest ended a day ago or more gets the next one, with the News Items that became ready since, reaching back at most 7 days. A Customer nothing new is relevant to gets none. `barbackend agent news` runs it once.
+
+| Table | Holds |
+|---|---|
+| `news_items` | One row per News Item: its STIX `report` as `jsonb`, its Feed, kind, publication date and CVE IDs, and `ready_at`, when it can go in a digest: on receipt for a leak post, once its reading is final for an article |
+| `news_victims`, `news_item_victims` | The victims structured Feeds name, one row per STIX `identity`, and which News Items refer to each |
+| `news_readings` | The Reader's reading of each article, `read` or `failed`, with its attempts, model and prompt id |
+| `news_digests` | Each Customer's digests: the period, the Business Context version read, the count per Relevance, and the digest as `jsonb` |
+
+`GET /news-digests` lists a Customer's digests and `GET /news-digests/{id}` reads one, grouped by Relevance, for every User of the Customer; a Platform Admin reads none. When the rules compare a leak post with a Customer's Concerns, it counts as ransomware and extortion, which is what a leak site is for.
 
 News Items are the most hostile text barbattack reads: anyone who can publish a post or a leak-site entry can put words in a Feed. Neither Agent has a tool to reach, and everything they write is for a person to read, rendered as plain text (ADR 0016).
 
@@ -45,8 +58,8 @@ Each is a Feed like any other, with its own interval (ADR 0011), short enough th
 
 | Feed | Format | What it adds | Interval |
 |---|---|---|---|
-| ransomware.live | JSON | leak-site victims with their sector, country and domain, without a model | 1h |
-| The Record, BleepingComputer, The Hacker News, SecurityWeek, Dark Reading, DataBreaches.net | RSS, a summary per article | Reported Attacks, through the Reader | 1h |
+| ransomware.live, only with `RANSOMWARELIVE_ENABLED=true` | JSON | leak-site victims with their sector, country and domain, without a model | 1h |
+| The Record, The Hacker News, SecurityWeek, Dark Reading, DataBreaches.net | RSS, a summary per article | Reported Attacks, through the Reader | 1h |
 | WeLiveSecurity (ESET, Spanish), Una al día (Hispasec) | RSS | the same, in Spanish and about Latin America | 2h |
 
 A news site's RSS gives a few hundred characters of each article, and the Reader reads only that: fetching each article's page is left out, for the sites' terms and the cost. `internal/feeds/rss` is one adapter configured per text Feed, so adding one is a name, a URL and an interval. CISA, INCIBE-CERT, Cisco PSIRT and ZDI publish Advisories, not News Items: they may become Advisory Feeds beside AWS under ADR 0022, and are not part of this ADR. ransomware.live's own sector names are mapped to `business.Sectors()` in its adapter; one it cannot map is left out, never guessed.
@@ -73,8 +86,9 @@ internal/
 - **A News Item that names no CVE is kept**, where an Advisory without one is skipped (ADR 0010, ADR 0022).
 - **Finding relevance reads the open Findings ADR 0020 stores.** Dossiers are built from them (ADR 0026), so News Items join a Dossier beside its Advisories (`docs/agents-pending.md`, item 5).
 - **Nothing here changes a Score or an order** (ADR 0009). If "exploited, says CISA" should raise a Score, that is a new Scoring Model fed by a structured signal, never by what the Reader states.
-- **It costs one Reader request per text News Item**, tens to a few hundred a day for all Customers together, under a daily cap set once the Feeds' real volume is measured, and one Editor request per Customer and day with news. There is no quota per Customer yet (`docs/agents-pending.md`, item 4).
-- ransomware.live's terms of use and rate limits must be checked before it is polled in production.
+- **It costs one Reader request per text News Item**, tens to a few hundred a day for all Customers together, capped at 300 a day, and one Editor request per Customer and day with news. There is no quota per Customer yet (`docs/agents-pending.md`, item 4).
+- **Ransomware.live is off unless an operator turns it on.** Its terms (www.ransomware.live/t&c) forbid using its data in a commercial product without its owner's written approval, and require "Source: Ransomware.live", linked, wherever its data is shown, which the dashboard does. Its free API is for personal use, one request a minute per endpoint; its PRO API (`api-pro.ransomware.live`, with an API key) is what an approved deployment should poll, which the adapter does not support yet. Until then Peers come only from the articles the Reader reads.
+- **BleepingComputer is left out**: its feed answers automated clients with a Cloudflare challenge, and getting past it would mean dodging its bot protection.
 
 ## Considered Options
 
