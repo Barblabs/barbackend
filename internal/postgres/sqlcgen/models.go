@@ -230,6 +230,53 @@ type MatchFlag struct {
 	Name string
 }
 
+type NewsDigest struct {
+	ID                     uuid.UUID
+	CustomerID             uuid.UUID
+	Since                  time.Time
+	Until                  time.Time
+	BusinessContextVersion int32
+	NamedCount             int32
+	FindingCount           int32
+	FootprintCount         int32
+	PeerCount              int32
+	Content                []byte
+	CreatedAt              time.Time
+}
+
+type NewsItem struct {
+	ID          string
+	Feed        string
+	Kind        string
+	PublishedAt time.Time
+	CveIds      []string
+	Object      []byte
+	ModifiedAt  time.Time
+	StoredAt    time.Time
+	ReadyAt     *time.Time
+}
+
+type NewsItemVictim struct {
+	NewsItemID string
+	VictimID   string
+}
+
+type NewsReading struct {
+	NewsItemID string
+	Outcome    string
+	Attempts   int32
+	Model      string
+	PromptID   string
+	Content    []byte
+	ReadAt     time.Time
+}
+
+type NewsVictim struct {
+	ID       string
+	Object   []byte
+	StoredAt time.Time
+}
+
 type Prioritization struct {
 	ID                     uuid.UUID
 	CustomerID             uuid.UUID
