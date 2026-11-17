@@ -16,7 +16,7 @@ An Agent's name is its role, not its model. The Prioritizer and Luna run on `cla
 
 **The Cartógrafo and the Reader read what Feeds wrote, and weigh no Finding.** The Cartógrafo labels a stored Vulnerability with Techniques (ADR 0024). The Reader reads a stored News Item, the one text no Feed structures, once for every Customer, and states what it reports with quotes its verifier finds in the text (ADR 0025). Neither reason above applies to them: they explain no Score, and a Feed outage only delays what they read. What they state reaches the Prioritizer and Luna only through the Dossier, which gains the newest News Items that name its Vulnerability (ADR 0025).
 
-The Prioritizer reads, in one request, the Findings it places and the order that stands, because ordering means weighing them against each other, so one round places at most 100 (ADR 0026). It reads a Brief of each, without the affected versions, references, quotes and Mitigations only an Action Plan needs, and the Customer's Business Context beside them. Luna writes the Action Plan of one Finding when someone asks for it, reading its whole Dossier: a plan for every Finding of every Prioritization would cost a request each, most of them never read.
+The Prioritizer reads, in one request, the Findings it places and the order that stands, because ordering means weighing them against each other, so one round places at most 100 (ADR 0026). It reads a Brief of each, without the affected versions, references, quotes and Mitigations only an Action Plan needs, and the Customer's Business Context beside them. Luna writes the Action Plan of one Finding, reading its whole Dossier. She writes one on her own for each open Finding of a Customer's order, and again when the Finding changes (ADR 0034). A User can also ask for one.
 
 ## How an Agent is kept honest
 
@@ -50,7 +50,7 @@ internal/
 - **`nvd/1` gains the optional `cna_affected`.** NVD no longer analyzes most CVEs, so many have no CPE matches and what is affected comes only from the CVE's numbering authority.
 - **The business context is the Customer's statement.** The Prioritizer weighs Criticality, Exposure, the kind of Asset and what its name and components say, and the Business Context the Customer states (ADR 0017): its Critical Services, data, regulations and Risk Appetite.
 - **The order can differ between runs** on the same Findings, as any model's can. The Score does not, and each Finding shows both.
-- A round costs one request and an Action Plan another. There is no quota yet.
+- A round costs one request and an Action Plan another, and Luna writes one for every open Finding (ADR 0034). There is no quota yet.
 - What is still missing, from a first run against the real model to a quota, is in `docs/agents-pending.md`.
 
 ## Considered Options

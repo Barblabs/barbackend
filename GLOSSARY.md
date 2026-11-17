@@ -251,7 +251,7 @@ A Customer's first rounds, until every open Finding has a place. Its Alerts are 
 _Avoid_: Onboarding, first sync
 
 **Action Plan**:
-Luna's output: the steps to remediate a Finding on its Asset, what mitigates it meanwhile and how to confirm the fix.
+Luna's output: the steps to remediate a Finding on its Asset, what mitigates it meanwhile and how to confirm the fix. Luna writes one for each open Finding of a Customer's order, and again when the Finding changes. A User can also ask for one.
 _Avoid_: Recommendation, remediation plan
 
 **Feedback**:

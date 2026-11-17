@@ -36,7 +36,7 @@ func (h prioritizationHandler) register(api huma.API) {
 		Method:        http.MethodPost,
 		Path:          "/prioritizations/{id}/plans",
 		Summary:       "Ask Luna for the Action Plan of one Finding of a Prioritization",
-		Description:   "Runs Luna, which can take a minute. A Finding asked again gets a newer plan.",
+		Description:   "Runs Luna, which can take a minute. Luna also writes the plan of each open Finding on her own; asking again gets a newer one.",
 		DefaultStatus: http.StatusCreated,
 		Errors:        []int{http.StatusBadRequest, http.StatusNotFound, http.StatusBadGateway},
 	}, h.plan)
