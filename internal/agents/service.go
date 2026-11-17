@@ -2,7 +2,6 @@ package agents
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -140,12 +139,8 @@ func (s *Service) Get(ctx context.Context, caller tenancy.User, id uuid.UUID) (P
 	if err != nil {
 		return Prioritization{}, err
 	}
-	p.Plans = make([]Plan, len(plans))
-	for i, stored := range plans {
-		if err := json.Unmarshal(stored.Content, &p.Plans[i]); err != nil {
-			return Prioritization{}, fmt.Errorf("read plan %s: %w", stored.ID, err)
-		}
-		p.Plans[i].Finding, p.Plans[i].Created = stored.Finding.String(), stored.Created
+	if p.Plans, err = restorePlans(plans); err != nil {
+		return Prioritization{}, err
 	}
 	return p, nil
 }
@@ -165,7 +160,8 @@ func (s *Service) Latest(ctx context.Context, caller tenancy.User) (Prioritizati
 
 // Plan runs Luna on a Finding of one of the Customer's Prioritizations, on its
 // Dossier as it is now, and stores its Action Plan with that Dossier, so the
-// plan can be traced to what Luna read. It holds no transaction
+// plan can be traced to what Luna read: a User asks it again of a plan Luna
+// wrote on her own (ADR 0034). It holds no transaction
 // while it runs. It fails with ErrPrioritizationNotFound or
 // ErrFindingNotFound before calling the model, and with ErrRefused,
 // ErrRejected or ErrUnavailable, storing nothing, when Luna has no verified
@@ -195,19 +191,7 @@ func (s *Service) Plan(ctx context.Context, caller tenancy.User, id uuid.UUID, f
 	if run.Output == nil {
 		return Plan{}, failure(run.Status, run.Violations)
 	}
-	plan := Plan{Finding: findingID.String(), Dossier: d, Luna: run}
-	content, err := json.Marshal(plan)
-	if err != nil {
-		return Plan{}, fmt.Errorf("write plan of %s: %w", finding, err)
-	}
-	err = s.db.InTx(ctx, func(tx *postgres.Tx) (err error) {
-		plan.Created, err = tx.CreatePlan(ctx, customer, id, postgres.StoredPlan{ID: uuid.New(), Finding: findingID, Content: content})
-		return err
-	})
-	if err != nil {
-		return Plan{}, err
-	}
-	return plan, nil
+	return s.storePlan(ctx, customer, id, d, run)
 }
 
 // RecordFeedback stores a User's verdict, by its code, on a Finding of one of
