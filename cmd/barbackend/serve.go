@@ -19,6 +19,7 @@ import (
 	"barbackend/internal/findings"
 	"barbackend/internal/httpapi"
 	"barbackend/internal/ingest"
+	"barbackend/internal/newsitems"
 	"barbackend/internal/postgres"
 	"barbackend/internal/scoring"
 	"barbackend/internal/slack"
@@ -66,7 +67,7 @@ func serve(ctx context.Context, _ []string) error {
 		found.OnChanged(changed.notify)
 		businessContext := businesscontext.New(db)
 		businessContext.OnSaved(changed.notify)
-		svc, err := ingest.New(handledBy(found, advisories.New(db), techniques.New(db), registeredFeeds())...)
+		svc, err := ingest.New(handledBy(found, advisories.New(db), techniques.New(db), newsitems.New(db), registeredFeeds())...)
 		if err != nil {
 			return err
 		}
@@ -80,9 +81,9 @@ func serve(ctx context.Context, _ []string) error {
 			}
 			return run, err
 		}
-		// The Feeds, the Cartógrafo, the Prioritizer, the Invitations and the
-		// Slack deliveries run in the background, and all stop before the
-		// database closes.
+		// The Feeds, the Cartógrafo, the Reader and the Editor, the
+		// Prioritizer, the Invitations and the Slack deliveries run in the
+		// background, and all stop before the database closes.
 		slackService := slack.New(db, slackAPI, key)
 		backgroundDone := make(chan struct{})
 		go func() {
@@ -90,6 +91,10 @@ func serve(ctx context.Context, _ []string) error {
 			var wg sync.WaitGroup
 			wg.Go(func() { svc.Run(ctx) })
 			wg.Go(func() { labelDaily(ctx, label, labelingDelay, labelingInterval) })
+			wg.Go(func() {
+				read := func(ctx context.Context) error { _, err := agentService.ReadNews(ctx); return err }
+				newsHourly(ctx, read, agentService.DigestNews, newsRunDelay, newsRunInterval)
+			})
 			wg.Go(func() {
 				prioritizeOnChange(ctx, changed, agentService.PrioritizeAll, prioritizeQuiet, prioritizeMaxWait, prioritizeInterval)
 			})
@@ -150,7 +155,7 @@ func awaitBackground(ctx context.Context, done <-chan struct{}) error {
 	case <-done:
 		return nil
 	case <-ctx.Done():
-		return errors.New("the feeds, the cartografo, the prioritizer, the invitations or the slack deliveries did not stop")
+		return errors.New("the feeds, the cartografo, the news, the prioritizer, the invitations or the slack deliveries did not stop")
 	}
 }
 
