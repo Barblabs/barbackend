@@ -50,6 +50,7 @@ func New(cfg Config) http.Handler {
 	findingHandler{findings: cfg.Findings}.register(api)
 	areaHandler{areas: cfg.Areas}.register(api)
 	prioritizationHandler{agents: cfg.Agents}.register(api)
+	newsDigestHandler{agents: cfg.Agents}.register(api)
 	analistaHandler{agents: cfg.Agents}.register(api)
 	businessContextHandler{contexts: cfg.BusinessContext, agents: cfg.Agents}.register(api)
 	customerHandler{users: cfg.Users}.register(api)
