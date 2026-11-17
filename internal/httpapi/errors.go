@@ -58,6 +58,7 @@ const (
 	slackError                = "slack_error"
 
 	prioritizationNotFound = "prioritization_not_found"
+	newsDigestNotFound     = "news_digest_not_found"
 	findingNotFound        = "finding_not_found"
 	conversationNotFound   = "conversation_not_found"
 	conversationBusy       = "conversation_busy"
@@ -159,6 +160,8 @@ func agentError(err error) *codedError {
 		return &codedError{status: http.StatusConflict, Code: conversationFull, Message: agents.ErrConversationFull.Error()}
 	case errors.Is(err, agents.ErrPrioritizationNotFound):
 		return &codedError{status: http.StatusNotFound, Code: prioritizationNotFound, Message: agents.ErrPrioritizationNotFound.Error()}
+	case errors.Is(err, agents.ErrNewsDigestNotFound):
+		return &codedError{status: http.StatusNotFound, Code: newsDigestNotFound, Message: agents.ErrNewsDigestNotFound.Error()}
 	case errors.Is(err, agents.ErrFindingNotFound):
 		return &codedError{status: http.StatusNotFound, Code: findingNotFound, Message: agents.ErrFindingNotFound.Error()}
 	case errors.Is(err, agents.ErrConversationNotFound):

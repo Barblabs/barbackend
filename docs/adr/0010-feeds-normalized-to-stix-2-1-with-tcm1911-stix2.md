@@ -64,7 +64,7 @@ func VulnerabilityID(cveID string) stix2.Identifier { return ID(stix2.TypeVulner
 - `vulnerability`: key is the CVE ID, trimmed and upper-cased (`CVE-2024-3094`). Reject anything that does not match `^CVE-\d{4}-\d{4,}$`.
 - barbattack `identity`: `ID(stix2.TypeIdentity, "barbattack")`.
 - `extension-definition`: `ID(stix2.TypeExtensionDefinition, "<feed>/<major version>")`, e.g. `"nvd/1"`.
-- `report` of a News Item: key is the item's guid, or its link when the Feed gives none.
+- `report` of a News Item: key is its Feed's name and the item's guid, or its link when the Feed gives none, as `bleepingcomputer:<guid>`, so two Feeds never share one.
 - Victim `identity`: key is `victim:` and its canonical domain (ADR 0017), or `victim:<feed>:<the Feed's id for the post>` when the Feed gives no domain, so two posts claiming the same domain name one victim.
 - SCOs, if any are ever created, keep the library's IDs. Those are already UUIDv5s defined by the spec.
 - Foreign objects (ATT&CK) keep their own IDs.

@@ -19,7 +19,7 @@ import (
 	"github.com/google/uuid"
 )
 
-const agentSynopsis = "run --findings <file> [--plans] | prioritize --as <email> | plan --as <email> --prioritization <id> --finding <id> | ask --as <email> [--conversation <id>] <message> | label"
+const agentSynopsis = "run --findings <file> [--plans] | prioritize --as <email> | plan --as <email> --prioritization <id> --finding <id> | ask --as <email> [--conversation <id>] <message> | label | news"
 
 func newCrew() *agents.Crew {
 	return agents.NewCrew(claude.New("", ""), agents.ModelsFrom(os.Getenv))
@@ -48,6 +48,8 @@ func agent(ctx context.Context, args []string) error {
 		return agentAsk(ctx, os.Stdout, args[1:])
 	case "label":
 		return agentLabel(ctx, os.Stdout, args[1:])
+	case "news":
+		return agentNews(ctx, os.Stdout, args[1:])
 	default:
 		return errors.New("usage: barbackend agent " + agentSynopsis)
 	}
@@ -219,6 +221,22 @@ func agentLabel(ctx context.Context, out io.Writer, args []string) error {
 	}
 	return withDB(ctx, func(db *postgres.DB) error {
 		return labelOnce(ctx, out, agents.NewService(db, newCrew()).LabelVulnerabilities)
+	})
+}
+
+// agentNews runs the Reader on the stored articles and then writes the News
+// Digest of every Customer that is due one, as serve does every hour.
+func agentNews(ctx context.Context, out io.Writer, args []string) error {
+	if len(args) > 0 {
+		return errors.New("usage: barbackend agent news")
+	}
+	return withDB(ctx, func(db *postgres.DB) error {
+		svc := agents.NewService(db, newCrew())
+		run, err := svc.ReadNews(ctx)
+		if writeErr := writeJSON(out, run); writeErr != nil || err != nil {
+			return errors.Join(err, writeErr)
+		}
+		return svc.DigestNews(ctx)
 	})
 }
 

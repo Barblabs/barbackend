@@ -1,8 +1,10 @@
 // Package agents holds the use cases of barbattack's Agents: the Prioritizer
 // orders a Customer's open Findings, Luna writes the Action Plan of one, the
 // Analista talks with a Customer's Users about them (ADR 0016), the Drafter
-// drafts a Customer's Business Context from a document (ADR 0017), and the
-// Cartógrafo labels Vulnerabilities with ATT&CK Techniques (ADR 0024).
+// drafts a Customer's Business Context from a document (ADR 0017), the
+// Cartógrafo labels Vulnerabilities with ATT&CK Techniques (ADR 0024), the
+// Reader reads each News Item once for every Customer and the Editor writes
+// each Customer's News Digest (ADR 0025).
 package agents
 
 import (
@@ -31,6 +33,8 @@ const (
 	defaultAnalistaModel    = "claude-opus-5-5"
 	defaultDrafterModel     = "claude-opus-5-5"
 	defaultCartografoModel  = "claude-haiku-5-5"
+	defaultReaderModel      = "claude-haiku-5-5"
+	defaultEditorModel      = "claude-haiku-5-5"
 
 	// MaxFindings bounds the Findings one round places: the Prioritizer reads
 	// them all in one request, to weigh them against each other and against
@@ -42,6 +46,8 @@ const (
 	lunaTimeout        = 2 * time.Minute
 	drafterTimeout     = 3 * time.Minute
 	cartografoTimeout  = 2 * time.Minute
+	readerTimeout      = time.Minute
+	editorTimeout      = 3 * time.Minute
 )
 
 var (
@@ -55,7 +61,7 @@ var (
 
 // Models names the model each Agent runs on.
 type Models struct {
-	Prioritizer, Luna, Analista, Drafter, Cartografo string
+	Prioritizer, Luna, Analista, Drafter, Cartografo, Reader, Editor string
 }
 
 // DefaultModels are the models the Agents run on unless told otherwise.
@@ -63,15 +69,16 @@ func DefaultModels() Models {
 	return Models{
 		Prioritizer: defaultPrioritizerModel, Luna: defaultLunaModel, Analista: defaultAnalistaModel,
 		Drafter: defaultDrafterModel, Cartografo: defaultCartografoModel,
+		Reader: defaultReaderModel, Editor: defaultEditorModel,
 	}
 }
 
 // ModelsFrom takes each Agent's model from getenv's PRIORITIZER_MODEL,
-// LUNA_MODEL, ANALISTA_MODEL, DRAFTER_MODEL and CARTOGRAFO_MODEL, or from
-// DefaultModels when blank.
+// LUNA_MODEL, ANALISTA_MODEL, DRAFTER_MODEL, CARTOGRAFO_MODEL, READER_MODEL
+// and EDITOR_MODEL, or from DefaultModels when blank.
 func ModelsFrom(getenv func(string) string) Models {
 	models := DefaultModels()
-	for name, model := range map[string]*string{"PRIORITIZER_MODEL": &models.Prioritizer, "LUNA_MODEL": &models.Luna, "ANALISTA_MODEL": &models.Analista, "DRAFTER_MODEL": &models.Drafter, "CARTOGRAFO_MODEL": &models.Cartografo} {
+	for name, model := range map[string]*string{"PRIORITIZER_MODEL": &models.Prioritizer, "LUNA_MODEL": &models.Luna, "ANALISTA_MODEL": &models.Analista, "DRAFTER_MODEL": &models.Drafter, "CARTOGRAFO_MODEL": &models.Cartografo, "READER_MODEL": &models.Reader, "EDITOR_MODEL": &models.Editor} {
 		if v := strings.TrimSpace(getenv(name)); v != "" {
 			*model = v
 		}
@@ -79,10 +86,11 @@ func ModelsFrom(getenv func(string) string) Models {
 	return models
 }
 
-// Crew is the Prioritizer, Luna, the Drafter and the Cartógrafo. It reads no
-// Feed and touches no database: all it knows of a Finding is the Dossier it is
-// given, of a Customer's business the Document it is given, and of a
-// Vulnerability the LabelingInput it is given.
+// Crew is the Prioritizer, Luna, the Drafter, the Cartógrafo, the Reader and
+// the Editor. It reads no Feed and touches no database: all it knows of a
+// Finding is the Dossier it is given, of a Customer's business the Document it
+// is given, of a Vulnerability the LabelingInput it is given, and of news the
+// News Items it is given.
 type Crew struct {
 	llm    *claude.Client
 	models Models
@@ -431,6 +439,10 @@ func oneOf(values ...string) map[string]any {
 
 func text() map[string]any {
 	return map[string]any{"type": "string"}
+}
+
+func boolean() map[string]any {
+	return map[string]any{"type": "boolean"}
 }
 
 func nullable(schema map[string]any) map[string]any {

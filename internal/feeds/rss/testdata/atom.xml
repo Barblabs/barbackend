@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/">
+	<title>Example Blog</title>
+	<id>urn:uuid:60a76c80-d399-11d9-b93C-0003939e0af6</id>
+	<updated>2026-11-17T10:00:00Z</updated>
+	<link rel="self" href="https://blog.example.org/feed.atom"/>
+	<entry>
+		<title type="html">Ransomware hits &lt;b&gt;Acme&lt;/b&gt;</title>
+		<media:title>Not the title</media:title>
+		<link rel="replies" href="https://blog.example.org/acme/comments"/>
+		<link rel="alternate" type="text/html" href="https://blog.example.org/acme"/>
+		<id>tag:blog.example.org,2026:acme</id>
+		<published>2026-11-16T08:30:00-06:00</published>
+		<updated>2026-11-17T10:00:00Z</updated>
+		<summary type="html">&lt;p&gt;Acme confirms the attack, through CVE-2026-0001.&lt;/p&gt;</summary>
+		<content type="html">&lt;p&gt;The full post, which is not read when there is a summary.&lt;/p&gt;</content>
+	</entry>
+	<entry>
+		<title>Patch notes</title>
+		<link href="https://blog.example.org/patch-notes"/>
+		<id>tag:blog.example.org,2026:patch-notes</id>
+		<updated>2026-11-15T12:00:00Z</updated>
+		<content type="xhtml"><div xmlns="http://www.w3.org/1999/xhtml"><p>An <b>xhtml</b> body.</p><p>Second paragraph.</p></div></content>
+	</entry>
+	<entry>
+		<title>No date</title>
+		<link href="https://blog.example.org/no-date"/>
+		<id>tag:blog.example.org,2026:no-date</id>
+		<summary>Skipped: it has neither published nor updated.</summary>
+	</entry>
+</feed>

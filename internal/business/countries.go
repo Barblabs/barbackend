@@ -1,5 +1,7 @@
 package business
 
+import "slices"
+
 // countries are the ISO 3166-1 alpha-2 codes of every country and territory.
 var countries = []string{
 	"AD", "AE", "AF", "AG", "AI", "AL", "AM", "AO", "AQ", "AR", "AS", "AT", "AU", "AW", "AX", "AZ",
@@ -22,3 +24,7 @@ var countries = []string{
 
 // Countries are the ISO 3166-1 alpha-2 codes Geography accepts, in order.
 func Countries() []string { return append([]string(nil), countries...) }
+
+// IsCountry reports whether code is an ISO 3166-1 alpha-2 country code, as a
+// Business Context writes its countries.
+func IsCountry(code string) bool { return slices.Contains(countries, code) }

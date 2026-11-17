@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"
+	xmlns:content="http://purl.org/rss/1.0/modules/content/"
+	xmlns:dc="http://purl.org/dc/elements/1.1/"
+	xmlns:atom="http://www.w3.org/2005/Atom"
+	xmlns:media="http://search.yahoo.com/mrss/">
+<channel>
+	<title>Example News</title>
+	<link>https://news.example.com</link>
+	<atom:link href="https://news.example.com/feed/" rel="self" type="application/rss+xml"/>
+	<item>
+		<title><![CDATA[Acme &amp; Co. VPN flaw <em>exploited</em>]]></title>
+		<link>https://news.example.com/acme-vpn-flaw-exploited/</link>
+		<atom:link href="https://news.example.com/acme-vpn-flaw-exploited/amp/" rel="amphtml"/>
+		<dc:creator><![CDATA[A. Writer]]></dc:creator>
+		<pubDate>Tue, 17 Nov 2026 14:55:30 +0000</pubDate>
+		<guid isPermaLink="false">https://news.example.com/?p=101</guid>
+		<description><![CDATA[<p>Attackers exploit CVE-2026-1234 &amp; cve-2026-5678 in Acme&#8217;s VPN.</p><script>document.write("<p>injected</p>")</script><style>p { color: red }</style>
+<p>The post <a href="https://news.example.com/acme-vpn-flaw-exploited/">Acme VPN</a> appeared first on <a href="https://news.example.com">Example News</a>.</p>
+]]></description>
+		<content:encoded><![CDATA[<p>The full article, which is not read when there is a summary.</p>]]></content:encoded>
+		<media:description>A photo of a VPN appliance, CVE-2026-9999.</media:description>
+	</item>
+	<item>
+		<title>&#8203;Hospital chain says patient data was stolen</title>
+		<link>https://news.example.com/hospital-data-stolen/</link>
+		<pubDate>Wed, 4 Nov 2026 01:20:00 GMT</pubDate>
+		<description>A regional hospital chain   said attackers stole
+			patient records.</description>
+	</item>
+	<item>
+		<title>No date</title>
+		<link>https://news.example.com/no-date/</link>
+		<guid isPermaLink="false">https://news.example.com/?p=103</guid>
+		<description>Skipped: it has no pubDate.</description>
+	</item>
+	<item>
+		<title>Unreadable date</title>
+		<link>https://news.example.com/unreadable-date/</link>
+		<guid isPermaLink="false">https://news.example.com/?p=104</guid>
+		<pubDate>yesterday</pubDate>
+		<description>Skipped: its pubDate is not a date.</description>
+	</item>
+	<item>
+		<title>No guid nor link</title>
+		<link>javascript:alert(1)</link>
+		<pubDate>Tue, 17 Nov 2026 10:00:00 +0000</pubDate>
+		<description>Skipped: nothing identifies it.</description>
+	</item>
+	<item>
+		<title>Banco sufre un ataque de ransomware</title>
+		<link>https://news.example.com/banco-ransomware/?utm_source=rss</link>
+		<guid isPermaLink="false">https://news.example.com/?p=106</guid>
+		<dc:date>2026-11-16T08:30:00-06:00</dc:date>
+		<description></description>
+		<content:encoded><![CDATA[<p>El banco confirmó el ataque.</p>]]></content:encoded>
+	</item>
+</channel>
+</rss>

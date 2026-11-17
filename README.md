@@ -30,6 +30,9 @@ export SLACK_CLIENT_ID=<client-id>
 export SLACK_CLIENT_SECRET=<client-secret>
 export SLACK_REDIRECT_URI=https://api.example.com/slack/install/callback
 export PORTAL_URL=https://app.example.com   # the portal every Slack Alert links to
+# poll Ransomware.live's leak-site victims (ADR 0025) only with its owner's
+# written approval: its terms forbid commercial use without it
+export RANSOMWARELIVE_ENABLED=false
 
 ./barbackend migrate   # apply migrations in internal/postgres/migrations
 ./barbackend serve     # HTTP server (gin, :8080 unless PORT is set)
@@ -68,7 +71,7 @@ Run `./barbackend` with no arguments to print the usage.
 
 ## Agents
 
-The Prioritizer, Luna (Advisor), the Analista (feedback), the Drafter (Business Context) and the Cartógrafo (ATT&CK Techniques of a Vulnerability, `docs/adr/0024-the-cartografo-labels-vulnerabilities-with-attack-techniques.md`) run on Anthropic's models; `docs/adr/0016-the-prioritizer-orders-findings-from-their-dossiers.md` explains what they read and how they are kept honest, and `docs/adr/0017-the-business-context-is-a-versioned-document-the-customer-states.md` what the Drafter reads. They need credentials, usually `ANTHROPIC_API_KEY`. No Agent that weighs a Finding reads a Feed: each Dossier is built from what the Findings pipeline stored, with the Finding's latest Score, its Vulnerability's Advisories, ATT&CK Techniques and Mitigations, and the Critical Services of the Business Context that run its Asset, in the shape of `docs/examples/findings.json`. Two more Agents are designed but not built (`docs/adr/0025-news-items-are-read-once-and-matched-to-customers-by-rules.md`): the Reader, which reads each News Item once for every Customer, and the Editor, which writes each Customer's News Digest from what rules found relevant. What they still lack is in `docs/agents-pending.md`.
+The Prioritizer, Luna (Advisor), the Analista (feedback), the Drafter (Business Context) and the Cartógrafo (ATT&CK Techniques of a Vulnerability, `docs/adr/0024-the-cartografo-labels-vulnerabilities-with-attack-techniques.md`) run on Anthropic's models; `docs/adr/0016-the-prioritizer-orders-findings-from-their-dossiers.md` explains what they read and how they are kept honest, and `docs/adr/0017-the-business-context-is-a-versioned-document-the-customer-states.md` what the Drafter reads. They need credentials, usually `ANTHROPIC_API_KEY`. No Agent that weighs a Finding reads a Feed: each Dossier is built from what the Findings pipeline stored, with the Finding's latest Score, its Vulnerability's Advisories, ATT&CK Techniques and Mitigations, and the Critical Services of the Business Context that run its Asset, in the shape of `docs/examples/findings.json`. The Reader and the Editor handle news (`docs/adr/0025-news-items-are-read-once-and-matched-to-customers-by-rules.md`): news Feeds store every article and leak-site post they publish, the Reader reads each article once for every Customer, rules match each News Item to each Customer by its Business Context, open Findings and Products, and the Editor writes each Customer's daily News Digest, served at `GET /news-digests`. What they still lack is in `docs/agents-pending.md`.
 
 `serve` keeps one lasting order per Customer (`docs/adr/0026-the-prioritizer-keeps-one-lasting-order-per-customer.md`). A Feed batch, a Sync, a Business Context save, a User's Feedback on the order or a Cartógrafo run that labels something wakes the Prioritizer, which waits until changes stop for 2 minutes, or 15 at most, and runs a round for each Customer with something to place, one Customer after another in turns: open Findings without a place, and those that changed since they were placed, up to 100 a request. Every other open Finding keeps its place, and a closed one leaves the order without a request. It also runs every 6 hours, to try again after a round that failed.
 
@@ -86,6 +89,9 @@ The Prioritizer, Luna (Advisor), the Analista (feedback), the Drafter (Business 
 
 # Label the stored Vulnerabilities with ATT&CK Techniques now, as serve does daily, within the same cap of 50 a day. Needs DATABASE_URL.
 ./barbackend agent label
+
+# Read the stored articles and write the News Digest of every Customer due one, as serve does hourly. Needs DATABASE_URL.
+./barbackend agent news
 ```
 
 ## Findings
