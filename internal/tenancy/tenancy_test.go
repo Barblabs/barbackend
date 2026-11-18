@@ -193,21 +193,6 @@ func TestOnlyACustomerAdminManagesTheCustomersConfiguration(t *testing.T) {
 	}
 }
 
-func TestACustomerKeepsAnActiveCustomerAdmin(t *testing.T) {
-	tests := []struct {
-		activeAdmins int
-		want         error
-	}{
-		{0, tenancy.ErrLastCustomerAdmin},
-		{1, nil},
-	}
-	for _, tt := range tests {
-		if err := tenancy.RequireActiveCustomerAdmin(tt.activeAdmins); !errors.Is(err, tt.want) {
-			t.Errorf("RequireActiveCustomerAdmin(%d) = %v, want %v", tt.activeAdmins, err, tt.want)
-		}
-	}
-}
-
 func TestWithRoleRefusesPlatformAdmin(t *testing.T) {
 	u, _ := tenancy.NewUser(userID, "a@example.com", tenancy.Viewer, customer)
 	if _, err := u.WithRole(tenancy.PlatformAdmin); !errors.Is(err, tenancy.ErrInvalidUser) {

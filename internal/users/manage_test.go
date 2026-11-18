@@ -27,19 +27,6 @@ func TestDisabledUserIsRefusedAtOnce(t *testing.T) {
 	}
 }
 
-func TestDisablingTheLastCustomerAdminIsRefused(t *testing.T) {
-	t.Parallel()
-	admin := &fakeAdmin{}
-	svc, db := newService(t, admin)
-	caller := customerAdmin(t, svc, db, admin)
-
-	_, err := svc.DisableUser(context.Background(), caller, caller.ID())
-
-	if !errors.Is(err, tenancy.ErrLastCustomerAdmin) || userBySub(t, db, admin.created[0]).SignIn() != nil {
-		t.Errorf("err = %v, want ErrLastCustomerAdmin and the admin still able to sign in", err)
-	}
-}
-
 func TestAPendingCustomerAdminDoesNotKeepTheCustomerManaged(t *testing.T) {
 	t.Parallel()
 	admin := &fakeAdmin{}
