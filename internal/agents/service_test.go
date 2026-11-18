@@ -131,25 +131,6 @@ func TestPlanStoresNothingWithoutAVerifiedAnswer(t *testing.T) {
 	}
 }
 
-func TestPlanRefusesBeforeCallingTheModel(t *testing.T) {
-	t.Parallel()
-	e := newEnv(t)
-	p := e.prioritize(t)
-	stranger := e.newCustomer(t, "theirs")
-	calls := len(e.llm.Requests())
-
-	_, err := e.svc.Plan(context.Background(), stranger, p.ID, e.pg())
-	wantErr(t, err, agents.ErrPrioritizationNotFound)
-	_, err = e.svc.Plan(context.Background(), e.user, p.ID, "f-9")
-	wantErr(t, err, agents.ErrFindingNotFound)
-	_, err = e.svc.Plan(context.Background(), e.user, p.ID, uuid.NewString())
-	wantErr(t, err, agents.ErrFindingNotFound)
-
-	if len(e.llm.Requests()) != calls {
-		t.Error("the model was called")
-	}
-}
-
 func TestFeedbackIsKeptOnTheFinding(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)

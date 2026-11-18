@@ -139,6 +139,7 @@ func TestAnotherCustomerCannotReachAPrioritization(t *testing.T) {
 	id := p.ID.String()
 	f1, _ := firstAndSecond(p)
 	stranger := "Bearer " + e.signIn(t, e.newUser(t, tenancy.Viewer, e.newCustomer(t)))
+	calls := len(e.llm.Requests())
 
 	for _, req := range []*http.Request{
 		httptest.NewRequest(http.MethodGet, "/prioritizations/"+id, nil),
@@ -149,6 +150,9 @@ func TestAnotherCustomerCannotReachAPrioritization(t *testing.T) {
 		if rec := e.do(req); rec.Code != http.StatusNotFound {
 			t.Errorf("%s %s = %d %s, want 404", req.Method, req.URL.Path, rec.Code, rec.Body)
 		}
+	}
+	if len(e.llm.Requests()) != calls {
+		t.Error("the model was called")
 	}
 	req := httptest.NewRequest(http.MethodGet, "/prioritizations", nil)
 	req.Header.Set("Authorization", stranger)

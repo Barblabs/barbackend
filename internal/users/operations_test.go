@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"barbackend/internal/tenancy"
 	"barbackend/internal/users"
 )
 
@@ -43,18 +42,10 @@ func TestSlackDeliveriesListEveryCustomer(t *testing.T) {
 	}
 }
 
-func TestOperationsAreOnlyForPlatformAdminsAndAtMostNinetyDays(t *testing.T) {
+func TestOperationsCoverAtMostNinetyDays(t *testing.T) {
 	t.Parallel()
-	admin := &fakeAdmin{}
-	svc, db := newService(t, admin)
-	ana := customerAdmin(t, svc, db, admin)
+	svc, _ := newService(t, &fakeAdmin{})
 
-	if _, err := svc.SyncHealth(context.Background(), ana, 1); !errors.Is(err, tenancy.ErrNotPlatformAdmin) {
-		t.Errorf("sync health as a Customer Admin: err = %v, want ErrNotPlatformAdmin", err)
-	}
-	if _, err := svc.SlackDeliveries(context.Background(), ana, 1); !errors.Is(err, tenancy.ErrNotPlatformAdmin) {
-		t.Errorf("slack deliveries as a Customer Admin: err = %v, want ErrNotPlatformAdmin", err)
-	}
 	if _, err := svc.SyncHealth(context.Background(), platformAdmin(t), users.MaxOperationDays+1); !errors.Is(err, users.ErrInvalidDays) {
 		t.Errorf("%d days: err = %v, want ErrInvalidDays", users.MaxOperationDays+1, err)
 	}

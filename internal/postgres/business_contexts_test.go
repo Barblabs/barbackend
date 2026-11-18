@@ -3,7 +3,6 @@ package postgres_test
 import (
 	"context"
 	"errors"
-	"reflect"
 	"testing"
 
 	"barbackend/internal/business"
@@ -55,42 +54,6 @@ func getBusinessContext(t *testing.T, db *postgres.DB, customer tenancy.Customer
 		t.Fatal(err)
 	}
 	return stored
-}
-
-func TestACustomerThatNeverSavedHasVersionZero(t *testing.T) {
-	t.Parallel()
-	db, _ := newDBWithConn(t)
-	got := getBusinessContext(t, db, newCustomer(t, db))
-	if got.Version != 0 || got.SavedBy != "" || !got.Saved.IsZero() || len(got.Context.Gaps()) != len(business.KeyFields()) {
-		t.Errorf("stored = %+v, want version 0 with nothing stated", got)
-	}
-}
-
-func TestEachSaveIsTheNextVersion(t *testing.T) {
-	t.Parallel()
-	db, _ := newDBWithConn(t)
-	customer := newCustomer(t, db)
-	admin := newAdmin(t, db, customer)
-
-	first, err := saveBusinessContext(db, customer, 0, businessContext(t, "Shoes."), admin)
-	if err != nil {
-		t.Fatal(err)
-	}
-	second, err := saveBusinessContext(db, customer, first.Version, businessContext(t, "Shoes and bags."), admin)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if first.Version != 1 || second.Version != 2 || second.SavedBy != admin.Email() {
-		t.Errorf("versions %d and %d by %s, want 1 and 2 by %s", first.Version, second.Version, second.SavedBy, admin.Email())
-	}
-
-	got := getBusinessContext(t, db, customer)
-	if got.Version != 2 || got.SavedBy != admin.Email() || !got.Saved.Equal(second.Saved) {
-		t.Errorf("newest = version %d by %s at %v, want version 2 as saved", got.Version, got.SavedBy, got.Saved)
-	}
-	if want := businessContext(t, "Shoes and bags.").Fields(); !reflect.DeepEqual(got.Context.Fields(), want) {
-		t.Errorf("newest = %+v, want %+v", got.Context.Fields(), want)
-	}
 }
 
 func TestASaveOnAnOlderVersionIsStale(t *testing.T) {

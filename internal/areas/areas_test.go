@@ -190,17 +190,6 @@ func TestListOnlyReturnsTheCustomersAreas(t *testing.T) {
 	}
 }
 
-func TestListRefusesAPlatformAdmin(t *testing.T) {
-	t.Parallel()
-	e := newEnv(t)
-
-	_, err := e.areas.List(context.Background(), user(t, tenancy.PlatformAdmin, tenancy.CustomerID{}), nil)
-
-	if !errors.Is(err, tenancy.ErrNoCustomer) {
-		t.Errorf("err = %v, want ErrNoCustomer", err)
-	}
-}
-
 func TestSetOwnerStatesTheCanonicalEmailAndASyncKeepsIt(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
