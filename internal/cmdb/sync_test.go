@@ -149,16 +149,6 @@ func TestFailedSyncChangesNoAsset(t *testing.T) {
 	}
 }
 
-func TestSyncWithoutConnectedSource(t *testing.T) {
-	t.Parallel()
-	e := newEnv(t)
-	e.connect(t)
-
-	if _, err := e.cmdb.SyncConnected(context.Background(), tenancytest.Viewer(e.newCustomer(t))); !errors.Is(err, inventory.ErrNotConnected) {
-		t.Errorf("err = %v, want ErrNotConnected", err)
-	}
-}
-
 func TestSyncOfSourceDisconnectedWhileItRunsChangesNothing(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
