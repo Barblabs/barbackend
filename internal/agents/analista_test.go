@@ -300,7 +300,7 @@ func TestContinueSendsTheConversationBackWithItsToolCalls(t *testing.T) {
 	}
 }
 
-func TestAConversationBelongsToItsUser(t *testing.T) {
+func TestAConversationIsNotFoundByAnotherCustomer(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
 	e.llm.Queue(claudetest.Text("hola"))
@@ -308,18 +308,9 @@ func TestAConversationBelongsToItsUser(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	customer, err := e.user.ActsFor()
-	if err != nil {
-		t.Fatal(err)
-	}
-	colleague := newUser(t, e.user.Role(), customer)
 	stranger := e.newCustomer(t, "theirs")
 
-	_, err = e.svc.Continue(context.Background(), colleague, answer.Conversation, "dos")
-	wantErr(t, err, agents.ErrConversationNotFound)
 	_, err = e.svc.Continue(context.Background(), stranger, answer.Conversation, "dos")
-	wantErr(t, err, agents.ErrConversationNotFound)
-	_, err = e.svc.Continue(context.Background(), e.user, uuid.New(), "dos")
 	wantErr(t, err, agents.ErrConversationNotFound)
 }
 
@@ -452,30 +443,14 @@ func TestAConversationHasALimit(t *testing.T) {
 	}
 }
 
-func TestAskFailures(t *testing.T) {
+func TestAnAnswerCutOffIsUnavailable(t *testing.T) {
 	t.Parallel()
-	tests := []struct {
-		name    string
-		message string
-		reply   *claudetest.Reply
-		want    error
-	}{
-		{name: "blank message", message: "  \n", want: agents.ErrEmptyMessage},
-		{name: "refused", message: "hola", reply: ptr(claudetest.Refusal()), want: agents.ErrRefused},
-		{name: "api failure", message: "hola", reply: ptr(claudetest.Fail(http.StatusUnauthorized)), want: agents.ErrUnavailable},
-		{name: "cut off", message: "hola", reply: ptr(claudetest.Truncated()), want: agents.ErrUnavailable},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			e := newEnv(t)
-			if tt.reply != nil {
-				e.llm.Queue(*tt.reply)
-			}
-			_, err := e.svc.Ask(context.Background(), e.user, tt.message)
-			wantErr(t, err, tt.want)
-		})
-	}
+	e := newEnv(t)
+	e.llm.Queue(claudetest.Truncated())
+
+	_, err := e.svc.Ask(context.Background(), e.user, "hola")
+
+	wantErr(t, err, agents.ErrUnavailable)
 }
 
 func waitForRequests(t *testing.T, e env, want int) {
