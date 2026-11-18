@@ -16,6 +16,7 @@ import (
 	"barbackend/internal/postgres"
 	"barbackend/internal/postgres/pgtest"
 	"barbackend/internal/tenancy"
+	"barbackend/internal/tenancy/tenancytest"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -64,7 +65,7 @@ func newKey(t *testing.T) encryption.Key {
 func (e env) connect(t *testing.T) (tenancy.CustomerID, inventory.CMDBSourceID) {
 	t.Helper()
 	customer := e.newCustomer(t)
-	if _, err := e.cmdb.Connect(context.Background(), viewerOf(customer), providertest.Name, providertest.Login); err != nil {
+	if _, err := e.cmdb.Connect(context.Background(), tenancytest.CustomerAdmin(customer), providertest.Name, providertest.Login); err != nil {
 		t.Fatal(err)
 	}
 	return customer, e.connected(t, customer).Source.ID()
@@ -84,7 +85,7 @@ func (e env) connected(t *testing.T, customer tenancy.CustomerID) postgres.Store
 
 func (e env) connectedSource(t *testing.T, customer tenancy.CustomerID) cmdb.ConnectedSource {
 	t.Helper()
-	src, err := e.cmdb.ConnectedSource(context.Background(), viewerOf(customer))
+	src, err := e.cmdb.ConnectedSource(context.Background(), tenancytest.Viewer(customer))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +96,7 @@ func (e env) holdSyncLock(t *testing.T, src inventory.CMDBSourceID) (release fun
 	t.Helper()
 	locked, unlock, done := make(chan struct{}), make(chan struct{}), make(chan error)
 	go func() {
-		_, err := e.db.CommitSync(context.Background(), src, time.Now(), func(existing []*inventory.Asset) (inventory.Reconciliation, error) {
+		_, err := e.db.CommitSync(context.Background(), src, time.Now(), func(existing inventory.Stored) (inventory.Reconciliation, error) {
 			close(locked)
 			<-unlock
 			return inventory.Reconcile(src, existing, inventory.Snapshot{})
@@ -146,8 +147,8 @@ var errReadOnly = errors.New("read only")
 func (e env) assets(t *testing.T, src inventory.CMDBSourceID) []*inventory.Asset {
 	t.Helper()
 	var got []*inventory.Asset
-	_, err := e.db.CommitSync(context.Background(), src, time.Now(), func(existing []*inventory.Asset) (inventory.Reconciliation, error) {
-		got = existing
+	_, err := e.db.CommitSync(context.Background(), src, time.Now(), func(existing inventory.Stored) (inventory.Reconciliation, error) {
+		got = existing.Assets
 		return inventory.Reconciliation{}, errReadOnly
 	})
 	if !errors.Is(err, errReadOnly) {
@@ -181,12 +182,4 @@ func record(t *testing.T, id, name string) inventory.Record {
 		t.Fatal(err)
 	}
 	return inventory.Record{RecordID: id, Imported: imported}
-}
-
-func viewerOf(customer tenancy.CustomerID) tenancy.User {
-	u, err := tenancy.NewUser(tenancy.UserID(uuid.New()), "viewer@example.com", tenancy.Viewer, customer)
-	if err != nil {
-		panic(err)
-	}
-	return u
 }

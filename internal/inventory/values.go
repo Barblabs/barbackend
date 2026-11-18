@@ -4,24 +4,41 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"barbackend/internal/tenancy"
 )
 
 var (
-	ErrInvalidSourceReference   = errors.New("invalid source reference")
-	ErrInvalidKind              = errors.New("invalid asset kind")
-	ErrEmptyName                = errors.New("asset name is required")
-	ErrHardwareOnVirtual        = errors.New("virtual machine cannot have hardware")
-	ErrInvalidSoftware          = errors.New("invalid software component")
-	ErrMultipleOperatingSystems = errors.New("asset has more than one operating system")
-	ErrInvalidCriticality       = errors.New("invalid criticality")
-	ErrInvalidExposure          = errors.New("invalid exposure")
-	ErrEmptyOwnerEmail          = errors.New("owner email is empty")
-	ErrZeroImportedAsset        = errors.New("imported asset is the zero value")
+	ErrInvalidSourceReference           = errors.New("invalid source reference")
+	ErrInvalidKind                      = errors.New("invalid asset kind")
+	ErrEmptyName                        = errors.New("name is required")
+	ErrHardwareOnVirtual                = errors.New("virtual machine cannot have hardware")
+	ErrInvalidSoftware                  = errors.New("invalid software component")
+	ErrMultipleOperatingSystems         = errors.New("asset has more than one operating system")
+	ErrInvalidCriticality               = errors.New("invalid criticality")
+	ErrInvalidExposure                  = errors.New("invalid exposure")
+	ErrInvalidLifecycleStage            = errors.New("invalid lifecycle stage")
+	ErrInvalidInformationClassification = errors.New("invalid information classification")
+	ErrEmptyOwnerEmail                  = errors.New("owner email is empty")
+	ErrZeroImportedAsset                = errors.New("imported asset is the zero value")
+	// ErrAssetInactive is a Declaration asked of an Asset barbattack no longer
+	// monitors.
+	ErrAssetInactive = errors.New("asset is inactive")
 )
 
 type SourceReference struct {
 	Source   CMDBSourceID
 	RecordID string
+}
+
+func (r SourceReference) validate() error {
+	if r.Source == (CMDBSourceID{}) {
+		return fmt.Errorf("%w: zero source", ErrInvalidSourceReference)
+	}
+	if blank(r.RecordID) {
+		return fmt.Errorf("%w: empty record id", ErrInvalidSourceReference)
+	}
+	return nil
 }
 
 type AssetKind int
@@ -150,6 +167,66 @@ func (e Exposure) String() string {
 	}
 }
 
+// LifecycleStage is where an Asset is in its life (ADR 0028). A retired Asset
+// has none: being retired is ImportedAsset.Retired.
+type LifecycleStage int
+
+// Stored as catalog ids (ADR 0006): never renumber.
+const (
+	LifecycleUnknown        LifecycleStage = 0
+	LifecycleProduction     LifecycleStage = 1
+	LifecycleImplementation LifecycleStage = 2
+	LifecycleStock          LifecycleStage = 3
+)
+
+func (s LifecycleStage) valid() bool { return s >= LifecycleUnknown && s <= LifecycleStock }
+
+func (s LifecycleStage) String() string {
+	switch s {
+	case LifecycleUnknown:
+		return "Unknown"
+	case LifecycleProduction:
+		return "Production"
+	case LifecycleImplementation:
+		return "Implementation"
+	case LifecycleStock:
+		return "Stock"
+	default:
+		return fmt.Sprintf("LifecycleStage(%d)", int(s))
+	}
+}
+
+// InformationClassification is how sensitive the data an Asset holds is. It
+// is only declared, and Unclassified until then (ADR 0031).
+type InformationClassification int
+
+// Stored as catalog ids (ADR 0006): never renumber.
+const (
+	Unclassified           InformationClassification = 0
+	ClassifiedPublic       InformationClassification = 1
+	ClassifiedPrivate      InformationClassification = 2
+	ClassifiedConfidential InformationClassification = 3
+)
+
+func (c InformationClassification) valid() bool {
+	return c >= Unclassified && c <= ClassifiedConfidential
+}
+
+func (c InformationClassification) String() string {
+	switch c {
+	case Unclassified:
+		return "Unclassified"
+	case ClassifiedPublic:
+		return "Public"
+	case ClassifiedPrivate:
+		return "Private"
+	case ClassifiedConfidential:
+		return "Confidential"
+	default:
+		return fmt.Sprintf("InformationClassification(%d)", int(c))
+	}
+}
+
 // OwnerEmail identifies an Asset Owner. Emails differing only in case or
 // surrounding space name the same person (ADR 0003), so every edge gets the
 // same canonical form from here. The zero value means no owner.
@@ -163,7 +240,7 @@ func NewOwnerEmail(s string) (OwnerEmail, error) {
 	if blank(s) {
 		return OwnerEmail{}, ErrEmptyOwnerEmail
 	}
-	return OwnerEmail{address: strings.ToLower(strings.TrimSpace(s))}, nil
+	return OwnerEmail{address: tenancy.CanonicalEmail(s)}, nil
 }
 
 func (o OwnerEmail) String() string { return o.address }
@@ -173,10 +250,12 @@ func (o OwnerEmail) isZero() bool { return o == OwnerEmail{} }
 func blank(s string) bool { return strings.TrimSpace(s) == "" }
 
 var (
-	assetKindCodes    = map[AssetKind]string{Server: "server", VirtualMachine: "virtual_machine", Workstation: "workstation", NetworkDevice: "network_device"}
-	criticalityCodes  = map[Criticality]string{CriticalityHigh: "high", CriticalityMedium: "medium", CriticalityLow: "low"}
-	exposureCodes     = map[Exposure]string{InternetFacing: "internet_facing", Internal: "internal"}
-	softwareRoleCodes = map[SoftwareRole]string{OperatingSystem: "operating_system", Application: "application"}
+	assetKindCodes                 = map[AssetKind]string{Server: "server", VirtualMachine: "virtual_machine", Workstation: "workstation", NetworkDevice: "network_device"}
+	criticalityCodes               = map[Criticality]string{CriticalityHigh: "high", CriticalityMedium: "medium", CriticalityLow: "low"}
+	exposureCodes                  = map[Exposure]string{InternetFacing: "internet_facing", Internal: "internal"}
+	lifecycleCodes                 = map[LifecycleStage]string{LifecycleProduction: "production", LifecycleImplementation: "implementation", LifecycleStock: "stock"}
+	informationClassificationCodes = map[InformationClassification]string{ClassifiedPublic: "public", ClassifiedPrivate: "private", ClassifiedConfidential: "confidential"}
+	softwareRoleCodes              = map[SoftwareRole]string{OperatingSystem: "operating_system", Application: "application"}
 )
 
 // Code is the stable lowercase snake_case name clients use for the kind, or
@@ -207,8 +286,50 @@ func ParseCriticality(code string) (Criticality, error) {
 // or empty for Unknown.
 func (e Exposure) Code() string { return exposureCodes[e] }
 
+// ParseExposure is the inverse of Exposure.Code. Unknown has no code.
+func ParseExposure(code string) (Exposure, error) {
+	if e, ok := parseCode(exposureCodes, code); ok {
+		return e, nil
+	}
+	return 0, fmt.Errorf("%w: %q", ErrInvalidExposure, code)
+}
+
+// Code is the stable lowercase snake_case name clients use for the lifecycle
+// stage, or empty for Unknown.
+func (s LifecycleStage) Code() string { return lifecycleCodes[s] }
+
+// ParseLifecycleStage is the inverse of LifecycleStage.Code. Unknown has no
+// code.
+func ParseLifecycleStage(code string) (LifecycleStage, error) {
+	if s, ok := parseCode(lifecycleCodes, code); ok {
+		return s, nil
+	}
+	return 0, fmt.Errorf("%w: %q", ErrInvalidLifecycleStage, code)
+}
+
+// Code is the stable lowercase snake_case name clients use for the
+// classification, or empty for Unclassified.
+func (c InformationClassification) Code() string { return informationClassificationCodes[c] }
+
+// ParseInformationClassification is the inverse of
+// InformationClassification.Code. Unclassified has no code.
+func ParseInformationClassification(code string) (InformationClassification, error) {
+	if c, ok := parseCode(informationClassificationCodes, code); ok {
+		return c, nil
+	}
+	return 0, fmt.Errorf("%w: %q", ErrInvalidInformationClassification, code)
+}
+
 // Code is the stable lowercase snake_case name clients use for the role.
 func (r SoftwareRole) Code() string { return softwareRoleCodes[r] }
+
+// ParseSoftwareRole is the inverse of SoftwareRole.Code.
+func ParseSoftwareRole(code string) (SoftwareRole, error) {
+	if r, ok := parseCode(softwareRoleCodes, code); ok {
+		return r, nil
+	}
+	return 0, fmt.Errorf("%w: role %q", ErrInvalidSoftware, code)
+}
 
 func parseCode[T comparable](codes map[T]string, code string) (T, bool) {
 	for v, c := range codes {

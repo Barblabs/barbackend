@@ -2,6 +2,7 @@ name: ci
 on:
   push:
     branches:
+      - dev
       - main
   pull_request:
 
@@ -36,6 +37,14 @@ jobs:
         run: go tool -modfile=tools.mod golangci-lint run ./...
       - name: check sqlc output is up to date
         run: go tool -modfile=tools.mod sqlc diff
+      # Without -test, so code only tests reach is reported. deadcode exits 0
+      # either way, so the step fails on any line outside the test-helper
+      # packages, which only tests are meant to reach.
+      - name: deadcode
+        shell: bash
+        run: |
+          dead=$(go tool -modfile=tools.mod deadcode ./... | { grep -Ev '^internal/[^:]*test/[^/:]+:' || true; })
+          if [ -n "$dead" ]; then echo "$dead"; exit 1; fi
       - &save-go-cache
         name: save go cache
         if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
@@ -63,3 +72,131 @@ jobs:
       - name: go test
         run: go test -race ./...
       - *save-go-cache
+
+  image:
+    name: image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: build image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: deploy
+    needs: [lint, test, image]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    # Queue instead of cancel: killing a deploy mid-migrate is worse than waiting.
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+      ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+      INSTANCE_NAME: ${{ vars.INSTANCE_NAME }}
+      SHA: ${{ github.sha }}
+    steps:
+      # Unset variables resolve to empty strings. Fail here with the full list
+      # instead of halfway through a deploy.
+      - name: check production environment variables
+        shell: bash
+        run: |
+          missing=()
+          for name in AWS_REGION AWS_ROLE_ARN ECR_REPOSITORY INSTANCE_NAME; do
+            [ -n "${!name}" ] || missing+=("$name")
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing variables on the 'production' environment: ${missing[*]}"
+            exit 1
+          fi
+      - uses: actions/checkout@v6
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - uses: aws-actions/amazon-ecr-login@7290e214a610b32bc0eef81748948b6d466a8783 # v2.2.0
+      # The repository's tags are immutable, so a re-run for a SHA already
+      # pushed skips the build and deploys the image that is there.
+      - name: check image in ecr
+        id: ecr
+        shell: bash
+        run: |
+          if out=$(aws ecr describe-images --repository-name "${ECR_REPOSITORY#*/}" --image-ids "imageTag=$SHA" 2>&1); then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "$ECR_REPOSITORY:$SHA already pushed"
+          elif grep -q ImageNotFoundException <<<"$out"; then
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "$out"
+            exit 1
+          fi
+      - if: steps.ecr.outputs.exists != 'true'
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: build and push image
+        if: steps.ecr.outputs.exists != 'true'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/arm64
+          push: true
+          tags: ${{ vars.ECR_REPOSITORY }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      # Polls instead of `aws ssm wait command-executed`, which gives up after
+      # about 100 s: an image pull plus migrate can take longer.
+      - name: run barbackend-deploy on the instance
+        timeout-minutes: 15
+        shell: bash
+        run: |
+          command_id=$(aws ssm send-command \
+            --document-name AWS-RunShellScript \
+            --targets "Key=tag:Name,Values=$INSTANCE_NAME" \
+            --parameters "commands=[\"barbackend-deploy $SHA\"]" \
+            --comment "barbackend $SHA" \
+            --query Command.CommandId --output text)
+          echo "command $command_id"
+
+          instance_id=""
+          for _ in $(seq 30); do
+            instance_id=$(aws ssm list-command-invocations --command-id "$command_id" \
+              --query 'CommandInvocations[0].InstanceId' --output text)
+            if [ -n "$instance_id" ] && [ "$instance_id" != None ]; then break; fi
+            instance_id=""
+            sleep 2
+          done
+          if [ -z "$instance_id" ]; then
+            echo "::error::No instance tagged Name=$INSTANCE_NAME picked up command $command_id"
+            exit 1
+          fi
+          echo "instance $instance_id"
+
+          invocation() {
+            aws ssm get-command-invocation --command-id "$command_id" --instance-id "$instance_id" \
+              --query "$1" --output text
+          }
+          while :; do
+            status=$(invocation Status 2>/dev/null || echo Pending)
+            case "$status" in
+              Pending|InProgress|Delayed) sleep 5 ;;
+              *) break ;;
+            esac
+          done
+
+          invocation StandardOutputContent
+          invocation StandardErrorContent >&2
+          if [ "$status" != Success ]; then
+            echo "::error::barbackend-deploy $SHA ended with status $status"
+            exit 1
+          fi

@@ -2,7 +2,6 @@ package users
 
 import (
 	"context"
-	"fmt"
 
 	"barbackend/internal/postgres"
 	"barbackend/internal/tenancy"
@@ -50,24 +49,17 @@ func (s *Service) ChangeRole(ctx context.Context, caller tenancy.User, id tenanc
 	return stored, nil
 }
 
-// DisableUser disables a User of the caller's Customer in Postgres and in
-// Cognito; they are never deleted. Disabling the last active Customer Admin
-// fails with tenancy.ErrLastCustomerAdmin. When Cognito fails nothing is
-// stored, and when storing fails after Cognito the User stays disabled in
-// Cognito only, unable to sign in until a retry disables them in both.
+// DisableUser disables a User of the caller's Customer; they are never
+// deleted. Authenticate refuses them from the next request on, while Cognito
+// still signs them in (ADR 0027). Disabling the last active Customer Admin
+// fails with tenancy.ErrLastCustomerAdmin.
 func (s *Service) DisableUser(ctx context.Context, caller tenancy.User, id tenancy.UserID) (StoredUser, error) {
 	var stored StoredUser
 	err := s.changeUsers(ctx, caller, func(tx *postgres.Tx, customer tenancy.CustomerID) (err error) {
 		if stored, err = tx.DisableUser(ctx, customer, id); err != nil {
 			return err
 		}
-		if err := requireActiveCustomerAdmin(ctx, tx, customer); err != nil {
-			return err
-		}
-		if err := s.admin.DisableUser(ctx, stored.Sub); err != nil {
-			return fmt.Errorf("disable user %s: %w", id, err)
-		}
-		return nil
+		return requireActiveCustomerAdmin(ctx, tx, customer)
 	})
 	if err != nil {
 		return StoredUser{}, err

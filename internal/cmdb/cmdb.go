@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"barbackend/internal/cmdb/provider"
@@ -55,12 +56,22 @@ type Service struct {
 	key         encryption.Key
 	lifetime    context.Context
 	syncTimeout time.Duration
+	afterSync   func(context.Context, inventory.CMDBSourceID) error
 }
 
 // New runs every Sync under lifetime, which ends when the server shuts down,
 // and bounds it by syncTimeout.
 func New(db *postgres.DB, providers provider.Providers, key encryption.Key, lifetime context.Context, syncTimeout time.Duration) *Service {
 	return &Service{db: db, providers: providers, key: key, lifetime: lifetime, syncTimeout: syncTimeout}
+}
+
+// OnSynced has every Sync that commits call fn with its CMDB Source, within
+// the Sync's limits, such as for the Findings to match its Assets again
+// (ADR 0020). The Sync has already succeeded: fn's error is logged, never
+// turned into a failed Sync Run. It is meant to be set once, before the
+// Service is used.
+func (s *Service) OnSynced(fn func(context.Context, inventory.CMDBSourceID) error) {
+	s.afterSync = fn
 }
 
 // detach keeps a Sync running when its caller goes away, such as a client
@@ -90,7 +101,7 @@ func (s *Service) create(ctx context.Context, customer tenancy.CustomerID, name 
 // TestLogin checks a login against its CMDB and stores nothing. A CMDB that
 // cannot be reached or rejects the login is a *Failure.
 func (s *Service) TestLogin(ctx context.Context, caller tenancy.User, name inventory.CMDBProvider, login Login) error {
-	if _, err := caller.ActsFor(); err != nil {
+	if _, err := caller.ManageCMDBSource(); err != nil {
 		return err
 	}
 	_, _, err := s.checkLogin(ctx, name, login)
@@ -104,7 +115,7 @@ func (s *Service) TestLogin(ctx context.Context, caller tenancy.User, name inven
 // the admin fixes the CMDB and syncs again without reconnecting. Like
 // SyncConnected, it outlives ctx.
 func (s *Service) Connect(ctx context.Context, caller tenancy.User, name inventory.CMDBProvider, login Login) (ConnectedSource, error) {
-	customer, err := caller.ActsFor()
+	customer, err := caller.ManageCMDBSource()
 	if err != nil {
 		return ConnectedSource{}, err
 	}
@@ -130,7 +141,7 @@ func (s *Service) Connect(ctx context.Context, caller tenancy.User, name invento
 // The login is for the source's own CMDB Provider: another provider's Record
 // IDs would not match the Assets.
 func (s *Service) UpdateLogin(ctx context.Context, caller tenancy.User, login Login) (ConnectedSource, error) {
-	customer, err := caller.ActsFor()
+	customer, err := caller.ManageCMDBSource()
 	if err != nil {
 		return ConnectedSource{}, err
 	}
@@ -158,7 +169,7 @@ func (s *Service) UpdateLogin(ctx context.Context, caller tenancy.User, login Lo
 // inventory.ErrNotConnected when there is none, and with
 // inventory.ErrSyncInProgress while a Sync of it commits.
 func (s *Service) Disconnect(ctx context.Context, caller tenancy.User) error {
-	customer, err := caller.ActsFor()
+	customer, err := caller.ManageCMDBSource()
 	if err != nil {
 		return err
 	}
@@ -303,6 +314,11 @@ func (s *Service) syncConnected(ctx context.Context, customer tenancy.CustomerID
 	case err != nil:
 		return inventory.SyncRun{}, s.recordFailure(ctx, stored.Source.ID(), started, err)
 	}
+	if s.afterSync != nil {
+		if err := s.afterSync(ctx, stored.Source.ID()); err != nil {
+			log.Printf("cmdb: after sync of %s: %v", stored.Source.ID(), err)
+		}
+	}
 	return run, nil
 }
 
@@ -316,7 +332,7 @@ func (s *Service) sync(ctx context.Context, stored postgres.StoredCMDBSource, st
 	if err != nil {
 		return inventory.SyncRun{}, fmt.Errorf("snapshot of %s: %w", src.ID(), err)
 	}
-	return s.db.CommitSync(ctx, src.ID(), started, func(existing []*inventory.Asset) (inventory.Reconciliation, error) {
+	return s.db.CommitSync(ctx, src.ID(), started, func(existing inventory.Stored) (inventory.Reconciliation, error) {
 		return inventory.Reconcile(src.ID(), existing, snapshot)
 	})
 }

@@ -1,0 +1,165 @@
+package postgres_test
+
+import (
+	"context"
+	"errors"
+	"slices"
+	"testing"
+	"time"
+
+	"barbackend/internal/assessment"
+	"barbackend/internal/postgres"
+)
+
+const (
+	cartografo = "claude-haiku-5-5"
+	promptHash = "sha256:0f1e2d"
+)
+
+func unlabeled(t *testing.T, db *postgres.DB, limit, maxAttempts int) []string {
+	t.Helper()
+	return inTxValue(t, db, func(tx *postgres.Tx) ([]string, error) {
+		return tx.UnlabeledVulnerabilities(context.Background(), limit, maxAttempts)
+	})
+}
+
+func threatsOf(t *testing.T, db *postgres.DB, cve string) postgres.Threats {
+	t.Helper()
+	return inTxValue(t, db, func(tx *postgres.Tx) (map[string]postgres.Threats, error) {
+		return tx.ThreatsOf(context.Background(), []string{cve})
+	})[cve]
+}
+
+func labelingOf(t *testing.T, db *postgres.DB, cve string) postgres.Labeling {
+	t.Helper()
+	l := threatsOf(t, db, cve).Labeling
+	if l == nil {
+		t.Fatalf("%s has no labeling", cve)
+	}
+	return *l
+}
+
+func TestStoreLabelingKeepsItsTechniquesInTheOrderOfAnAttack(t *testing.T) {
+	t.Parallel()
+	db := storedCVEs(t, "CVE-2026-0001")
+	if err := storeLabeling(db, "CVE-2026-0001",
+		postgres.TechniqueLabel{AttackID: "T1059", Role: "primary_impact", Evidence: "execute arbitrary commands", Rationale: "It runs commands."},
+		postgres.TechniqueLabel{AttackID: "T1190", Role: "exploitation", Evidence: "a crafted HTTP request", Rationale: "It is reached over HTTP."},
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	got := threatsOf(t, db, "CVE-2026-0001").Techniques
+	if len(got) != 2 || got[0].Label.AttackID != "T1190" || got[1].Label.AttackID != "T1059" {
+		t.Errorf("techniques = %+v, want T1190 (exploitation) before T1059 (primary_impact)", got)
+	}
+	if l := labelingOf(t, db, "CVE-2026-0001"); l.Outcome != assessment.LabelingLabeled || l.Attempts != 1 || l.Model != cartografo || l.PromptHash != promptHash {
+		t.Errorf("labeling = %+v, want labeled on the first attempt, with its model and prompt hash", l)
+	}
+}
+
+func TestALabelingWithNoTechniquesIsNone(t *testing.T) {
+	t.Parallel()
+	db := storedCVEs(t, "CVE-2026-0001")
+	if err := storeLabeling(db, "CVE-2026-0001"); err != nil {
+		t.Fatal(err)
+	}
+
+	if l := labelingOf(t, db, "CVE-2026-0001"); l.Outcome != assessment.LabelingNone {
+		t.Errorf("outcome = %s, want none", l.Outcome)
+	}
+}
+
+func TestAFinalLabelingIsNotRecordedAgain(t *testing.T) {
+	t.Parallel()
+	db := storedCVEs(t, "CVE-2026-0001")
+	if err := storeLabeling(db, "CVE-2026-0001"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := storeLabeling(db, "CVE-2026-0001"); !errors.Is(err, postgres.ErrLabeled) {
+		t.Errorf("second labeling err = %v, want ErrLabeled", err)
+	}
+	if err := storeFailedLabeling(db, "CVE-2026-0001"); !errors.Is(err, postgres.ErrLabeled) {
+		t.Errorf("failed attempt after a final labeling err = %v, want ErrLabeled", err)
+	}
+}
+
+func TestAFailedLabelingCountsItsAttemptsUntilOneSucceeds(t *testing.T) {
+	t.Parallel()
+	db := storedCVEs(t, "CVE-2026-0001")
+	for range 2 {
+		if err := storeFailedLabeling(db, "CVE-2026-0001"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if l := labelingOf(t, db, "CVE-2026-0001"); l.Outcome != assessment.LabelingFailed || l.Attempts != 2 {
+		t.Errorf("labeling = %+v, want failed after 2 attempts", l)
+	}
+
+	if err := storeLabeling(db, "CVE-2026-0001", postgres.TechniqueLabel{AttackID: "T1190", Role: "exploitation", Evidence: "remote", Rationale: "Remote."}); err != nil {
+		t.Fatal(err)
+	}
+	if l := labelingOf(t, db, "CVE-2026-0001"); l.Outcome != assessment.LabelingLabeled || l.Attempts != 3 {
+		t.Errorf("labeling = %+v, want labeled on the third attempt", l)
+	}
+}
+
+func TestUnlabeledVulnerabilitiesAreThoseWithAttemptsLeft(t *testing.T) {
+	t.Parallel()
+	db := storedCVEs(t, "CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004")
+	if err := storeLabeling(db, "CVE-2026-0001"); err != nil {
+		t.Fatal(err)
+	}
+	if err := storeFailedLabeling(db, "CVE-2026-0002"); err != nil {
+		t.Fatal(err)
+	}
+	for range 3 {
+		if err := storeFailedLabeling(db, "CVE-2026-0003"); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	got := unlabeled(t, db, 50, 3)
+	slices.Sort(got)
+	if want := []string{"CVE-2026-0002", "CVE-2026-0004"}; !slices.Equal(got, want) {
+		t.Errorf("unlabeled = %v, want %v: not the final one nor the one out of attempts", got, want)
+	}
+}
+
+func TestUnlabeledVulnerabilitiesAreTheNewestFirstUpToTheLimit(t *testing.T) {
+	t.Parallel()
+	db, conn := newDBWithConn(t)
+	for _, cve := range []string{"CVE-2026-0001", "CVE-2026-0002"} {
+		storeVulnerability(t, db, cve, may, vulnerabilityObject(cve, "Analyzed", `[]`))
+	}
+	if _, err := conn.Exec(context.Background(), `UPDATE vulnerabilities SET stored_at = stored_at - interval '1 hour' WHERE cve_id = 'CVE-2026-0001'`); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := unlabeled(t, db, 1, 3); !slices.Equal(got, []string{"CVE-2026-0002"}) {
+		t.Errorf("unlabeled = %v, want only the newest one", got)
+	}
+}
+
+func TestLabelingsSinceCountsTheAttemptsAfterAMoment(t *testing.T) {
+	t.Parallel()
+	db := storedCVEs(t, "CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003")
+	before := time.Now().Add(-time.Minute)
+	if err := storeLabeling(db, "CVE-2026-0001"); err != nil {
+		t.Fatal(err)
+	}
+	if err := storeFailedLabeling(db, "CVE-2026-0002"); err != nil {
+		t.Fatal(err)
+	}
+
+	count := func(since time.Time) int {
+		return inTxValue(t, db, func(tx *postgres.Tx) (int, error) { return tx.LabelingsSince(context.Background(), since) })
+	}
+	if got := count(before); got != 2 {
+		t.Errorf("labelings since a minute ago = %d, want 2", got)
+	}
+	if got := count(time.Now().Add(time.Minute)); got != 0 {
+		t.Errorf("labelings since a minute from now = %d, want 0", got)
+	}
+}

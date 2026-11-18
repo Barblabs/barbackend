@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"barbackend/internal/inventory"
 	"barbackend/internal/postgres/sqlcgen"
 	"barbackend/internal/tenancy"
 	"github.com/google/uuid"
@@ -56,7 +57,46 @@ func (t *Tx) Customers(ctx context.Context) ([]StoredCustomer, error) {
 	return customers, nil
 }
 
-// RenameCustomer stores the name of c on the Customer with its id.
+// CustomerStats is what a Platform Admin sees of a Customer besides the
+// Customer itself: never its Assets or Findings (ADR 0013).
+type CustomerStats struct {
+	Customer StoredCustomer
+	// Users counts its Users who are not disabled, invited ones included.
+	Users int
+	// Connected is whether it has a connected CMDB Source.
+	Connected bool
+	// LastSync is when the latest successful Sync of its connected CMDB
+	// Source finished, zero if none succeeded.
+	LastSync time.Time
+	// LastSyncFailed is when its latest Sync finished, set only while that
+	// Sync failed.
+	LastSyncFailed time.Time
+}
+
+// CustomerStats are ordered by name, regardless of case, as Customers are.
+func (t *Tx) CustomerStats(ctx context.Context) ([]CustomerStats, error) {
+	rows, err := t.q.ListCustomerStats(ctx, int16(inventory.SyncSucceeded))
+	if err != nil {
+		return nil, fmt.Errorf("list customer stats: %w", err)
+	}
+	stats := make([]CustomerStats, 0, len(rows))
+	for _, row := range rows {
+		c, err := restoreCustomer(sqlcgen.Customer{ID: row.ID, Name: row.Name, CreatedAt: row.CreatedAt, DeactivatedAt: row.DeactivatedAt})
+		if err != nil {
+			return nil, err
+		}
+		s := CustomerStats{Customer: c, Users: int(row.UserCount), Connected: row.CmdbConnected}
+		if row.LastSucceededSyncFinishedAt != nil {
+			s.LastSync = *row.LastSucceededSyncFinishedAt
+		}
+		if row.LatestSyncOutcomeID != nil && inventory.SyncOutcome(*row.LatestSyncOutcomeID) == inventory.SyncFailed {
+			s.LastSyncFailed = *row.LatestSyncFinishedAt
+		}
+		stats = append(stats, s)
+	}
+	return stats, nil
+}
+
 func (t *Tx) RenameCustomer(ctx context.Context, c tenancy.Customer) (StoredCustomer, error) {
 	row, err := t.q.RenameCustomer(ctx, sqlcgen.RenameCustomerParams{ID: uuid.UUID(c.ID()), Name: c.Name()})
 	if err != nil {

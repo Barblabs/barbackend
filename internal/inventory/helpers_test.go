@@ -39,3 +39,37 @@ func mustOwner(t *testing.T, email string) inventory.OwnerEmail {
 	}
 	return o
 }
+
+func mustImportedArea(t *testing.T, name string, inactive bool) inventory.ImportedArea {
+	t.Helper()
+	a, err := inventory.NewImportedArea(inventory.ImportedAreaParams{Name: name, Inactive: inactive})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return a
+}
+
+func restoreArea(t *testing.T, id, name string, state inventory.AreaState) *inventory.Area {
+	t.Helper()
+	a, err := inventory.RestoreArea(inventory.SourceReference{Source: sourceID, RecordID: id}, name, state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return a
+}
+
+func recs(id string, p inventory.ImportedAssetParams) map[string]inventory.ImportedAssetParams {
+	return map[string]inventory.ImportedAssetParams{id: p}
+}
+
+func snapshot(t *testing.T, records map[string]inventory.ImportedAssetParams, skipped ...string) inventory.Snapshot {
+	t.Helper()
+	var s inventory.Snapshot
+	for id, p := range records {
+		s.Records = append(s.Records, inventory.Record{RecordID: id, Imported: mustImported(t, p)})
+	}
+	for _, id := range skipped {
+		s.Skipped = append(s.Skipped, inventory.SkippedRecord{RecordID: id, Reason: "invalid " + id})
+	}
+	return s
+}

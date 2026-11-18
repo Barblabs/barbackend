@@ -7,17 +7,7 @@ import (
 
 	"barbackend/internal/postgres"
 	"barbackend/internal/tenancy"
-	"github.com/google/uuid"
 )
-
-func platformAdmin(t *testing.T) tenancy.User {
-	t.Helper()
-	u, err := tenancy.NewUser(tenancy.UserID(uuid.New()), "staff@example.com", tenancy.PlatformAdmin, tenancy.CustomerID{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return u
-}
 
 func TestCreateCustomerStoresItWithItsFirstCustomerAdmin(t *testing.T) {
 	t.Parallel()
@@ -60,8 +50,6 @@ func TestCreateCustomerWithATakenNameSendsNoInvitation(t *testing.T) {
 	}
 }
 
-// The admin's email is stored already, so storing them fails after Cognito
-// created the user.
 func TestCreateCustomerStoresNothingWhenItsAdminCannotBeStored(t *testing.T) {
 	t.Parallel()
 	admin := &fakeAdmin{}
@@ -77,7 +65,7 @@ func TestCreateCustomerStoresNothingWhenItsAdminCannotBeStored(t *testing.T) {
 	if listErr != nil {
 		t.Fatal(listErr)
 	}
-	if err == nil || len(customers) != 1 || len(admin.deleted) != 1 {
-		t.Errorf("err = %v, customers = %d, deleted = %v, want an error, only Acme stored and the Cognito user deleted", err, len(customers), admin.deleted)
+	if !errors.Is(err, tenancy.ErrEmailTaken) || len(customers) != 1 || len(admin.created) != 1 {
+		t.Errorf("err = %v, customers = %d, invited %d, want ErrEmailTaken, only Acme stored and one invitation", err, len(customers), len(admin.created))
 	}
 }

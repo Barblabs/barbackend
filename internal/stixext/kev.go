@@ -15,13 +15,11 @@ type KEV struct {
 	CatalogReleased            string `json:"catalog_released"`
 }
 
-// NewKEV returns k as a property extension.
 func NewKEV(k KEV) KEV {
 	k.ExtensionType = "property-extension"
 	return k
 }
 
-// KEVOf decodes the kev/1 extension of v.
 func KEVOf(v *stix2.Vulnerability) (KEV, bool) {
 	return decodeExtension[KEV](v, KEVDefinitionID)
 }

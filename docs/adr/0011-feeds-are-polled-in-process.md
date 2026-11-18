@@ -20,4 +20,4 @@ The interval belongs to the Feed, so a new adapter lands with its own constant a
 
 - **External scheduler (CI cron)**: rejected; couples freshness to another system and its delays, while the one long-running process already exists.
 - **Webhook receivers**: rejected; none of the Feeds offer push, and a webhook cannot be registered on a repository we do not own.
-- **Remembering the last successful Pull per Feed**: rejected for now; it needs storage, which the ingestion step deliberately excludes.
+- **Remembering the last successful Pull per Feed**: rejected for now; it needs storage of run state, which the ingestion step deliberately excludes. Feed handlers store what matches (ADR 0015) and every News Item (ADR 0025), not when a Pull last succeeded, so a gap longer than a Feed's window is still accepted loss.

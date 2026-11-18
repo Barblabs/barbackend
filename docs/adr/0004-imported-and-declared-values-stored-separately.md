@@ -5,6 +5,7 @@ Some Asset values can come from the CMDB Source or from a Declaration by a barba
 ## Which values
 
 - **Asset Owner**: imported and declarable; the Declaration wins.
-- **Exposure**: declared only.
+- **Exposure**: imported from the iTop Location and declarable; the Declaration wins (ADR 0021, which superseded "declared only").
+- **Information Classification**: declared only, since iTop has no field for it; Unclassified until declared (ADR 0031).
 - **Criticality**: imported only.
 - Everything else (name, description, Asset Kind, Hardware, Software Components, status): imported only.

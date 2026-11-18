@@ -6,9 +6,14 @@ import (
 	"net/http"
 	"strings"
 
+	"barbackend/internal/agents"
+	"barbackend/internal/areas"
 	"barbackend/internal/assets"
+	"barbackend/internal/business"
 	"barbackend/internal/cmdb"
+	"barbackend/internal/findings"
 	"barbackend/internal/inventory"
+	"barbackend/internal/slack"
 	"barbackend/internal/tenancy"
 	"barbackend/internal/users"
 	"github.com/danielgtaylor/huma/v2"
@@ -39,8 +44,30 @@ const (
 	customerDeactivated = "customer_deactivated"
 	emailTaken          = "email_taken"
 	userNotFound        = "user_not_found"
+	areaNotFound        = "area_not_found"
+	assetNotFound       = "asset_not_found"
+	assetInactive       = "asset_inactive"
 	lastCustomerAdmin   = "last_customer_admin"
 	internalError       = "internal_error"
+
+	invalidState              = "invalid_state"
+	slackNotInstalled         = "slack_not_installed"
+	slackNeedsReauthorisation = "slack_needs_reauthorisation"
+	slackChannelNotSet        = "slack_channel_not_set"
+	slackUnavailable          = "slack_unavailable"
+	slackError                = "slack_error"
+
+	prioritizationNotFound = "prioritization_not_found"
+	newsDigestNotFound     = "news_digest_not_found"
+	findingNotFound        = "finding_not_found"
+	conversationNotFound   = "conversation_not_found"
+	conversationBusy       = "conversation_busy"
+	conversationFull       = "conversation_full"
+	agentRefused           = "agent_refused"
+	agentRejected          = "agent_rejected"
+	agentUnavailable       = "agent_unavailable"
+	invalidDocument        = "invalid_document"
+	businessContextStale   = "business_context_stale"
 )
 
 func apiError(err error) *codedError {
@@ -48,11 +75,15 @@ func apiError(err error) *codedError {
 	if errors.As(err, &coded) {
 		return coded
 	}
+	if e := agentError(err); e != nil {
+		return e
+	}
 	var failed *cmdb.SyncError
 	if errors.As(err, &failed) {
 		return &codedError{status: http.StatusBadGateway, cause: err, Code: failureCode(failed), Message: failed.Error()}
 	}
 	var failure *cmdb.Failure
+	var slackAPI *slack.APIError
 	switch {
 	case errors.Is(err, users.ErrUnauthenticated), errors.Is(err, tenancy.ErrUserDisabled):
 		return &codedError{status: http.StatusUnauthorized, cause: err, Code: unauthenticated, Message: "a valid access token of a user who can sign in is required"}
@@ -61,7 +92,7 @@ func apiError(err error) *codedError {
 	case errors.Is(err, tenancy.ErrNotPlatformAdmin):
 		return &codedError{status: http.StatusForbidden, Code: forbidden, Message: "only a platform admin can manage customers"}
 	case errors.Is(err, tenancy.ErrNotCustomerAdmin):
-		return &codedError{status: http.StatusForbidden, Code: forbidden, Message: "only a customer admin can manage users"}
+		return &codedError{status: http.StatusForbidden, Code: forbidden, Message: "only a customer admin can do this"}
 	case errors.Is(err, tenancy.ErrLastCustomerAdmin):
 		return &codedError{status: http.StatusConflict, Code: lastCustomerAdmin, Message: "a customer keeps at least one active customer admin"}
 	case errors.Is(err, tenancy.ErrCustomerDeactivated):
@@ -80,8 +111,34 @@ func apiError(err error) *codedError {
 		return &codedError{status: http.StatusUnprocessableEntity, Code: string(failure.Code), Message: failure.Message}
 	case errors.Is(err, cmdb.ErrInvalidLogin):
 		return &codedError{status: http.StatusBadRequest, Code: invalidLogin, Message: err.Error()}
-	case errors.Is(err, assets.ErrInvalidQuery):
+	case errors.Is(err, business.ErrInvalidContext):
 		return &codedError{status: http.StatusBadRequest, Code: invalidRequest, Message: err.Error()}
+	case errors.Is(err, business.ErrStale):
+		return &codedError{status: http.StatusConflict, Code: businessContextStale, Message: business.ErrStale.Error()}
+	case errors.Is(err, areas.ErrAreaNotFound):
+		return &codedError{status: http.StatusNotFound, Code: areaNotFound, Message: "area not found"}
+	case errors.Is(err, assets.ErrAssetNotFound):
+		return &codedError{status: http.StatusNotFound, Code: assetNotFound, Message: "asset not found"}
+	case errors.Is(err, inventory.ErrAssetInactive):
+		return &codedError{status: http.StatusConflict, Code: assetInactive, Message: "an inactive asset cannot be declared"}
+	case errors.Is(err, assets.ErrInvalidQuery), errors.Is(err, findings.ErrInvalidTrend), errors.Is(err, findings.ErrInvalidCount), errors.Is(err, users.ErrInvalidDays):
+		return &codedError{status: http.StatusBadRequest, Code: invalidRequest, Message: err.Error()}
+	case errors.Is(err, slack.ErrInvalidState):
+		return &codedError{status: http.StatusBadRequest, Code: invalidState, Message: "the Slack authorization state is invalid or has expired"}
+	case errors.Is(err, slack.ErrInvalidChannel):
+		return &codedError{status: http.StatusBadRequest, Code: invalidRequest, Message: slack.ErrInvalidChannel.Error()}
+	case errors.Is(err, slack.ErrOAuth):
+		return &codedError{status: http.StatusBadGateway, cause: err, Code: slackError, Message: "Slack refused the authorization"}
+	case errors.Is(err, slack.ErrNotInstalled):
+		return &codedError{status: http.StatusNotFound, Code: slackNotInstalled, Message: "Slack is not connected"}
+	case errors.Is(err, slack.ErrNeedsReauthorisation):
+		return &codedError{status: http.StatusConflict, Code: slackNeedsReauthorisation, Message: "Slack needs re-authorisation"}
+	case errors.Is(err, slack.ErrNoChannel):
+		return &codedError{status: http.StatusConflict, Code: slackChannelNotSet, Message: "set the Security Team channel first"}
+	case errors.Is(err, slack.ErrUnavailable):
+		return &codedError{status: http.StatusBadGateway, cause: err, Code: slackUnavailable, Message: "Slack is unavailable"}
+	case errors.As(err, &slackAPI):
+		return &codedError{status: http.StatusBadGateway, cause: err, Code: slackError, Message: slackAPI.Error()}
 	case errors.Is(err, inventory.ErrNotConnected):
 		return &codedError{status: http.StatusNotFound, Code: notConnected, Message: err.Error()}
 	case errors.Is(err, inventory.ErrAlreadyConnected):
@@ -90,6 +147,35 @@ func apiError(err error) *codedError {
 		return &codedError{status: http.StatusConflict, Code: syncInProgress, Message: err.Error()}
 	default:
 		return internal(err)
+	}
+}
+
+func agentError(err error) *codedError {
+	switch {
+	case errors.Is(err, agents.ErrEmptyMessage), errors.Is(err, agents.ErrInvalidFeedback), errors.Is(err, agents.ErrInvalidLimit):
+		return &codedError{status: http.StatusBadRequest, Code: invalidRequest, Message: err.Error()}
+	case errors.Is(err, agents.ErrInvalidDocument):
+		return &codedError{status: http.StatusBadRequest, Code: invalidDocument, Message: err.Error()}
+	case errors.Is(err, agents.ErrConversationFull):
+		return &codedError{status: http.StatusConflict, Code: conversationFull, Message: agents.ErrConversationFull.Error()}
+	case errors.Is(err, agents.ErrPrioritizationNotFound):
+		return &codedError{status: http.StatusNotFound, Code: prioritizationNotFound, Message: agents.ErrPrioritizationNotFound.Error()}
+	case errors.Is(err, agents.ErrNewsDigestNotFound):
+		return &codedError{status: http.StatusNotFound, Code: newsDigestNotFound, Message: agents.ErrNewsDigestNotFound.Error()}
+	case errors.Is(err, agents.ErrFindingNotFound):
+		return &codedError{status: http.StatusNotFound, Code: findingNotFound, Message: agents.ErrFindingNotFound.Error()}
+	case errors.Is(err, agents.ErrConversationNotFound):
+		return &codedError{status: http.StatusNotFound, Code: conversationNotFound, Message: agents.ErrConversationNotFound.Error()}
+	case errors.Is(err, agents.ErrConversationBusy):
+		return &codedError{status: http.StatusConflict, Code: conversationBusy, Message: agents.ErrConversationBusy.Error()}
+	case errors.Is(err, agents.ErrRefused):
+		return &codedError{status: http.StatusBadGateway, cause: err, Code: agentRefused, Message: agents.ErrRefused.Error()}
+	case errors.Is(err, agents.ErrRejected):
+		return &codedError{status: http.StatusBadGateway, cause: err, Code: agentRejected, Message: agents.ErrRejected.Error()}
+	case errors.Is(err, agents.ErrUnavailable):
+		return &codedError{status: http.StatusBadGateway, cause: err, Code: agentUnavailable, Message: agents.ErrUnavailable.Error()}
+	default:
+		return nil
 	}
 }
 

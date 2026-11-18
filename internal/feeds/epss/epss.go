@@ -142,22 +142,25 @@ func emitRow(row []string, model, scoreDate string, emit feeds.Emit) error {
 		log.Printf("epss: skipping %s: percentile %q: %v", id, row[2], err)
 		return nil
 	}
+	v, err := vulnerability(id, stixext.EPSS{Probability: probability, Percentile: percentile, ScoreDate: scoreDate, ModelVersion: model})
+	if err != nil {
+		return err
+	}
+	return emit(v)
+}
+
+func vulnerability(id string, score stixext.EPSS) (*stix2.Vulnerability, error) {
 	v, err := stix2.NewVulnerability(id,
 		stix2.OptionCreatedBy(stixext.BarbattackID),
 		stix2.OptionExternalReferences([]*stix2.ExternalReference{{Name: "cve", ExternalID: id}}),
 		stix2.OptionObjectMarking([]stix2.Identifier{stixext.TLPClear}),
-		stix2.OptionExtension(string(stixext.EPSSDefinitionID), stixext.NewEPSS(stixext.EPSS{
-			Probability:  probability,
-			Percentile:   percentile,
-			ScoreDate:    scoreDate,
-			ModelVersion: model,
-		})),
+		stix2.OptionExtension(string(stixext.EPSSDefinitionID), stixext.NewEPSS(score)),
 	)
 	if err != nil {
-		return fmt.Errorf("epss: %s: %w", id, err)
+		return nil, fmt.Errorf("epss: %s: %w", id, err)
 	}
 	v.ID = stixext.VulnerabilityID(id)
-	return emit(v)
+	return v, nil
 }
 
 func parseDate(s string) (time.Time, error) {

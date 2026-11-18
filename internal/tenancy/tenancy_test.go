@@ -53,6 +53,19 @@ func TestNewUserNormalizesEmail(t *testing.T) {
 	}
 }
 
+func TestANewUserSignsInOnceInvited(t *testing.T) {
+	u, err := tenancy.NewUser(userID, "a@example.com", tenancy.Viewer, customer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := u.SignIn(); !errors.Is(err, tenancy.ErrUserPending) {
+		t.Errorf("SignIn before the Invitation = %v, want %v", err, tenancy.ErrUserPending)
+	}
+	if err := u.Invited().SignIn(); err != nil {
+		t.Errorf("SignIn once invited = %v, want nil", err)
+	}
+}
+
 func TestSignIn(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -63,6 +76,9 @@ func TestSignIn(t *testing.T) {
 		{"disabled", tenancy.UserState{Disabled: true}, tenancy.ErrUserDisabled},
 		{"deactivated customer", tenancy.UserState{CustomerDeactivated: true}, tenancy.ErrCustomerDeactivated},
 		{"disabled in a deactivated customer", tenancy.UserState{Disabled: true, CustomerDeactivated: true}, tenancy.ErrUserDisabled},
+		{"pending", tenancy.UserState{Pending: true}, tenancy.ErrUserPending},
+		{"pending and disabled", tenancy.UserState{Pending: true, Disabled: true}, tenancy.ErrUserDisabled},
+		{"pending in a deactivated customer", tenancy.UserState{Pending: true, CustomerDeactivated: true}, tenancy.ErrUserPending},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -144,7 +160,14 @@ func TestOnlyAPlatformAdminManagesCustomers(t *testing.T) {
 	}
 }
 
-func TestOnlyACustomerAdminManagesUsers(t *testing.T) {
+func TestOnlyACustomerAdminManagesTheCustomersConfiguration(t *testing.T) {
+	actions := map[string]func(tenancy.User) (tenancy.CustomerID, error){
+		"ManageUsers":         tenancy.User.ManageUsers,
+		"ManageAreas":         tenancy.User.ManageAreas,
+		"DeclareAssetValues":  tenancy.User.DeclareAssetValues,
+		"EditBusinessContext": tenancy.User.EditBusinessContext,
+		"ManageCMDBSource":    tenancy.User.ManageCMDBSource,
+	}
 	tests := []struct {
 		role     tenancy.Role
 		customer tenancy.CustomerID
@@ -154,17 +177,19 @@ func TestOnlyACustomerAdminManagesUsers(t *testing.T) {
 		{tenancy.Viewer, customer, tenancy.ErrNotCustomerAdmin},
 		{tenancy.PlatformAdmin, tenancy.CustomerID{}, tenancy.ErrNotCustomerAdmin},
 	}
-	for _, tt := range tests {
-		t.Run(tt.role.String(), func(t *testing.T) {
-			u, err := tenancy.NewUser(userID, "a@example.com", tt.role, tt.customer)
-			if err != nil {
-				t.Fatal(err)
-			}
-			got, err := u.ManageUsers()
-			if !errors.Is(err, tt.want) || (err == nil && got != customer) {
-				t.Errorf("ManageUsers = %v, %v, want %v, %v", got, err, customer, tt.want)
-			}
-		})
+	for name, action := range actions {
+		for _, tt := range tests {
+			t.Run(name+"/"+tt.role.String(), func(t *testing.T) {
+				u, err := tenancy.NewUser(userID, "a@example.com", tt.role, tt.customer)
+				if err != nil {
+					t.Fatal(err)
+				}
+				got, err := action(u)
+				if !errors.Is(err, tt.want) || (err == nil && got != customer) {
+					t.Errorf("%s = %v, %v, want %v, %v", name, got, err, customer, tt.want)
+				}
+			})
+		}
 	}
 }
 

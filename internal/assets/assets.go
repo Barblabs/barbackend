@@ -1,13 +1,16 @@
 // Package assets holds the use cases on a Customer's Assets: listing them
-// across all its CMDB Sources (ADR 0008).
+// across all its CMDB Sources, counting their open Findings by Score Band and
+// declaring their Exposure and Information Classification (ADR 0008).
 package assets
 
 import (
+	"cmp"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 
 	"barbackend/internal/inventory"
 	"barbackend/internal/postgres"
@@ -24,25 +27,33 @@ const (
 // cursor, including a cursor reused with other filters.
 var ErrInvalidQuery = errors.New("invalid asset query")
 
+// ErrAssetNotFound is an Asset the Customer does not have.
+var ErrAssetNotFound = errors.New("asset not found")
+
 type StoredAsset = postgres.StoredAsset
 
-type Service struct {
-	db *postgres.DB
+type Filter = postgres.AssetFilter
+
+// Rescorer rescores the open Findings of an Asset from its effective
+// Criticality and Exposure.
+type Rescorer interface {
+	RescoreAsset(ctx context.Context, asset inventory.SourceReference) error
 }
 
-func New(db *postgres.DB) *Service {
-	return &Service{db: db}
+type Service struct {
+	db       *postgres.DB
+	rescorer Rescorer
+}
+
+func New(db *postgres.DB, rescorer Rescorer) *Service {
+	return &Service{db: db, rescorer: rescorer}
 }
 
 // Query selects a page of a Customer's Assets. A zero Limit takes
-// DefaultLimit; a nil filter keeps every value.
+// DefaultLimit.
 type Query struct {
-	Limit int
-	// Active keeps only Active Assets when true and only Inactive ones when
-	// false.
-	Active      *bool
-	Kind        *inventory.AssetKind
-	Criticality *inventory.Criticality
+	Limit  int
+	Filter Filter
 	// Cursor is the NextCursor of the previous page, empty for the first.
 	Cursor string
 }
@@ -74,14 +85,14 @@ func (s *Service) List(ctx context.Context, caller tenancy.User, q Query) (Page,
 	if err != nil {
 		return Page{}, err
 	}
-	query := postgres.AssetListQuery{Customer: customer, Active: q.Active, Kind: q.Kind, Criticality: q.Criticality, Limit: q.Limit}
+	query := postgres.AssetListQuery{Customer: customer, Filter: q.Filter, Limit: q.Limit}
 	if query.Limit == 0 {
 		query.Limit = DefaultLimit
 	}
 	if query.Limit < 1 || query.Limit > MaxLimit {
 		return Page{}, fmt.Errorf("%w: limit must be a number from 1 to %d", ErrInvalidQuery, MaxLimit)
 	}
-	filters, err := q.filters()
+	filters, err := canonicalFilters(q.Filter)
 	if err != nil {
 		return Page{}, err
 	}
@@ -102,22 +113,38 @@ func (s *Service) List(ctx context.Context, caller tenancy.User, q Query) (Page,
 	return result, nil
 }
 
-// filters is the canonical form of q's filters, which a cursor carries.
-// encoding/json sorts map keys, so equal filters give equal strings.
-func (q Query) filters() (string, error) {
+type FindingBands = postgres.AssetFindingBands
+
+// FindingsSummary counts the open Findings of each of the Customer's Assets
+// that has a scored one by the Score Band of their latest Score, ordered as
+// List orders Assets.
+func (s *Service) FindingsSummary(ctx context.Context, caller tenancy.User) ([]FindingBands, error) {
+	customer, err := caller.ActsFor()
+	if err != nil {
+		return nil, err
+	}
+	return postgres.InTxValue(ctx, s.db, func(tx *postgres.Tx) ([]FindingBands, error) {
+		return tx.FindingBandsByAssetOfCustomer(ctx, customer)
+	})
+}
+
+// canonicalFilters is the form of f a cursor carries. encoding/json sorts map
+// keys, so equal filters give equal strings.
+func canonicalFilters(f Filter) (string, error) {
 	active := "all"
-	if q.Active != nil {
-		active = fmt.Sprint(*q.Active)
+	if f.Active != nil {
+		active = fmt.Sprint(*f.Active)
 	}
-	var kind, criticality string
-	if q.Kind != nil {
-		kind = q.Kind.Code()
-	}
-	if q.Criticality != nil {
-		criticality = q.Criticality.Code()
-	}
-	b, err := json.Marshal(map[string]string{"active": active, "kind": kind, "criticality": criticality})
+	b, err := json.Marshal(map[string]any{
+		"active": active, "kind": canonical(f.Kind), "criticality": canonical(f.Criticality), "exposure": canonical(f.Exposure),
+		"information_classification": canonical(f.InformationClassification), "lifecycle_stage": canonical(f.Lifecycle),
+		"area": canonical(f.Area),
+	})
 	return string(b), err
+}
+
+func canonical[T cmp.Ordered](values []T) []T {
+	return slices.Compact(slices.Sorted(slices.Values(values)))
 }
 
 func encodeCursor(c cursor) string {

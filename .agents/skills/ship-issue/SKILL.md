@@ -19,10 +19,10 @@ The step is done when the user has answered every numbered decision. If they cha
 
 ## 2. Build
 
-1. Create a branch off an up-to-date `main`.
+1. Create a branch off an up-to-date `dev`.
 2. Implement in atomic commits, one per clear advancement, each leaving `go test ./...` and `go tool -modfile=tools.mod golangci-lint run ./...` green. After a schema or query edit, run `go tool -modfile=tools.mod sqlc generate` in the same commit.
 
-The step is done when every behaviour in the issue has a test that would fail on `main`.
+The step is done when every behaviour in the issue has a test that would fail on `dev`.
 
 ## 3. Review
 

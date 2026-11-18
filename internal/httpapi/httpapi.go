@@ -7,8 +7,13 @@ import (
 	"io"
 	"net/http"
 
+	"barbackend/internal/agents"
+	"barbackend/internal/areas"
 	"barbackend/internal/assets"
+	"barbackend/internal/businesscontext"
 	"barbackend/internal/cmdb"
+	"barbackend/internal/findings"
+	"barbackend/internal/slack"
 	"barbackend/internal/users"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humagin"
@@ -16,9 +21,14 @@ import (
 )
 
 type Config struct {
-	Assets *assets.Service
-	CMDB   *cmdb.Service
-	Users  *users.Service
+	Agents          *agents.Service
+	Areas           *areas.Service
+	Assets          *assets.Service
+	BusinessContext *businesscontext.Service
+	CMDB            *cmdb.Service
+	Findings        *findings.Service
+	Slack           *slack.Service
+	Users           *users.Service
 	// AllowedOrigins may call the API from a browser.
 	AllowedOrigins []string
 }
@@ -31,8 +41,18 @@ func New(cfg Config) http.Handler {
 	})
 	api := humagin.New(router, apiConfig())
 	api.UseMiddleware(authenticate(api, cfg.Users))
+	slackHandler{slack: cfg.Slack}.register(api)
+	// Slack redirects the popup here with no bearer token; the sealed state
+	// is the authorization.
+	router.GET("/slack/install/callback", slackHandler{slack: cfg.Slack}.callback)
 	cmdbSourceHandler{cmdb: cfg.CMDB}.register(api)
 	assetHandler{assets: cfg.Assets}.register(api)
+	findingHandler{findings: cfg.Findings}.register(api)
+	areaHandler{areas: cfg.Areas}.register(api)
+	prioritizationHandler{agents: cfg.Agents}.register(api)
+	newsDigestHandler{agents: cfg.Agents}.register(api)
+	analistaHandler{agents: cfg.Agents}.register(api)
+	businessContextHandler{contexts: cfg.BusinessContext, agents: cfg.Agents}.register(api)
 	customerHandler{users: cfg.Users}.register(api)
 	userHandler{users: cfg.Users}.register(api)
 	meHandler{users: cfg.Users}.register(api)

@@ -11,7 +11,7 @@ import (
 )
 
 func TestListRejectsALimitOutOfRange(t *testing.T) {
-	svc := assets.New(nil)
+	svc := assets.New(nil, nil)
 	viewer, err := tenancy.NewUser(tenancy.UserID(uuid.New()), "viewer@example.com", tenancy.Viewer, tenancy.CustomerID(uuid.New()))
 	if err != nil {
 		t.Fatal(err)

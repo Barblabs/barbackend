@@ -13,33 +13,38 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const countCustomerAssets = `-- name: CountCustomerAssets :one
-SELECT count(*)
-FROM assets a
-JOIN cmdb_sources s ON s.id = a.cmdb_source_id
-WHERE s.customer_id = $1
-  AND ($2::boolean IS NULL OR (a.inactive_since IS NULL) = $2::boolean)
-  AND ($3::smallint IS NULL OR a.kind_id = $3::smallint)
-  AND ($4::smallint IS NULL OR a.criticality_id = $4::smallint)
+const clearAssetExposure = `-- name: ClearAssetExposure :exec
+UPDATE assets
+SET declared_exposure_id = NULL, exposure_declared_by = NULL, exposure_declared_at = NULL
+WHERE cmdb_source_id = $1 AND record_id = $2
 `
 
-type CountCustomerAssetsParams struct {
-	CustomerID    uuid.UUID
-	Active        *bool
-	KindID        *int16
-	CriticalityID *int16
+type ClearAssetExposureParams struct {
+	CmdbSourceID uuid.UUID
+	RecordID     string
 }
 
-func (q *Queries) CountCustomerAssets(ctx context.Context, arg CountCustomerAssetsParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countCustomerAssets,
-		arg.CustomerID,
-		arg.Active,
-		arg.KindID,
-		arg.CriticalityID,
-	)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
+func (q *Queries) ClearAssetExposure(ctx context.Context, arg ClearAssetExposureParams) error {
+	_, err := q.db.Exec(ctx, clearAssetExposure, arg.CmdbSourceID, arg.RecordID)
+	return err
+}
+
+const clearAssetInformationClassification = `-- name: ClearAssetInformationClassification :exec
+UPDATE assets
+SET declared_information_classification_id = NULL,
+    information_classification_declared_by = NULL,
+    information_classification_declared_at = NULL
+WHERE cmdb_source_id = $1 AND record_id = $2
+`
+
+type ClearAssetInformationClassificationParams struct {
+	CmdbSourceID uuid.UUID
+	RecordID     string
+}
+
+func (q *Queries) ClearAssetInformationClassification(ctx context.Context, arg ClearAssetInformationClassificationParams) error {
+	_, err := q.db.Exec(ctx, clearAssetInformationClassification, arg.CmdbSourceID, arg.RecordID)
+	return err
 }
 
 const deactivateAssets = `-- name: DeactivateAssets :execrows
@@ -72,6 +77,56 @@ func (q *Queries) DeactivateSourceAssets(ctx context.Context, cmdbSourceID uuid.
 	return err
 }
 
+const declareAssetExposure = `-- name: DeclareAssetExposure :exec
+UPDATE assets
+SET declared_exposure_id = $1::smallint,
+    exposure_declared_by = $2::uuid,
+    exposure_declared_at = now()
+WHERE cmdb_source_id = $3 AND record_id = $4
+`
+
+type DeclareAssetExposureParams struct {
+	DeclaredExposureID int16
+	DeclaredBy         uuid.UUID
+	CmdbSourceID       uuid.UUID
+	RecordID           string
+}
+
+func (q *Queries) DeclareAssetExposure(ctx context.Context, arg DeclareAssetExposureParams) error {
+	_, err := q.db.Exec(ctx, declareAssetExposure,
+		arg.DeclaredExposureID,
+		arg.DeclaredBy,
+		arg.CmdbSourceID,
+		arg.RecordID,
+	)
+	return err
+}
+
+const declareAssetInformationClassification = `-- name: DeclareAssetInformationClassification :exec
+UPDATE assets
+SET declared_information_classification_id = $1::smallint,
+    information_classification_declared_by = $2::uuid,
+    information_classification_declared_at = now()
+WHERE cmdb_source_id = $3 AND record_id = $4
+`
+
+type DeclareAssetInformationClassificationParams struct {
+	DeclaredInformationClassificationID int16
+	DeclaredBy                          uuid.UUID
+	CmdbSourceID                        uuid.UUID
+	RecordID                            string
+}
+
+func (q *Queries) DeclareAssetInformationClassification(ctx context.Context, arg DeclareAssetInformationClassificationParams) error {
+	_, err := q.db.Exec(ctx, declareAssetInformationClassification,
+		arg.DeclaredInformationClassificationID,
+		arg.DeclaredBy,
+		arg.CmdbSourceID,
+		arg.RecordID,
+	)
+	return err
+}
+
 const deleteSoftwareComponents = `-- name: DeleteSoftwareComponents :exec
 DELETE FROM software_components
 WHERE cmdb_source_id = $1 AND record_id = ANY($2::text[])
@@ -88,17 +143,20 @@ func (q *Queries) DeleteSoftwareComponents(ctx context.Context, arg DeleteSoftwa
 }
 
 type InsertAssetsParams struct {
-	CmdbSourceID    uuid.UUID
-	RecordID        string
-	Name            string
-	Description     string
-	KindID          int16
-	HardwareVendor  *string
-	HardwareModel   *string
-	CriticalityID   *int16
-	ImportedOwnerID *int64
-	Retired         bool
-	InactiveSince   *time.Time
+	CmdbSourceID       uuid.UUID
+	RecordID           string
+	Name               string
+	Description        string
+	KindID             int16
+	HardwareVendor     *string
+	HardwareModel      *string
+	CriticalityID      *int16
+	ImportedExposureID *int16
+	LifecycleStageID   *int16
+	ImportedOwnerID    *int64
+	AreaRecordID       *string
+	Retired            bool
+	InactiveSince      *time.Time
 }
 
 type InsertSoftwareComponentsParams struct {
@@ -113,31 +171,49 @@ type InsertSoftwareComponentsParams struct {
 }
 
 const listAssets = `-- name: ListAssets :many
-SELECT a.cmdb_source_id, a.record_id, a.name, a.description, a.kind_id,
+SELECT a.id, a.cmdb_source_id, a.record_id, a.name, a.description, a.kind_id,
        a.hardware_vendor, a.hardware_model, a.criticality_id,
        imported_owner.email AS imported_owner, declared_owner.email AS declared_owner,
-       a.declared_exposure_id, a.retired, a.inactive_since
+       a.imported_exposure_id, a.declared_exposure_id, a.lifecycle_stage_id, a.area_record_id, a.retired, a.inactive_since,
+       area.id AS area_id, area.name AS area_name,
+       exposure_declarer.email AS exposure_declared_by, a.exposure_declared_at,
+       a.declared_information_classification_id,
+       information_classification_declarer.email AS information_classification_declared_by, a.information_classification_declared_at
 FROM assets a
 LEFT JOIN asset_owners imported_owner ON imported_owner.id = a.imported_owner_id
 LEFT JOIN asset_owners declared_owner ON declared_owner.id = a.declared_owner_id
+LEFT JOIN customer_areas area ON area.cmdb_source_id = a.cmdb_source_id AND area.record_id = a.area_record_id
+LEFT JOIN users exposure_declarer ON exposure_declarer.id = a.exposure_declared_by
+LEFT JOIN users information_classification_declarer ON information_classification_declarer.id = a.information_classification_declared_by
 WHERE a.cmdb_source_id = $1
 ORDER BY a.record_id
 `
 
 type ListAssetsRow struct {
-	CmdbSourceID       uuid.UUID
-	RecordID           string
-	Name               string
-	Description        string
-	KindID             int16
-	HardwareVendor     *string
-	HardwareModel      *string
-	CriticalityID      *int16
-	ImportedOwner      *string
-	DeclaredOwner      *string
-	DeclaredExposureID *int16
-	Retired            bool
-	InactiveSince      *time.Time
+	ID                                  int64
+	CmdbSourceID                        uuid.UUID
+	RecordID                            string
+	Name                                string
+	Description                         string
+	KindID                              int16
+	HardwareVendor                      *string
+	HardwareModel                       *string
+	CriticalityID                       *int16
+	ImportedOwner                       *string
+	DeclaredOwner                       *string
+	ImportedExposureID                  *int16
+	DeclaredExposureID                  *int16
+	LifecycleStageID                    *int16
+	AreaRecordID                        *string
+	Retired                             bool
+	InactiveSince                       *time.Time
+	AreaID                              *int64
+	AreaName                            *string
+	ExposureDeclaredBy                  *string
+	ExposureDeclaredAt                  *time.Time
+	DeclaredInformationClassificationID *int16
+	InformationClassificationDeclaredBy *string
+	InformationClassificationDeclaredAt *time.Time
 }
 
 func (q *Queries) ListAssets(ctx context.Context, cmdbSourceID uuid.UUID) ([]ListAssetsRow, error) {
@@ -150,6 +226,7 @@ func (q *Queries) ListAssets(ctx context.Context, cmdbSourceID uuid.UUID) ([]Lis
 	for rows.Next() {
 		var i ListAssetsRow
 		if err := rows.Scan(
+			&i.ID,
 			&i.CmdbSourceID,
 			&i.RecordID,
 			&i.Name,
@@ -160,9 +237,121 @@ func (q *Queries) ListAssets(ctx context.Context, cmdbSourceID uuid.UUID) ([]Lis
 			&i.CriticalityID,
 			&i.ImportedOwner,
 			&i.DeclaredOwner,
+			&i.ImportedExposureID,
 			&i.DeclaredExposureID,
+			&i.LifecycleStageID,
+			&i.AreaRecordID,
 			&i.Retired,
 			&i.InactiveSince,
+			&i.AreaID,
+			&i.AreaName,
+			&i.ExposureDeclaredBy,
+			&i.ExposureDeclaredAt,
+			&i.DeclaredInformationClassificationID,
+			&i.InformationClassificationDeclaredBy,
+			&i.InformationClassificationDeclaredAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAssetsByReference = `-- name: ListAssetsByReference :many
+SELECT a.id, a.cmdb_source_id, a.record_id, a.name, a.description, a.kind_id,
+       a.hardware_vendor, a.hardware_model, a.criticality_id,
+       imported_owner.email AS imported_owner, declared_owner.email AS declared_owner,
+       a.imported_exposure_id, a.declared_exposure_id, a.lifecycle_stage_id, a.area_record_id, a.retired, a.inactive_since,
+       area.id AS area_id, area.name AS area_name,
+       exposure_declarer.email AS exposure_declared_by, a.exposure_declared_at,
+       a.declared_information_classification_id,
+       information_classification_declarer.email AS information_classification_declared_by, a.information_classification_declared_at
+FROM assets a
+LEFT JOIN asset_owners imported_owner ON imported_owner.id = a.imported_owner_id
+LEFT JOIN asset_owners declared_owner ON declared_owner.id = a.declared_owner_id
+LEFT JOIN customer_areas area ON area.cmdb_source_id = a.cmdb_source_id AND area.record_id = a.area_record_id
+LEFT JOIN users exposure_declarer ON exposure_declarer.id = a.exposure_declared_by
+LEFT JOIN users information_classification_declarer ON information_classification_declarer.id = a.information_classification_declared_by
+WHERE (a.cmdb_source_id, a.record_id) IN (
+    SELECT s.id, r.id
+    FROM unnest($1::uuid[]) WITH ORDINALITY AS s (id, n)
+    JOIN unnest($2::text[]) WITH ORDINALITY AS r (id, n) USING (n)
+)
+ORDER BY a.cmdb_source_id, a.record_id
+`
+
+type ListAssetsByReferenceParams struct {
+	SourceIds []uuid.UUID
+	RecordIds []string
+}
+
+type ListAssetsByReferenceRow struct {
+	ID                                  int64
+	CmdbSourceID                        uuid.UUID
+	RecordID                            string
+	Name                                string
+	Description                         string
+	KindID                              int16
+	HardwareVendor                      *string
+	HardwareModel                       *string
+	CriticalityID                       *int16
+	ImportedOwner                       *string
+	DeclaredOwner                       *string
+	ImportedExposureID                  *int16
+	DeclaredExposureID                  *int16
+	LifecycleStageID                    *int16
+	AreaRecordID                        *string
+	Retired                             bool
+	InactiveSince                       *time.Time
+	AreaID                              *int64
+	AreaName                            *string
+	ExposureDeclaredBy                  *string
+	ExposureDeclaredAt                  *time.Time
+	DeclaredInformationClassificationID *int16
+	InformationClassificationDeclaredBy *string
+	InformationClassificationDeclaredAt *time.Time
+}
+
+// Assets by their references, as ListAssets reads them. The two arrays are
+// parallel: element i of each names one Asset.
+func (q *Queries) ListAssetsByReference(ctx context.Context, arg ListAssetsByReferenceParams) ([]ListAssetsByReferenceRow, error) {
+	rows, err := q.db.Query(ctx, listAssetsByReference, arg.SourceIds, arg.RecordIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAssetsByReferenceRow
+	for rows.Next() {
+		var i ListAssetsByReferenceRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.CmdbSourceID,
+			&i.RecordID,
+			&i.Name,
+			&i.Description,
+			&i.KindID,
+			&i.HardwareVendor,
+			&i.HardwareModel,
+			&i.CriticalityID,
+			&i.ImportedOwner,
+			&i.DeclaredOwner,
+			&i.ImportedExposureID,
+			&i.DeclaredExposureID,
+			&i.LifecycleStageID,
+			&i.AreaRecordID,
+			&i.Retired,
+			&i.InactiveSince,
+			&i.AreaID,
+			&i.AreaName,
+			&i.ExposureDeclaredBy,
+			&i.ExposureDeclaredAt,
+			&i.DeclaredInformationClassificationID,
+			&i.InformationClassificationDeclaredBy,
+			&i.InformationClassificationDeclaredAt,
 		); err != nil {
 			return nil, err
 		}
@@ -175,64 +364,115 @@ func (q *Queries) ListAssets(ctx context.Context, cmdbSourceID uuid.UUID) ([]Lis
 }
 
 const listCustomerAssets = `-- name: ListCustomerAssets :many
-SELECT a.cmdb_source_id, a.record_id, a.name, a.description, a.kind_id,
-       a.hardware_vendor, a.hardware_model, a.criticality_id,
-       imported_owner.email AS imported_owner, declared_owner.email AS declared_owner,
-       a.declared_exposure_id, a.retired, a.inactive_since
-FROM assets a
-JOIN cmdb_sources s ON s.id = a.cmdb_source_id
-LEFT JOIN asset_owners imported_owner ON imported_owner.id = a.imported_owner_id
-LEFT JOIN asset_owners declared_owner ON declared_owner.id = a.declared_owner_id
-WHERE s.customer_id = $1
-  AND ($2::boolean IS NULL OR (a.inactive_since IS NULL) = $2::boolean)
-  AND ($3::smallint IS NULL OR a.kind_id = $3::smallint)
-  AND ($4::smallint IS NULL OR a.criticality_id = $4::smallint)
-  AND ($5::text IS NULL
-       OR (a.name, a.cmdb_source_id, a.record_id)
-          > ($5::text, $6::uuid, $7::text))
-ORDER BY a.name, a.cmdb_source_id, a.record_id
-LIMIT $8
+WITH matching AS (
+    SELECT a.id, a.cmdb_source_id, a.record_id, a.name, a.description, a.kind_id,
+           a.hardware_vendor, a.hardware_model, a.criticality_id,
+           imported_owner.email AS imported_owner, declared_owner.email AS declared_owner,
+           a.imported_exposure_id, a.declared_exposure_id, a.lifecycle_stage_id, a.area_record_id, a.retired, a.inactive_since,
+           area.id AS area_id, area.name AS area_name,
+           exposure_declarer.email AS exposure_declared_by, a.exposure_declared_at,
+           a.declared_information_classification_id,
+           information_classification_declarer.email AS information_classification_declared_by, a.information_classification_declared_at,
+           count(*) OVER () AS total
+    FROM assets a
+    JOIN cmdb_sources s ON s.id = a.cmdb_source_id
+    LEFT JOIN asset_owners imported_owner ON imported_owner.id = a.imported_owner_id
+    LEFT JOIN asset_owners declared_owner ON declared_owner.id = a.declared_owner_id
+    LEFT JOIN customer_areas area ON area.cmdb_source_id = a.cmdb_source_id AND area.record_id = a.area_record_id
+    LEFT JOIN users exposure_declarer ON exposure_declarer.id = a.exposure_declared_by
+    LEFT JOIN users information_classification_declarer ON information_classification_declarer.id = a.information_classification_declared_by
+    WHERE s.customer_id = $5
+      AND ($6::boolean IS NULL OR (a.inactive_since IS NULL) = $6::boolean)
+      AND (cardinality($7::smallint[]) = 0 OR a.kind_id = ANY($7::smallint[]))
+      AND (cardinality($8::smallint[]) = 0 OR coalesce(a.criticality_id, 0) = ANY($8::smallint[]))
+      AND (cardinality($9::smallint[]) = 0
+           OR coalesce(a.declared_exposure_id, a.imported_exposure_id, 0) = ANY($9::smallint[]))
+      AND (cardinality($10::smallint[]) = 0
+           OR coalesce(a.declared_information_classification_id, 0) = ANY($10::smallint[]))
+      AND (cardinality($11::smallint[]) = 0 OR coalesce(a.lifecycle_stage_id, 0) = ANY($11::smallint[]))
+      AND (cardinality($12::bigint[]) = 0
+           OR (a.cmdb_source_id, a.area_record_id) IN
+              (SELECT cmdb_source_id, record_id FROM customer_areas WHERE id = ANY($12::bigint[])))
+)
+SELECT id, cmdb_source_id, record_id, name, description, kind_id,
+       hardware_vendor, hardware_model, criticality_id,
+       imported_owner, declared_owner,
+       imported_exposure_id, declared_exposure_id, lifecycle_stage_id, area_record_id, retired, inactive_since,
+       area_id, area_name,
+       exposure_declared_by, exposure_declared_at,
+       declared_information_classification_id,
+       information_classification_declared_by, information_classification_declared_at,
+       total
+FROM matching
+WHERE $1::text IS NULL
+   OR (name, cmdb_source_id, record_id)
+      > ($1::text, $2::uuid, $3::text)
+ORDER BY name, cmdb_source_id, record_id
+LIMIT $4
 `
 
 type ListCustomerAssetsParams struct {
-	CustomerID    uuid.UUID
-	Active        *bool
-	KindID        *int16
-	CriticalityID *int16
-	AfterName     *string
-	AfterSourceID pgtype.UUID
-	AfterRecordID *string
-	PageSize      int32
+	AfterName                    *string
+	AfterSourceID                pgtype.UUID
+	AfterRecordID                *string
+	PageSize                     int32
+	CustomerID                   uuid.UUID
+	Active                       *bool
+	KindIds                      []int16
+	CriticalityIds               []int16
+	ExposureIds                  []int16
+	InformationClassificationIds []int16
+	LifecycleStageIds            []int16
+	AreaIds                      []int64
 }
 
 type ListCustomerAssetsRow struct {
-	CmdbSourceID       uuid.UUID
-	RecordID           string
-	Name               string
-	Description        string
-	KindID             int16
-	HardwareVendor     *string
-	HardwareModel      *string
-	CriticalityID      *int16
-	ImportedOwner      *string
-	DeclaredOwner      *string
-	DeclaredExposureID *int16
-	Retired            bool
-	InactiveSince      *time.Time
+	ID                                  int64
+	CmdbSourceID                        uuid.UUID
+	RecordID                            string
+	Name                                string
+	Description                         string
+	KindID                              int16
+	HardwareVendor                      *string
+	HardwareModel                       *string
+	CriticalityID                       *int16
+	ImportedOwner                       *string
+	DeclaredOwner                       *string
+	ImportedExposureID                  *int16
+	DeclaredExposureID                  *int16
+	LifecycleStageID                    *int16
+	AreaRecordID                        *string
+	Retired                             bool
+	InactiveSince                       *time.Time
+	AreaID                              *int64
+	AreaName                            *string
+	ExposureDeclaredBy                  *string
+	ExposureDeclaredAt                  *time.Time
+	DeclaredInformationClassificationID *int16
+	InformationClassificationDeclaredBy *string
+	InformationClassificationDeclaredAt *time.Time
+	Total                               int64
 }
 
 // The keyset condition and the ORDER BY both use (name, cmdb_source_id,
 // record_id), so a page boundary is exact even between equal names.
+// matching holds the Customer's Assets that pass every value filter, so the
+// filter lives once; total counts them before the page keyset narrows the
+// rows, and so counts every match whatever page is read.
 func (q *Queries) ListCustomerAssets(ctx context.Context, arg ListCustomerAssetsParams) ([]ListCustomerAssetsRow, error) {
 	rows, err := q.db.Query(ctx, listCustomerAssets,
-		arg.CustomerID,
-		arg.Active,
-		arg.KindID,
-		arg.CriticalityID,
 		arg.AfterName,
 		arg.AfterSourceID,
 		arg.AfterRecordID,
 		arg.PageSize,
+		arg.CustomerID,
+		arg.Active,
+		arg.KindIds,
+		arg.CriticalityIds,
+		arg.ExposureIds,
+		arg.InformationClassificationIds,
+		arg.LifecycleStageIds,
+		arg.AreaIds,
 	)
 	if err != nil {
 		return nil, err
@@ -242,6 +482,7 @@ func (q *Queries) ListCustomerAssets(ctx context.Context, arg ListCustomerAssets
 	for rows.Next() {
 		var i ListCustomerAssetsRow
 		if err := rows.Scan(
+			&i.ID,
 			&i.CmdbSourceID,
 			&i.RecordID,
 			&i.Name,
@@ -252,9 +493,20 @@ func (q *Queries) ListCustomerAssets(ctx context.Context, arg ListCustomerAssets
 			&i.CriticalityID,
 			&i.ImportedOwner,
 			&i.DeclaredOwner,
+			&i.ImportedExposureID,
 			&i.DeclaredExposureID,
+			&i.LifecycleStageID,
+			&i.AreaRecordID,
 			&i.Retired,
 			&i.InactiveSince,
+			&i.AreaID,
+			&i.AreaName,
+			&i.ExposureDeclaredBy,
+			&i.ExposureDeclaredAt,
+			&i.DeclaredInformationClassificationID,
+			&i.InformationClassificationDeclaredBy,
+			&i.InformationClassificationDeclaredAt,
+			&i.Total,
 		); err != nil {
 			return nil, err
 		}
@@ -346,6 +598,33 @@ func (q *Queries) ListSoftwareComponentsOf(ctx context.Context, arg ListSoftware
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockCustomerAsset = `-- name: LockCustomerAsset :one
+SELECT a.cmdb_source_id, a.record_id
+FROM assets a
+JOIN cmdb_sources s ON s.id = a.cmdb_source_id
+WHERE a.id = $1 AND s.customer_id = $2
+FOR UPDATE OF a
+`
+
+type LockCustomerAssetParams struct {
+	ID         int64
+	CustomerID uuid.UUID
+}
+
+type LockCustomerAssetRow struct {
+	CmdbSourceID uuid.UUID
+	RecordID     string
+}
+
+// The reference of the Customer's Asset with that id, locked until the
+// transaction ends so a Declaration and a Sync of it take turns.
+func (q *Queries) LockCustomerAsset(ctx context.Context, arg LockCustomerAssetParams) (LockCustomerAssetRow, error) {
+	row := q.db.QueryRow(ctx, lockCustomerAsset, arg.ID, arg.CustomerID)
+	var i LockCustomerAssetRow
+	err := row.Scan(&i.CmdbSourceID, &i.RecordID)
+	return i, err
 }
 
 const reactivateAssets = `-- name: ReactivateAssets :execrows

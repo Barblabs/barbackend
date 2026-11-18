@@ -10,29 +10,9 @@ import (
 	"barbackend/internal/inventory"
 	"barbackend/internal/postgres"
 	"barbackend/internal/postgres/pgtest"
+	"barbackend/internal/tenancy"
 	"github.com/google/uuid"
 )
-
-func fullParams(t *testing.T) inventory.ImportedAssetParams {
-	return inventory.ImportedAssetParams{
-		Name:        "srv-01",
-		Description: "Billing API",
-		Kind:        inventory.Server,
-		Hardware:    inventory.Hardware{Vendor: "Dell", Model: ""},
-		Software: []inventory.SoftwareComponent{
-			{Role: inventory.Application, Name: "nginx", Version: "1.24", Product: inventory.Product{Vendor: "f5", Name: "nginx"}},
-			{Role: inventory.OperatingSystem, Name: "Ubuntu", Version: "22.04 LTS"},
-			{Role: inventory.Application, Name: "custom agent"},
-		},
-		Criticality: inventory.CriticalityHigh,
-		Owner:       mustOwner(t, "owner@example.com"),
-		Retired:     true,
-	}
-}
-
-func record(t *testing.T, id string, p inventory.ImportedAssetParams) inventory.Record {
-	return inventory.Record{RecordID: id, Imported: mustImported(t, p)}
-}
 
 func TestCreatedAssetRoundTrip(t *testing.T) {
 	tests := []struct {
@@ -106,16 +86,23 @@ func TestImportedUpdateKeepsDeclarations(t *testing.T) {
 	t.Parallel()
 	db, conn := newDBWithConn(t)
 	src := newSource(t, db, newCustomer(t, db))
-	syncRecords(t, db, src.ID(), record(t, "1", fullParams(t)))
+	admin := storeUser(t, db, "admin@example.com", tenancy.CustomerAdmin, src.Customer())
+	active := fullParams(t)
+	active.Retired = false
+	syncRecords(t, db, src.ID(), record(t, "1", active))
 	_, err := conn.Exec(context.Background(), `
 		WITH owner AS (
 			INSERT INTO asset_owners (customer_id, email) VALUES ($1, 'declared@example.com') RETURNING id
 		)
-		UPDATE assets SET declared_owner_id = (SELECT id FROM owner), declared_exposure_id = $2`,
-		src.Customer().String(), int16(inventory.Internal))
+		UPDATE assets SET declared_owner_id = (SELECT id FROM owner)`,
+		src.Customer().String())
 	if err != nil {
 		t.Fatal(err)
 	}
+	id := onlyAsset(t, db, src.Customer()).ID
+	declareInternal(t, db, src.Customer(), id, admin.ID())
+	declareConfidential(t, db, src.Customer(), id, admin.ID())
+	declared := onlyAsset(t, db, src.Customer())
 
 	changed := inventory.ImportedAssetParams{
 		Name:     "srv-01-renamed",
@@ -125,15 +112,24 @@ func TestImportedUpdateKeepsDeclarations(t *testing.T) {
 	syncRecords(t, db, src.ID(), record(t, "1", changed))
 
 	want, err := inventory.RestoreAsset(inventory.SourceReference{Source: src.ID(), RecordID: "1"}, mustImported(t, changed), inventory.AssetState{
-		Active:           true,
-		DeclaredOwner:    mustOwner(t, "declared@example.com"),
-		DeclaredExposure: inventory.Internal,
+		Active:                            true,
+		DeclaredOwner:                     mustOwner(t, "declared@example.com"),
+		DeclaredExposure:                  inventory.Internal,
+		DeclaredInformationClassification: inventory.ClassifiedConfidential,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got := assets(t, db, src.ID()); len(got) != 1 || !reflect.DeepEqual(got[0], want) {
 		t.Errorf("assets = %+v, want [%+v]", got, want)
+	}
+	after := onlyAsset(t, db, src.Customer())
+	if after.ExposureAudit != declared.ExposureAudit {
+		t.Errorf("ExposureAudit after the Sync = %+v, want %+v", after.ExposureAudit, declared.ExposureAudit)
+	}
+	if after.InformationClassificationAudit != declared.InformationClassificationAudit {
+		t.Errorf("InformationClassificationAudit after the Sync = %+v, want %+v",
+			after.InformationClassificationAudit, declared.InformationClassificationAudit)
 	}
 }
 
@@ -156,8 +152,8 @@ func TestDeactivationKeepsFirstInactiveTime(t *testing.T) {
 	}
 
 	stale := restore(t, src.ID(), "1", retired, true)
-	commitSync(t, db, src.ID(), func([]*inventory.Asset) (inventory.Reconciliation, error) {
-		return inventory.Reconcile(src.ID(), []*inventory.Asset{stale}, inventory.Snapshot{})
+	commitSync(t, db, src.ID(), func(inventory.Stored) (inventory.Reconciliation, error) {
+		return inventory.Reconcile(src.ID(), inventory.Stored{Assets: []*inventory.Asset{stale}}, inventory.Snapshot{})
 	})
 	if again := inactiveSince(); again == nil || !again.Equal(*first) {
 		t.Errorf("inactive_since = %v after deactivating again, want %v", again, first)
@@ -204,8 +200,8 @@ func TestSaveOfMissingAssetFails(t *testing.T) {
 			}
 
 			ghost := restore(t, src.ID(), "missing", active, tt.active)
-			_, err := db.CommitSync(context.Background(), src.ID(), time.Now(), func([]*inventory.Asset) (inventory.Reconciliation, error) {
-				return inventory.Reconcile(src.ID(), []*inventory.Asset{ghost}, s)
+			_, err := db.CommitSync(context.Background(), src.ID(), time.Now(), func(inventory.Stored) (inventory.Reconciliation, error) {
+				return inventory.Reconcile(src.ID(), inventory.Stored{Assets: []*inventory.Asset{ghost}}, s)
 			})
 			if !errors.Is(err, postgres.ErrNotFound) {
 				t.Errorf("err = %v, want ErrNotFound", err)
@@ -268,7 +264,7 @@ func TestCommitSyncFailsWhileLocked(t *testing.T) {
 	locked, release := make(chan struct{}), make(chan struct{})
 	done := make(chan error)
 	go func() {
-		_, err := db.CommitSync(context.Background(), src.ID(), time.Now(), func(existing []*inventory.Asset) (inventory.Reconciliation, error) {
+		_, err := db.CommitSync(context.Background(), src.ID(), time.Now(), func(existing inventory.Stored) (inventory.Reconciliation, error) {
 			close(locked)
 			<-release
 			return reconcile(existing)
@@ -296,8 +292,8 @@ func TestCommitSyncOfAnotherSourceFails(t *testing.T) {
 	locked := newSource(t, db, newCustomer(t, db))
 	other := newSource(t, db, newCustomer(t, db))
 
-	_, err := db.CommitSync(context.Background(), locked.ID(), time.Now(), func([]*inventory.Asset) (inventory.Reconciliation, error) {
-		return inventory.Reconcile(other.ID(), nil, inventory.Snapshot{Records: []inventory.Record{record(t, "1", fullParams(t))}})
+	_, err := db.CommitSync(context.Background(), locked.ID(), time.Now(), func(inventory.Stored) (inventory.Reconciliation, error) {
+		return inventory.Reconcile(other.ID(), inventory.Stored{}, inventory.Snapshot{Records: []inventory.Record{record(t, "1", fullParams(t))}})
 	})
 
 	if err == nil {

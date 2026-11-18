@@ -12,6 +12,53 @@ import (
 	"github.com/google/uuid"
 )
 
+const countSyncRunsByDay = `-- name: CountSyncRunsByDay :many
+SELECT d.start::timestamptz AS day,
+       (SELECT count(*) FROM sync_runs r
+        WHERE r.outcome_id = $1
+          AND r.finished_at >= d.start AND r.finished_at < d.start + interval '24 hours')::integer AS succeeded,
+       (SELECT count(*) FROM sync_runs r
+        WHERE r.outcome_id <> $1
+          AND r.finished_at >= d.start AND r.finished_at < d.start + interval '24 hours')::integer AS failed
+FROM generate_series($2::timestamptz, $3::timestamptz, interval '24 hours') AS d(start)
+ORDER BY d.start
+`
+
+type CountSyncRunsByDayParams struct {
+	SucceededOutcomeID int16
+	Since              time.Time
+	LastStart          time.Time
+}
+
+type CountSyncRunsByDayRow struct {
+	Day       time.Time
+	Succeeded int32
+	Failed    int32
+}
+
+// Every day from the one starting at since to the one starting at last_start,
+// each 24 hours long: how many Syncs of every CMDB Source finished in it,
+// succeeded or not.
+func (q *Queries) CountSyncRunsByDay(ctx context.Context, arg CountSyncRunsByDayParams) ([]CountSyncRunsByDayRow, error) {
+	rows, err := q.db.Query(ctx, countSyncRunsByDay, arg.SucceededOutcomeID, arg.Since, arg.LastStart)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CountSyncRunsByDayRow
+	for rows.Next() {
+		var i CountSyncRunsByDayRow
+		if err := rows.Scan(&i.Day, &i.Succeeded, &i.Failed); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const insertSyncRun = `-- name: InsertSyncRun :exec
 INSERT INTO sync_runs (
     cmdb_source_id, started_at, finished_at, outcome_id,

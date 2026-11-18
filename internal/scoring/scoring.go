@@ -4,6 +4,7 @@ package scoring
 import (
 	"errors"
 	"fmt"
+	"math"
 
 	"barbackend/internal/inventory"
 )
@@ -22,6 +23,9 @@ type Inputs struct {
 	KEVStale    bool     // that catalog is older than expected, or was never read
 	Criticality inventory.Criticality
 	Exposure    inventory.Exposure
+	Lifecycle   inventory.LifecycleStage
+	// Classification is read only by a Model that scores it (ADR 0032).
+	Classification inventory.InformationClassification
 }
 
 type DataGap int
@@ -33,6 +37,10 @@ const (
 	KEVStale           DataGap = 3
 	CriticalityUnknown DataGap = 4
 	ExposureUndeclared DataGap = 5
+	LifecycleUnknown   DataGap = 6
+	// ClassificationUndeclared is recorded only by a Model that scores the
+	// Information Classification (ADR 0032).
+	ClassificationUndeclared DataGap = 7
 )
 
 func (g DataGap) String() string {
@@ -47,6 +55,10 @@ func (g DataGap) String() string {
 		return "criticality_unknown"
 	case ExposureUndeclared:
 		return "exposure_undeclared"
+	case LifecycleUnknown:
+		return "lifecycle_unknown"
+	case ClassificationUndeclared:
+		return "information_classification_undeclared"
 	default:
 		return fmt.Sprintf("DataGap(%d)", int(g))
 	}
@@ -57,32 +69,233 @@ type ModelVersion int
 // Model is a Scoring Model. Its fields are unexported so a published version
 // can never be edited: changing any number means a new Model.
 type Model struct {
-	version                  ModelVersion
-	wCVSS, wEPSS, wKEV       float64
-	critHigh, critMedium     float64
-	critLow, critUnknown     float64
-	expInternet, expInternal float64
-	expUnknown               float64
-	defaultCVSS              float64
+	version     ModelVersion
+	layer1      func(Factors) (vulnerability float64, exploitSignal *float64)
+	criticality map[inventory.Criticality]float64
+	exposure    map[inventory.Exposure]float64
+	// A nil table is a factor the Model does not score: lifecycle then
+	// multiplies by 1, and classification leaves the impact to Criticality.
+	lifecycle      map[inventory.LifecycleStage]float64
+	classification map[inventory.InformationClassification]float64
+	defaultCVSS    float64
+	bands          []bandFloor // highest first
+}
+
+// bandFloor is the lowest Score of a Band.
+type bandFloor struct {
+	band  Band
+	floor float64
+}
+
+// weightedSum is layer 1 of ADR 0009: CVSS, EPSS and KEV added by weight.
+func weightedSum(cvss, epss, kev float64) func(Factors) (float64, *float64) {
+	return func(f Factors) (float64, *float64) {
+		return cvss*f.Alpha + epss*f.Beta + kev*f.Gamma, nil
+	}
+}
+
+// weighedByExploitSignal is layer 1 of ADR 0032: the CVSS weighed by the
+// Exploit Signal, which is 1 on a KEV CVE and grows linearly with EPSS up to
+// saturation; at a signal of 0, unexploitedShare of the CVSS counts.
+func weighedByExploitSignal(saturation, unexploitedShare float64) func(Factors) (float64, *float64) {
+	return func(f Factors) (float64, *float64) {
+		signal := 1.0
+		if f.Gamma != 1 {
+			signal = min(f.Beta/saturation, 1)
+		}
+		return f.Alpha * (unexploitedShare + (1-unexploitedShare)*signal), &signal
+	}
 }
 
 // Model1 is the linear model of ADR 0009. Unknown Criticality and Exposure
 // take the highest multiplier, so missing context never lowers a Score.
 var Model1 = Model{
 	version: 1,
-	wCVSS:   0.3, wEPSS: 0.3, wKEV: 0.4,
-	critHigh: 1.0, critMedium: 0.7, critLow: 0.4, critUnknown: 1.0,
-	expInternet: 1.0, expInternal: 0.6, expUnknown: 1.0,
+	layer1:  weightedSum(0.3, 0.3, 0.4),
+	criticality: map[inventory.Criticality]float64{
+		inventory.CriticalityHigh: 1.0, inventory.CriticalityMedium: 0.7, inventory.CriticalityLow: 0.4, inventory.CriticalityUnknown: 1.0,
+	},
+	exposure:    map[inventory.Exposure]float64{inventory.InternetFacing: 1.0, inventory.Internal: 0.6, inventory.ExposureUnknown: 1.0},
 	defaultCVSS: 0.7,
 }
 
+// Model2 is Model1 with the Lifecycle Stage as a third Asset multiplier
+// (ADR 0028). An Unknown stage takes the highest one, as in Model1.
+var Model2 = Model{
+	version: 2,
+	layer1:  weightedSum(0.3, 0.3, 0.4),
+	criticality: map[inventory.Criticality]float64{
+		inventory.CriticalityHigh: 1.0, inventory.CriticalityMedium: 0.7, inventory.CriticalityLow: 0.4, inventory.CriticalityUnknown: 1.0,
+	},
+	exposure: map[inventory.Exposure]float64{inventory.InternetFacing: 1.0, inventory.Internal: 0.6, inventory.ExposureUnknown: 1.0},
+	lifecycle: map[inventory.LifecycleStage]float64{
+		inventory.LifecycleProduction: 1.0, inventory.LifecycleImplementation: 0.8, inventory.LifecycleStock: 0.3, inventory.LifecycleUnknown: 1.0,
+	},
+	defaultCVSS: 0.7,
+}
+
+// Model3 weighs the CVSS by the Exploit Signal instead of adding EPSS and KEV
+// to it, takes the higher of Criticality and Information Classification as
+// the impact, softens the multipliers and sets the Score Bands (ADR 0032).
+var Model3 = Model{
+	version: 3,
+	layer1:  weighedByExploitSignal(0.10, 0.5),
+	criticality: map[inventory.Criticality]float64{
+		inventory.CriticalityHigh: 1.0, inventory.CriticalityMedium: 0.75, inventory.CriticalityLow: 0.5, inventory.CriticalityUnknown: 1.0,
+	},
+	exposure: map[inventory.Exposure]float64{inventory.InternetFacing: 1.0, inventory.Internal: 0.7, inventory.ExposureUnknown: 1.0},
+	lifecycle: map[inventory.LifecycleStage]float64{
+		inventory.LifecycleProduction: 1.0, inventory.LifecycleImplementation: 0.85, inventory.LifecycleStock: 0.4, inventory.LifecycleUnknown: 1.0,
+	},
+	classification: map[inventory.InformationClassification]float64{
+		inventory.ClassifiedConfidential: 1.0, inventory.ClassifiedPrivate: 0.75, inventory.ClassifiedPublic: 0.5,
+	},
+	defaultCVSS: 0.7,
+	bands: []bandFloor{
+		{BandCritical, 0.70},
+		{BandHigh, 0.40},
+		{BandMedium, 0.20},
+		{BandLow, 0},
+	},
+}
+
 func (m Model) Version() ModelVersion { return m.version }
+
+// Band is a Score Band (ADR 0032). It is derived from a Score's value and
+// Model, never stored.
+type Band int
+
+const (
+	BandLow      Band = 1
+	BandMedium   Band = 2
+	BandHigh     Band = 3
+	BandCritical Band = 4
+)
+
+func (b Band) String() string {
+	switch b {
+	case BandLow:
+		return "low"
+	case BandMedium:
+		return "medium"
+	case BandHigh:
+		return "high"
+	case BandCritical:
+		return "critical"
+	default:
+		return fmt.Sprintf("Band(%d)", int(b))
+	}
+}
+
+// BandCounts counts Scores by their Band.
+type BandCounts struct {
+	Critical, High, Medium, Low int
+	// Unbanded counts the Scores of a Model without Bands, before Model 3.
+	Unbanded int
+}
+
+// Add counts s in its Band.
+func (c *BandCounts) Add(s Score) {
+	band, ok := s.Band()
+	switch {
+	case !ok:
+		c.Unbanded++
+	case band == BandCritical:
+		c.Critical++
+	case band == BandHigh:
+		c.High++
+	case band == BandMedium:
+		c.Medium++
+	default:
+		c.Low++
+	}
+}
+
+// Total is every Score counted.
+func (c BandCounts) Total() int { return c.Critical + c.High + c.Medium + c.Low + c.Unbanded }
+
+// ParseBand is the Band named name, as String writes it, and false for any
+// other name.
+func ParseBand(name string) (Band, bool) {
+	for _, b := range []Band{BandLow, BandMedium, BandHigh, BandCritical} {
+		if b.String() == name {
+			return b, true
+		}
+	}
+	return 0, false
+}
+
+// models are the published Scoring Models, so a stored Score's Band is read
+// from the Model that scored it.
+var models = []Model{Model1, Model2, Model3}
+
+// Band is the Score Band of s under the Model that scored it, and false when
+// that Model has none or is not one of the published Models.
+func (s Score) Band() (Band, bool) {
+	for _, m := range models {
+		if m.version == s.Model {
+			return m.Band(s.Value)
+		}
+	}
+	return 0, false
+}
+
+// bandDigits is how many decimals of a Score its Band is read from: those
+// the Dossier and the API show, so a Score shown as 0.7 is never High, and
+// the float error of a product that lands on a floor, such as CVSS 7 on a
+// KEV CVE and an Asset factor of 1, does not move it (ADR 0032).
+const bandDigits = 4
+
+// Band is the Score Band of value under m, and false for a Model that has
+// none (Models 1 and 2).
+func (m Model) Band(value float64) (Band, bool) {
+	scale := math.Pow10(bandDigits)
+	shown := math.Round(value*scale) / scale
+	for _, b := range m.bands {
+		if shown >= b.floor {
+			return b.band, true
+		}
+	}
+	return 0, false
+}
 
 type Factors struct {
 	Alpha, Beta, Gamma    float64 // normalized CVSS, EPSS and KEV
 	Vulnerability         float64 // S, layer 1
 	CriticalityMultiplier float64
 	ExposureMultiplier    float64
+	LifecycleMultiplier   float64 // 1 in a Model without a lifecycle factor
+	// ExploitSignal is nil in a Model that adds EPSS and KEV instead.
+	ExploitSignal *float64
+	// ClassificationMultiplier is nil in a Model that does not score the
+	// Information Classification, and when the Asset is Unclassified.
+	ClassificationMultiplier *float64
+}
+
+// Equal reports whether f and g hold the same factors, comparing the
+// optional ones by value.
+func (f Factors) Equal(g Factors) bool {
+	plainF, plainG := f, g
+	plainF.ExploitSignal, plainF.ClassificationMultiplier = nil, nil
+	plainG.ExploitSignal, plainG.ClassificationMultiplier = nil, nil
+	return plainF == plainG && sameOptional(f.ExploitSignal, g.ExploitSignal) &&
+		sameOptional(f.ClassificationMultiplier, g.ClassificationMultiplier)
+}
+
+func sameOptional(a, b *float64) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
+}
+
+// Impact is the Asset's impact multiplier: Criticality's, or the
+// Information Classification's when it is higher (ADR 0032).
+func (f Factors) Impact() float64 {
+	if f.ClassificationMultiplier != nil && *f.ClassificationMultiplier > f.CriticalityMultiplier {
+		return *f.ClassificationMultiplier
+	}
+	return f.CriticalityMultiplier
 }
 
 type Score struct {
@@ -124,37 +337,58 @@ func (m Model) Compute(in Inputs) (Score, error) {
 		gaps = append(gaps, KEVStale)
 	}
 
-	switch in.Criticality {
-	case inventory.CriticalityHigh:
-		f.CriticalityMultiplier = m.critHigh
-	case inventory.CriticalityMedium:
-		f.CriticalityMultiplier = m.critMedium
-	case inventory.CriticalityLow:
-		f.CriticalityMultiplier = m.critLow
-	case inventory.CriticalityUnknown:
-		f.CriticalityMultiplier = m.critUnknown
-		gaps = append(gaps, CriticalityUnknown)
-	default:
-		return Score{}, fmt.Errorf("%w: %d", inventory.ErrInvalidCriticality, int(in.Criticality))
+	var err error
+	if f.CriticalityMultiplier, gaps, err = multiplier(m.criticality, in.Criticality, inventory.CriticalityUnknown, CriticalityUnknown, inventory.ErrInvalidCriticality, gaps); err != nil {
+		return Score{}, err
+	}
+	if f.ExposureMultiplier, gaps, err = multiplier(m.exposure, in.Exposure, inventory.ExposureUnknown, ExposureUndeclared, inventory.ErrInvalidExposure, gaps); err != nil {
+		return Score{}, err
+	}
+	f.LifecycleMultiplier = 1
+	if m.lifecycle != nil {
+		if f.LifecycleMultiplier, gaps, err = multiplier(m.lifecycle, in.Lifecycle, inventory.LifecycleUnknown, LifecycleUnknown, inventory.ErrInvalidLifecycleStage, gaps); err != nil {
+			return Score{}, err
+		}
+	}
+	if f.ClassificationMultiplier, gaps, err = m.classificationOf(in.Classification, gaps); err != nil {
+		return Score{}, err
 	}
 
-	switch in.Exposure {
-	case inventory.InternetFacing:
-		f.ExposureMultiplier = m.expInternet
-	case inventory.Internal:
-		f.ExposureMultiplier = m.expInternal
-	case inventory.ExposureUnknown:
-		f.ExposureMultiplier = m.expUnknown
-		gaps = append(gaps, ExposureUndeclared)
-	default:
-		return Score{}, fmt.Errorf("%w: %d", inventory.ErrInvalidExposure, int(in.Exposure))
-	}
-
-	f.Vulnerability = m.wCVSS*f.Alpha + m.wEPSS*f.Beta + m.wKEV*f.Gamma
+	f.Vulnerability, f.ExploitSignal = m.layer1(f)
 	return Score{
 		Model:   m.version,
-		Value:   f.Vulnerability * f.CriticalityMultiplier * f.ExposureMultiplier,
+		Value:   f.Vulnerability * f.Impact() * f.ExposureMultiplier * f.LifecycleMultiplier,
 		Factors: f,
 		Gaps:    gaps,
 	}, nil
+}
+
+// multiplier is v's multiplier in table, recording gap when v is the unknown
+// value, and failing with invalid when the table has no such value.
+func multiplier[V comparable](table map[V]float64, v, unknown V, gap DataGap, invalid error, gaps []DataGap) (float64, []DataGap, error) {
+	m, ok := table[v]
+	if !ok {
+		return 0, nil, fmt.Errorf("%w: %v", invalid, v)
+	}
+	if v == unknown {
+		gaps = append(gaps, gap)
+	}
+	return m, gaps, nil
+}
+
+// classificationOf is nil for a Model that does not score the Information
+// Classification, and for an Unclassified Asset, which does not count and is
+// a Data Gap (ADR 0032).
+func (m Model) classificationOf(c inventory.InformationClassification, gaps []DataGap) (*float64, []DataGap, error) {
+	if m.classification == nil {
+		return nil, gaps, nil
+	}
+	if c == inventory.Unclassified {
+		return nil, append(gaps, ClassificationUndeclared), nil
+	}
+	v, ok := m.classification[c]
+	if !ok {
+		return nil, nil, fmt.Errorf("%w: %v", inventory.ErrInvalidInformationClassification, c)
+	}
+	return &v, gaps, nil
 }

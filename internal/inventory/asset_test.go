@@ -111,11 +111,38 @@ func TestAssetExposure(t *testing.T) {
 			if a.Exposure() != tt.want {
 				t.Errorf("Exposure() = %v, want %v", a.Exposure(), tt.want)
 			}
-			if err == nil {
-				a.ClearExposureDeclaration()
-				if a.Exposure() != inventory.ExposureUnknown {
-					t.Errorf("after clear Exposure() = %v, want Unknown", a.Exposure())
+		})
+	}
+}
+
+func TestAssetExposureFallsBackToImported(t *testing.T) {
+	tests := []struct {
+		name     string
+		imported inventory.Exposure
+		declare  inventory.Exposure
+		want     inventory.Exposure
+		wantDecl inventory.Exposure
+	}{
+		{"none", inventory.ExposureUnknown, inventory.ExposureUnknown, inventory.ExposureUnknown, inventory.ExposureUnknown},
+		{"imported only", inventory.Internal, inventory.ExposureUnknown, inventory.Internal, inventory.ExposureUnknown},
+		{"declared only", inventory.ExposureUnknown, inventory.InternetFacing, inventory.InternetFacing, inventory.InternetFacing},
+		{"declared wins", inventory.Internal, inventory.InternetFacing, inventory.InternetFacing, inventory.InternetFacing},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := validParams()
+			p.Exposure = tt.imported
+			a := newAsset(t, p)
+			if tt.declare != inventory.ExposureUnknown {
+				if err := a.DeclareExposure(tt.declare); err != nil {
+					t.Fatal(err)
 				}
+			}
+			if got := a.Exposure(); got != tt.want {
+				t.Errorf("Exposure() = %v, want %v", got, tt.want)
+			}
+			if got := a.DeclaredExposure(); got != tt.wantDecl {
+				t.Errorf("DeclaredExposure() = %v, want %v", got, tt.wantDecl)
 			}
 		})
 	}
@@ -131,6 +158,70 @@ func TestAssetRejectedExposureKeepsPrevious(t *testing.T) {
 	}
 	if a.Exposure() != inventory.Internal {
 		t.Errorf("Exposure() = %v, want Internal", a.Exposure())
+	}
+}
+
+func TestAnInactiveAssetCannotBeDeclaredButKeepsItsDeclaration(t *testing.T) {
+	a := newAsset(t, validParams())
+	if err := a.DeclareExposure(inventory.Internal); err != nil {
+		t.Fatal(err)
+	}
+	a.MarkInactive()
+	if err := a.DeclareExposure(inventory.InternetFacing); !errors.Is(err, inventory.ErrAssetInactive) {
+		t.Fatalf("err = %v, want ErrAssetInactive", err)
+	}
+	if a.Exposure() != inventory.Internal {
+		t.Errorf("Exposure() = %v, want the Internal declared while Active", a.Exposure())
+	}
+}
+
+func TestAssetInformationClassification(t *testing.T) {
+	tests := []struct {
+		name    string
+		declare inventory.InformationClassification
+		want    error
+	}{
+		{"public", inventory.ClassifiedPublic, nil},
+		{"private", inventory.ClassifiedPrivate, nil},
+		{"confidential", inventory.ClassifiedConfidential, nil},
+		{"unclassified rejected", inventory.Unclassified, inventory.ErrInvalidInformationClassification},
+		{"out of range rejected", 42, inventory.ErrInvalidInformationClassification},
+		{"negative rejected", -1, inventory.ErrInvalidInformationClassification},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := newAsset(t, validParams())
+			if err := a.DeclareInformationClassification(inventory.ClassifiedPrivate); err != nil {
+				t.Fatal(err)
+			}
+			want := tt.declare
+			if tt.want != nil {
+				want = inventory.ClassifiedPrivate
+			}
+
+			err := a.DeclareInformationClassification(tt.declare)
+
+			if !errors.Is(err, tt.want) {
+				t.Fatalf("err = %v, want %v", err, tt.want)
+			}
+			if got := a.InformationClassification(); got != want {
+				t.Errorf("InformationClassification() = %v, want %v", got, want)
+			}
+		})
+	}
+}
+
+func TestAnInactiveAssetCannotBeClassifiedButKeepsItsClassification(t *testing.T) {
+	a := newAsset(t, validParams())
+	if err := a.DeclareInformationClassification(inventory.ClassifiedConfidential); err != nil {
+		t.Fatal(err)
+	}
+	a.MarkInactive()
+	if err := a.DeclareInformationClassification(inventory.ClassifiedPublic); !errors.Is(err, inventory.ErrAssetInactive) {
+		t.Fatalf("err = %v, want ErrAssetInactive", err)
+	}
+	if got := a.InformationClassification(); got != inventory.ClassifiedConfidential {
+		t.Errorf("InformationClassification() = %v, want the Confidential declared while Active", got)
 	}
 }
 
@@ -181,7 +272,9 @@ func TestRestoreAsset(t *testing.T) {
 		{"active without declarations", ref, inventory.AssetState{Active: true}, nil},
 		{"inactive with declarations", ref, inventory.AssetState{DeclaredOwner: mustOwner(t, "o@example.com"), DeclaredExposure: inventory.Internal}, nil},
 		{"invalid reference", inventory.SourceReference{Source: sourceID}, inventory.AssetState{Active: true}, inventory.ErrInvalidSourceReference},
+		{"inactive with a classification", ref, inventory.AssetState{DeclaredInformationClassification: inventory.ClassifiedConfidential}, nil},
 		{"out of range exposure", ref, inventory.AssetState{DeclaredExposure: 42}, inventory.ErrInvalidExposure},
+		{"out of range classification", ref, inventory.AssetState{DeclaredInformationClassification: 42}, inventory.ErrInvalidInformationClassification},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -193,7 +286,10 @@ func TestRestoreAsset(t *testing.T) {
 				return
 			}
 			owner, _ := a.DeclaredOwner()
-			got := inventory.AssetState{Active: a.Active(), DeclaredOwner: owner, DeclaredExposure: a.Exposure()}
+			got := inventory.AssetState{
+				Active: a.Active(), DeclaredOwner: owner, DeclaredExposure: a.Exposure(),
+				DeclaredInformationClassification: a.InformationClassification(),
+			}
 			if got != tt.state {
 				t.Errorf("restored state = %+v, want %+v", got, tt.state)
 			}

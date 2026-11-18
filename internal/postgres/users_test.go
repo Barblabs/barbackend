@@ -31,8 +31,7 @@ func TestUserBySubRestoresTheStoredUser(t *testing.T) {
 			}
 			sub := uuid.NewString()
 			inTx(t, db, func(tx *postgres.Tx) error {
-				_, err := tx.CreateUser(context.Background(), want, sub)
-				return err
+				return pgtest.CreateUser(context.Background(), tx, want, sub)
 			})
 
 			var got tenancy.User
@@ -41,7 +40,7 @@ func TestUserBySubRestoresTheStoredUser(t *testing.T) {
 				return err
 			})
 
-			if got != want {
+			if got != want.Invited() {
 				t.Errorf("user = %+v, want %+v", got, want)
 			}
 		})
@@ -60,19 +59,6 @@ func TestUserBySubWithUnknownSub(t *testing.T) {
 	if !errors.Is(err, postgres.ErrNotFound) {
 		t.Errorf("err = %v, want ErrNotFound", err)
 	}
-}
-
-func storeUser(t *testing.T, db *postgres.DB, email string, role tenancy.Role, customer tenancy.CustomerID) tenancy.User {
-	t.Helper()
-	u, err := tenancy.NewUser(tenancy.UserID(uuid.New()), email, role, customer)
-	if err != nil {
-		t.Fatal(err)
-	}
-	inTx(t, db, func(tx *postgres.Tx) error {
-		_, err := tx.CreateUser(context.Background(), u, uuid.NewString())
-		return err
-	})
-	return u
 }
 
 func TestUsersAreOnlyTheCustomersOrderedByEmail(t *testing.T) {

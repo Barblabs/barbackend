@@ -28,6 +28,10 @@ func createPlatformAdmin(ctx context.Context, args []string) error {
 		if err != nil {
 			return err
 		}
+		if stored.User.Pending() {
+			_, _ = fmt.Fprintf(os.Stdout, "stored platform admin %s (%s); Cognito could not invite them yet, so serve retries\n", stored.User.Email(), stored.User.ID())
+			return nil
+		}
 		_, _ = fmt.Fprintf(os.Stdout, "invited platform admin %s (%s)\n", stored.User.Email(), stored.User.ID())
 		return nil
 	})

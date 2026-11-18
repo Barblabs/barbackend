@@ -24,31 +24,81 @@ export COGNITO_USER_POOL_ID=<pool-id>
 export COGNITO_CLIENT_ID=<app-client-id>
 # browser origins allowed to call the HTTP API, comma-separated
 export CORS_ALLOWED_ORIGINS=http://localhost:5173
+# the Slack app Customers install from the portal (ADR 0029); the redirect
+# URI must be registered in the Slack app and end in /slack/install/callback
+export SLACK_CLIENT_ID=<client-id>
+export SLACK_CLIENT_SECRET=<client-secret>
+export SLACK_REDIRECT_URI=https://api.example.com/slack/install/callback
+export PORTAL_URL=https://app.example.com   # the portal every Slack Alert links to
+# poll Ransomware.live's leak-site victims (ADR 0025) only with its owner's
+# written approval: its terms forbid commercial use without it
+export RANSOMWARELIVE_ENABLED=false
 
 ./barbackend migrate   # apply migrations in internal/postgres/migrations
 ./barbackend serve     # HTTP server (gin, :8080 unless PORT is set)
 ./barbackend create-platform-admin <email>   # invite the first Platform Admin
 ```
 
-`create-platform-admin` creates the user in Cognito, which emails the invitation, so it needs AWS credentials allowed to call `AdminCreateUser` and `AdminDeleteUser` on the pool, from the default AWS credential chain. The pool itself is created by Terraform outside this repo.
+`create-platform-admin` stores the Platform Admin and has Cognito email their Invitation, so it needs AWS credentials allowed to call `AdminCreateUser` and `AdminGetUser` on the pool, from the default AWS credential chain. The pool itself is created by Terraform outside this repo.
+
+### Container image
+
+The `Dockerfile` builds an image with the static binary and CA certificates only, running as a non-root user with Gin in release mode. `serve` is the default command, and any other command replaces it.
+
+```bash
+docker build -t barbackend .
+# both architectures, as CI builds them
+docker buildx build --platform linux/amd64,linux/arm64 -t barbackend .
+
+docker run --rm --env-file barbackend.env barbackend migrate   # before every deploy; safe to repeat
+docker run -d --restart unless-stopped -p 8080:8080 --env-file barbackend.env barbackend
+docker run --rm --env-file barbackend.env barbackend create-platform-admin <email>
+```
+
+`barbackend.env` holds the variables above as plain `KEY=value` lines: Docker reads no `export` and no quotes. Health checks go to `GET /ping`, as the image has no shell for a `HEALTHCHECK`.
+
+On EC2, give the instance a role allowed to call `AdminCreateUser` and `AdminGetUser` on the pool, and leave AWS keys out of the env file: the SDK falls back to the instance role. With IMDSv2, the container is one network hop further from the metadata service, so set the instance's metadata hop limit to at least 2 (`http_put_response_hop_limit = 2` in Terraform), or Cognito admin calls fail to get credentials.
 
 ### HTTP API
 
 Every error answers `{code, error}`: `code` is stable for the dashboard to translate, and `error` is readable on its own.
 
-Every endpoint below except `/ping` needs `Authorization: Bearer <Cognito access token>`, and acts for the Customer of the User it signs in. A missing or invalid token, or one of a disabled User, answers 401 `unauthenticated`: the dashboard should send the User to sign in again. A valid token of a User of a Deactivated Customer answers 403 `customer_deactivated`, as does a request that finds its Customer deactivated while it runs: signing in again would not help. A Platform Admin, who belongs to no Customer, answers 403 `forbidden`.
+Every endpoint below except `/ping` and the Slack install callback (`/slack/install/callback`, where Slack redirects the popup) needs `Authorization: Bearer <Cognito access token>`, and acts for the Customer of the User it signs in. A missing or invalid token, or one of a disabled User, answers 401 `unauthenticated`: the dashboard should send the User to sign in again. A valid token of a User of a Deactivated Customer answers 403 `customer_deactivated`, as does a request that finds its Customer deactivated while it runs: signing in again would not help. A Platform Admin, who belongs to no Customer, answers 403 `forbidden`.
 
-The OpenAPI 3.1 spec is served at `/openapi.json` and `/openapi.yaml`, with a browsable reference at `/docs`.
-
-- `GET /ping`: liveness.
-- `GET /me`: the signed-in User as `{id, email, role, customer}`, where `role` is `platform_admin`, `customer_admin` or `viewer` and `customer` is `{id, name}`, or `null` for a Platform Admin. Unlike every other endpoint, a Platform Admin gets 200, not 403.
-- `GET /cmdb/source`: the Customer's Connected CMDB Source as `{provider, url, user, last_sync, last_sync_failure}`, or `null` if none is connected. `last_sync` is when the latest successful Sync Run finished; `last_sync_failure` is `{at, error}` while the latest Sync Run is a failed one. Credentials are never returned.
-- `POST /cmdb/source`: connects a CMDB Source from `{provider, url, user, password}`. It checks the login against the CMDB, stores the source with encrypted credentials, runs the first Sync under the same limits as `POST /cmdb/source/sync`, and answers as `GET /cmdb/source`. A failed first Sync still answers 200, with `last_sync: null` and `last_sync_failure` set, and the source stays connected. Answers 400 `invalid_request` for an invalid body, 400 `invalid_login` for an unknown provider or a login it rejects without reaching the CMDB, 409 `already_connected` if a source is already connected, and 422 with the CMDB's failure code when the CMDB rejects the login, storing nothing.
-- `PUT /cmdb/source`: replaces the login of the Connected CMDB Source with `{url, user, password}`, such as after a password rotation. The source keeps its provider. It checks the login against the CMDB, then replaces the settings and encrypted credentials of the same source, keeping its Assets and their Declarations, and answers as `GET /cmdb/source`. It runs no Sync. Answers 400 `invalid_request` or `invalid_login` as `POST /cmdb/source` does, 404 `not_connected` if no source is connected, and 422 with the CMDB's failure code when the CMDB rejects the login, changing nothing.
-- `DELETE /cmdb/source`: disconnects the Connected CMDB Source, deleting nothing: the source and its Assets stay stored, its Assets become Inactive, and a Sync of it is refused from then on. Connecting again creates a new CMDB Source. Answers 204, 404 `not_connected` if no source is connected, and 409 `sync_in_progress` while a Sync of it commits.
-- `POST /cmdb/source/sync`: runs a Sync of the Connected CMDB Source and answers `{last_sync, created, updated, deactivated, reactivated, skipped}`. The Sync outlives its request and is cancelled only by a 5-minute limit or server shutdown. Answers 404 `not_connected` if no source is connected, 409 `sync_in_progress` while another Sync of it runs, and 502 when the Sync fails, which is recorded as a failed Sync Run. Its code is the CMDB's failure code, such as `invalid_credentials` after a password rotation, or `sync_failed` when the CMDB Provider did not classify why.
+The OpenAPI 3.1 spec is served at `/openapi.json` and `/openapi.yaml`, with a browsable reference at `/docs`. It is generated from the handlers (ADR 0014), so it is the authoritative, always-current list of endpoints, their request and response shapes, and their error codes. `GET /ping` is the liveness probe, and `GET /me` returns the signed-in User; browse `/docs` for the rest.
 
 Run `./barbackend` with no arguments to print the usage.
+
+## Agents
+
+The Prioritizer, Luna (Advisor), the Analista (feedback), the Drafter (Business Context) and the Cartógrafo (ATT&CK Techniques of a Vulnerability, `docs/adr/0024-the-cartografo-labels-vulnerabilities-with-attack-techniques.md`) run on Anthropic's models; `docs/adr/0016-the-prioritizer-orders-findings-from-their-dossiers.md` explains what they read and how they are kept honest, and `docs/adr/0017-the-business-context-is-a-versioned-document-the-customer-states.md` what the Drafter reads. They need credentials, usually `ANTHROPIC_API_KEY`. No Agent that weighs a Finding reads a Feed: each Dossier is built from what the Findings pipeline stored, with the Finding's latest Score, its Vulnerability's Advisories, ATT&CK Techniques and Mitigations, and the Critical Services of the Business Context that run its Asset, in the shape of `docs/examples/findings.json`. The Reader and the Editor handle news (`docs/adr/0025-news-items-are-read-once-and-matched-to-customers-by-rules.md`): news Feeds store every article and leak-site post they publish, the Reader reads each article once for every Customer, rules match each News Item to each Customer by its Business Context, open Findings and Products, and the Editor writes each Customer's daily News Digest, served at `GET /news-digests`. What they still lack is in `docs/agents-pending.md`.
+
+`serve` keeps one lasting order per Customer (`docs/adr/0026-the-prioritizer-keeps-one-lasting-order-per-customer.md`). A Feed batch, a Sync, a Business Context save, a User's Feedback on the order or a Cartógrafo run that labels something wakes the Prioritizer, which waits until changes stop for 2 minutes, or 15 at most, and runs a round for each Customer with something to place, one Customer after another in turns: open Findings without a place, and those that changed since they were placed, up to 100 a request. Every other open Finding keeps its place, and a closed one leaves the order without a request. It also runs every 6 hours, to try again after a round that failed. After each of its runs, Luna writes, one at a time and in the order of the list, the Action Plan of each open Finding that has none, or that changed since its plan as a round would place it again (`docs/adr/0034-luna-writes-the-action-plans-on-her-own.md`). She stops trying one after 3 failed attempts, until a round places it again.
+
+```sh
+# Order the Findings of a file, and with --plans have Luna write each Action Plan. Needs no database and stores nothing.
+./barbackend agent run --findings docs/examples/findings.json --plans
+
+# Run the rounds a Customer needs now, as serve does when its Findings change, acting as one of its Users; then an Action Plan, as serve has Luna write after each run. These need DATABASE_URL.
+./barbackend agent prioritize --as <email>
+./barbackend agent plan --as <email> --prioritization <id> --finding <finding id>
+
+# Talk with the Analista. Pass the printed conversation id to continue.
+./barbackend agent ask --as <email> "¿qué atiendo primero?"
+./barbackend agent ask --as <email> --conversation <id> "el de lab-01 debería ir antes, ahí corre la nómina"
+
+# Label the stored Vulnerabilities with ATT&CK Techniques now, as serve does daily, within the same cap of 50 a day. Needs DATABASE_URL.
+./barbackend agent label
+
+# Read the stored articles and write the News Digest of every Customer due one, as serve does hourly. Needs DATABASE_URL.
+./barbackend agent news
+```
+
+## Findings
+
+`serve` turns Feeds and Syncs into Findings, one per Asset, Product and CVE (`docs/adr/0020-findings-are-opened-and-closed-never-deleted.md`). Each NVD pull matches its CVEs against the Software Components of every Active Asset (`docs/adr/0015-vulnerabilities-matched-by-product-and-version.md`); a match stores the CVE and opens, updates or reopens its Finding, scored with Scoring Model 2 (`docs/adr/0009-findings-scored-by-versioned-two-layer-model.md`, with the Lifecycle Stage multiplier of `docs/adr/0028-the-lifecycle-stage-is-imported-from-itop-and-scored.md`). KEV and EPSS pulls rescore the open Findings of the CVEs already stored, and ignore every other CVE. After each successful Sync, the CMDB Source's Assets are matched again against the stored CVEs: Findings that no longer match are closed with a reason, and new Assets get theirs. `feed pull` only counts what each Feed returns and stores nothing.
+
+Only Software Components with a Product match, written as NVD's CPE vendor and product tokens in the CMDB (`docs/adr/0019-software-components-take-their-product-from-the-cmdb-in-cpe-terms.md`): in iTop, the Software linked to each SoftwareInstance.
 
 ## CMDB Sources
 

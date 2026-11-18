@@ -98,3 +98,28 @@ func recordSyncRun(ctx context.Context, q *sqlcgen.Queries, run inventory.SyncRu
 	}
 	return nil
 }
+
+// SyncDay is how many Syncs of every CMDB Source finished in one day.
+type SyncDay struct {
+	// Start is when the day starts; it lasts 24 hours.
+	Start             time.Time
+	Succeeded, Failed int
+}
+
+// SyncDays are the days ahead of since, days of them, oldest first, each
+// counted even when no Sync finished in it.
+func (t *Tx) SyncDays(ctx context.Context, since time.Time, days int) ([]SyncDay, error) {
+	rows, err := t.q.CountSyncRunsByDay(ctx, sqlcgen.CountSyncRunsByDayParams{
+		SucceededOutcomeID: int16(inventory.SyncSucceeded),
+		Since:              since,
+		LastStart:          since.Add(time.Duration(days-1) * 24 * time.Hour),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("count sync runs by day since %s: %w", since, err)
+	}
+	out := make([]SyncDay, len(rows))
+	for i, row := range rows {
+		out[i] = SyncDay{Start: row.Day.UTC(), Succeeded: int(row.Succeeded), Failed: int(row.Failed)}
+	}
+	return out, nil
+}

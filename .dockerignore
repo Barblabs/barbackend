@@ -1,0 +1,8 @@
+# Allowlist: the build needs only the module files and the Go sources, and
+# keeping everything else out keeps .env files and local binaries out of the
+# context.
+*
+!go.mod
+!go.sum
+!cmd/
+!internal/

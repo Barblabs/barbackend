@@ -9,6 +9,41 @@ import (
 	"context"
 )
 
+// iteratorForInsertAreas implements pgx.CopyFromSource.
+type iteratorForInsertAreas struct {
+	rows                 []InsertAreasParams
+	skippedFirstNextCall bool
+}
+
+func (r *iteratorForInsertAreas) Next() bool {
+	if len(r.rows) == 0 {
+		return false
+	}
+	if !r.skippedFirstNextCall {
+		r.skippedFirstNextCall = true
+		return true
+	}
+	r.rows = r.rows[1:]
+	return len(r.rows) > 0
+}
+
+func (r iteratorForInsertAreas) Values() ([]interface{}, error) {
+	return []interface{}{
+		r.rows[0].CmdbSourceID,
+		r.rows[0].RecordID,
+		r.rows[0].Name,
+		r.rows[0].InactiveSince,
+	}, nil
+}
+
+func (r iteratorForInsertAreas) Err() error {
+	return nil
+}
+
+func (q *Queries) InsertAreas(ctx context.Context, arg []InsertAreasParams) (int64, error) {
+	return q.db.CopyFrom(ctx, []string{"customer_areas"}, []string{"cmdb_source_id", "record_id", "name", "inactive_since"}, &iteratorForInsertAreas{rows: arg})
+}
+
 // iteratorForInsertAssets implements pgx.CopyFromSource.
 type iteratorForInsertAssets struct {
 	rows                 []InsertAssetsParams
@@ -37,7 +72,10 @@ func (r iteratorForInsertAssets) Values() ([]interface{}, error) {
 		r.rows[0].HardwareVendor,
 		r.rows[0].HardwareModel,
 		r.rows[0].CriticalityID,
+		r.rows[0].ImportedExposureID,
+		r.rows[0].LifecycleStageID,
 		r.rows[0].ImportedOwnerID,
+		r.rows[0].AreaRecordID,
 		r.rows[0].Retired,
 		r.rows[0].InactiveSince,
 	}, nil
@@ -48,7 +86,183 @@ func (r iteratorForInsertAssets) Err() error {
 }
 
 func (q *Queries) InsertAssets(ctx context.Context, arg []InsertAssetsParams) (int64, error) {
-	return q.db.CopyFrom(ctx, []string{"assets"}, []string{"cmdb_source_id", "record_id", "name", "description", "kind_id", "hardware_vendor", "hardware_model", "criticality_id", "imported_owner_id", "retired", "inactive_since"}, &iteratorForInsertAssets{rows: arg})
+	return q.db.CopyFrom(ctx, []string{"assets"}, []string{"cmdb_source_id", "record_id", "name", "description", "kind_id", "hardware_vendor", "hardware_model", "criticality_id", "imported_exposure_id", "lifecycle_stage_id", "imported_owner_id", "area_record_id", "retired", "inactive_since"}, &iteratorForInsertAssets{rows: arg})
+}
+
+// iteratorForInsertFindingMatchFlags implements pgx.CopyFromSource.
+type iteratorForInsertFindingMatchFlags struct {
+	rows                 []InsertFindingMatchFlagsParams
+	skippedFirstNextCall bool
+}
+
+func (r *iteratorForInsertFindingMatchFlags) Next() bool {
+	if len(r.rows) == 0 {
+		return false
+	}
+	if !r.skippedFirstNextCall {
+		r.skippedFirstNextCall = true
+		return true
+	}
+	r.rows = r.rows[1:]
+	return len(r.rows) > 0
+}
+
+func (r iteratorForInsertFindingMatchFlags) Values() ([]interface{}, error) {
+	return []interface{}{
+		r.rows[0].FindingID,
+		r.rows[0].FlagID,
+	}, nil
+}
+
+func (r iteratorForInsertFindingMatchFlags) Err() error {
+	return nil
+}
+
+func (q *Queries) InsertFindingMatchFlags(ctx context.Context, arg []InsertFindingMatchFlagsParams) (int64, error) {
+	return q.db.CopyFrom(ctx, []string{"finding_match_flags"}, []string{"finding_id", "flag_id"}, &iteratorForInsertFindingMatchFlags{rows: arg})
+}
+
+// iteratorForInsertFindingPlacements implements pgx.CopyFromSource.
+type iteratorForInsertFindingPlacements struct {
+	rows                 []InsertFindingPlacementsParams
+	skippedFirstNextCall bool
+}
+
+func (r *iteratorForInsertFindingPlacements) Next() bool {
+	if len(r.rows) == 0 {
+		return false
+	}
+	if !r.skippedFirstNextCall {
+		r.skippedFirstNextCall = true
+		return true
+	}
+	r.rows = r.rows[1:]
+	return len(r.rows) > 0
+}
+
+func (r iteratorForInsertFindingPlacements) Values() ([]interface{}, error) {
+	return []interface{}{
+		r.rows[0].ID,
+		r.rows[0].FindingID,
+		r.rows[0].PlacedAt,
+		r.rows[0].Dossier,
+	}, nil
+}
+
+func (r iteratorForInsertFindingPlacements) Err() error {
+	return nil
+}
+
+func (q *Queries) InsertFindingPlacements(ctx context.Context, arg []InsertFindingPlacementsParams) (int64, error) {
+	return q.db.CopyFrom(ctx, []string{"finding_placements"}, []string{"id", "finding_id", "placed_at", "dossier"}, &iteratorForInsertFindingPlacements{rows: arg})
+}
+
+// iteratorForInsertFindingScoreDataGaps implements pgx.CopyFromSource.
+type iteratorForInsertFindingScoreDataGaps struct {
+	rows                 []InsertFindingScoreDataGapsParams
+	skippedFirstNextCall bool
+}
+
+func (r *iteratorForInsertFindingScoreDataGaps) Next() bool {
+	if len(r.rows) == 0 {
+		return false
+	}
+	if !r.skippedFirstNextCall {
+		r.skippedFirstNextCall = true
+		return true
+	}
+	r.rows = r.rows[1:]
+	return len(r.rows) > 0
+}
+
+func (r iteratorForInsertFindingScoreDataGaps) Values() ([]interface{}, error) {
+	return []interface{}{
+		r.rows[0].FindingID,
+		r.rows[0].ScoredAt,
+		r.rows[0].GapID,
+	}, nil
+}
+
+func (r iteratorForInsertFindingScoreDataGaps) Err() error {
+	return nil
+}
+
+func (q *Queries) InsertFindingScoreDataGaps(ctx context.Context, arg []InsertFindingScoreDataGapsParams) (int64, error) {
+	return q.db.CopyFrom(ctx, []string{"finding_score_data_gaps"}, []string{"finding_id", "scored_at", "gap_id"}, &iteratorForInsertFindingScoreDataGaps{rows: arg})
+}
+
+// iteratorForInsertPrioritizationFindings implements pgx.CopyFromSource.
+type iteratorForInsertPrioritizationFindings struct {
+	rows                 []InsertPrioritizationFindingsParams
+	skippedFirstNextCall bool
+}
+
+func (r *iteratorForInsertPrioritizationFindings) Next() bool {
+	if len(r.rows) == 0 {
+		return false
+	}
+	if !r.skippedFirstNextCall {
+		r.skippedFirstNextCall = true
+		return true
+	}
+	r.rows = r.rows[1:]
+	return len(r.rows) > 0
+}
+
+func (r iteratorForInsertPrioritizationFindings) Values() ([]interface{}, error) {
+	return []interface{}{
+		r.rows[0].PrioritizationID,
+		r.rows[0].FindingID,
+		r.rows[0].PlacementID,
+		r.rows[0].GroupPosition,
+		r.rows[0].ScoreRank,
+	}, nil
+}
+
+func (r iteratorForInsertPrioritizationFindings) Err() error {
+	return nil
+}
+
+func (q *Queries) InsertPrioritizationFindings(ctx context.Context, arg []InsertPrioritizationFindingsParams) (int64, error) {
+	return q.db.CopyFrom(ctx, []string{"prioritization_findings"}, []string{"prioritization_id", "finding_id", "placement_id", "group_position", "score_rank"}, &iteratorForInsertPrioritizationFindings{rows: arg})
+}
+
+// iteratorForInsertSlackDeliveries implements pgx.CopyFromSource.
+type iteratorForInsertSlackDeliveries struct {
+	rows                 []InsertSlackDeliveriesParams
+	skippedFirstNextCall bool
+}
+
+func (r *iteratorForInsertSlackDeliveries) Next() bool {
+	if len(r.rows) == 0 {
+		return false
+	}
+	if !r.skippedFirstNextCall {
+		r.skippedFirstNextCall = true
+		return true
+	}
+	r.rows = r.rows[1:]
+	return len(r.rows) > 0
+}
+
+func (r iteratorForInsertSlackDeliveries) Values() ([]interface{}, error) {
+	return []interface{}{
+		r.rows[0].ID,
+		r.rows[0].CustomerID,
+		r.rows[0].Kind,
+		r.rows[0].TargetKind,
+		r.rows[0].Target,
+		r.rows[0].Payload,
+		r.rows[0].FindingID,
+	}, nil
+}
+
+func (r iteratorForInsertSlackDeliveries) Err() error {
+	return nil
+}
+
+func (q *Queries) InsertSlackDeliveries(ctx context.Context, arg []InsertSlackDeliveriesParams) (int64, error) {
+	return q.db.CopyFrom(ctx, []string{"slack_deliveries"}, []string{"id", "customer_id", "kind", "target_kind", "target", "payload", "finding_id"}, &iteratorForInsertSlackDeliveries{rows: arg})
 }
 
 // iteratorForInsertSoftwareComponents implements pgx.CopyFromSource.

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"barbackend/internal/tenancy"
+	"barbackend/internal/tenancy/tenancytest"
 	"github.com/google/uuid"
 )
 
@@ -51,7 +52,6 @@ func TestUsersOfACustomerCannotManageCustomers(t *testing.T) {
 	}
 }
 
-// The new Customer Admin signs in with the sub the fake user pool gave them.
 func TestDeactivatedCustomerLosesAccessAndSyncUntilReactivated(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
@@ -73,7 +73,7 @@ func TestDeactivatedCustomerLosesAccessAndSyncUntilReactivated(t *testing.T) {
 	if code := syncAsAna(); code != http.StatusForbidden {
 		t.Errorf("sync as its admin after deactivating = %d, want 403", code)
 	}
-	if _, err := e.cmdb.SyncConnected(context.Background(), viewerOf(id)); !errors.Is(err, tenancy.ErrCustomerDeactivated) {
+	if _, err := e.cmdb.SyncConnected(context.Background(), tenancytest.Viewer(id)); !errors.Is(err, tenancy.ErrCustomerDeactivated) {
 		t.Errorf("sync after deactivating: err = %v, want ErrCustomerDeactivated", err)
 	}
 
@@ -138,5 +138,69 @@ func TestCustomerManagementErrors(t *testing.T) {
 				t.Errorf("code = %q, want %q", got.Code, tt.code)
 			}
 		})
+	}
+}
+
+func TestPlatformAdminSeesTheStatsOfEveryCustomer(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	e.connect(t, e.customer)
+	other := e.newCustomer(t)
+
+	got := decode[struct {
+		Customers []struct {
+			ID                   string     `json:"id"`
+			Active               bool       `json:"active"`
+			UserCount            int        `json:"user_count"`
+			CMDBConnected        bool       `json:"cmdb_connected"`
+			CMDBLastSync         *time.Time `json:"cmdb_last_sync"`
+			CMDBLastSyncFailedAt *time.Time `json:"cmdb_last_sync_failed_at"`
+		} `json:"customers"`
+	}](t, e.asUser(e.platformAdmin(t), http.MethodGet, "/customers/stats", nil), http.StatusOK)
+
+	byID := map[string]int{}
+	for i, c := range got.Customers {
+		byID[c.ID] = i
+	}
+	connected, ok := byID[e.customer.String()]
+	empty, okOther := byID[other.String()]
+	if len(got.Customers) != 2 || !ok || !okOther {
+		t.Fatalf("customers = %+v, want the env's Customer and the other one", got.Customers)
+	}
+	if c := got.Customers[connected]; !c.Active || c.UserCount != 1 || !c.CMDBConnected || c.CMDBLastSync == nil || c.CMDBLastSyncFailedAt != nil {
+		t.Errorf("connected Customer = %+v, want active, 1 User, connected and synced", c)
+	}
+	if c := got.Customers[empty]; !c.Active || c.UserCount != 0 || c.CMDBConnected || c.CMDBLastSync != nil {
+		t.Errorf("other Customer = %+v, want active, no Users and no CMDB Source", c)
+	}
+}
+
+func TestPlatformAdminSeesSyncHealthAndSlackDeliveries(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	staff := e.platformAdmin(t)
+
+	health := decode[struct {
+		Days []struct {
+			Date      string `json:"date"`
+			Succeeded int    `json:"succeeded"`
+		} `json:"days"`
+	}](t, e.asUser(staff, http.MethodGet, "/customers/sync-health?days=7", nil), http.StatusOK)
+	deliveries := decode[struct {
+		Customers []struct {
+			ID   string `json:"id"`
+			Sent int    `json:"sent"`
+		} `json:"customers"`
+	}](t, e.asUser(staff, http.MethodGet, "/customers/slack-deliveries", nil), http.StatusOK)
+	tooMany := e.asUser(staff, http.MethodGet, "/customers/sync-health?days=91", nil)
+
+	if len(health.Days) != 7 || health.Days[6].Date != time.Now().UTC().Format(time.DateOnly) {
+		t.Errorf("sync health = %+v, want 7 days ending today", health.Days)
+	}
+	if len(deliveries.Customers) != 1 || deliveries.Customers[0].ID != e.customer.String() || deliveries.Customers[0].Sent != 0 {
+		t.Errorf("slack deliveries = %+v, want the env's Customer with nothing sent", deliveries.Customers)
+	}
+	if tooMany.Code != http.StatusBadRequest {
+		t.Errorf("91 days = %d %s, want 400", tooMany.Code, tooMany.Body)
 	}
 }

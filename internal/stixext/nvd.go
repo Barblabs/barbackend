@@ -1,6 +1,11 @@
 package stixext
 
-import "github.com/TcM1911/stix2"
+import (
+	"cmp"
+	"slices"
+
+	"github.com/TcM1911/stix2"
+)
 
 // NVD is the nvd/1 property extension of a Vulnerability (ADR 0010).
 type NVD struct {
@@ -11,6 +16,26 @@ type NVD struct {
 	CVSS          []CVSS     `json:"cvss"`
 	CWEs          []string   `json:"cwes"`
 	Affected      []Affected `json:"affected"`
+	// CNAAffected is what the CVE's numbering authority lists, which NVD relays
+	// even for a CVE it has not analyzed and so gave no CPE matches.
+	CNAAffected []CNAAffected `json:"cna_affected,omitempty"`
+}
+
+// Rejected reports whether NVD withdrew the CVE.
+func (n NVD) Rejected() bool { return n.VulnStatus == "Rejected" }
+
+// BaseScore is the newest CVSS version's base score from NVD's Primary
+// metrics, else from the numbering authority's Secondary ones (ADR 0009), and
+// false when NVD reports neither.
+func (n NVD) BaseScore() (float64, bool) {
+	for _, kind := range []string{"Primary", "Secondary"} {
+		of := slices.DeleteFunc(slices.Clone(n.CVSS), func(m CVSS) bool { return m.Type != kind })
+		if len(of) == 0 {
+			continue
+		}
+		return slices.MaxFunc(of, func(a, b CVSS) int { return cmp.Compare(a.Version, b.Version) }).BaseScore, true
+	}
+	return 0, false
 }
 
 // CVSS is one metric NVD reports for a Vulnerability.
@@ -22,24 +47,44 @@ type CVSS struct {
 	Type      string  `json:"type"`
 }
 
-// Affected is one vulnerable CPE match of a Vulnerability.
+// Affected is one vulnerable CPE match of a Vulnerability. Version and Update
+// are the version and update fields of Criteria: an exact version, "*" for any
+// (bounded by the range, if any) or "-" for none. Entries stored before they
+// were added have neither.
 type Affected struct {
 	Criteria              string `json:"criteria"`
 	Vendor                string `json:"vendor"`
 	Product               string `json:"product"`
+	Version               string `json:"version,omitempty"`
+	Update                string `json:"update,omitempty"`
 	VersionStartIncluding string `json:"version_start_including,omitempty"`
 	VersionStartExcluding string `json:"version_start_excluding,omitempty"`
 	VersionEndIncluding   string `json:"version_end_including,omitempty"`
 	VersionEndExcluding   string `json:"version_end_excluding,omitempty"`
 }
 
-// NewNVD returns n as a property extension.
+// CNAAffected is one product a CVE's numbering authority lists as affected.
+type CNAAffected struct {
+	Source        string       `json:"source"`
+	Vendor        string       `json:"vendor"`
+	Product       string       `json:"product"`
+	DefaultStatus string       `json:"default_status"`
+	Versions      []CNAVersion `json:"versions"`
+}
+
+// CNAVersion is a version or range of a CNAAffected, as the authority wrote it.
+type CNAVersion struct {
+	Version         string `json:"version"`
+	LessThan        string `json:"less_than,omitempty"`
+	LessThanOrEqual string `json:"less_than_or_equal,omitempty"`
+	Status          string `json:"status"`
+}
+
 func NewNVD(n NVD) NVD {
 	n.ExtensionType = "property-extension"
 	return n
 }
 
-// NVDOf decodes the nvd/1 extension of v.
 func NVDOf(v *stix2.Vulnerability) (NVD, bool) {
 	return decodeExtension[NVD](v, NVDDefinitionID)
 }

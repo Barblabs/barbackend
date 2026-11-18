@@ -24,14 +24,69 @@ func (h assetHandler) register(api huma.API) {
 		Description: "Pages through Assets in a stable order. Pass next_cursor as cursor, with the same filters, to get the next page.",
 		Errors:      []int{http.StatusBadRequest},
 	}, h.list)
+	register(api, huma.Operation{
+		OperationID: "get-assets-findings-summary",
+		Method:      http.MethodGet,
+		Path:        "/assets/findings-summary",
+		Summary:     "Count each Asset's open Findings by Score Band",
+		Description: "Every Asset of the Customer with an open scored Finding, ordered as GET /assets lists them, with its open Findings counted by the Score Band of their latest Score. A Finding not scored yet is left out.",
+	}, h.findingsSummary)
+	register(api, huma.Operation{
+		OperationID: "declare-asset-exposure",
+		Method:      http.MethodPut,
+		Path:        "/assets/{id}/exposure",
+		Summary:     "Declare an Asset's Exposure",
+		Description: "Only a Customer Admin declares it, over the imported Exposure, and only on an Active Asset. Unknown cannot be declared: clear the Declaration instead. The Asset's open Findings are rescored before the response; if that fails, the request fails but the Declaration stands. A Sync never changes it.",
+		Errors:      []int{http.StatusBadRequest, http.StatusNotFound, http.StatusConflict},
+	}, h.declareExposure)
+	register(api, huma.Operation{
+		OperationID: "clear-asset-exposure",
+		Method:      http.MethodDelete,
+		Path:        "/assets/{id}/exposure",
+		Summary:     "Clear an Asset's declared Exposure",
+		Description: "Only a Customer Admin clears it. The Asset's Exposure falls back to the imported one, and its open Findings are rescored before the response.",
+		Errors:      []int{http.StatusNotFound},
+	}, h.clearExposure)
+	register(api, huma.Operation{
+		OperationID: "declare-asset-information-classification",
+		Method:      http.MethodPut,
+		Path:        "/assets/{id}/information-classification",
+		Summary:     "Declare an Asset's Information Classification",
+		Description: "Only a Customer Admin declares it, and only on an Active Asset. Unclassified cannot be declared: clear the Declaration instead. The Asset's open Findings are rescored before the response; if that fails, the request fails but the Declaration stands. A Sync never changes it.",
+		Errors:      []int{http.StatusBadRequest, http.StatusNotFound, http.StatusConflict},
+	}, h.declareInformationClassification)
+	register(api, huma.Operation{
+		OperationID: "clear-asset-information-classification",
+		Method:      http.MethodDelete,
+		Path:        "/assets/{id}/information-classification",
+		Summary:     "Clear an Asset's Information Classification",
+		Description: "Only a Customer Admin clears it, even on an Inactive Asset. The Asset is Unclassified again, and its open Findings are rescored before the response.",
+		Errors:      []int{http.StatusNotFound},
+	}, h.clearInformationClassification)
 }
 
 type assetQuery struct {
-	Limit       pageSize        `query:"limit" doc:"Page size"`
-	Cursor      string          `query:"cursor" doc:"next_cursor of the previous page"`
-	Active      string          `query:"active" enum:"true,false,all" default:"true"`
-	Kind        assetKindCode   `query:"kind" doc:"Asset Kind code"`
-	Criticality criticalityCode `query:"criticality" doc:"Criticality code"`
+	Limit                     pageSize                              `query:"limit" doc:"Page size"`
+	Cursor                    string                                `query:"cursor" doc:"next_cursor of the previous page"`
+	Active                    activeFilter                          `query:"active" enum:"true,false,all" default:"true"`
+	Kind                      []assetKindCode                       `query:"kind,explode" doc:"Asset Kind codes, as repeated keys; an Asset of any of them matches"`
+	Criticality               []criticalityFilterCode               `query:"criticality,explode" doc:"Criticality codes, as repeated keys; an Asset with any of them matches, and unknown matches an Asset without a Criticality"`
+	Exposure                  []exposureFilterCode                  `query:"exposure,explode" doc:"Exposure codes, as repeated keys, matched against the effective Exposure (exposure.value); an Asset with any of them matches, and unknown matches an Asset without one"`
+	InformationClassification []informationClassificationFilterCode `query:"information_classification,explode" doc:"Information Classification codes, as repeated keys; an Asset with any of them matches, and unclassified matches an Asset without a Declaration"`
+	Lifecycle                 []lifecycleFilterCode                 `query:"lifecycle_stage,explode" doc:"Lifecycle stage codes, as repeated keys; an Asset with any of them matches, and unknown matches an Asset without one, a retired Asset included"`
+	Area                      []int64                               `query:"area,explode" doc:"Area ids, as in GET /areas, as repeated keys; an Asset in any of them matches"`
+}
+
+type activeFilter string
+
+func (f activeFilter) keep() *bool {
+	switch f {
+	case "true":
+		return ptr(true)
+	case "false":
+		return ptr(false)
+	}
+	return nil
 }
 
 type pageSize int
@@ -46,35 +101,76 @@ func (assetKindCode) Schema(huma.Registry) *huma.Schema {
 	return &huma.Schema{Type: huma.TypeString, Enum: codes(inventory.Server, inventory.VirtualMachine, inventory.Workstation, inventory.NetworkDevice)}
 }
 
-type criticalityCode string
+const (
+	unknownFilterCode      = "unknown"
+	unclassifiedFilterCode = "unclassified"
+)
 
-func (criticalityCode) Schema(huma.Registry) *huma.Schema {
-	return &huma.Schema{Type: huma.TypeString, Enum: codes(inventory.CriticalityHigh, inventory.CriticalityMedium, inventory.CriticalityLow)}
+type criticalityFilterCode string
+
+func (criticalityFilterCode) Schema(huma.Registry) *huma.Schema {
+	return &huma.Schema{Type: huma.TypeString, Enum: append(codes(inventory.CriticalityHigh, inventory.CriticalityMedium, inventory.CriticalityLow), unknownFilterCode)}
+}
+
+type exposureFilterCode string
+
+func (exposureFilterCode) Schema(huma.Registry) *huma.Schema {
+	return &huma.Schema{Type: huma.TypeString, Enum: append(codes(inventory.InternetFacing, inventory.Internal), unknownFilterCode)}
+}
+
+type informationClassificationFilterCode string
+
+func (informationClassificationFilterCode) Schema(huma.Registry) *huma.Schema {
+	return &huma.Schema{Type: huma.TypeString, Enum: append(codes(inventory.ClassifiedPublic, inventory.ClassifiedPrivate, inventory.ClassifiedConfidential), unclassifiedFilterCode)}
+}
+
+type lifecycleFilterCode string
+
+func (lifecycleFilterCode) Schema(huma.Registry) *huma.Schema {
+	return &huma.Schema{Type: huma.TypeString, Enum: append(codes(inventory.LifecycleProduction, inventory.LifecycleImplementation, inventory.LifecycleStock), unknownFilterCode)}
 }
 
 func (in assetQuery) query() (assets.Query, error) {
-	q := assets.Query{Limit: int(in.Limit), Cursor: in.Cursor}
-	switch in.Active {
-	case "true":
-		q.Active = ptr(true)
-	case "false":
-		q.Active = ptr(false)
+	q := assets.Query{Limit: int(in.Limit), Cursor: in.Cursor, Filter: assets.Filter{Active: in.Active.keep()}}
+	var err error
+	if q.Filter.Kind, err = parseEach(in.Kind, inventory.ParseAssetKind); err != nil {
+		return assets.Query{}, err
 	}
-	if in.Kind != "" {
-		kind, err := inventory.ParseAssetKind(string(in.Kind))
-		if err != nil {
-			return assets.Query{}, err
-		}
-		q.Kind = &kind
+	if q.Filter.Criticality, err = parseEach(in.Criticality, orUnknown(unknownFilterCode, inventory.CriticalityUnknown, inventory.ParseCriticality)); err != nil {
+		return assets.Query{}, err
 	}
-	if in.Criticality != "" {
-		criticality, err := inventory.ParseCriticality(string(in.Criticality))
-		if err != nil {
-			return assets.Query{}, err
-		}
-		q.Criticality = &criticality
+	if q.Filter.Exposure, err = parseEach(in.Exposure, orUnknown(unknownFilterCode, inventory.ExposureUnknown, inventory.ParseExposure)); err != nil {
+		return assets.Query{}, err
 	}
+	if q.Filter.InformationClassification, err = parseEach(in.InformationClassification, orUnknown(unclassifiedFilterCode, inventory.Unclassified, inventory.ParseInformationClassification)); err != nil {
+		return assets.Query{}, err
+	}
+	if q.Filter.Lifecycle, err = parseEach(in.Lifecycle, orUnknown(unknownFilterCode, inventory.LifecycleUnknown, inventory.ParseLifecycleStage)); err != nil {
+		return assets.Query{}, err
+	}
+	q.Filter.Area = in.Area
 	return q, nil
+}
+
+func parseEach[C ~string, T any](codes []C, parse func(string) (T, error)) ([]T, error) {
+	var values []T
+	for _, code := range codes {
+		v, err := parse(string(code))
+		if err != nil {
+			return nil, err
+		}
+		values = append(values, v)
+	}
+	return values, nil
+}
+
+func orUnknown[T any](code string, unknown T, parse func(string) (T, error)) func(string) (T, error) {
+	return func(in string) (T, error) {
+		if in == code {
+			return unknown, nil
+		}
+		return parse(in)
+	}
 }
 
 type assetListResponse struct {
@@ -84,19 +180,37 @@ type assetListResponse struct {
 }
 
 type assetResponse struct {
-	SourceID      string             `json:"source_id"`
-	RecordID      string             `json:"record_id"`
-	Name          string             `json:"name"`
-	Description   string             `json:"description"`
-	Kind          string             `json:"kind"`
-	Hardware      *hardwareResponse  `json:"hardware"`
-	Software      []softwareResponse `json:"software"`
-	Criticality   *string            `json:"criticality"`
-	Exposure      *string            `json:"exposure"`
-	Owner         *ownerResponse     `json:"owner"`
-	Retired       bool               `json:"retired"`
-	Active        bool               `json:"active"`
-	InactiveSince *time.Time         `json:"inactive_since"`
+	ID                        int64                             `json:"id" doc:"The Asset's handle in this API, as in PUT /assets/{id}/exposure"`
+	SourceID                  string                            `json:"source_id"`
+	RecordID                  string                            `json:"record_id"`
+	Name                      string                            `json:"name"`
+	Description               string                            `json:"description"`
+	Kind                      string                            `json:"kind"`
+	Hardware                  *hardwareResponse                 `json:"hardware"`
+	Software                  []softwareResponse                `json:"software"`
+	Criticality               *string                           `json:"criticality"`
+	Exposure                  exposureResponse                  `json:"exposure"`
+	Lifecycle                 *string                           `json:"lifecycle_stage" enum:"production,implementation,stock" doc:"Null when the CMDB Source does not give it, and for a retired Asset"`
+	InformationClassification informationClassificationResponse `json:"information_classification"`
+	Owner                     *ownerResponse                    `json:"owner"`
+	Area                      *areaRefResponse                  `json:"area"`
+	Retired                   bool                              `json:"retired"`
+	Active                    bool                              `json:"active"`
+	InactiveSince             *time.Time                        `json:"inactive_since"`
+}
+
+type assetFindingsSummaryResponse struct {
+	Assets []assetFindingBandsResponse `json:"assets"`
+}
+
+type assetFindingBandsResponse struct {
+	ID       int64  `json:"id" doc:"The Asset's handle, as in GET /assets"`
+	Name     string `json:"name"`
+	Critical int    `json:"critical"`
+	High     int    `json:"high"`
+	Medium   int    `json:"medium"`
+	Low      int    `json:"low"`
+	Unbanded int    `json:"unbanded" doc:"Open Findings whose latest Score is from a Scoring Model before 3, which has no Score Bands; they get one when rescored"`
 }
 
 type hardwareResponse struct {
@@ -116,9 +230,64 @@ type productResponse struct {
 	Name   string `json:"name"`
 }
 
+type exposureResponse struct {
+	Value      *string    `json:"value" doc:"The effective Exposure, internet_facing or internal: the declared one, otherwise the imported one; null when Unknown"`
+	Source     string     `json:"source" enum:"imported,declared" doc:"Whether value is the imported Exposure or a Declaration"`
+	Imported   *string    `json:"imported" doc:"The Exposure the CMDB Source gives, internet_facing or internal, also beneath a Declaration; null when Unknown"`
+	DeclaredBy *string    `json:"declared_by" doc:"Email of the User who declared it; null without a Declaration"`
+	DeclaredAt *time.Time `json:"declared_at" doc:"When it was declared; null without a Declaration"`
+}
+
+type exposureCode string
+
+func (exposureCode) Schema(huma.Registry) *huma.Schema {
+	return &huma.Schema{Type: huma.TypeString, Enum: codes(inventory.InternetFacing, inventory.Internal)}
+}
+
+type declareExposureRequest struct {
+	_        struct{}     `additionalProperties:"true"`
+	Exposure exposureCode `json:"exposure" doc:"Unknown cannot be declared; clear the Declaration instead"`
+}
+
+type declareExposureInput struct {
+	ID   int64 `path:"id"`
+	Body declareExposureRequest
+}
+
+type informationClassificationResponse struct {
+	Value      *string    `json:"value" enum:"public,private,confidential" doc:"The declared Information Classification; null when Unclassified"`
+	DeclaredBy *string    `json:"declared_by" doc:"Email of the User who declared it; null when Unclassified"`
+	DeclaredAt *time.Time `json:"declared_at" doc:"When it was declared; null when Unclassified"`
+}
+
+type informationClassificationCode string
+
+func (informationClassificationCode) Schema(huma.Registry) *huma.Schema {
+	return &huma.Schema{Type: huma.TypeString, Enum: codes(inventory.ClassifiedPublic, inventory.ClassifiedPrivate, inventory.ClassifiedConfidential)}
+}
+
+type declareInformationClassificationRequest struct {
+	_                         struct{}                      `additionalProperties:"true"`
+	InformationClassification informationClassificationCode `json:"information_classification" doc:"Unclassified cannot be declared; clear the Declaration instead"`
+}
+
+type declareInformationClassificationInput struct {
+	ID   int64 `path:"id"`
+	Body declareInformationClassificationRequest
+}
+
+type assetIDInput struct {
+	ID int64 `path:"id"`
+}
+
 type ownerResponse struct {
 	Email  string `json:"email"`
 	Source string `json:"source"`
+}
+
+type areaRefResponse struct {
+	ID   int64  `json:"id" doc:"The Area's id, as in GET /areas"`
+	Name string `json:"name"`
 }
 
 func (h assetHandler) list(ctx context.Context, caller tenancy.User, in *assetQuery) (*body[assetListResponse], error) {
@@ -131,6 +300,18 @@ func (h assetHandler) list(ctx context.Context, caller tenancy.User, in *assetQu
 		return nil, err
 	}
 	return &body[assetListResponse]{Body: newAssetListResponse(page)}, nil
+}
+
+func (h assetHandler) findingsSummary(ctx context.Context, caller tenancy.User, _ *struct{}) (*body[assetFindingsSummaryResponse], error) {
+	summary, err := h.assets.FindingsSummary(ctx, caller)
+	if err != nil {
+		return nil, err
+	}
+	resp := assetFindingsSummaryResponse{Assets: make([]assetFindingBandsResponse, len(summary))}
+	for i, a := range summary {
+		resp.Assets[i] = assetFindingBandsResponse{ID: a.AssetID, Name: a.AssetName, Critical: a.Critical, High: a.High, Medium: a.Medium, Low: a.Low, Unbanded: a.Unbanded}
+	}
+	return &body[assetFindingsSummaryResponse]{Body: resp}, nil
 }
 
 func newAssetListResponse(page assets.Page) assetListResponse {
@@ -148,17 +329,20 @@ func newAssetResponse(stored assets.StoredAsset) assetResponse {
 	a, imported := stored.Asset, stored.Asset.Imported()
 	software := imported.Software()
 	resp := assetResponse{
-		SourceID:      a.Ref().Source.String(),
-		RecordID:      a.Ref().RecordID,
-		Name:          imported.Name(),
-		Description:   imported.Description(),
-		Kind:          imported.Kind().Code(),
-		Software:      make([]softwareResponse, len(software)),
-		Criticality:   code(imported.Criticality().Code()),
-		Exposure:      code(a.Exposure().Code()),
-		Retired:       imported.Retired(),
-		Active:        a.Active(),
-		InactiveSince: stored.InactiveSince,
+		ID:                        stored.ID,
+		SourceID:                  a.Ref().Source.String(),
+		RecordID:                  a.Ref().RecordID,
+		Name:                      imported.Name(),
+		Description:               imported.Description(),
+		Kind:                      imported.Kind().Code(),
+		Software:                  make([]softwareResponse, len(software)),
+		Criticality:               code(imported.Criticality().Code()),
+		Exposure:                  newExposureResponse(stored),
+		Lifecycle:                 code(imported.Lifecycle().Code()),
+		InformationClassification: newInformationClassificationResponse(stored),
+		Retired:                   imported.Retired(),
+		Active:                    a.Active(),
+		InactiveSince:             stored.InactiveSince,
 	}
 	if hw, ok := imported.Hardware(); ok {
 		resp.Hardware = &hardwareResponse{Vendor: hw.Vendor, Model: hw.Model}
@@ -169,6 +353,9 @@ func newAssetResponse(stored assets.StoredAsset) assetResponse {
 			resp.Software[i].Product = &productResponse{Vendor: sc.Product.Vendor, Name: sc.Product.Name}
 		}
 	}
+	if area := stored.Area; area != nil {
+		resp.Area = &areaRefResponse{ID: area.ID, Name: area.Name}
+	}
 	if owner, ok := a.Owner(); ok {
 		resp.Owner = &ownerResponse{Email: owner.String(), Source: "imported"}
 		if _, declared := a.DeclaredOwner(); declared {
@@ -176,6 +363,69 @@ func newAssetResponse(stored assets.StoredAsset) assetResponse {
 		}
 	}
 	return resp
+}
+
+func newExposureResponse(stored assets.StoredAsset) exposureResponse {
+	a := stored.Asset
+	resp := exposureResponse{
+		Value:    code(a.Exposure().Code()),
+		Source:   "imported",
+		Imported: code(a.Imported().Exposure().Code()),
+	}
+	if a.DeclaredExposure() != inventory.ExposureUnknown {
+		audit := stored.ExposureAudit
+		resp.Source, resp.DeclaredBy, resp.DeclaredAt = "declared", &audit.By, &audit.At
+	}
+	return resp
+}
+
+func newInformationClassificationResponse(stored assets.StoredAsset) informationClassificationResponse {
+	c := stored.Asset.InformationClassification()
+	if c == inventory.Unclassified {
+		return informationClassificationResponse{}
+	}
+	audit := stored.InformationClassificationAudit
+	return informationClassificationResponse{Value: code(c.Code()), DeclaredBy: &audit.By, DeclaredAt: &audit.At}
+}
+
+func (h assetHandler) declareExposure(ctx context.Context, caller tenancy.User, in *declareExposureInput) (*body[assetResponse], error) {
+	e, err := inventory.ParseExposure(string(in.Body.Exposure))
+	if err != nil {
+		return nil, err
+	}
+	stored, err := h.assets.DeclareExposure(ctx, caller, in.ID, e)
+	if err != nil {
+		return nil, err
+	}
+	return &body[assetResponse]{Body: newAssetResponse(stored)}, nil
+}
+
+func (h assetHandler) clearExposure(ctx context.Context, caller tenancy.User, in *assetIDInput) (*body[assetResponse], error) {
+	stored, err := h.assets.ClearExposure(ctx, caller, in.ID)
+	if err != nil {
+		return nil, err
+	}
+	return &body[assetResponse]{Body: newAssetResponse(stored)}, nil
+}
+
+func (h assetHandler) declareInformationClassification(ctx context.Context, caller tenancy.User, in *declareInformationClassificationInput) (*body[assetResponse], error) {
+	c, err := inventory.ParseInformationClassification(string(in.Body.InformationClassification))
+	if err != nil {
+		return nil, err
+	}
+	stored, err := h.assets.DeclareInformationClassification(ctx, caller, in.ID, c)
+	if err != nil {
+		return nil, err
+	}
+	return &body[assetResponse]{Body: newAssetResponse(stored)}, nil
+}
+
+func (h assetHandler) clearInformationClassification(ctx context.Context, caller tenancy.User, in *assetIDInput) (*body[assetResponse], error) {
+	stored, err := h.assets.ClearInformationClassification(ctx, caller, in.ID)
+	if err != nil {
+		return nil, err
+	}
+	return &body[assetResponse]{Body: newAssetResponse(stored)}, nil
 }
 
 func ptr[T any](v T) *T { return &v }

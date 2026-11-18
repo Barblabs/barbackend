@@ -10,7 +10,7 @@ You review one branch's changes. You report findings; the caller applies them.
    - `CODING_STANDARDS.md`
    - `.agents/skills/thermo-nuclear-code-quality-review/SKILL.md`
    - `GLOSSARY.md`, and the ADRs in `docs/adr/` that touch the packages the diff changes.
-2. Read the diff with `git diff main...HEAD` and `git log --oneline main..HEAD`. Open the surrounding code wherever a rule depends on context the diff does not show, such as an existing helper, the canonical layer, or how sibling handlers are shaped.
+2. Read the diff with `git diff dev...HEAD` and `git log --oneline dev..HEAD`. Open the surrounding code wherever a rule depends on context the diff does not show, such as an existing helper, the canonical layer, or how sibling handlers are shaped.
 3. Apply every rule to every changed file. Done means each rule in both files has been checked against the whole diff.
 
 Report:

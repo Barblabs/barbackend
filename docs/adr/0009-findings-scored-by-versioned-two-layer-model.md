@@ -4,12 +4,12 @@ status: proposed
 
 # Findings are scored by a versioned, deterministic two-layer model
 
-We score the Finding, not the Vulnerability: the same CVE matters very differently on an internet-facing production server and on an internal lab machine. Threat context (ATT&CK techniques, advisories, news) is not scored in this version: no Feed links a CVE to an ATT&CK technique, so it stays as evidence for people and agents.
+We score the Finding, not the Vulnerability: the same CVE matters very differently on an internet-facing production server and on an internal lab machine. Threat context (ATT&CK techniques, advisories, news) is not scored in this version: no Feed links a CVE to an ATT&CK technique, so it stays as evidence for people and agents. News Items reach them as ADR 0025 describes, in a Finding's Dossier and in the News Digest, and never move a Score.
 
 A Score is computed in two layers by pure functions, so the same inputs always give the same Score:
 
 1. **Vulnerability**: `S = c1·α + c2·β + c3·γ`, with α = CVSS base score / 10, β = the raw EPSS probability, γ = 1 if the CVE is in the CISA KEV catalog, else 0. Scoring Model 1 uses c = (0.3, 0.3, 0.4). β is the probability, not the percentile, because a percentile only ranks a CVE against all others and moves when they change.
-2. **Asset**: `S_f = S × m_criticality × m_exposure`, with Criticality High 1.0, Medium 0.7, Low 0.4 and Exposure Internet-facing 1.0, Internal 0.6. These multipliers are provisional.
+2. **Asset**: `S_f = S × m_criticality × m_exposure`, with Criticality High 1.0, Medium 0.7, Low 0.4 and Exposure Internet-facing 1.0, Internal 0.6. These multipliers are provisional. Scoring Model 2 adds a third, `m_lifecycle`, from the Asset's Lifecycle Stage (ADR 0028). Scoring Model 3 changes both layers and adds Information Classification (ADR 0032).
 
 Weights, multipliers, the aggregation function and the Data Gap defaults together form a Scoring Model. Scoring Models are immutable and defined in Go, like catalog values (ADR 0006), so a stored Score can always be recomputed. Each Score stores its Scoring Model version, the value of every factor and its Data Gaps. Changing any number means a new Scoring Model, never editing an old one. Like threat matching (ADR 0008), scoring is a pure domain package that imports `inventory`.
 
@@ -36,6 +36,7 @@ CVSS is taken from the first source that has it: the NVD Primary score, then the
 
 ## Consequences
 
+- The Score stored in `finding_scores` (ADR 0020) is the only Score. The Agents (ADR 0016) and the dashboard read it and never compute their own, so the Score a Customer sees and the one an Agent explains are the same.
 - Exposure is only declared (ADR 0004), and Declarations are not implemented yet, so today every Score has `exposure_undeclared` and an exposure multiplier of 1.0.
-- Open Findings are rescored daily, because KEV and EPSS change, and each Score is kept as history. Closed Findings are not rescored.
-- The Asset Owner and the Security Team are only alerted when a Finding changes Score Band or its Vulnerability enters the KEV catalog, not on every rescoring. Band thresholds are not decided yet.
+- Open Findings are rescored daily, because KEV and EPSS change, and each Score is kept as history; a new Score is stored only when its Scoring Model, value, factors or Data Gaps differ from the latest one (ADR 0020, ADR 0032). Closed Findings are not rescored.
+- Every Finding the pipeline emits is alerted: a DM to its Asset Owner and the same message mirrored to the Security Team channel (ADR 0029). Alerting no longer waits for a Score Band change or KEV entry; Band thresholds remain undecided because delivery does not depend on them; Scoring Model 3 sets them (ADR 0032).

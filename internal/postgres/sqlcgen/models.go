@@ -11,22 +11,65 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type ActionPlan struct {
+	ID               uuid.UUID
+	PrioritizationID uuid.UUID
+	FindingID        uuid.UUID
+	Content          []byte
+	CreatedAt        time.Time
+}
+
+type ActionPlanFailure struct {
+	PlacementID uuid.UUID
+	Attempts    int32
+	FailedAt    time.Time
+}
+
+type Advisory struct {
+	ID          string
+	Feed        string
+	PublishedAt time.Time
+	Object      []byte
+	ModifiedAt  time.Time
+	StoredAt    time.Time
+}
+
+type AnalistaConversation struct {
+	ID             uuid.UUID
+	CustomerID     uuid.UUID
+	UserID         uuid.UUID
+	History        []byte
+	Turns          int32
+	AnsweringSince *time.Time
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
 type Asset struct {
-	CmdbSourceID       uuid.UUID
-	RecordID           string
-	Name               string
-	Description        string
-	KindID             int16
-	HardwareVendor     *string
-	HardwareModel      *string
-	CriticalityID      *int16
-	ImportedOwnerID    *int64
-	Retired            bool
-	DeclaredOwnerID    *int64
-	DeclaredExposureID *int16
-	CreatedAt          time.Time
-	ImportedChangedAt  time.Time
-	InactiveSince      *time.Time
+	CmdbSourceID                        uuid.UUID
+	RecordID                            string
+	Name                                string
+	Description                         string
+	KindID                              int16
+	HardwareVendor                      *string
+	HardwareModel                       *string
+	CriticalityID                       *int16
+	ImportedOwnerID                     *int64
+	Retired                             bool
+	DeclaredOwnerID                     *int64
+	DeclaredExposureID                  *int16
+	CreatedAt                           time.Time
+	ImportedChangedAt                   time.Time
+	InactiveSince                       *time.Time
+	AreaRecordID                        *string
+	ImportedExposureID                  *int16
+	ID                                  int64
+	ExposureDeclaredBy                  pgtype.UUID
+	ExposureDeclaredAt                  *time.Time
+	LifecycleStageID                    *int16
+	DeclaredInformationClassificationID *int16
+	InformationClassificationDeclaredBy pgtype.UUID
+	InformationClassificationDeclaredAt *time.Time
 }
 
 type AssetKind struct {
@@ -38,6 +81,46 @@ type AssetOwner struct {
 	ID         int64
 	CustomerID uuid.UUID
 	Email      string
+}
+
+type AttackMitigation struct {
+	ID         string
+	AttackID   string
+	Name       string
+	Object     []byte
+	ModifiedAt time.Time
+	StoredAt   time.Time
+}
+
+type AttackRelationship struct {
+	ID          string
+	Type        string
+	SourceID    string
+	TargetID    string
+	Description string
+	ModifiedAt  time.Time
+	StoredAt    time.Time
+}
+
+type AttackTechnique struct {
+	ID         string
+	AttackID   string
+	Name       string
+	Tactics    []string
+	Revoked    bool
+	Deprecated bool
+	Object     []byte
+	ModifiedAt time.Time
+	StoredAt   time.Time
+}
+
+type BusinessContext struct {
+	CustomerID uuid.UUID
+	Version    int32
+	Schema     string
+	Content    []byte
+	SavedBy    uuid.UUID
+	SavedAt    time.Time
 }
 
 type CmdbSource struct {
@@ -62,9 +145,206 @@ type Customer struct {
 	DeactivatedAt *time.Time
 }
 
+type CustomerArea struct {
+	ID                int64
+	CmdbSourceID      uuid.UUID
+	RecordID          string
+	Name              string
+	OwnerEmail        *string
+	CreatedAt         time.Time
+	ImportedChangedAt time.Time
+	InactiveSince     *time.Time
+}
+
 type Exposure struct {
 	ID   int16
 	Name string
+}
+
+type FeedbackVerdict struct {
+	ID   int16
+	Name string
+}
+
+type Finding struct {
+	ID               uuid.UUID
+	CmdbSourceID     uuid.UUID
+	RecordID         string
+	ProductVendor    string
+	ProductName      string
+	CveID            string
+	ComponentName    string
+	ComponentVersion string
+	Evidence         []byte
+	FirstOpenedAt    time.Time
+	OpenedAt         time.Time
+	ClosedAt         *time.Time
+	CloseReasonID    *int16
+}
+
+type FindingCloseReason struct {
+	ID   int16
+	Name string
+}
+
+type FindingMatchFlag struct {
+	FindingID uuid.UUID
+	FlagID    int16
+}
+
+type FindingPlacement struct {
+	ID        uuid.UUID
+	FindingID uuid.UUID
+	PlacedAt  time.Time
+	Dossier   []byte
+}
+
+type FindingScore struct {
+	FindingID                           uuid.UUID
+	ScoredAt                            time.Time
+	Model                               int16
+	Value                               float64
+	Alpha                               float64
+	Beta                                float64
+	Gamma                               float64
+	Vulnerability                       float64
+	CriticalityMultiplier               float64
+	ExposureMultiplier                  float64
+	LifecycleMultiplier                 float64
+	ExploitSignal                       *float64
+	InformationClassificationMultiplier *float64
+}
+
+type FindingScoreDataGap struct {
+	FindingID uuid.UUID
+	ScoredAt  time.Time
+	GapID     int16
+}
+
+type InformationClassification struct {
+	ID   int16
+	Name string
+}
+
+type LifecycleStage struct {
+	ID   int16
+	Name string
+}
+
+type MatchFlag struct {
+	ID   int16
+	Name string
+}
+
+type NewsDigest struct {
+	ID                     uuid.UUID
+	CustomerID             uuid.UUID
+	Since                  time.Time
+	Until                  time.Time
+	BusinessContextVersion int32
+	NamedCount             int32
+	FindingCount           int32
+	FootprintCount         int32
+	PeerCount              int32
+	Content                []byte
+	CreatedAt              time.Time
+}
+
+type NewsItem struct {
+	ID          string
+	Feed        string
+	Kind        string
+	PublishedAt time.Time
+	CveIds      []string
+	Object      []byte
+	ModifiedAt  time.Time
+	StoredAt    time.Time
+	ReadyAt     *time.Time
+}
+
+type NewsItemVictim struct {
+	NewsItemID string
+	VictimID   string
+}
+
+type NewsReading struct {
+	NewsItemID string
+	Outcome    string
+	Attempts   int32
+	Model      string
+	PromptID   string
+	Content    []byte
+	ReadAt     time.Time
+}
+
+type NewsVictim struct {
+	ID       string
+	Object   []byte
+	StoredAt time.Time
+}
+
+type Prioritization struct {
+	ID                     uuid.UUID
+	CustomerID             uuid.UUID
+	FindingCount           int32
+	GroupCount             int32
+	Content                []byte
+	CreatedAt              time.Time
+	PreviousID             pgtype.UUID
+	BusinessContextVersion *int32
+}
+
+type PrioritizationFeedback struct {
+	ID               uuid.UUID
+	PrioritizationID uuid.UUID
+	FindingID        uuid.UUID
+	AuthorID         uuid.UUID
+	VerdictID        int16
+	Note             string
+	ViaAnalista      bool
+	CreatedAt        time.Time
+}
+
+type PrioritizationFinding struct {
+	PrioritizationID uuid.UUID
+	FindingID        uuid.UUID
+	PlacementID      uuid.UUID
+	GroupPosition    int32
+	ScoreRank        int32
+}
+
+type ScoreDataGap struct {
+	ID   int16
+	Name string
+}
+
+type SlackDelivery struct {
+	ID            uuid.UUID
+	CustomerID    uuid.UUID
+	Kind          string
+	TargetKind    string
+	Target        string
+	Payload       []byte
+	Status        string
+	Attempts      int32
+	NextAttemptAt time.Time
+	FailureCode   *string
+	LastError     *string
+	CreatedAt     time.Time
+	FindingID     pgtype.UUID
+}
+
+type SlackInstallation struct {
+	CustomerID  uuid.UUID
+	TeamID      string
+	TeamName    string
+	BotToken    []byte
+	ChannelID   string
+	ChannelName string
+	State       string
+	InstalledAt time.Time
+	UpdatedAt   time.Time
+	RemovedAt   *time.Time
 }
 
 type SoftwareComponent struct {
@@ -105,7 +385,7 @@ type SyncRun struct {
 
 type User struct {
 	ID         uuid.UUID
-	CognitoSub string
+	CognitoSub *string
 	Email      string
 	CustomerID pgtype.UUID
 	RoleID     int16
@@ -113,7 +393,44 @@ type User struct {
 	DisabledAt *time.Time
 }
 
+type UserInvitation struct {
+	UserID        uuid.UUID
+	Attempts      int32
+	NextAttemptAt time.Time
+	LastError     *string
+}
+
 type UserRole struct {
 	ID   int16
 	Name string
+}
+
+type Vulnerability struct {
+	CveID      string
+	Object     []byte
+	ModifiedAt time.Time
+	StoredAt   time.Time
+}
+
+type VulnerabilityAdvisory struct {
+	CveID      string
+	AdvisoryID string
+	LinkedAt   time.Time
+}
+
+type VulnerabilityLabeling struct {
+	CveID      string
+	Outcome    string
+	Attempts   int32
+	Model      string
+	PromptHash string
+	LabeledAt  time.Time
+}
+
+type VulnerabilityTechnique struct {
+	CveID     string
+	AttackID  string
+	Role      string
+	Evidence  string
+	Rationale string
 }
