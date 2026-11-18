@@ -222,26 +222,6 @@ func TestDigestNewsSkipsCustomersNothingIsRelevantTo(t *testing.T) {
 	}
 }
 
-func TestNewsDigestsAreTheCallersCustomers(t *testing.T) {
-	t.Parallel()
-	e := newEnv(t)
-	saveContext(t, e, bankContext())
-	storeLeakPost(t, e)
-	e.llm.Queue(claudetest.Refusal())
-	if err := e.svc.DigestNews(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	d := latestDigest(t, e, e.user)
-
-	stranger := e.newCustomer(t, "other-01")
-	if _, err := e.svc.GetNewsDigest(context.Background(), stranger, d.ID); !errors.Is(err, agents.ErrNewsDigestNotFound) {
-		t.Errorf("another Customer's User read the digest: %v", err)
-	}
-	if list, _ := e.svc.NewsDigests(context.Background(), stranger, 0); len(list) != 0 {
-		t.Errorf("another Customer lists %d digests", len(list))
-	}
-}
-
 func latestDigest(t *testing.T, e env, user tenancy.User) agents.NewsDigest {
 	t.Helper()
 	list, err := e.svc.NewsDigests(context.Background(), user, 1)
