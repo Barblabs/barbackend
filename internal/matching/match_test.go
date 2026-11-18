@@ -140,3 +140,43 @@ func TestMatchKeepsTheFirstFlaggedEntryWhenNoneIsCertain(t *testing.T) {
 		t.Errorf("Match = %+v, want %+v flagged version_unparsed", got, first)
 	}
 }
+
+func TestMatchReadsEachKindOfEntry(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		version string
+		entry   stixext.Affected
+		matched bool
+		flags   []matching.Flag
+	}{
+		{"every version", "1.18.0", exact("v", "p", "*", "*"), true, nil},
+		{"no versions", "", exact("v", "p", "-", "*"), true, nil},
+		{"entry without a version", "1.18.0", exact("v", "p", "", ""), true, []matching.Flag{matching.VersionUnparsed}},
+
+		{"exact equal with trailing zero", "5.6.1.0", exact("v", "p", "5.6.1", "*"), true, nil},
+		{"exact newer", "5.6.2", exact("v", "p", "5.6.1", "*"), false, nil},
+		{"exact pre-release update, release installed", "2.0", exact("v", "p", "2.0", "beta9"), false, nil},
+		{"exact other update, same version", "1.9.5", exact("v", "p", "1.9.5", "patch1"), true, []matching.Flag{matching.VersionUnparsed}},
+		{"exact other update, other version", "1.9.6", exact("v", "p", "1.9.5", "patch1"), false, nil},
+		{"exact release line", "20.04.6", exact("v", "p", "20.04", "*"), true, []matching.Flag{matching.VersionUnparsed}},
+		{"exact with revision", "5.6.1-2", exact("v", "p", "5.6.1", "*"), true, []matching.Flag{matching.DistroBackport}},
+		{"exact not comparable", "1.0.1.2", exact("v", "p", "1.0.1f", "*"), true, []matching.Flag{matching.VersionUnparsed}},
+		{"exact component unparsed", "latest", exact("v", "p", "5.6.1", "*"), true, []matching.Flag{matching.VersionUnparsed}},
+
+		{"before range", "0.6.17", between("v", "p", "0.6.18", "1.20.1"), false, nil},
+		{"range bound not comparable", "1.0.1.2", between("v", "p", "1.0.1", "1.0.1g"), true, []matching.Flag{matching.VersionUnparsed}},
+		{"excluding bound wins over doubt", "2.0.0", between("v", "p", "1.0.1", "1.0.1g"), false, nil},
+		{"start excluding", "2.0", stixext.Affected{Vendor: "v", Product: "p", Version: "*", VersionStartExcluding: "2.0"}, false, nil},
+		{"end including", "2.0", stixext.Affected{Vendor: "v", Product: "p", Version: "*", VersionEndIncluding: "2.0"}, true, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := matching.Match(component("v", "p", tt.version), vulnerability(tt.entry))
+			if got.Matched != tt.matched || !slices.Equal(got.Flags, tt.flags) {
+				t.Errorf("Match = %t, %v; want %t, %v", got.Matched, got.Flags, tt.matched, tt.flags)
+			}
+		})
+	}
+}

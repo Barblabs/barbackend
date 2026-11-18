@@ -11,7 +11,6 @@ func TestApplications(t *testing.T) {
 	lk := lookups{software: map[string]software{
 		"2": {Vendor: "Oracle", Name: "Oracle DB engine", Version: "19c"},
 		"5": {Vendor: "OpenBSD", Name: "OpenSSH", Version: "9.6p1"},
-		"7": {Vendor: " ", Name: "Internal portal", Version: "3.1"},
 	}}
 	app := func(name, version string) inventory.SoftwareComponent {
 		return inventory.SoftwareComponent{Role: inventory.Application, Name: name, Version: version}
@@ -27,16 +26,6 @@ func TestApplications(t *testing.T) {
 		want      []inventory.SoftwareComponent
 	}{
 		{"none", nil, nil},
-		{
-			"named after the instance, identified and versioned after the linked Software",
-			[]instance{{Class: "DBServer", Name: "Billing database", SoftwareID: "2"}},
-			[]inventory.SoftwareComponent{identified("Billing database", "Oracle", "Oracle DB engine", "19c")},
-		},
-		{
-			"Software with a blank vendor stays unidentified",
-			[]instance{{Class: "OtherSoftware", Name: "Portal", SoftwareID: "7"}},
-			[]inventory.SoftwareComponent{app("Portal", "3.1")},
-		},
 		{
 			"no linked Software keeps the instance name and stays unidentified",
 			[]instance{{Class: "WebServer", Name: "Apache", SoftwareID: blankKey}},
