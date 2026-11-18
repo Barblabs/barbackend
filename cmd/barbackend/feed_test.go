@@ -45,7 +45,7 @@ func TestRansomwareLiveIsPolledOnlyWhenEnabled(t *testing.T) {
 
 func TestNewsFeedsArePulledHourlyOrEveryTwoHoursInSpanish(t *testing.T) {
 	for _, f := range registeredFeeds() {
-		want := map[string]time.Duration{"therecord": newsInterval, "welivesecurity": spanishNewsInterval, "unaaldia": spanishNewsInterval}[f.Name]
+		want := map[string]time.Duration{"therecord": time.Hour, "welivesecurity": 2 * time.Hour, "unaaldia": 2 * time.Hour}[f.Name]
 		if want != 0 && f.Interval != want {
 			t.Errorf("feed %s interval = %s, want %s", f.Name, f.Interval, want)
 		}
