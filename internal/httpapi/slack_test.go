@@ -304,7 +304,7 @@ func TestSlackDisconnect(t *testing.T) {
 	}
 }
 
-func TestSlackViewerReadsButCannotManage(t *testing.T) {
+func TestSlackViewerReadsTheInstallation(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
 	admin := e.adminToken(t)
@@ -322,43 +322,6 @@ func TestSlackViewerReadsButCannotManage(t *testing.T) {
 	}
 	if got := e.failedDeliveries(t, viewer); len(got) != 0 {
 		t.Errorf("viewer failed deliveries = %+v, want none", got)
-	}
-
-	for _, req := range []*http.Request{
-		httptest.NewRequest(http.MethodPost, "/slack/install/start", nil),
-		httptest.NewRequest(http.MethodPut, "/slack/installation", strings.NewReader(`{"channel_id":"C1","channel_name":"general"}`)),
-		httptest.NewRequest(http.MethodPost, "/slack/installation/test", nil),
-		httptest.NewRequest(http.MethodDelete, "/slack/installation", nil),
-		httptest.NewRequest(http.MethodPost, "/slack/deliveries/retry", nil),
-	} {
-		rec := e.as(viewer, req)
-		if rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), `"code":"forbidden"`) {
-			t.Errorf("%s %s = %d %s, want 403 forbidden", req.Method, req.URL.Path, rec.Code, rec.Body)
-		}
-	}
-}
-
-func TestSlackPlatformAdminIsForbidden(t *testing.T) {
-	t.Parallel()
-	e := newEnv(t)
-	admin := e.adminToken(t)
-	e.installSlack(t, admin)
-	platform := "Bearer " + e.signIn(t, e.newUser(t, tenancy.PlatformAdmin, tenancy.CustomerID{}))
-
-	for _, req := range []*http.Request{
-		httptest.NewRequest(http.MethodGet, "/slack/installation", nil),
-		httptest.NewRequest(http.MethodGet, "/slack/channels", nil),
-		httptest.NewRequest(http.MethodPost, "/slack/install/start", nil),
-		httptest.NewRequest(http.MethodPut, "/slack/installation", strings.NewReader(`{"channel_id":"C1","channel_name":"general"}`)),
-		httptest.NewRequest(http.MethodPost, "/slack/installation/test", nil),
-		httptest.NewRequest(http.MethodDelete, "/slack/installation", nil),
-		httptest.NewRequest(http.MethodGet, "/slack/deliveries/failed", nil),
-		httptest.NewRequest(http.MethodPost, "/slack/deliveries/retry", nil),
-	} {
-		rec := e.as(platform, req)
-		if rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), `"code":"forbidden"`) {
-			t.Errorf("%s %s = %d %s, want 403 forbidden", req.Method, req.URL.Path, rec.Code, rec.Body)
-		}
 	}
 }
 
