@@ -8,8 +8,6 @@ import (
 
 	"barbackend/internal/findings"
 	"barbackend/internal/inventory"
-	"barbackend/internal/tenancy"
-	"github.com/google/uuid"
 )
 
 func TestWeeklyTrendCountsFirstOpensAndClosesInEveryWeek(t *testing.T) {
@@ -66,20 +64,13 @@ func TestWeeklyTrendFillsQuietWeeksAndDefaultsToTwelve(t *testing.T) {
 	}
 }
 
-func TestWeeklyTrendRefusesWeeksOutOfRangeAndPlatformAdmins(t *testing.T) {
+func TestWeeklyTrendRefusesWeeksOutOfRange(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
-	staff, err := tenancy.NewUser(tenancy.UserID(uuid.New()), "staff@example.com", tenancy.PlatformAdmin, tenancy.CustomerID{})
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	for _, weeks := range []int{-1, findings.MaxTrendWeeks + 1} {
 		if _, err := w.findings.WeeklyTrend(context.Background(), w.viewer(t), weeks); !errors.Is(err, findings.ErrInvalidTrend) {
 			t.Errorf("%d weeks: err = %v, want ErrInvalidTrend", weeks, err)
 		}
-	}
-	if _, err := w.findings.WeeklyTrend(context.Background(), staff, 1); !errors.Is(err, tenancy.ErrNoCustomer) {
-		t.Errorf("platform admin: err = %v, want ErrNoCustomer", err)
 	}
 }

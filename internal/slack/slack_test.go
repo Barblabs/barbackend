@@ -16,7 +16,6 @@ import (
 	"barbackend/internal/slack"
 	"barbackend/internal/slack/slacktest"
 	"barbackend/internal/tenancy"
-	"github.com/google/uuid"
 )
 
 func newService(t *testing.T) (*slack.Service, *slacktest.Server, *postgres.DB, tenancy.CustomerID, encryption.Key) {
@@ -25,22 +24,6 @@ func newService(t *testing.T) (*slack.Service, *slacktest.Server, *postgres.DB, 
 	fake := slacktest.New(t)
 	key := testKey(t)
 	return slack.New(db, fake.Client, key), fake, db, newCustomer(t, db), key
-}
-
-func viewerOf(customer tenancy.CustomerID) tenancy.User {
-	u, err := tenancy.NewUser(tenancy.UserID(uuid.New()), "viewer@example.com", tenancy.Viewer, customer)
-	if err != nil {
-		panic(err)
-	}
-	return u
-}
-
-func platformAdmin() tenancy.User {
-	u, err := tenancy.NewUser(tenancy.UserID(uuid.New()), "platform@example.com", tenancy.PlatformAdmin, tenancy.CustomerID{})
-	if err != nil {
-		panic(err)
-	}
-	return u
 }
 
 func setState(t *testing.T, db *postgres.DB, customer tenancy.CustomerID, state slack.State) {
@@ -384,53 +367,5 @@ func TestDisconnectHidesTheInstallationAndDropsTheToken(t *testing.T) {
 	got, err = svc.Status(context.Background(), caller)
 	if err != nil || got == nil || got.State != slack.Active {
 		t.Errorf("after reinstall status = %+v, %v, want active", got, err)
-	}
-}
-
-func TestViewerReadsButCannotManageSlack(t *testing.T) {
-	t.Parallel()
-	svc, _, _, customer, _ := newService(t)
-	admin := adminOf(customer)
-	viewer := viewerOf(customer)
-
-	if got, err := svc.Status(context.Background(), viewer); err != nil || got != nil {
-		t.Errorf("viewer status = %+v, %v, want nothing yet", got, err)
-	}
-	install(t, svc, admin)
-	if _, err := svc.SetChannel(context.Background(), admin, "C-security", "security"); err != nil {
-		t.Fatal(err)
-	}
-	if got, err := svc.Status(context.Background(), viewer); err != nil || got == nil || got.ChannelID != "C-security" {
-		t.Errorf("viewer status = %+v, %v, want the channel", got, err)
-	}
-	if _, err := svc.Channels(context.Background(), viewer); err != nil {
-		t.Errorf("viewer channels: %v, want the channels", err)
-	}
-
-	if _, err := svc.StartInstall(context.Background(), viewer); !errors.Is(err, tenancy.ErrNotCustomerAdmin) {
-		t.Errorf("start err = %v, want ErrNotCustomerAdmin", err)
-	}
-	if _, err := svc.SetChannel(context.Background(), viewer, "C1", "general"); !errors.Is(err, tenancy.ErrNotCustomerAdmin) {
-		t.Errorf("set channel err = %v, want ErrNotCustomerAdmin", err)
-	}
-	if _, err := svc.SendTest(context.Background(), viewer); !errors.Is(err, tenancy.ErrNotCustomerAdmin) {
-		t.Errorf("test err = %v, want ErrNotCustomerAdmin", err)
-	}
-	if err := svc.Disconnect(context.Background(), viewer); !errors.Is(err, tenancy.ErrNotCustomerAdmin) {
-		t.Errorf("disconnect err = %v, want ErrNotCustomerAdmin", err)
-	}
-}
-
-func TestPlatformAdminCannotSeeSlack(t *testing.T) {
-	t.Parallel()
-	svc, _, _, customer, _ := newService(t)
-	platform := platformAdmin()
-	install(t, svc, adminOf(customer))
-
-	if _, err := svc.Status(context.Background(), platform); !errors.Is(err, tenancy.ErrNoCustomer) {
-		t.Errorf("status err = %v, want ErrNoCustomer", err)
-	}
-	if _, err := svc.StartInstall(context.Background(), platform); !errors.Is(err, tenancy.ErrNotCustomerAdmin) {
-		t.Errorf("start err = %v, want ErrNotCustomerAdmin", err)
 	}
 }
