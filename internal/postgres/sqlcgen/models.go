@@ -180,6 +180,9 @@ type Finding struct {
 	OpenedAt         time.Time
 	ClosedAt         *time.Time
 	CloseReasonID    *int16
+	ClosedBy         pgtype.UUID
+	CloseNote        *string
+	ReopenAt         *time.Time
 }
 
 type FindingCloseReason struct {
