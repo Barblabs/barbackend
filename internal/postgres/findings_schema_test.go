@@ -2,13 +2,10 @@ package postgres_test
 
 import (
 	"context"
-	"errors"
-	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // findingFixture stores one Asset and one Vulnerability, and returns a
@@ -95,7 +92,3 @@ func TestVulnerabilitiesRejectAnIDThatIsNotACVE(t *testing.T) {
 
 // isConstraintViolation reports an integrity constraint violation (SQLSTATE
 // class 23), not any other failure such as a typo in the test's SQL.
-func isConstraintViolation(err error) bool {
-	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && strings.HasPrefix(pgErr.Code, "23")
-}

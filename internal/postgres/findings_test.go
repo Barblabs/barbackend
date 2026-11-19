@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"slices"
 	"testing"
+	"time"
 
 	"barbackend/internal/finding"
 	"barbackend/internal/inventory"
@@ -135,6 +136,108 @@ func TestCloseFindingClosesOnlyAnOpenFinding(t *testing.T) {
 			return err
 		})
 	}
+}
+
+func TestSaveMatchHoldsAFindingClosedByHandUntilItsReopenTime(t *testing.T) {
+	t.Parallel()
+	ahead := time.Now().Add(24 * time.Hour)
+	tests := []struct {
+		name     string
+		reason   finding.CloseReason
+		reopenAt time.Duration
+		want     finding.Outcome
+	}{
+		{name: "remediated", reason: finding.Remediated, want: finding.Reopened},
+		{name: "false positive", reason: finding.FalsePositive, want: finding.Held},
+		{name: "accepted risk ahead", reason: finding.AcceptedRisk, reopenAt: time.Until(ahead), want: finding.Held},
+		{name: "postponed past", reason: finding.Postponed, reopenAt: 50 * time.Millisecond, want: finding.Reopened},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			w := newFindingWorld(t)
+			user := storeUser(t, w.db, "viewer@example.com", tenancy.Viewer, w.customer)
+			id, _ := saveMatch(t, w.db, match(t, w.payments, "1.18.0"))
+			c := postgres.ManualClose{Reason: tt.reason, By: user.ID(), Note: "the WAF blocks it"}
+			if tt.reopenAt > 0 {
+				c.ReopenAt = ptr(time.Now().Add(tt.reopenAt))
+			}
+			closeByHand(t, w, id, c)
+			time.Sleep(100 * time.Millisecond)
+
+			again, outcome := saveMatch(t, w.db, match(t, w.payments, "1.19.0"))
+			if outcome != tt.want || again != id {
+				t.Fatalf("match after closing = %v %v, want %v %v", outcome, again, tt.want, id)
+			}
+			open := openFindingsOf(t, w.db, "CVE-2021-23017")
+			if reopened := len(open) == 1; reopened != (tt.want == finding.Reopened) {
+				t.Errorf("open findings = %+v, want reopened %t", open, tt.want == finding.Reopened)
+			}
+		})
+	}
+}
+
+func TestCloseFindingByHandClosesOnlyAnOpenFindingOfTheCustomer(t *testing.T) {
+	t.Parallel()
+	w := newFindingWorld(t)
+	user := storeUser(t, w.db, "viewer@example.com", tenancy.Viewer, w.customer)
+	id, _ := saveMatch(t, w.db, match(t, w.payments, "1.18.0"))
+	c := postgres.ManualClose{Reason: finding.FalsePositive, By: user.ID(), Note: "lab only"}
+	for i, step := range []struct {
+		customer tenancy.CustomerID
+		want     bool
+	}{{newCustomer(t, w.db), false}, {w.customer, true}, {w.customer, false}} {
+		inTx(t, w.db, func(tx *postgres.Tx) error {
+			closed, err := tx.CloseFindingByHand(context.Background(), step.customer, id, c)
+			if closed != step.want {
+				t.Errorf("close %d = %t, want %t", i+1, closed, step.want)
+			}
+			return err
+		})
+	}
+}
+
+func TestCloseFindingByHandRejectsAnInconsistentClose(t *testing.T) {
+	t.Parallel()
+	ahead := ptr(time.Now().Add(time.Hour))
+	tests := []struct {
+		name string
+		c    postgres.ManualClose
+	}{
+		{name: "an automatic reason", c: postgres.ManualClose{Reason: finding.ComponentRemoved, Note: "gone"}},
+		{name: "an empty note", c: postgres.ManualClose{Reason: finding.FalsePositive, Note: "  "}},
+		{name: "an accepted risk without reopen time", c: postgres.ManualClose{Reason: finding.AcceptedRisk, Note: "known"}},
+		{name: "a false positive with a reopen time", c: postgres.ManualClose{Reason: finding.FalsePositive, Note: "lab", ReopenAt: ahead}},
+		{name: "a reopen time already past", c: postgres.ManualClose{Reason: finding.Postponed, Note: "later", ReopenAt: ptr(time.Now().Add(-time.Hour))}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			w := newFindingWorld(t)
+			tt.c.By = storeUser(t, w.db, "viewer@example.com", tenancy.Viewer, w.customer).ID()
+			id, _ := saveMatch(t, w.db, match(t, w.payments, "1.18.0"))
+			err := w.db.InTx(context.Background(), func(tx *postgres.Tx) error {
+				_, err := tx.CloseFindingByHand(context.Background(), w.customer, id, tt.c)
+				return err
+			})
+			if !isConstraintViolation(err) {
+				t.Errorf("err = %v, want a constraint violation", err)
+			}
+		})
+	}
+}
+
+func ptr[T any](v T) *T { return &v }
+
+func closeByHand(t *testing.T, w findingWorld, id finding.ID, c postgres.ManualClose) {
+	t.Helper()
+	inTx(t, w.db, func(tx *postgres.Tx) error {
+		closed, err := tx.CloseFindingByHand(context.Background(), w.customer, id, c)
+		if err == nil && !closed {
+			t.Fatal("not closed")
+		}
+		return err
+	})
 }
 
 func TestCloseFindingsOfInactiveAssetsClosesOnlyThose(t *testing.T) {

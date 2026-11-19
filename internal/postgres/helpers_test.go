@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	"barbackend/internal/tenancy"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 func inTx(t *testing.T, db *postgres.DB, fn func(*postgres.Tx) error) {
@@ -369,4 +371,9 @@ func storeCustomer(db *postgres.DB, name string) (postgres.StoredCustomer, error
 		return err
 	})
 	return stored, err
+}
+
+func isConstraintViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && strings.HasPrefix(pgErr.Code, "23")
 }

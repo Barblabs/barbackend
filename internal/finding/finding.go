@@ -89,6 +89,10 @@ const (
 	Updated
 	// Reopened: the Finding was closed and is open again.
 	Reopened
+	// Held: a User closed the Finding for a reason a match does not undo yet,
+	// so it stays closed and only its component and evidence were updated
+	// (ADR 0035).
+	Held
 )
 
 func (o Outcome) String() string {
@@ -99,6 +103,8 @@ func (o Outcome) String() string {
 		return "updated"
 	case Reopened:
 		return "reopened"
+	case Held:
+		return "held"
 	default:
 		return fmt.Sprintf("Outcome(%d)", int(o))
 	}

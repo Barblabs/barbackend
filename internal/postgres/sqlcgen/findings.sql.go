@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const closeFinding = `-- name: CloseFinding :execrows
@@ -25,6 +26,41 @@ type CloseFindingParams struct {
 
 func (q *Queries) CloseFinding(ctx context.Context, arg CloseFindingParams) (int64, error) {
 	result, err := q.db.Exec(ctx, closeFinding, arg.CloseReasonID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const closeFindingByHand = `-- name: CloseFindingByHand :execrows
+UPDATE findings f
+SET closed_at = now(), close_reason_id = $1,
+    closed_by = $2, close_note = $3, reopen_at = $4
+FROM cmdb_sources src
+WHERE src.id = f.cmdb_source_id AND src.customer_id = $5
+  AND f.id = $6 AND f.closed_at IS NULL
+`
+
+type CloseFindingByHandParams struct {
+	CloseReasonID *int16
+	ClosedBy      pgtype.UUID
+	CloseNote     *string
+	ReopenAt      *time.Time
+	CustomerID    uuid.UUID
+	ID            uuid.UUID
+}
+
+// Closes an open Finding of a Customer's Assets for a reason a User gave
+// (ADR 0035).
+func (q *Queries) CloseFindingByHand(ctx context.Context, arg CloseFindingByHandParams) (int64, error) {
+	result, err := q.db.Exec(ctx, closeFindingByHand,
+		arg.CloseReasonID,
+		arg.ClosedBy,
+		arg.CloseNote,
+		arg.ReopenAt,
+		arg.CustomerID,
+		arg.ID,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -923,7 +959,8 @@ func (q *Queries) ListOpenFindingsOfVulnerability(ctx context.Context, cveID str
 
 const upsertFinding = `-- name: UpsertFinding :one
 WITH previous AS (
-    SELECT f.closed_at
+    SELECT f.closed_at,
+           coalesce(f.close_reason_id = 6 OR (f.close_reason_id IN (7, 8) AND f.reopen_at > now()), false) AS held
     FROM findings f
     WHERE f.cmdb_source_id = $2 AND f.record_id = $3
       AND f.product_vendor = $4 AND f.product_name = $5
@@ -940,12 +977,17 @@ ON CONFLICT (cmdb_source_id, record_id, product_vendor, product_name, cve_id) DO
 SET component_name    = EXCLUDED.component_name,
     component_version = EXCLUDED.component_version,
     evidence          = EXCLUDED.evidence,
-    opened_at         = CASE WHEN findings.closed_at IS NULL THEN findings.opened_at ELSE now() END,
-    closed_at         = NULL,
-    close_reason_id   = NULL
+    opened_at         = CASE WHEN findings.closed_at IS NULL OR coalesce((SELECT p.held FROM previous p), false)
+                             THEN findings.opened_at ELSE now() END,
+    (closed_at, close_reason_id, closed_by, close_note, reopen_at) = (
+        SELECT findings.closed_at, findings.close_reason_id, findings.closed_by, findings.close_note, findings.reopen_at
+        FROM previous p
+        WHERE p.held
+    )
 RETURNING findings.id,
           (SELECT count(*) FROM previous)::int AS existed,
-          coalesce((SELECT bool_or(p.closed_at IS NOT NULL) FROM previous p), false)::boolean AS was_closed
+          coalesce((SELECT bool_or(p.closed_at IS NOT NULL) FROM previous p), false)::boolean AS was_closed,
+          (findings.closed_at IS NOT NULL)::boolean AS stays_closed
 `
 
 type UpsertFindingParams struct {
@@ -961,9 +1003,10 @@ type UpsertFindingParams struct {
 }
 
 type UpsertFindingRow struct {
-	ID        uuid.UUID
-	Existed   int32
-	WasClosed bool
+	ID          uuid.UUID
+	Existed     int32
+	WasClosed   bool
+	StaysClosed bool
 }
 
 // Opens, updates or reopens the Finding of one match in one statement, so two
@@ -971,6 +1014,10 @@ type UpsertFindingRow struct {
 // before the statement runs, so it tells what the Finding was: absent (opened),
 // open (updated) or closed (reopened). Times are the transaction's, so
 // first_opened_at <= opened_at holds whatever the application's clock says.
+// A Finding a User closed as false_positive (6), or as accepted_risk (7) or
+// postponed (8) with its reopen_at still ahead, is held: it stays closed and
+// only its component and evidence are updated (ADR 0035). Otherwise the
+// sub-select yields no row, which sets its close to nulls.
 func (q *Queries) UpsertFinding(ctx context.Context, arg UpsertFindingParams) (UpsertFindingRow, error) {
 	row := q.db.QueryRow(ctx, upsertFinding,
 		arg.ID,
@@ -984,6 +1031,11 @@ func (q *Queries) UpsertFinding(ctx context.Context, arg UpsertFindingParams) (U
 		arg.Evidence,
 	)
 	var i UpsertFindingRow
-	err := row.Scan(&i.ID, &i.Existed, &i.WasClosed)
+	err := row.Scan(
+		&i.ID,
+		&i.Existed,
+		&i.WasClosed,
+		&i.StaysClosed,
+	)
 	return i, err
 }
