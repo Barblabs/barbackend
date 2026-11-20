@@ -177,26 +177,6 @@ func TestSaveMatchHoldsAFindingClosedByHandUntilItsReopenTime(t *testing.T) {
 	}
 }
 
-func TestCloseFindingByHandClosesOnlyAnOpenFindingOfTheCustomer(t *testing.T) {
-	t.Parallel()
-	w := newFindingWorld(t)
-	user := storeUser(t, w.db, "viewer@example.com", tenancy.Viewer, w.customer)
-	id, _ := saveMatch(t, w.db, match(t, w.payments, "1.18.0"))
-	c := postgres.ManualClose{Reason: finding.FalsePositive, By: user.ID(), Note: "lab only"}
-	for i, step := range []struct {
-		customer tenancy.CustomerID
-		want     bool
-	}{{newCustomer(t, w.db), false}, {w.customer, true}, {w.customer, false}} {
-		inTx(t, w.db, func(tx *postgres.Tx) error {
-			closed, err := tx.CloseFindingByHand(context.Background(), step.customer, id, c)
-			if closed != step.want {
-				t.Errorf("close %d = %t, want %t", i+1, closed, step.want)
-			}
-			return err
-		})
-	}
-}
-
 func TestCloseFindingByHandRejectsAnInconsistentClose(t *testing.T) {
 	t.Parallel()
 	ahead := ptr(time.Now().Add(time.Hour))

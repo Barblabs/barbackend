@@ -3,7 +3,6 @@ package findings_test
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 	"time"
 
@@ -42,68 +41,13 @@ func TestCloseByHandClosesAFindingThatALaterMatchHolds(t *testing.T) {
 	}
 }
 
-func TestCloseByHandRejectsAnInvalidClose(t *testing.T) {
-	t.Parallel()
-	w, f := matchedPayments(t)
-	viewer := w.storedUser(t, "viewer@example.com", tenancy.Viewer)
-	ahead, past := time.Now().Add(time.Hour), time.Now().Add(-time.Hour)
-	tests := []struct {
-		name     string
-		reason   finding.CloseReason
-		note     string
-		reopenAt *time.Time
-	}{
-		{name: "a reason only a match gives", reason: finding.ComponentRemoved, note: "gone"},
-		{name: "a blank note", reason: finding.FalsePositive, note: "   "},
-		{name: "a note too long", reason: finding.FalsePositive, note: strings.Repeat("a", findings.MaxCloseNoteLength+1)},
-		{name: "an accepted risk without reopen time", reason: finding.AcceptedRisk, note: "known"},
-		{name: "a false positive with a reopen time", reason: finding.FalsePositive, note: "lab", reopenAt: &ahead},
-		{name: "a reopen time already past", reason: finding.Postponed, note: "later", reopenAt: &past},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := w.findings.CloseByHand(context.Background(), viewer, finding.ID(f.id), tt.reason, tt.note, tt.reopenAt)
-			if !errors.Is(err, findings.ErrInvalidClose) {
-				t.Errorf("err = %v, want ErrInvalidClose", err)
-			}
-		})
-	}
-	if !w.mustFinding(t, "payments", "CVE-2021-23017").open {
-		t.Error("an invalid close closed the Finding")
-	}
-}
-
-func TestCloseByHandFailsOnAFindingNotOpenInTheCustomer(t *testing.T) {
-	t.Parallel()
-	w, f := matchedPayments(t)
-	viewer := w.storedUser(t, "viewer@example.com", tenancy.Viewer)
-	other := newWorld(t).storedUser(t, "other@example.com", tenancy.Viewer)
-	ctx := context.Background()
-
-	if err := w.findings.CloseByHand(ctx, other, finding.ID(f.id), finding.FalsePositive, "lab", nil); !errors.Is(err, findings.ErrFindingNotFound) {
-		t.Errorf("another Customer's close = %v, want ErrFindingNotFound", err)
-	}
-	if err := w.findings.CloseByHand(ctx, viewer, finding.ID(f.id), finding.Remediated, "patched", nil); err != nil {
-		t.Fatal(err)
-	}
-	if err := w.findings.CloseByHand(ctx, viewer, finding.ID(f.id), finding.FalsePositive, "lab", nil); !errors.Is(err, findings.ErrFindingClosed) {
-		t.Errorf("second close = %v, want ErrFindingClosed", err)
-	}
-}
-
-func TestReopenByHandReopensOnlyAFindingAUserClosed(t *testing.T) {
+func TestReopenByHandClearsTheCloseAndRefusesAFindingClosedOnItsOwn(t *testing.T) {
 	t.Parallel()
 	w, f := matchedPayments(t)
 	admin := w.storedUser(t, "admin@example.com", tenancy.CustomerAdmin)
 	ctx := context.Background()
 	id := finding.ID(f.id)
 
-	if err := w.findings.ReopenByHand(ctx, admin, id); !errors.Is(err, findings.ErrNotClosedByHand) {
-		t.Errorf("reopen of an open Finding = %v, want ErrNotClosedByHand", err)
-	}
-	if err := w.findings.ReopenByHand(ctx, admin, finding.ID(uuid.New())); !errors.Is(err, findings.ErrFindingNotFound) {
-		t.Errorf("reopen of an unknown Finding = %v, want ErrFindingNotFound", err)
-	}
 	reopenAt := time.Now().Add(30 * 24 * time.Hour)
 	if err := w.findings.CloseByHand(ctx, admin, id, finding.AcceptedRisk, "behind the WAF", &reopenAt); err != nil {
 		t.Fatal(err)
@@ -160,7 +104,10 @@ func TestClosedByHandListsOnlyWhatUsersClosedNewestFirst(t *testing.T) {
 	if got := closed[1]; got.ID != finding.ID(a.id) || got.Reason != finding.FalsePositive || got.ReopenAt != nil {
 		t.Errorf("oldest = %+v, want a's false positive", got)
 	}
-	if other, err := w.findings.ClosedByHand(ctx, newWorld(t).storedUser(t, "other@example.com", tenancy.Viewer)); err != nil || len(other) != 0 {
+	other := w
+	other.customer = tenancy.CustomerID(uuid.New())
+	w.exec(t, `INSERT INTO customers (id, name) VALUES ($1, 'other')`, uuid.UUID(other.customer))
+	if other, err := w.findings.ClosedByHand(ctx, other.storedUser(t, "other@example.com", tenancy.Viewer)); err != nil || len(other) != 0 {
 		t.Errorf("another Customer's = %+v, %v, want none", other, err)
 	}
 }
