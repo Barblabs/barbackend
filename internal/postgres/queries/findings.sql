@@ -85,6 +85,36 @@ FROM cmdb_sources src
 WHERE src.id = f.cmdb_source_id AND src.customer_id = @customer_id
   AND f.id = @id AND f.closed_at IS NULL;
 
+-- Whether a Finding of a Customer's Assets is closed, and why.
+-- name: GetFindingCloseOfCustomer :one
+SELECT f.closed_at, f.close_reason_id
+FROM findings f
+JOIN cmdb_sources src ON src.id = f.cmdb_source_id
+WHERE src.customer_id = @customer_id AND f.id = @id;
+
+-- Reopens a Finding of a Customer's Assets that a User closed (ADR 0035).
+-- name: ReopenFindingByHand :execrows
+UPDATE findings f
+SET opened_at = now(), closed_at = NULL, close_reason_id = NULL,
+    closed_by = NULL, close_note = NULL, reopen_at = NULL
+FROM cmdb_sources src
+WHERE src.id = f.cmdb_source_id AND src.customer_id = @customer_id
+  AND f.id = @id AND f.close_reason_id IN (5, 6, 7, 8);
+
+-- The Findings of a Customer's Assets that a User closed, newest close first,
+-- with their Asset and who closed them (ADR 0035).
+-- name: ListFindingsOfCustomerClosedByHand :many
+SELECT f.id, f.cve_id, a.id AS asset_id, a.name AS asset_name,
+       f.product_vendor, f.product_name, f.component_name, f.component_version,
+       f.close_reason_id::smallint AS close_reason_id, f.closed_at::timestamptz AS closed_at,
+       f.close_note::text AS close_note, f.reopen_at, u.email AS closed_by_email
+FROM findings f
+JOIN cmdb_sources src ON src.id = f.cmdb_source_id
+JOIN assets a ON a.cmdb_source_id = f.cmdb_source_id AND a.record_id = f.record_id
+JOIN users u ON u.id = f.closed_by
+WHERE src.customer_id = @customer_id
+ORDER BY f.closed_at DESC, f.id;
+
 -- Closes the open Findings of the source's Assets that are Inactive.
 -- name: CloseFindingsOfInactiveAssets :execrows
 UPDATE findings f

@@ -53,7 +53,7 @@ A User can reopen a Finding closed by hand, with any of the four reasons. `opene
 |---|---|---|
 | `POST` | `/findings/{id}/close` | closes an open Finding with `reason`, `note` and, for `accepted_risk` and `postponed`, `reopen_at`; 409 if it is closed |
 | `POST` | `/findings/{id}/reopen` | reopens a Finding closed by hand; 409 if it is open or was closed on its own |
-| `GET` | `/findings/closed` | the Customer's closed Findings, newest close first, each with its reason, note, who closed it, when, and `reopen_at` |
+| `GET` | `/findings/closed` | the Customer's Findings closed by hand, newest close first, each with its Asset, reason, note, who closed it, when, and `reopen_at`; those closed on its own are left out, since only a match reopens them and they pile up with every upgrade |
 
 The Customer is the caller's; a Finding of another Customer is 404.
 

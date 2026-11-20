@@ -3,7 +3,7 @@ package finding
 import "fmt"
 
 // CloseReason says why a Finding was closed: its match no longer holds
-// (ADR 0020).
+// (ADR 0020), or a User closed it (ADR 0035).
 type CloseReason int
 
 // Stored as catalog ids (ADR 0006): never renumber.
@@ -27,6 +27,17 @@ const (
 	// Postponed: it will be attended after its reopen time.
 	Postponed CloseReason = 8
 )
+
+// ByHand reports whether r is a reason a User gives.
+func (r CloseReason) ByHand() bool {
+	return r >= Remediated && r <= Postponed
+}
+
+// Expires reports whether a close for r lasts until a reopen time, after which
+// a match reopens the Finding.
+func (r CloseReason) Expires() bool {
+	return r == AcceptedRisk || r == Postponed
+}
 
 func (r CloseReason) String() string {
 	switch r {

@@ -161,6 +161,31 @@ func (q *Queries) DeleteFindingMatchFlags(ctx context.Context, findingID uuid.UU
 	return err
 }
 
+const getFindingCloseOfCustomer = `-- name: GetFindingCloseOfCustomer :one
+SELECT f.closed_at, f.close_reason_id
+FROM findings f
+JOIN cmdb_sources src ON src.id = f.cmdb_source_id
+WHERE src.customer_id = $1 AND f.id = $2
+`
+
+type GetFindingCloseOfCustomerParams struct {
+	CustomerID uuid.UUID
+	ID         uuid.UUID
+}
+
+type GetFindingCloseOfCustomerRow struct {
+	ClosedAt      *time.Time
+	CloseReasonID *int16
+}
+
+// Whether a Finding of a Customer's Assets is closed, and why.
+func (q *Queries) GetFindingCloseOfCustomer(ctx context.Context, arg GetFindingCloseOfCustomerParams) (GetFindingCloseOfCustomerRow, error) {
+	row := q.db.QueryRow(ctx, getFindingCloseOfCustomer, arg.CustomerID, arg.ID)
+	var i GetFindingCloseOfCustomerRow
+	err := row.Scan(&i.ClosedAt, &i.CloseReasonID)
+	return i, err
+}
+
 const getFindingOfCustomer = `-- name: GetFindingOfCustomer :one
 SELECT f.id, f.cmdb_source_id, f.record_id, f.cve_id, f.component_name, f.component_version,
        v.object AS vulnerability_object,
@@ -476,6 +501,71 @@ func (q *Queries) ListActiveComponentsWithProducts(ctx context.Context, arg List
 			&i.ExposureID,
 			&i.LifecycleStageID,
 			&i.DeclaredInformationClassificationID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listFindingsOfCustomerClosedByHand = `-- name: ListFindingsOfCustomerClosedByHand :many
+SELECT f.id, f.cve_id, a.id AS asset_id, a.name AS asset_name,
+       f.product_vendor, f.product_name, f.component_name, f.component_version,
+       f.close_reason_id::smallint AS close_reason_id, f.closed_at::timestamptz AS closed_at,
+       f.close_note::text AS close_note, f.reopen_at, u.email AS closed_by_email
+FROM findings f
+JOIN cmdb_sources src ON src.id = f.cmdb_source_id
+JOIN assets a ON a.cmdb_source_id = f.cmdb_source_id AND a.record_id = f.record_id
+JOIN users u ON u.id = f.closed_by
+WHERE src.customer_id = $1
+ORDER BY f.closed_at DESC, f.id
+`
+
+type ListFindingsOfCustomerClosedByHandRow struct {
+	ID               uuid.UUID
+	CveID            string
+	AssetID          int64
+	AssetName        string
+	ProductVendor    string
+	ProductName      string
+	ComponentName    string
+	ComponentVersion string
+	CloseReasonID    int16
+	ClosedAt         time.Time
+	CloseNote        string
+	ReopenAt         *time.Time
+	ClosedByEmail    string
+}
+
+// The Findings of a Customer's Assets that a User closed, newest close first,
+// with their Asset and who closed them (ADR 0035).
+func (q *Queries) ListFindingsOfCustomerClosedByHand(ctx context.Context, customerID uuid.UUID) ([]ListFindingsOfCustomerClosedByHandRow, error) {
+	rows, err := q.db.Query(ctx, listFindingsOfCustomerClosedByHand, customerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListFindingsOfCustomerClosedByHandRow
+	for rows.Next() {
+		var i ListFindingsOfCustomerClosedByHandRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.CveID,
+			&i.AssetID,
+			&i.AssetName,
+			&i.ProductVendor,
+			&i.ProductName,
+			&i.ComponentName,
+			&i.ComponentVersion,
+			&i.CloseReasonID,
+			&i.ClosedAt,
+			&i.CloseNote,
+			&i.ReopenAt,
+			&i.ClosedByEmail,
 		); err != nil {
 			return nil, err
 		}
@@ -955,6 +1045,29 @@ func (q *Queries) ListOpenFindingsOfVulnerability(ctx context.Context, cveID str
 		return nil, err
 	}
 	return items, nil
+}
+
+const reopenFindingByHand = `-- name: ReopenFindingByHand :execrows
+UPDATE findings f
+SET opened_at = now(), closed_at = NULL, close_reason_id = NULL,
+    closed_by = NULL, close_note = NULL, reopen_at = NULL
+FROM cmdb_sources src
+WHERE src.id = f.cmdb_source_id AND src.customer_id = $1
+  AND f.id = $2 AND f.close_reason_id IN (5, 6, 7, 8)
+`
+
+type ReopenFindingByHandParams struct {
+	CustomerID uuid.UUID
+	ID         uuid.UUID
+}
+
+// Reopens a Finding of a Customer's Assets that a User closed (ADR 0035).
+func (q *Queries) ReopenFindingByHand(ctx context.Context, arg ReopenFindingByHandParams) (int64, error) {
+	result, err := q.db.Exec(ctx, reopenFindingByHand, arg.CustomerID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const upsertFinding = `-- name: UpsertFinding :one

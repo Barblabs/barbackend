@@ -157,6 +157,76 @@ func (t *Tx) OpenFindingFactsOfCustomer(ctx context.Context, customer tenancy.Cu
 	return facts, nil
 }
 
+// FindingClose is whether a Finding of a Customer's Assets is closed, and why.
+type FindingClose struct {
+	Closed bool
+	Reason finding.CloseReason
+}
+
+// FindingCloseOfCustomer reads whether a Finding of the Customer's Assets is
+// closed. It fails with ErrNotFound when the Customer has no such Finding.
+func (t *Tx) FindingCloseOfCustomer(ctx context.Context, customer tenancy.CustomerID, id finding.ID) (FindingClose, error) {
+	row, err := t.q.GetFindingCloseOfCustomer(ctx, sqlcgen.GetFindingCloseOfCustomerParams{CustomerID: uuid.UUID(customer), ID: uuid.UUID(id)})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return FindingClose{}, fmt.Errorf("finding %s: %w", id, ErrNotFound)
+	}
+	if err != nil {
+		return FindingClose{}, fmt.Errorf("get close of finding %s: %w", id, err)
+	}
+	if row.CloseReasonID == nil {
+		return FindingClose{}, nil
+	}
+	return FindingClose{Closed: true, Reason: finding.CloseReason(*row.CloseReasonID)}, nil
+}
+
+// ReopenFindingByHand reopens a Finding of the Customer's Assets that a User
+// closed (ADR 0035). It reports false, changing nothing, when the Customer has
+// no such Finding closed by hand.
+func (t *Tx) ReopenFindingByHand(ctx context.Context, customer tenancy.CustomerID, id finding.ID) (bool, error) {
+	n, err := t.q.ReopenFindingByHand(ctx, sqlcgen.ReopenFindingByHandParams{CustomerID: uuid.UUID(customer), ID: uuid.UUID(id)})
+	if err != nil {
+		return false, fmt.Errorf("reopen finding %s by hand: %w", id, err)
+	}
+	return n > 0, nil
+}
+
+// FindingClosedByHand is a Finding of a Customer's Assets that a User closed,
+// with its Asset and the close (ADR 0035).
+type FindingClosedByHand struct {
+	ID               finding.ID
+	CVE              string
+	AssetID          int64
+	AssetName        string
+	Product          inventory.Product
+	ComponentName    string
+	ComponentVersion string
+	Reason           finding.CloseReason
+	Closed           time.Time
+	Note             string
+	ReopenAt         *time.Time
+	ClosedByEmail    string
+}
+
+// FindingsOfCustomerClosedByHand is the Findings of the Customer's Assets that
+// a User closed, newest close first.
+func (t *Tx) FindingsOfCustomerClosedByHand(ctx context.Context, customer tenancy.CustomerID) ([]FindingClosedByHand, error) {
+	rows, err := t.q.ListFindingsOfCustomerClosedByHand(ctx, uuid.UUID(customer))
+	if err != nil {
+		return nil, fmt.Errorf("list findings of customer %s closed by hand: %w", customer, err)
+	}
+	out := make([]FindingClosedByHand, len(rows))
+	for i, r := range rows {
+		out[i] = FindingClosedByHand{
+			ID: finding.ID(r.ID), CVE: r.CveID, AssetID: r.AssetID, AssetName: r.AssetName,
+			Product:       inventory.Product{Vendor: r.ProductVendor, Name: r.ProductName},
+			ComponentName: r.ComponentName, ComponentVersion: r.ComponentVersion,
+			Reason: finding.CloseReason(r.CloseReasonID), Closed: r.ClosedAt, Note: r.CloseNote,
+			ReopenAt: r.ReopenAt, ClosedByEmail: r.ClosedByEmail,
+		}
+	}
+	return out, nil
+}
+
 // ClosedFinding is a closed Finding: when it was last opened and closed,
 // and its latest Score's Model and value, which give its Band.
 type ClosedFinding struct {
