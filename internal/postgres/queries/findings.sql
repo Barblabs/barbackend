@@ -34,9 +34,14 @@ ORDER BY c.cmdb_source_id, c.record_id, c.position;
 -- before the statement runs, so it tells what the Finding was: absent (opened),
 -- open (updated) or closed (reopened). Times are the transaction's, so
 -- first_opened_at <= opened_at holds whatever the application's clock says.
+-- A Finding a User closed as false_positive (6), or as accepted_risk (7) or
+-- postponed (8) with its reopen_at still ahead, is held: it stays closed and
+-- only its component and evidence are updated (ADR 0035). Otherwise the
+-- sub-select yields no row, which sets its close to nulls.
 -- name: UpsertFinding :one
 WITH previous AS (
-    SELECT f.closed_at
+    SELECT f.closed_at,
+           coalesce(f.close_reason_id = 6 OR (f.close_reason_id IN (7, 8) AND f.reopen_at > now()), false) AS held
     FROM findings f
     WHERE f.cmdb_source_id = @cmdb_source_id AND f.record_id = @record_id
       AND f.product_vendor = @product_vendor AND f.product_name = @product_name
@@ -53,17 +58,62 @@ ON CONFLICT (cmdb_source_id, record_id, product_vendor, product_name, cve_id) DO
 SET component_name    = EXCLUDED.component_name,
     component_version = EXCLUDED.component_version,
     evidence          = EXCLUDED.evidence,
-    opened_at         = CASE WHEN findings.closed_at IS NULL THEN findings.opened_at ELSE now() END,
-    closed_at         = NULL,
-    close_reason_id   = NULL
+    opened_at         = CASE WHEN findings.closed_at IS NULL OR coalesce((SELECT p.held FROM previous p), false)
+                             THEN findings.opened_at ELSE now() END,
+    (closed_at, close_reason_id, closed_by, close_note, reopen_at) = (
+        SELECT findings.closed_at, findings.close_reason_id, findings.closed_by, findings.close_note, findings.reopen_at
+        FROM previous p
+        WHERE p.held
+    )
 RETURNING findings.id,
           (SELECT count(*) FROM previous)::int AS existed,
-          coalesce((SELECT bool_or(p.closed_at IS NOT NULL) FROM previous p), false)::boolean AS was_closed;
+          coalesce((SELECT bool_or(p.closed_at IS NOT NULL) FROM previous p), false)::boolean AS was_closed,
+          (findings.closed_at IS NOT NULL)::boolean AS stays_closed;
 
 -- name: CloseFinding :execrows
 UPDATE findings
 SET closed_at = now(), close_reason_id = @close_reason_id
 WHERE id = @id AND closed_at IS NULL;
+
+-- Closes an open Finding of a Customer's Assets for a reason a User gave
+-- (ADR 0035).
+-- name: CloseFindingByHand :execrows
+UPDATE findings f
+SET closed_at = now(), close_reason_id = @close_reason_id,
+    closed_by = @closed_by, close_note = @close_note, reopen_at = @reopen_at
+FROM cmdb_sources src
+WHERE src.id = f.cmdb_source_id AND src.customer_id = @customer_id
+  AND f.id = @id AND f.closed_at IS NULL;
+
+-- Whether a Finding of a Customer's Assets is closed, and why.
+-- name: GetFindingCloseOfCustomer :one
+SELECT f.closed_at, f.close_reason_id
+FROM findings f
+JOIN cmdb_sources src ON src.id = f.cmdb_source_id
+WHERE src.customer_id = @customer_id AND f.id = @id;
+
+-- Reopens a Finding of a Customer's Assets that a User closed (ADR 0035).
+-- name: ReopenFindingByHand :execrows
+UPDATE findings f
+SET opened_at = now(), closed_at = NULL, close_reason_id = NULL,
+    closed_by = NULL, close_note = NULL, reopen_at = NULL
+FROM cmdb_sources src
+WHERE src.id = f.cmdb_source_id AND src.customer_id = @customer_id
+  AND f.id = @id AND f.close_reason_id IN (5, 6, 7, 8);
+
+-- The Findings of a Customer's Assets that a User closed, newest close first,
+-- with their Asset and who closed them (ADR 0035).
+-- name: ListFindingsOfCustomerClosedByHand :many
+SELECT f.id, f.cve_id, a.id AS asset_id, a.name AS asset_name,
+       f.product_vendor, f.product_name, f.component_name, f.component_version,
+       f.close_reason_id::smallint AS close_reason_id, f.closed_at::timestamptz AS closed_at,
+       f.close_note::text AS close_note, f.reopen_at, u.email AS closed_by_email
+FROM findings f
+JOIN cmdb_sources src ON src.id = f.cmdb_source_id
+JOIN assets a ON a.cmdb_source_id = f.cmdb_source_id AND a.record_id = f.record_id
+JOIN users u ON u.id = f.closed_by
+WHERE src.customer_id = @customer_id
+ORDER BY f.closed_at DESC, f.id;
 
 -- Closes the open Findings of the source's Assets that are Inactive.
 -- name: CloseFindingsOfInactiveAssets :execrows

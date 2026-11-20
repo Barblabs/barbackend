@@ -117,8 +117,12 @@ _Avoid_: Countermeasure, course of action (that is its STIX type), remediation (
 ### Risk
 
 **Finding**:
-The fact that one Vulnerability affects one Product installed on one Asset. It is open until it is remediated or no longer applies, then closed with a reason, and reopened if it applies again; it is never deleted. Only open Findings are scored.
+The fact that one Vulnerability affects one Product installed on one Asset. It is open until it is remediated or no longer applies, then closed with a reason, and reopened if it applies again; it is never deleted. It closes on its own when a Sync or NVD shows it no longer applies, or by a Manual Close. Only open Findings are scored.
 _Avoid_: Hallazgo, issue, vulnerability instance, alert
+
+**Manual Close**:
+A User's close of a Finding, with a reason, a note saying why and, for an accepted risk or a postponed one, a reopen time. The reasons are remediated, false positive, accepted risk and postponed. A match reopens a remediated one, never a false positive, and an accepted risk or a postponed one only after its reopen time; a User can reopen any of them (ADR 0035).
+_Avoid_: Dismiss, suppress, mute, snooze, ignore, exception
 
 **Match Flag**:
 A reason a Finding's match is uncertain, such as a version that could not be compared. A Finding with no Match Flags is a certain match; one with any is still a Finding.
@@ -255,7 +259,7 @@ Luna's output: the steps to remediate a Finding on its Asset, what mitigates it 
 _Avoid_: Recommendation, remediation plan
 
 **Feedback**:
-What a User says about a Finding of a Prioritization: that its Vulnerability applies, does not apply or was remediated, or that it should be attended earlier or later. It changes no Score. That it should be attended earlier or later, said by the User directly and not through the Analista, has the Prioritizer place the Finding again (ADR 0026).
+What a User says about a Finding of a Prioritization, with a note saying why: that it applies, or that it should be attended earlier or later. It changes no Score and leaves the Finding open; a User who says it does not apply or was remediated makes a Manual Close instead (ADR 0035). That it should be attended earlier or later, said by the User directly and not through the Analista, has the Prioritizer place the Finding again, reading the note (ADR 0026).
 _Avoid_: Label, correction, comment
 
 ### People

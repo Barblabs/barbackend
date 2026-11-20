@@ -25,7 +25,8 @@ const (
 var (
 	// ErrPrioritizationNotFound is a Prioritization the Customer does not have.
 	ErrPrioritizationNotFound = errors.New("prioritization not found")
-	// ErrInvalidFeedback is a verdict that is none, or too long a note.
+	// ErrInvalidFeedback is a verdict a User cannot give, or a note that is
+	// blank or too long.
 	ErrInvalidFeedback = errors.New("invalid feedback")
 	// ErrInvalidLimit is a page size out of range.
 	ErrInvalidLimit = errors.New("invalid limit")
@@ -246,6 +247,10 @@ func newFeedback(caller tenancy.User, finding, verdictCode, note string) (Feedba
 	verdict, err := assessment.ParseVerdict(verdictCode)
 	if err != nil {
 		return Feedback{}, fmt.Errorf("%w: %w", ErrInvalidFeedback, err)
+	}
+	note = strings.TrimSpace(note)
+	if note == "" {
+		return Feedback{}, fmt.Errorf("%w: a note is required", ErrInvalidFeedback)
 	}
 	if utf8.RuneCountInString(note) > MaxNoteLength {
 		return Feedback{}, fmt.Errorf("%w: note is longer than %d characters", ErrInvalidFeedback, MaxNoteLength)
