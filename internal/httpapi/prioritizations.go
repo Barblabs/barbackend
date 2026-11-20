@@ -312,7 +312,7 @@ func (verdictCode) Schema(huma.Registry) *huma.Schema {
 type noteText string
 
 func (noteText) Schema(huma.Registry) *huma.Schema {
-	return &huma.Schema{Type: huma.TypeString, MaxLength: ptr(agents.MaxNoteLength)}
+	return &huma.Schema{Type: huma.TypeString, MinLength: ptr(1), MaxLength: ptr(agents.MaxNoteLength)}
 }
 
 type feedbackRequest struct {
@@ -320,7 +320,7 @@ type feedbackRequest struct {
 	Body struct {
 		FindingID string      `json:"finding_id" minLength:"1"`
 		Verdict   verdictCode `json:"verdict"`
-		Note      noteText    `json:"note" required:"false"`
+		Note      noteText    `json:"note" doc:"Why; the Prioritizer reads it with a verdict on the order"`
 	}
 }
 

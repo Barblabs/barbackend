@@ -119,13 +119,16 @@ type PlanMitigation struct {
 	Step       string `json:"step"`
 }
 
-// Verdict is what a User says about a Finding: whether its Vulnerability
-// really affects its Asset, or where the Prioritizer should have put it.
+// Verdict is what a User says about a Finding of a Prioritization: that it
+// applies, or where the Prioritizer should have put it.
 type Verdict int
 
 // Stored as catalog ids (ADR 0006): never renumber.
 const (
-	VerdictApplies         Verdict = 1
+	VerdictApplies Verdict = 1
+	// VerdictDoesNotApply and VerdictRemediated are no longer given: a User
+	// closes the Finding by hand instead (ADR 0035). Feedback stored with them
+	// before still reads.
 	VerdictDoesNotApply    Verdict = 2
 	VerdictRemediated      Verdict = 3
 	VerdictShouldBeEarlier Verdict = 4
@@ -157,12 +160,17 @@ var verdictCodes = map[Verdict]string{
 	VerdictShouldBeLater:   "should_be_later",
 }
 
-// VerdictCodes are the codes clients use, in catalog order.
+// givenVerdicts are the Verdicts a User can give now, in catalog order.
+var givenVerdicts = []Verdict{VerdictApplies, VerdictShouldBeEarlier, VerdictShouldBeLater}
+
+// VerdictCodes are the codes of the Verdicts a User can give now, in catalog
+// order.
 func VerdictCodes() []string {
-	return []string{
-		verdictCodes[VerdictApplies], verdictCodes[VerdictDoesNotApply], verdictCodes[VerdictRemediated],
-		verdictCodes[VerdictShouldBeEarlier], verdictCodes[VerdictShouldBeLater],
+	codes := make([]string, len(givenVerdicts))
+	for i, v := range givenVerdicts {
+		codes[i] = verdictCodes[v]
 	}
+	return codes
 }
 
 // Code is the stable lowercase snake_case name clients use for the verdict.
@@ -171,10 +179,11 @@ func (v Verdict) Code() string { return verdictCodes[v] }
 // ErrInvalidVerdict is a code that names no Verdict.
 var ErrInvalidVerdict = errors.New("invalid verdict")
 
-// ParseVerdict is the inverse of Verdict.Code.
+// ParseVerdict is the inverse of Verdict.Code, for the Verdicts a User can
+// give now.
 func ParseVerdict(code string) (Verdict, error) {
-	for v, c := range verdictCodes {
-		if c == code {
+	for _, v := range givenVerdicts {
+		if verdictCodes[v] == code {
 			return v, nil
 		}
 	}
