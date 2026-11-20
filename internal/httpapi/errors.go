@@ -60,6 +60,8 @@ const (
 	prioritizationNotFound = "prioritization_not_found"
 	newsDigestNotFound     = "news_digest_not_found"
 	findingNotFound        = "finding_not_found"
+	findingClosed          = "finding_closed"
+	findingNotClosedByHand = "finding_not_closed_by_hand"
 	conversationNotFound   = "conversation_not_found"
 	conversationBusy       = "conversation_busy"
 	conversationFull       = "conversation_full"
@@ -121,8 +123,14 @@ func apiError(err error) *codedError {
 		return &codedError{status: http.StatusNotFound, Code: assetNotFound, Message: "asset not found"}
 	case errors.Is(err, inventory.ErrAssetInactive):
 		return &codedError{status: http.StatusConflict, Code: assetInactive, Message: "an inactive asset cannot be declared"}
-	case errors.Is(err, assets.ErrInvalidQuery), errors.Is(err, findings.ErrInvalidTrend), errors.Is(err, findings.ErrInvalidCount), errors.Is(err, users.ErrInvalidDays):
+	case errors.Is(err, assets.ErrInvalidQuery), errors.Is(err, findings.ErrInvalidTrend), errors.Is(err, findings.ErrInvalidCount), errors.Is(err, findings.ErrInvalidClose), errors.Is(err, users.ErrInvalidDays):
 		return &codedError{status: http.StatusBadRequest, Code: invalidRequest, Message: err.Error()}
+	case errors.Is(err, findings.ErrFindingNotFound):
+		return &codedError{status: http.StatusNotFound, Code: findingNotFound, Message: "finding not found"}
+	case errors.Is(err, findings.ErrFindingClosed):
+		return &codedError{status: http.StatusConflict, Code: findingClosed, Message: findings.ErrFindingClosed.Error()}
+	case errors.Is(err, findings.ErrNotClosedByHand):
+		return &codedError{status: http.StatusConflict, Code: findingNotClosedByHand, Message: findings.ErrNotClosedByHand.Error()}
 	case errors.Is(err, slack.ErrInvalidState):
 		return &codedError{status: http.StatusBadRequest, Code: invalidState, Message: "the Slack authorization state is invalid or has expired"}
 	case errors.Is(err, slack.ErrInvalidChannel):
