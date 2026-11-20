@@ -94,19 +94,19 @@ type closedFindingsResponse struct {
 }
 
 type closedFindingResponse struct {
-	ID               string     `json:"id"`
-	CVEID            string     `json:"cve_id"`
-	AssetID          int64      `json:"asset_id" doc:"As in GET /assets"`
-	AssetName        string     `json:"asset_name"`
-	Vendor           string     `json:"vendor"`
-	Product          string     `json:"product"`
-	ComponentName    string     `json:"component_name"`
-	ComponentVersion string     `json:"component_version"`
+	ID               string          `json:"id"`
+	CVEID            string          `json:"cve_id"`
+	AssetID          int64           `json:"asset_id" doc:"As in GET /assets"`
+	AssetName        string          `json:"asset_name"`
+	Vendor           string          `json:"vendor"`
+	Product          string          `json:"product"`
+	ComponentName    string          `json:"component_name"`
+	ComponentVersion string          `json:"component_version"`
 	Reason           closeReasonCode `json:"reason"`
-	Note             string     `json:"note"`
-	ClosedAt         time.Time  `json:"closed_at"`
-	ClosedBy         string     `json:"closed_by" doc:"The email of the User who closed it"`
-	ReopenAt         *time.Time `json:"reopen_at" doc:"When a match may reopen it; null for remediated and false_positive"`
+	Note             string          `json:"note"`
+	ClosedAt         time.Time       `json:"closed_at"`
+	ClosedBy         string          `json:"closed_by" doc:"The email of the User who closed it"`
+	ReopenAt         *time.Time      `json:"reopen_at" doc:"When a match may reopen it; null for remediated and false_positive"`
 }
 
 func (h findingHandler) closed(ctx context.Context, caller tenancy.User, _ *struct{}) (*body[closedFindingsResponse], error) {
