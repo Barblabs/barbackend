@@ -26,6 +26,11 @@ type Slot struct {
 	ScoreRank int
 }
 
+// Span is where a Priority Group sits in its Prioritization's order counted
+// Finding by Finding, from 1. Its Findings are attended at the same time, so
+// each of them is anywhere From to To; compare it with a rank by Score alone.
+type Span struct{ From, To int }
+
 // HistoryKind is what an entry of a Finding's history says happened to its
 // place (ADR 0036).
 type HistoryKind string
@@ -50,14 +55,19 @@ type TimedFeedback struct {
 	Note    string
 }
 
-// HistoryEntry is one change of a Finding's place. Group and rank are 0
-// where there is no place: before for Placed, now for Left.
+// HistoryEntry is one change of a Finding's place. Group, rank, Score and
+// order are zero where there is no place: before for Placed, now for Left.
 type HistoryEntry struct {
 	Prioritization        string
 	Created               time.Time
 	Kind                  HistoryKind
 	GroupBefore, GroupNow int
 	RankBefore, RankNow   int
+	// ScoreBefore and ScoreNow are its Score as the Prioritizer read it, and
+	// OrderBefore and OrderNow where its group sits in the Prioritizer's
+	// order, to compare with where its Score alone put it.
+	ScoreBefore, ScoreNow float64
+	OrderBefore, OrderNow Span
 	// Title, Reason and Evidence are the Prioritizer's justification: the
 	// title of the Finding's group, the reason of the part that holds it and
 	// what that part cites of the Finding. Left has none.
@@ -105,18 +115,16 @@ func marks(versions []Version) []mark {
 }
 
 // HistoryReads is what a Finding's history needs read beyond versions, which
-// are oldest first: the Prioritizations whose Priority Groups it reads, and
-// the placements whose Dossiers it compares.
+// are oldest first: for each version that gives an entry and the one before
+// it, when they hold the Finding, the Prioritization whose Priority Groups it
+// reads and the placement whose Dossier it reads.
 func HistoryReads(versions []Version) (prioritizations, placements []string) {
 	for _, m := range marks(versions) {
-		switch m.kind {
-		case Placed:
-			prioritizations = append(prioritizations, versions[m.index].Prioritization)
-		case PlacedAgain:
-			prioritizations = append(prioritizations, versions[m.index].Prioritization)
-			placements = append(placements, versions[m.index-1].Slot.Placement, versions[m.index].Slot.Placement)
-		case Moved:
-			prioritizations = append(prioritizations, versions[m.index-1].Prioritization, versions[m.index].Prioritization)
+		for _, v := range versions[max(m.index-1, 0) : m.index+1] {
+			if v.Slot != nil {
+				prioritizations = append(prioritizations, v.Prioritization)
+				placements = append(placements, v.Slot.Placement)
+			}
 		}
 	}
 	return compactStrings(prioritizations), compactStrings(placements)
@@ -138,9 +146,13 @@ func History(finding string, versions []Version, lists map[string]PriorityList, 
 		}
 		if before.Slot != nil {
 			e.GroupBefore, e.RankBefore = before.Slot.Group, before.Slot.ScoreRank
+			e.ScoreBefore = dossiers[before.Slot.Placement].Score.Value
+			e.OrderBefore = spanOf(lists[before.Prioritization], before.Slot.Group)
 		}
 		if v.Slot != nil {
 			e.GroupNow, e.RankNow = v.Slot.Group, v.Slot.ScoreRank
+			e.ScoreNow = dossiers[v.Slot.Placement].Score.Value
+			e.OrderNow = spanOf(lists[v.Prioritization], v.Slot.Group)
 			e.Title, e.Reason, e.Evidence = justification(lists[v.Prioritization], finding, v.Slot.Group)
 		}
 		switch m.kind {
@@ -156,6 +168,19 @@ func History(finding string, versions []Version, lists map[string]PriorityList, 
 		out = append(out, e)
 	}
 	return out
+}
+
+// spanOf is where the group at position, from 1, sits in l counted Finding by
+// Finding.
+func spanOf(l PriorityList, position int) Span {
+	if position < 1 || position > len(l.Groups) {
+		return Span{}
+	}
+	from := 1
+	for _, g := range l.Groups[:position-1] {
+		from += len(g.Findings())
+	}
+	return Span{From: from, To: from + len(l.Groups[position-1].Findings()) - 1}
 }
 
 // justification is the title of the group at position, from 1, and the

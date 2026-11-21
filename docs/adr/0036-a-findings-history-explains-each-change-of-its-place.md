@@ -35,7 +35,9 @@ More than one can apply. None applying means a round placed it again for a reaso
 
 ## The API
 
-`GET /findings/{id}/history`, for a Customer Admin or a Viewer of the Finding's Customer, a 404 otherwise. Each entry has the Prioritization's id and creation time, its kind, the position of the Finding's group before and now (null before its first placement and after it left) and the group's title, its rank by Score alone before and now, the change codes with their values, and the justification. The frontend calls it when a User opens a Finding, not with every Prioritization, which already holds all its Findings.
+`GET /findings/{id}/history`, for a Customer Admin or a Viewer of the Finding's Customer, a 404 otherwise. Each entry has the Prioritization's id and creation time, its kind, the position of the Finding's group before and now (null before its first placement and after it left) and the group's title, its rank by Score alone before and now, the change codes with their values, and the justification.
+
+So that each entry compares the order the Score alone gives with the one the Prioritizer gave, it also has, before and now, the Score the Prioritizer read in the Finding's Dossier, and where its group sits in the Prioritizer's order counted Finding by Finding, as a span from and to. A span and not one position: a Priority Group's Findings are attended at the same time, so the order inside it says nothing. A Finding whose Score alone puts it 7th, in a group that spans 2 to 4, is one the Prioritizer brought forward. The frontend calls it when a User opens a Finding, not with every Prioritization, which already holds all its Findings.
 
 ## How it is read
 

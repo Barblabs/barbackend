@@ -41,7 +41,8 @@ func TestHistoryTellsEachChangeOfAFindingsPlaceNewestFirst(t *testing.T) {
 	}
 	was, now := dossier(t), dossier(t)
 	was.KEV = nil
-	dossiers := map[string]assessment.Dossier{"p1": was, "p2": now}
+	was.Score.Value = now.Score.Value - 0.05
+	dossiers := map[string]assessment.Dossier{"p1": was, "p2": now, "p3": now}
 	feedback := []assessment.TimedFeedback{
 		{At: day(1).Add(-time.Hour), Verdict: "should_be_later", Note: "before it was placed"},
 		{At: day(2), Verdict: "should_be_earlier", Note: "es el de pagos"},
@@ -52,28 +53,36 @@ func TestHistoryTellsEachChangeOfAFindingsPlaceNewestFirst(t *testing.T) {
 	if want := []string{"v1", "v2", "v3", "v4", "v6"}; !reflect.DeepEqual(prioritizations, want) {
 		t.Errorf("prioritizations to read = %v, want %v", prioritizations, want)
 	}
-	if want := []string{"p1", "p2"}; !reflect.DeepEqual(placements, want) {
+	if want := []string{"p1", "p2", "p3"}; !reflect.DeepEqual(placements, want) {
 		t.Errorf("placements to read = %v, want %v", placements, want)
 	}
 
 	got := assessment.History("f", versions, lists, dossiers, feedback)
 
 	evidence := []assessment.FindingEvidence{{Finding: "f", Path: "/kev", Value: "null"}}
-	score := now.Score.Value
+	before, score := was.Score.Value, now.Score.Value
 	want := []assessment.HistoryEntry{
-		{Prioritization: "v6", Created: day(6), Kind: assessment.Placed, GroupNow: 1, RankNow: 1, Title: "Reabierto", Reason: "Volvió.", Evidence: evidence},
-		{Prioritization: "v5", Created: day(5), Kind: assessment.Left, GroupBefore: 1, RankBefore: 1},
+		{
+			Prioritization: "v6", Created: day(6), Kind: assessment.Placed, GroupNow: 1, RankNow: 1, ScoreNow: score, OrderNow: assessment.Span{From: 1, To: 1},
+			Title: "Reabierto", Reason: "Volvió.", Evidence: evidence,
+		},
+		{Prioritization: "v5", Created: day(5), Kind: assessment.Left, GroupBefore: 1, RankBefore: 1, ScoreBefore: score, OrderBefore: assessment.Span{From: 1, To: 1}},
 		{
 			Prioritization: "v4", Created: day(4), Kind: assessment.PlacedAgain, GroupBefore: 2, GroupNow: 1, RankBefore: 3, RankNow: 1,
+			ScoreBefore: before, ScoreNow: score, OrderBefore: assessment.Span{From: 2, To: 3}, OrderNow: assessment.Span{From: 1, To: 1},
 			Title: "KEV ahora", Reason: "KEV lo lista.", Evidence: evidence,
-			Change:   assessment.Change{KEVListed: true, ScoreFrom: score, ScoreTo: score},
+			Change:   assessment.Change{KEVListed: true, ScoreFrom: before, ScoreTo: score},
 			Feedback: []assessment.TimedFeedback{feedback[1]},
 		},
 		{
 			Prioritization: "v3", Created: day(3), Kind: assessment.Moved, GroupBefore: 1, GroupNow: 2, RankBefore: 3, RankNow: 3,
+			ScoreBefore: before, ScoreNow: before, OrderBefore: assessment.Span{From: 1, To: 2}, OrderNow: assessment.Span{From: 2, To: 3},
 			Title: "Expuestos", Reason: "Expuesto a internet.", Evidence: evidence, GroupsAppeared: []string{"Ransomware"},
 		},
-		{Prioritization: "v1", Created: day(1), Kind: assessment.Placed, GroupNow: 1, RankNow: 2, Title: "Expuestos", Reason: "Expuesto a internet.", Evidence: evidence},
+		{
+			Prioritization: "v1", Created: day(1), Kind: assessment.Placed, GroupNow: 1, RankNow: 2, ScoreNow: before, OrderNow: assessment.Span{From: 1, To: 2},
+			Title: "Expuestos", Reason: "Expuesto a internet.", Evidence: evidence,
+		},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("history =\n%+v\nwant\n%+v", got, want)
