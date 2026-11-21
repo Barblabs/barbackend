@@ -14,6 +14,11 @@ import (
 	"github.com/google/uuid"
 )
 
+type historyOrder struct {
+	From int `json:"from"`
+	To   int `json:"to"`
+}
+
 type findingHistory struct {
 	Entries []struct {
 		PrioritizationID string `json:"prioritization_id"`
@@ -30,11 +35,11 @@ type findingHistory struct {
 		Band    *struct {
 			From string `json:"from"`
 		} `json:"band"`
-		Score *struct {
-			From float64 `json:"from"`
-			To   float64 `json:"to"`
-		} `json:"score"`
-		Feedback []struct {
+		OrderBefore *historyOrder `json:"order_before"`
+		OrderNow    *historyOrder `json:"order_now"`
+		ScoreBefore *float64      `json:"score_before"`
+		ScoreNow    *float64      `json:"score_now"`
+		Feedback    []struct {
 			Verdict string `json:"verdict"`
 			Note    string `json:"note"`
 		} `json:"feedback"`
@@ -65,12 +70,14 @@ func TestFindingHistoryTellsWhyEachFindingMoved(t *testing.T) {
 	}
 
 	second := history(f2).Entries
-	if len(second) != 2 || second[1].Kind != "placed" || second[1].GroupBefore != nil || second[1].PrioritizationID != p.ID.String() {
+	if len(second) != 2 || second[1].Kind != "placed" || second[1].GroupBefore != nil || second[1].OrderBefore != nil || second[1].ScoreBefore != nil ||
+		second[1].ScoreNow == nil || second[1].PrioritizationID != p.ID.String() {
 		t.Fatalf("second's history = %+v, want placed, then placed again", second)
 	}
 	again := second[0]
 	if again.Kind != "placed_again" || *again.GroupBefore != 2 || *again.GroupNow != 1 || again.Title != "Antes" || again.Reason != "Es el de pagos." ||
-		!reflect.DeepEqual(again.Changes, []string{"feedback"}) || again.Band != nil || again.Score == nil || again.Score.From != again.Score.To {
+		!reflect.DeepEqual(again.Changes, []string{"feedback"}) || again.Band != nil || again.ScoreBefore == nil || again.ScoreNow == nil || *again.ScoreBefore != *again.ScoreNow ||
+		again.OrderBefore == nil || *again.OrderBefore != (historyOrder{2, 2}) || again.OrderNow == nil || *again.OrderNow != (historyOrder{1, 1}) {
 		t.Errorf("second placed again = %+v", again)
 	}
 	if len(again.Feedback) != 1 || again.Feedback[0].Verdict != "should_be_earlier" || again.Feedback[0].Note != "es el de pagos" {
@@ -79,7 +86,8 @@ func TestFindingHistoryTellsWhyEachFindingMoved(t *testing.T) {
 	first := history(f1).Entries
 	if len(first) != 2 || first[0].Kind != "moved" || !reflect.DeepEqual(first[0].GroupsAppeared, []string{"Antes"}) || first[0].Title != "Primero" ||
 		first[0].Reason != "Va en pg-prod-01." || len(first[0].Evidence) != 1 || first[0].Evidence[0].Value != "pg-prod-01" ||
-		first[0].Changes == nil || len(first[0].Changes) != 0 || first[0].Score != nil || first[0].CloseReason != nil {
+		first[0].Changes == nil || len(first[0].Changes) != 0 || first[0].CloseReason != nil ||
+		first[0].OrderBefore == nil || *first[0].OrderBefore != (historyOrder{1, 1}) || first[0].OrderNow == nil || *first[0].OrderNow != (historyOrder{2, 2}) {
 		t.Errorf("first's history = %+v, want it moved under Antes with its reason", first)
 	}
 }
