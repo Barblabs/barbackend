@@ -178,24 +178,51 @@ func byScore(findings []Dossier) []Dossier {
 }
 
 // Changed reports whether a Finding placed when its Dossier was was must be
-// placed again now that it is now (ADR 0026): because KEV lists it now, or
-// says ransomware uses it now, because the Cartógrafo labeled it since,
-// because its Score Band changed, or because its Score moved by ScoreShift
-// or more. A Score of a Model without Bands has no Band to compare, so only
-// ScoreShift moves it (ADR 0032).
+// placed again now that it is now (ADR 0026): whether ChangeOf finds any.
 func Changed(was, now Dossier) bool {
-	switch {
-	case was.KEV == nil && now.KEV != nil:
-		return true
-	case now.KEV != nil && now.KEV.KnownRansomwareCampaignUse == knownRansomwareUse && (was.KEV == nil || was.KEV.KnownRansomwareCampaignUse != knownRansomwareUse):
-		return true
-	case len(was.Techniques) == 0 && len(now.Techniques) > 0:
-		return true
-	case was.Score.Band != "" && now.Score.Band != "" && was.Score.Band != now.Score.Band:
-		return true
-	default:
-		return rounded(math.Abs(now.Score.Value-was.Score.Value)) >= ScoreShift
+	return ChangeOf(was, now).Any()
+}
+
+// Change is what changed in a Finding between two of its Dossiers that
+// places it again (ADR 0026), as its history gives it (ADR 0036).
+type Change struct {
+	// KEVListed: KEV lists it now.
+	KEVListed bool
+	// RansomwareUse: KEV says ransomware uses it now.
+	RansomwareUse bool
+	// Labeled: the Cartógrafo labeled it with Techniques since.
+	Labeled bool
+	// BandFrom and BandTo are its Score Bands when they differ, empty
+	// otherwise. A Score of a Model without Bands has none to compare
+	// (ADR 0032).
+	BandFrom, BandTo string
+	// ScoreMoved: its Score moved by ScoreShift or more, from ScoreFrom to
+	// ScoreTo, which are set either way.
+	ScoreMoved         bool
+	ScoreFrom, ScoreTo float64
+}
+
+// ChangeOf is what changed in a Finding placed when its Dossier was was, now
+// that it is now.
+func ChangeOf(was, now Dossier) Change {
+	c := Change{
+		KEVListed: was.KEV == nil && now.KEV != nil,
+		RansomwareUse: now.KEV != nil && now.KEV.KnownRansomwareCampaignUse == knownRansomwareUse &&
+			(was.KEV == nil || was.KEV.KnownRansomwareCampaignUse != knownRansomwareUse),
+		Labeled:    len(was.Techniques) == 0 && len(now.Techniques) > 0,
+		ScoreMoved: rounded(math.Abs(now.Score.Value-was.Score.Value)) >= ScoreShift,
+		ScoreFrom:  was.Score.Value,
+		ScoreTo:    now.Score.Value,
 	}
+	if was.Score.Band != "" && now.Score.Band != "" && was.Score.Band != now.Score.Band {
+		c.BandFrom, c.BandTo = was.Score.Band, now.Score.Band
+	}
+	return c
+}
+
+// Any reports whether anything changed that places the Finding again.
+func (c Change) Any() bool {
+	return c.KEVListed || c.RansomwareUse || c.Labeled || c.BandFrom != "" || c.ScoreMoved
 }
 
 // BandRose reports whether now's Score Band is higher than was's, the

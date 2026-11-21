@@ -49,6 +49,7 @@ func (h prioritizationHandler) register(api huma.API) {
 		DefaultStatus: http.StatusCreated,
 		Errors:        []int{http.StatusBadRequest, http.StatusNotFound},
 	}, h.recordFeedback)
+	h.registerHistory(api)
 }
 
 type prioritizationSummaryResponse struct {

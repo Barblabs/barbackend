@@ -24,6 +24,7 @@ func TestOpenAPIListsEveryRoute(t *testing.T) {
 		{http.MethodPost, "/prioritizations/{id}/feedback"},
 		{http.MethodPost, "/findings/{id}/close"},
 		{http.MethodPost, "/findings/{id}/reopen"},
+		{http.MethodGet, "/findings/{id}/history"},
 		{http.MethodPost, "/analista/conversations"},
 		{http.MethodPost, "/analista/conversations/{id}/messages"},
 		{http.MethodPut, "/areas/{id}/owner"},
