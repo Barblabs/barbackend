@@ -22,6 +22,36 @@ type HistoryEntry struct {
 	CloseReason string
 }
 
+// PlacedAgain reports whether a round placed the Finding again in this entry.
+func (e HistoryEntry) PlacedAgain() bool { return e.Kind == assessment.PlacedAgain }
+
+// ChangeCodes are, for an entry where a round placed the Finding again, the
+// codes of ADR 0036 for what changed in it, in that order; none otherwise.
+func (e HistoryEntry) ChangeCodes() []string {
+	out := []string{}
+	if !e.PlacedAgain() {
+		return out
+	}
+	c := e.Change
+	for _, rule := range []struct {
+		applies bool
+		code    string
+	}{
+		{c.KEVListed, "kev_listed"},
+		{c.RansomwareUse, "ransomware_use"},
+		{c.Labeled, "labeled"},
+		{c.BandFrom != "", "band_changed"},
+		{c.ScoreMoved, "score_moved"},
+		{len(e.Feedback) > 0, "feedback"},
+		{e.BusinessContext, "business_context"},
+	} {
+		if rule.applies {
+			out = append(out, rule.code)
+		}
+	}
+	return out
+}
+
 // FindingHistory is how the Customer's order placed the Finding of that id,
 // newest change first, computed from what the Prioritizations stored and
 // calling no Agent (ADR 0036). A Finding no Prioritization held has none. It
