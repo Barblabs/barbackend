@@ -158,7 +158,7 @@ func idsOf(dossiers []assessment.Dossier) []string {
 	return ids
 }
 
-func TestChanged(t *testing.T) {
+func TestChangeOf(t *testing.T) {
 	t.Parallel()
 	ransomware := func(use string) *stixext.KEV {
 		return &stixext.KEV{DateAdded: "2025-09-29", KnownRansomwareCampaignUse: use}
@@ -166,29 +166,34 @@ func TestChanged(t *testing.T) {
 	tests := []struct {
 		name   string
 		change func(was, now *assessment.Dossier)
-		want   bool
+		want   assessment.Change
 	}{
-		{"nothing", func(_, _ *assessment.Dossier) {}, false},
-		{"a small move of its Score", func(_, now *assessment.Dossier) { now.Score.Value += assessment.ScoreShift / 2 }, false},
-		{"its Score moved up", func(_, now *assessment.Dossier) { now.Score.Value += assessment.ScoreShift }, true},
-		{"its Score moved down", func(_, now *assessment.Dossier) { now.Score.Value -= assessment.ScoreShift }, true},
-		{"KEV lists it now", func(was, _ *assessment.Dossier) { was.KEV = nil }, true},
-		{"KEV no longer lists it", func(_, now *assessment.Dossier) { now.KEV = nil }, false},
-		{"ransomware uses it now", func(was, now *assessment.Dossier) { was.KEV, now.KEV = ransomware("Unknown"), ransomware("Known") }, true},
-		{"ransomware used it already", func(was, now *assessment.Dossier) { was.KEV, now.KEV = ransomware("Known"), ransomware("Known") }, false},
-		{"the Cartógrafo labeled it since", func(was, _ *assessment.Dossier) { was.Techniques = nil }, true},
-		{"the Cartógrafo labeled it already", func(_, now *assessment.Dossier) { now.Techniques = append(now.Techniques, now.Techniques[0]) }, false},
-		{"its Band changed by a small move", func(was, now *assessment.Dossier) { was.Score.Band, now.Score.Band = "high", "critical" }, true},
-		{"its Band stayed", func(was, now *assessment.Dossier) { was.Score.Band, now.Score.Band = "high", "high" }, false},
-		{"a Band where there was none", func(_, now *assessment.Dossier) { now.Score.Band = "critical" }, false},
+		{"nothing", func(_, _ *assessment.Dossier) {}, assessment.Change{}},
+		{"a small move of its Score", func(_, now *assessment.Dossier) { now.Score.Value += assessment.ScoreShift / 2 }, assessment.Change{}},
+		{"its Score moved up", func(_, now *assessment.Dossier) { now.Score.Value += assessment.ScoreShift }, assessment.Change{ScoreMoved: true}},
+		{"its Score moved down", func(_, now *assessment.Dossier) { now.Score.Value -= assessment.ScoreShift }, assessment.Change{ScoreMoved: true}},
+		{"KEV lists it now", func(was, _ *assessment.Dossier) { was.KEV = nil }, assessment.Change{KEVListed: true}},
+		{"KEV no longer lists it", func(_, now *assessment.Dossier) { now.KEV = nil }, assessment.Change{}},
+		{"KEV lists it now, used by ransomware", func(was, now *assessment.Dossier) { was.KEV, now.KEV = nil, ransomware("Known") }, assessment.Change{KEVListed: true, RansomwareUse: true}},
+		{"ransomware uses it now", func(was, now *assessment.Dossier) { was.KEV, now.KEV = ransomware("Unknown"), ransomware("Known") }, assessment.Change{RansomwareUse: true}},
+		{"ransomware used it already", func(was, now *assessment.Dossier) { was.KEV, now.KEV = ransomware("Known"), ransomware("Known") }, assessment.Change{}},
+		{"the Cartógrafo labeled it since", func(was, _ *assessment.Dossier) { was.Techniques = nil }, assessment.Change{Labeled: true}},
+		{"the Cartógrafo labeled it already", func(_, now *assessment.Dossier) { now.Techniques = append(now.Techniques, now.Techniques[0]) }, assessment.Change{}},
+		{"its Band changed by a small move", func(was, now *assessment.Dossier) { was.Score.Band, now.Score.Band = "high", "critical" }, assessment.Change{BandFrom: "high", BandTo: "critical"}},
+		{"its Band stayed", func(was, now *assessment.Dossier) { was.Score.Band, now.Score.Band = "high", "high" }, assessment.Change{}},
+		{"a Band where there was none", func(_, now *assessment.Dossier) { now.Score.Band = "critical" }, assessment.Change{}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			was, now := dossier(t), dossier(t)
 			tt.change(&was, &now)
-			if got := assessment.Changed(was, now); got != tt.want {
-				t.Errorf("Changed = %v, want %v", got, tt.want)
+			tt.want.ScoreFrom, tt.want.ScoreTo = was.Score.Value, now.Score.Value
+			if got := assessment.ChangeOf(was, now); got != tt.want {
+				t.Errorf("ChangeOf = %+v, want %+v", got, tt.want)
+			}
+			if got := assessment.Changed(was, now); got != tt.want.Any() {
+				t.Errorf("Changed = %v, want %v", got, tt.want.Any())
 			}
 		})
 	}
