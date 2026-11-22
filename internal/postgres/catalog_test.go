@@ -23,7 +23,7 @@ func TestCatalogsMatchDomainConstants(t *testing.T) {
 		"criticalities":               names(inventory.CriticalityHigh, inventory.CriticalityMedium, inventory.CriticalityLow),
 		"exposures":                   names(inventory.InternetFacing, inventory.Internal),
 		"lifecycle_stages":            names(inventory.LifecycleProduction, inventory.LifecycleImplementation, inventory.LifecycleStock),
-		"information_classifications": names(inventory.ClassifiedPublic, inventory.ClassifiedPrivate, inventory.ClassifiedConfidential),
+		"information_classifications": names(inventory.ClassifiedPublic, inventory.ClassifiedPrivate, inventory.ClassifiedConfidential, inventory.ClassifiedHighlyConfidential),
 		"software_roles":              names(inventory.OperatingSystem, inventory.Application),
 		"sync_outcomes":               names(inventory.SyncSucceeded, inventory.SyncFailed),
 		"user_roles":                  names(tenancy.PlatformAdmin, tenancy.CustomerAdmin, tenancy.Viewer),
