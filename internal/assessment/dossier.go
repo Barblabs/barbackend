@@ -341,7 +341,7 @@ func (a Asset) problems() []string {
 		problems = append(problems, fmt.Sprintf("asset lifecycle stage %q is not production, implementation, stock or unknown", a.Lifecycle))
 	}
 	if _, err := inventory.ParseInformationClassification(a.Classification); err != nil && a.Classification != unclassified {
-		problems = append(problems, fmt.Sprintf("asset information classification %q is not confidential, private, public or unclassified", a.Classification))
+		problems = append(problems, fmt.Sprintf("asset information classification %q is not highly_confidential, confidential, private, public or unclassified", a.Classification))
 	}
 	for _, s := range a.Software {
 		if _, err := inventory.ParseSoftwareRole(s.Role); err != nil {

@@ -184,6 +184,7 @@ func TestAssetInformationClassification(t *testing.T) {
 		{"public", inventory.ClassifiedPublic, nil},
 		{"private", inventory.ClassifiedPrivate, nil},
 		{"confidential", inventory.ClassifiedConfidential, nil},
+		{"highly confidential", inventory.ClassifiedHighlyConfidential, nil},
 		{"unclassified rejected", inventory.Unclassified, inventory.ErrInvalidInformationClassification},
 		{"out of range rejected", 42, inventory.ErrInvalidInformationClassification},
 		{"negative rejected", -1, inventory.ErrInvalidInformationClassification},

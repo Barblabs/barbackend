@@ -28,11 +28,11 @@ func TestDeclaringAnInformationClassificationKeepsItThroughASync(t *testing.T) {
 		t.Fatalf("classification before declaring = %+v, want Unclassified", vm.InformationClassification)
 	}
 
-	declared := decode[asset](t, e.asUser(admin, http.MethodPut, informationClassificationPath(vm.ID), informationClassificationBody("confidential")), http.StatusOK)
+	declared := decode[asset](t, e.asUser(admin, http.MethodPut, informationClassificationPath(vm.ID), informationClassificationBody("highly_confidential")), http.StatusOK)
 
-	if c := declared.InformationClassification; c.Value == nil || *c.Value != "confidential" ||
+	if c := declared.InformationClassification; c.Value == nil || *c.Value != "highly_confidential" ||
 		c.DeclaredBy == nil || *c.DeclaredBy != adminEmail || c.DeclaredAt == nil {
-		t.Errorf("declared classification = %+v, want confidential declared by %s", c, adminEmail)
+		t.Errorf("declared classification = %+v, want highly_confidential declared by %s", c, adminEmail)
 	}
 
 	e.syncRecords(t, virtualMachine(t, "vm", false))

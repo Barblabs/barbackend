@@ -161,7 +161,7 @@ Where an Asset is in its life: Production, Implementation, Stock, or Unknown. It
 _Avoid_: Status, environment, state
 
 **Information Classification**:
-How sensitive the data an Asset holds is: Public, Private, Confidential, or Unclassified. iTop has no field for it, so it is only declared, by a Customer Admin, and is Unclassified until then. It is scored from Scoring Model 3, as the higher of it and Criticality, and does not count while Unclassified (ADR 0031, ADR 0032). "Private", not "Internal": Internal is an Exposure value.
+How sensitive the data an Asset holds is: Public, Private, Confidential, Highly Confidential, or Unclassified. iTop has no field for it, so it is only declared, by a Customer Admin, and is Unclassified until then. It is scored from Scoring Model 3, as the higher of it and Criticality, and does not count while Unclassified; Highly Confidential is scored from Model 4 (ADR 0031, ADR 0032, ADR 0037). "Private", not "Internal": Internal is an Exposure value.
 _Avoid_: Data classification, sensitivity
 
 ### Business

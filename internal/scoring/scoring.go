@@ -225,9 +225,20 @@ func ParseBand(name string) (Band, bool) {
 	return 0, false
 }
 
+// Model4 is Model3 with Highly Confidential, a step above Confidential, which
+// moves down to 0.9 so that the scale stays from 0 to 1 (ADR 0037).
+var Model4 = func() Model {
+	m := Model3
+	m.version = 4
+	m.classification = map[inventory.InformationClassification]float64{
+		inventory.ClassifiedHighlyConfidential: 1.0, inventory.ClassifiedConfidential: 0.9, inventory.ClassifiedPrivate: 0.75, inventory.ClassifiedPublic: 0.5,
+	}
+	return m
+}()
+
 // models are the published Scoring Models, so a stored Score's Band is read
 // from the Model that scored it.
-var models = []Model{Model1, Model2, Model3}
+var models = []Model{Model1, Model2, Model3, Model4}
 
 // Band is the Score Band of s under the Model that scored it, and false when
 // that Model has none or is not one of the published Models.
