@@ -120,7 +120,7 @@ type currentAssetResponse struct {
 	Criticality               string `json:"criticality" enum:"high,medium,low,unknown"`
 	Exposure                  string `json:"exposure" enum:"internet_facing,internal,unknown"`
 	LifecycleStage            string `json:"lifecycle_stage" enum:"production,implementation,stock,unknown"`
-	InformationClassification string `json:"information_classification" enum:"confidential,private,public,unclassified"`
+	InformationClassification string `json:"information_classification" enum:"highly_confidential,confidential,private,public,unclassified"`
 }
 
 type findingDetailsResponse struct {
@@ -144,7 +144,7 @@ type findingAssetResponse struct {
 	Criticality               string                    `json:"criticality" enum:"high,medium,low,unknown"`
 	Exposure                  string                    `json:"exposure" enum:"internet_facing,internal,unknown"`
 	LifecycleStage            string                    `json:"lifecycle_stage" enum:"production,implementation,stock,unknown"`
-	InformationClassification string                    `json:"information_classification" enum:"confidential,private,public,unclassified" doc:"Unclassified while no Customer Admin declared it, which does not mean the data is public"`
+	InformationClassification string                    `json:"information_classification" enum:"highly_confidential,confidential,private,public,unclassified" doc:"Unclassified while no Customer Admin declared it, which does not mean the data is public"`
 	CriticalServices          []criticalServiceResponse `json:"critical_services" doc:"The Critical Services of the Business Context that name the Asset"`
 }
 

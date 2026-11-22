@@ -121,7 +121,7 @@ func (exposureFilterCode) Schema(huma.Registry) *huma.Schema {
 type informationClassificationFilterCode string
 
 func (informationClassificationFilterCode) Schema(huma.Registry) *huma.Schema {
-	return &huma.Schema{Type: huma.TypeString, Enum: append(codes(inventory.ClassifiedPublic, inventory.ClassifiedPrivate, inventory.ClassifiedConfidential), unclassifiedFilterCode)}
+	return &huma.Schema{Type: huma.TypeString, Enum: append(classificationCodes(), unclassifiedFilterCode)}
 }
 
 type lifecycleFilterCode string
@@ -255,7 +255,7 @@ type declareExposureInput struct {
 }
 
 type informationClassificationResponse struct {
-	Value      *string    `json:"value" enum:"public,private,confidential" doc:"The declared Information Classification; null when Unclassified"`
+	Value      *string    `json:"value" enum:"public,private,confidential,highly_confidential" doc:"The declared Information Classification; null when Unclassified"`
 	DeclaredBy *string    `json:"declared_by" doc:"Email of the User who declared it; null when Unclassified"`
 	DeclaredAt *time.Time `json:"declared_at" doc:"When it was declared; null when Unclassified"`
 }
@@ -263,7 +263,13 @@ type informationClassificationResponse struct {
 type informationClassificationCode string
 
 func (informationClassificationCode) Schema(huma.Registry) *huma.Schema {
-	return &huma.Schema{Type: huma.TypeString, Enum: codes(inventory.ClassifiedPublic, inventory.ClassifiedPrivate, inventory.ClassifiedConfidential)}
+	return &huma.Schema{Type: huma.TypeString, Enum: classificationCodes()}
+}
+
+// classificationCodes are the codes of the Information Classifications a
+// Customer Admin can declare.
+func classificationCodes() []any {
+	return codes(inventory.ClassifiedPublic, inventory.ClassifiedPrivate, inventory.ClassifiedConfidential, inventory.ClassifiedHighlyConfidential)
 }
 
 type declareInformationClassificationRequest struct {

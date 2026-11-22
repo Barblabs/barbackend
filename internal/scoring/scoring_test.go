@@ -328,6 +328,47 @@ func TestModel3ImpactIsTheHigherOfCriticalityAndClassification(t *testing.T) {
 	}
 }
 
+func TestModel4ComputeTheExamplesOfADR0037(t *testing.T) {
+	kev := func(cvss float64, criticality inventory.Criticality, classification inventory.InformationClassification, exposure inventory.Exposure) scoring.Inputs {
+		return scoring.Inputs{CVSS: ptr(cvss), EPSS: ptr(0.5), KEVListed: true, Criticality: criticality,
+			Classification: classification, Exposure: exposure, Lifecycle: inventory.LifecycleProduction}
+	}
+	tests := []struct {
+		name      string
+		in        scoring.Inputs
+		wantValue float64
+		wantBand  scoring.Band
+	}{
+		{"highly confidential raises a low asset in full", kev(8.8, inventory.CriticalityLow, inventory.ClassifiedHighlyConfidential, inventory.Internal), 0.88 * 0.7, scoring.BandHigh},
+		{"confidential raises it to 0.9", kev(8.8, inventory.CriticalityLow, inventory.ClassifiedConfidential, inventory.Internal), 0.88 * 0.9 * 0.7, scoring.BandHigh},
+		{"confidential can leave critical", kev(7.5, inventory.CriticalityLow, inventory.ClassifiedConfidential, inventory.InternetFacing), 0.75 * 0.9, scoring.BandHigh},
+		{"highly confidential keeps it critical", kev(7.5, inventory.CriticalityLow, inventory.ClassifiedHighlyConfidential, inventory.InternetFacing), 0.75, scoring.BandCritical},
+		{"a high asset is not moved", kev(7.5, inventory.CriticalityHigh, inventory.ClassifiedConfidential, inventory.InternetFacing), 0.75, scoring.BandCritical},
+		{"private keeps its value", kev(7.5, inventory.CriticalityLow, inventory.ClassifiedPrivate, inventory.InternetFacing), 0.75 * 0.75, scoring.BandHigh},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := scoring.Model4.Compute(tt.in)
+			if err != nil {
+				t.Fatalf("Compute: %v", err)
+			}
+			if math.Abs(got.Value-tt.wantValue) > 1e-9 || got.Model != 4 {
+				t.Errorf("Value, Model = %v, %v, want %v, 4", got.Value, got.Model, tt.wantValue)
+			}
+			if band, ok := scoring.Model4.Band(got.Value); !ok || band != tt.wantBand {
+				t.Errorf("Band = %v, %v, want %v", band, ok, tt.wantBand)
+			}
+		})
+	}
+}
+
+func TestModel3DoesNotScoreHighlyConfidential(t *testing.T) {
+	in := scoring.Inputs{CVSS: ptr(5), EPSS: ptr(0.5), Criticality: inventory.CriticalityHigh, Exposure: inventory.Internal, Classification: inventory.ClassifiedHighlyConfidential}
+	if _, err := scoring.Model3.Compute(in); !errors.Is(err, inventory.ErrInvalidInformationClassification) {
+		t.Errorf("err = %v, want %v: Model 3 is never edited (ADR 0037)", err, inventory.ErrInvalidInformationClassification)
+	}
+}
+
 func TestModel3RejectsOutOfRangeClassification(t *testing.T) {
 	in := scoring.Inputs{CVSS: ptr(5), EPSS: ptr(0.5), Criticality: inventory.CriticalityHigh, Exposure: inventory.Internal, Classification: 42}
 	if _, err := scoring.Model3.Compute(in); !errors.Is(err, inventory.ErrInvalidInformationClassification) {
@@ -380,6 +421,7 @@ func TestAScoreHasTheBandOfTheModelThatScoredIt(t *testing.T) {
 		wantOK bool
 	}{
 		{"model 3", scoring.Score{Model: 3, Value: 0.59}, scoring.BandHigh, true},
+		{"model 4", scoring.Score{Model: 4, Value: 0.72}, scoring.BandCritical, true},
 		{"model 2 has none", scoring.Score{Model: 2, Value: 0.59}, 0, false},
 		{"an unpublished model has none", scoring.Score{Model: 42, Value: 0.59}, 0, false},
 	}
