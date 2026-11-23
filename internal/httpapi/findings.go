@@ -66,6 +66,7 @@ func (h findingHandler) register(api huma.API) {
 		Description: "The scored Findings closed in the last weeks ISO weeks, in UTC and the current week included, by the Score Band of their latest Score: how many, and the median and average days from when each was last opened to its close. A Finding not scored is left out.",
 		Errors:      []int{http.StatusBadRequest},
 	}, h.timeToClose)
+	h.registerCloses(api)
 }
 
 type weeklyTrendQuery struct {

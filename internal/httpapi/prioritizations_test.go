@@ -111,9 +111,12 @@ func TestPrioritizationErrors(t *testing.T) {
 		{"plan for a Finding it does not hold", jsonRequest(t, http.MethodPost, "/prioritizations/"+id+"/plans", map[string]string{"finding_id": missing}), http.StatusNotFound, "finding_not_found"},
 		{"plan for what is not a Finding's id", jsonRequest(t, http.MethodPost, "/prioritizations/"+id+"/plans", map[string]string{"finding_id": "f-9"}), http.StatusNotFound, "finding_not_found"},
 		{"plan without a Finding", jsonRequest(t, http.MethodPost, "/prioritizations/"+id+"/plans", map[string]string{"finding_id": ""}), http.StatusBadRequest, "invalid_request"},
-		{"feedback on a Finding it does not hold", jsonRequest(t, http.MethodPost, "/prioritizations/"+id+"/feedback", map[string]string{"finding_id": missing, "verdict": "applies"}), http.StatusNotFound, "finding_not_found"},
-		{"feedback on an unknown Prioritization", jsonRequest(t, http.MethodPost, "/prioritizations/"+missing+"/feedback", map[string]string{"finding_id": f1, "verdict": "applies"}), http.StatusNotFound, "prioritization_not_found"},
-		{"unknown verdict", jsonRequest(t, http.MethodPost, "/prioritizations/"+id+"/feedback", map[string]string{"finding_id": f1, "verdict": "maybe"}), http.StatusBadRequest, "invalid_request"},
+		{"feedback on a Finding it does not hold", jsonRequest(t, http.MethodPost, "/prioritizations/"+id+"/feedback", map[string]string{"finding_id": missing, "verdict": "applies", "note": "x"}), http.StatusNotFound, "finding_not_found"},
+		{"feedback on an unknown Prioritization", jsonRequest(t, http.MethodPost, "/prioritizations/"+missing+"/feedback", map[string]string{"finding_id": f1, "verdict": "applies", "note": "x"}), http.StatusNotFound, "prioritization_not_found"},
+		{"unknown verdict", jsonRequest(t, http.MethodPost, "/prioritizations/"+id+"/feedback", map[string]string{"finding_id": f1, "verdict": "maybe", "note": "x"}), http.StatusBadRequest, "invalid_request"},
+		{"a verdict no longer given", jsonRequest(t, http.MethodPost, "/prioritizations/"+id+"/feedback", map[string]string{"finding_id": f1, "verdict": "does_not_apply", "note": "x"}), http.StatusBadRequest, "invalid_request"},
+		{"no note", jsonRequest(t, http.MethodPost, "/prioritizations/"+id+"/feedback", map[string]string{"finding_id": f1, "verdict": "applies"}), http.StatusBadRequest, "invalid_request"},
+		{"a blank note", jsonRequest(t, http.MethodPost, "/prioritizations/"+id+"/feedback", map[string]string{"finding_id": f1, "verdict": "applies", "note": "   "}), http.StatusBadRequest, "invalid_request"},
 		{"too long a note", jsonRequest(t, http.MethodPost, "/prioritizations/"+id+"/feedback", map[string]string{"finding_id": f1, "verdict": "applies", "note": strings.Repeat("x", 2001)}), http.StatusBadRequest, "invalid_request"},
 		{"id that is not one", httptest.NewRequest(http.MethodGet, "/prioritizations/nope", nil), http.StatusBadRequest, "invalid_request"},
 		{"blank message to the Analista", jsonRequest(t, http.MethodPost, "/analista/conversations", map[string]string{"message": "  "}), http.StatusBadRequest, "invalid_request"},
@@ -139,16 +142,20 @@ func TestAnotherCustomerCannotReachAPrioritization(t *testing.T) {
 	id := p.ID.String()
 	f1, _ := firstAndSecond(p)
 	stranger := "Bearer " + e.signIn(t, e.newUser(t, tenancy.Viewer, e.newCustomer(t)))
+	calls := len(e.llm.Requests())
 
 	for _, req := range []*http.Request{
 		httptest.NewRequest(http.MethodGet, "/prioritizations/"+id, nil),
 		jsonRequest(t, http.MethodPost, "/prioritizations/"+id+"/plans", map[string]string{"finding_id": f1}),
-		jsonRequest(t, http.MethodPost, "/prioritizations/"+id+"/feedback", map[string]string{"finding_id": f1, "verdict": "applies"}),
+		jsonRequest(t, http.MethodPost, "/prioritizations/"+id+"/feedback", map[string]string{"finding_id": f1, "verdict": "applies", "note": "x"}),
 	} {
 		req.Header.Set("Authorization", stranger)
 		if rec := e.do(req); rec.Code != http.StatusNotFound {
 			t.Errorf("%s %s = %d %s, want 404", req.Method, req.URL.Path, rec.Code, rec.Body)
 		}
+	}
+	if len(e.llm.Requests()) != calls {
+		t.Error("the model was called")
 	}
 	req := httptest.NewRequest(http.MethodGet, "/prioritizations", nil)
 	req.Header.Set("Authorization", stranger)
@@ -200,7 +207,7 @@ func TestPlatformAdminIsForbiddenFromTheAgents(t *testing.T) {
 	for _, req := range []*http.Request{
 		httptest.NewRequest(http.MethodGet, "/prioritizations/"+id, nil),
 		jsonRequest(t, http.MethodPost, "/prioritizations/"+id+"/plans", map[string]string{"finding_id": f1}),
-		jsonRequest(t, http.MethodPost, "/prioritizations/"+id+"/feedback", map[string]string{"finding_id": f1, "verdict": "applies"}),
+		jsonRequest(t, http.MethodPost, "/prioritizations/"+id+"/feedback", map[string]string{"finding_id": f1, "verdict": "applies", "note": "x"}),
 		jsonRequest(t, http.MethodPost, "/analista/conversations", map[string]string{"message": "hola"}),
 		jsonRequest(t, http.MethodPost, "/analista/conversations/"+id+"/messages", map[string]string{"message": "hola"}),
 	} {

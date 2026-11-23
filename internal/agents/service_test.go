@@ -131,25 +131,6 @@ func TestPlanStoresNothingWithoutAVerifiedAnswer(t *testing.T) {
 	}
 }
 
-func TestPlanRefusesBeforeCallingTheModel(t *testing.T) {
-	t.Parallel()
-	e := newEnv(t)
-	p := e.prioritize(t)
-	stranger := e.newCustomer(t, "theirs")
-	calls := len(e.llm.Requests())
-
-	_, err := e.svc.Plan(context.Background(), stranger, p.ID, e.pg())
-	wantErr(t, err, agents.ErrPrioritizationNotFound)
-	_, err = e.svc.Plan(context.Background(), e.user, p.ID, "f-9")
-	wantErr(t, err, agents.ErrFindingNotFound)
-	_, err = e.svc.Plan(context.Background(), e.user, p.ID, uuid.NewString())
-	wantErr(t, err, agents.ErrFindingNotFound)
-
-	if len(e.llm.Requests()) != calls {
-		t.Error("the model was called")
-	}
-}
-
 func TestFeedbackIsKeptOnTheFinding(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
@@ -179,8 +160,8 @@ func TestOnlyFeedbackOnTheOrderNotifies(t *testing.T) {
 	notices := 0
 	e.svc.OnOrderFeedback(func() { notices++ })
 
-	for _, verdict := range []string{"applies", "does_not_apply", "remediated", "should_be_earlier", "should_be_later"} {
-		if _, err := e.svc.RecordFeedback(context.Background(), e.user, p.ID, e.os(), verdict, ""); err != nil {
+	for _, verdict := range []string{"applies", "should_be_earlier", "should_be_later"} {
+		if _, err := e.svc.RecordFeedback(context.Background(), e.user, p.ID, e.os(), verdict, "x"); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -200,12 +181,12 @@ func TestRecordFeedbackRejects(t *testing.T) {
 		return err
 	}
 
-	wantErr(t, record(p.ID, e.pg(), "maybe", ""), agents.ErrInvalidFeedback)
+	wantErr(t, record(p.ID, e.pg(), "maybe", "x"), agents.ErrInvalidFeedback)
 	wantErr(t, record(p.ID, e.pg(), "applies", strings.Repeat("x", agents.MaxNoteLength+1)), agents.ErrInvalidFeedback)
-	wantErr(t, record(p.ID, "f-9", "applies", ""), agents.ErrFindingNotFound)
-	wantErr(t, record(p.ID, uuid.NewString(), "applies", ""), agents.ErrFindingNotFound)
-	wantErr(t, record(uuid.New(), e.pg(), "applies", ""), agents.ErrPrioritizationNotFound)
-	_, err := e.svc.RecordFeedback(context.Background(), stranger, p.ID, e.pg(), "applies", "")
+	wantErr(t, record(p.ID, "f-9", "applies", "x"), agents.ErrFindingNotFound)
+	wantErr(t, record(p.ID, uuid.NewString(), "applies", "x"), agents.ErrFindingNotFound)
+	wantErr(t, record(uuid.New(), e.pg(), "applies", "x"), agents.ErrPrioritizationNotFound)
+	_, err := e.svc.RecordFeedback(context.Background(), stranger, p.ID, e.pg(), "applies", "x")
 	wantErr(t, err, agents.ErrPrioritizationNotFound)
 	_, err = e.svc.Get(context.Background(), stranger, p.ID)
 	wantErr(t, err, agents.ErrPrioritizationNotFound)

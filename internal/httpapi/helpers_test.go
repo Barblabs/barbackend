@@ -61,6 +61,7 @@ var operations = []struct{ method, path string }{
 	{http.MethodGet, "/findings/top"},
 	{http.MethodGet, "/findings/attack-matrix"},
 	{http.MethodGet, "/findings/time-to-close"},
+	{http.MethodGet, "/findings/closed"},
 	{http.MethodGet, "/areas"},
 	{http.MethodGet, "/prioritizations"},
 	{http.MethodGet, "/news-digests"},
@@ -391,7 +392,9 @@ func (e env) holdSyncLock(t *testing.T, src inventory.CMDBSourceID) (release fun
 // prioritize stores two Findings on the Customer's pg-prod-01 and their
 // Prioritization, in which the Prioritizer puts the one of CVE-2025-1094 first
 // though the other has the higher Score.
-func (e env) prioritize(t *testing.T) agents.Prioritization {
+// storeFindings stores, on the Customer's pg-prod-01, the scored Findings of
+// CVE-2025-1094, which KEV lists, and of CVE-2024-6387, and returns their ids.
+func (e env) storeFindings(t *testing.T) []string {
 	t.Helper()
 	ctx := context.Background()
 	postgreSQL := inventory.SoftwareComponent{Role: inventory.Application, Name: "PostgreSQL", Version: "15.6", Product: inventory.Product{Vendor: "postgresql", Name: "postgresql"}}
@@ -450,6 +453,13 @@ func (e env) prioritize(t *testing.T) agents.Prioritization {
 			t.Fatal(err)
 		}
 	}
+	return ids
+}
+
+func (e env) prioritize(t *testing.T) agents.Prioritization {
+	t.Helper()
+	ctx := context.Background()
+	ids := e.storeFindings(t)
 	e.llm.Queue(claudetest.JSON(t, assessment.Placement{Groups: []assessment.PlacedGroup{
 		{Title: "Primero", Findings: ids[:1], Reason: "Va en pg-prod-01.", Evidence: []assessment.FindingEvidence{{Finding: ids[0], Path: "/asset/name", Value: "pg-prod-01"}}},
 		{Title: "Después", Findings: ids[1:], Reason: "Sin KEV.", Evidence: []assessment.FindingEvidence{{Finding: ids[1], Path: "/kev", Value: "null"}}},

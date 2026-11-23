@@ -327,6 +327,122 @@ func (q *Queries) ListActionPlanFailures(ctx context.Context, arg ListActionPlan
 	return items, nil
 }
 
+const listFeedbackOnFinding = `-- name: ListFeedbackOnFinding :many
+SELECT f.id, f.finding_id, f.author_id, f.verdict_id, f.note, f.via_analista, f.created_at
+FROM prioritization_feedback f
+JOIN prioritizations p ON p.id = f.prioritization_id
+WHERE p.customer_id = $1 AND f.finding_id = $2
+ORDER BY f.created_at, f.id
+`
+
+type ListFeedbackOnFindingParams struct {
+	CustomerID uuid.UUID
+	FindingID  uuid.UUID
+}
+
+type ListFeedbackOnFindingRow struct {
+	ID          uuid.UUID
+	FindingID   uuid.UUID
+	AuthorID    uuid.UUID
+	VerdictID   int16
+	Note        string
+	ViaAnalista bool
+	CreatedAt   time.Time
+}
+
+// Every Feedback on one Finding of the Customer's Prioritizations, oldest
+// first.
+func (q *Queries) ListFeedbackOnFinding(ctx context.Context, arg ListFeedbackOnFindingParams) ([]ListFeedbackOnFindingRow, error) {
+	rows, err := q.db.Query(ctx, listFeedbackOnFinding, arg.CustomerID, arg.FindingID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListFeedbackOnFindingRow
+	for rows.Next() {
+		var i ListFeedbackOnFindingRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.FindingID,
+			&i.AuthorID,
+			&i.VerdictID,
+			&i.Note,
+			&i.ViaAnalista,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listFindingVersions = `-- name: ListFindingVersions :many
+SELECT p.id, p.created_at, p.business_context_version,
+       pf.placement_id, fp.placed_at, pf.group_position, pf.score_rank
+FROM prioritizations p
+LEFT JOIN prioritization_findings pf ON pf.prioritization_id = p.id AND pf.finding_id = $1
+LEFT JOIN finding_placements fp ON fp.id = pf.placement_id
+WHERE p.customer_id = $2
+  AND p.created_at >= (
+      SELECT min(first.created_at)
+      FROM prioritization_findings held
+      JOIN prioritizations first ON first.id = held.prioritization_id
+      WHERE held.finding_id = $1 AND first.customer_id = $2
+  )
+ORDER BY p.created_at, p.id
+`
+
+type ListFindingVersionsParams struct {
+	FindingID  uuid.UUID
+	CustomerID uuid.UUID
+}
+
+type ListFindingVersionsRow struct {
+	ID                     uuid.UUID
+	CreatedAt              time.Time
+	BusinessContextVersion *int32
+	PlacementID            pgtype.UUID
+	PlacedAt               *time.Time
+	GroupPosition          *int32
+	ScoreRank              *int32
+}
+
+// The Customer's Prioritizations from the first that holds a Finding on,
+// oldest first, each with the Finding's place in it, null where it does not
+// hold it: a Finding's history reads them (ADR 0036). The chain is linear, so
+// creation time orders it.
+func (q *Queries) ListFindingVersions(ctx context.Context, arg ListFindingVersionsParams) ([]ListFindingVersionsRow, error) {
+	rows, err := q.db.Query(ctx, listFindingVersions, arg.FindingID, arg.CustomerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListFindingVersionsRow
+	for rows.Next() {
+		var i ListFindingVersionsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.CreatedAt,
+			&i.BusinessContextVersion,
+			&i.PlacementID,
+			&i.PlacedAt,
+			&i.GroupPosition,
+			&i.ScoreRank,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listLatestActionPlans = `-- name: ListLatestActionPlans :many
 SELECT DISTINCT ON (a.finding_id) a.id, a.finding_id, a.content, a.created_at
 FROM prioritization_findings pf
@@ -406,6 +522,82 @@ func (q *Queries) ListLatestPlacedDossiers(ctx context.Context, arg ListLatestPl
 	for rows.Next() {
 		var i ListLatestPlacedDossiersRow
 		if err := rows.Scan(&i.FindingID, &i.Dossier); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPlacementDossiers = `-- name: ListPlacementDossiers :many
+SELECT fp.id, fp.dossier
+FROM finding_placements fp
+JOIN findings f ON f.id = fp.finding_id
+JOIN cmdb_sources src ON src.id = f.cmdb_source_id
+WHERE src.customer_id = $1 AND fp.finding_id = $2 AND fp.id = ANY($3::uuid[])
+`
+
+type ListPlacementDossiersParams struct {
+	CustomerID uuid.UUID
+	FindingID  uuid.UUID
+	Ids        []uuid.UUID
+}
+
+type ListPlacementDossiersRow struct {
+	ID      uuid.UUID
+	Dossier []byte
+}
+
+// The Dossiers of some placements of one Finding of the Customer's Assets.
+func (q *Queries) ListPlacementDossiers(ctx context.Context, arg ListPlacementDossiersParams) ([]ListPlacementDossiersRow, error) {
+	rows, err := q.db.Query(ctx, listPlacementDossiers, arg.CustomerID, arg.FindingID, arg.Ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlacementDossiersRow
+	for rows.Next() {
+		var i ListPlacementDossiersRow
+		if err := rows.Scan(&i.ID, &i.Dossier); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPrioritizationContents = `-- name: ListPrioritizationContents :many
+SELECT id, content
+FROM prioritizations
+WHERE customer_id = $1 AND id = ANY($2::uuid[])
+`
+
+type ListPrioritizationContentsParams struct {
+	CustomerID uuid.UUID
+	Ids        []uuid.UUID
+}
+
+type ListPrioritizationContentsRow struct {
+	ID      uuid.UUID
+	Content []byte
+}
+
+func (q *Queries) ListPrioritizationContents(ctx context.Context, arg ListPrioritizationContentsParams) ([]ListPrioritizationContentsRow, error) {
+	rows, err := q.db.Query(ctx, listPrioritizationContents, arg.CustomerID, arg.Ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPrioritizationContentsRow
+	for rows.Next() {
+		var i ListPrioritizationContentsRow
+		if err := rows.Scan(&i.ID, &i.Content); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

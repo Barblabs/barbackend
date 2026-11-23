@@ -49,6 +49,7 @@ func (h prioritizationHandler) register(api huma.API) {
 		DefaultStatus: http.StatusCreated,
 		Errors:        []int{http.StatusBadRequest, http.StatusNotFound},
 	}, h.recordFeedback)
+	h.registerHistory(api)
 }
 
 type prioritizationSummaryResponse struct {
@@ -119,7 +120,7 @@ type currentAssetResponse struct {
 	Criticality               string `json:"criticality" enum:"high,medium,low,unknown"`
 	Exposure                  string `json:"exposure" enum:"internet_facing,internal,unknown"`
 	LifecycleStage            string `json:"lifecycle_stage" enum:"production,implementation,stock,unknown"`
-	InformationClassification string `json:"information_classification" enum:"confidential,private,public,unclassified"`
+	InformationClassification string `json:"information_classification" enum:"highly_confidential,confidential,private,public,unclassified"`
 }
 
 type findingDetailsResponse struct {
@@ -143,7 +144,7 @@ type findingAssetResponse struct {
 	Criticality               string                    `json:"criticality" enum:"high,medium,low,unknown"`
 	Exposure                  string                    `json:"exposure" enum:"internet_facing,internal,unknown"`
 	LifecycleStage            string                    `json:"lifecycle_stage" enum:"production,implementation,stock,unknown"`
-	InformationClassification string                    `json:"information_classification" enum:"confidential,private,public,unclassified" doc:"Unclassified while no Customer Admin declared it, which does not mean the data is public"`
+	InformationClassification string                    `json:"information_classification" enum:"highly_confidential,confidential,private,public,unclassified" doc:"Unclassified while no Customer Admin declared it, which does not mean the data is public"`
 	CriticalServices          []criticalServiceResponse `json:"critical_services" doc:"The Critical Services of the Business Context that name the Asset"`
 }
 
@@ -312,7 +313,7 @@ func (verdictCode) Schema(huma.Registry) *huma.Schema {
 type noteText string
 
 func (noteText) Schema(huma.Registry) *huma.Schema {
-	return &huma.Schema{Type: huma.TypeString, MaxLength: ptr(agents.MaxNoteLength)}
+	return &huma.Schema{Type: huma.TypeString, MinLength: ptr(1), MaxLength: ptr(agents.MaxNoteLength)}
 }
 
 type feedbackRequest struct {
@@ -320,7 +321,7 @@ type feedbackRequest struct {
 	Body struct {
 		FindingID string      `json:"finding_id" minLength:"1"`
 		Verdict   verdictCode `json:"verdict"`
-		Note      noteText    `json:"note" required:"false"`
+		Note      noteText    `json:"note" doc:"Why; the Prioritizer reads it with a verdict on the order"`
 	}
 }
 

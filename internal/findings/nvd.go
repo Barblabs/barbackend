@@ -90,18 +90,23 @@ func storeAndRead(ctx context.Context, tx *postgres.Tx, cve string, v *stix2.Vul
 	return storedVulnerability(ctx, tx, cve)
 }
 
-// save saves and scores every match of v, and returns the Keys it saved.
+// save saves every match of v and scores those left open, and returns the
+// Keys it saved. A Finding a User's close holds is not scored, as no closed
+// Finding is (ADR 0009).
 func (s *Service) save(ctx context.Context, tx *postgres.Tx, v *stix2.Vulnerability, matches []candidateMatch) (map[finding.Key]bool, error) {
 	saved := make(map[finding.Key]bool, len(matches))
 	for _, m := range matches {
-		id, _, err := tx.SaveMatch(ctx, m.Match)
+		id, outcome, err := tx.SaveMatch(ctx, m.Match)
 		if err != nil {
 			return nil, err
+		}
+		saved[m.Key] = true
+		if outcome == finding.Held {
+			continue
 		}
 		if err := s.score(ctx, tx, id, v, m.asset); err != nil {
 			return nil, err
 		}
-		saved[m.Key] = true
 	}
 	return saved, nil
 }

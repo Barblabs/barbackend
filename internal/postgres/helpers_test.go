@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	"barbackend/internal/tenancy"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 func inTx(t *testing.T, db *postgres.DB, fn func(*postgres.Tx) error) {
@@ -369,4 +371,44 @@ func storeCustomer(db *postgres.DB, name string) (postgres.StoredCustomer, error
 		return err
 	})
 	return stored, err
+}
+
+func isConstraintViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && strings.HasPrefix(pgErr.Code, "23")
+}
+
+// readAt is when the rounds of chain read what they placed.
+var readAt = []time.Time{time.Date(2026, 11, 1, 9, 0, 0, 0, time.UTC), time.Date(2026, 11, 2, 9, 0, 0, 0, time.UTC)}
+
+// chain stores two Prioritizations of the Customer of w, the second built
+// from the first, over a Finding on the payments server and one on the lab
+// server. The second keeps the first's placement of the payments one and
+// places the lab one.
+func chain(t *testing.T, w findingWorld) (first, second postgres.StoredPrioritization, payments, lab uuid.UUID) {
+	t.Helper()
+	ctx := context.Background()
+	p, _ := saveMatch(t, w.db, match(t, w.payments, "1.18.0"))
+	l, _ := saveMatch(t, w.db, match(t, w.lab, "1.18.0"))
+	payments, lab = uuid.UUID(p), uuid.UUID(l)
+	content := json.RawMessage(`{"list":{"groups":[]}}`)
+	first = postgres.StoredPrioritization{ID: uuid.New(), Content: content, Findings: 1, Groups: 1}
+	inTx(t, w.db, func(tx *postgres.Tx) (err error) {
+		first.Created, err = tx.CreatePrioritization(ctx, w.customer, first, readAt[0], []postgres.Placement{
+			{Finding: payments, Group: 1, ScoreRank: 1, Dossier: json.RawMessage(`{"finding":"payments"}`)},
+		})
+		return err
+	})
+	kept := inTxValue(t, w.db, func(tx *postgres.Tx) ([]postgres.PlacedFinding, error) {
+		return tx.PrioritizationFindings(ctx, w.customer, first.ID)
+	})[0].Placement
+	second = postgres.StoredPrioritization{ID: uuid.New(), Previous: &first.ID, Content: content, Findings: 2, Groups: 2}
+	inTx(t, w.db, func(tx *postgres.Tx) (err error) {
+		second.Created, err = tx.CreatePrioritization(ctx, w.customer, second, readAt[1], []postgres.Placement{
+			{Finding: payments, Group: 1, ScoreRank: 1, Kept: kept},
+			{Finding: lab, Group: 2, ScoreRank: 2, Dossier: json.RawMessage(`{"finding":"lab"}`)},
+		})
+		return err
+	})
+	return first, second, payments, lab
 }

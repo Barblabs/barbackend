@@ -197,19 +197,21 @@ func (s LifecycleStage) String() string {
 }
 
 // InformationClassification is how sensitive the data an Asset holds is. It
-// is only declared, and Unclassified until then (ADR 0031).
+// is only declared, and Unclassified until then (ADR 0031). Highly
+// Confidential is the step above Confidential (ADR 0037).
 type InformationClassification int
 
 // Stored as catalog ids (ADR 0006): never renumber.
 const (
-	Unclassified           InformationClassification = 0
-	ClassifiedPublic       InformationClassification = 1
-	ClassifiedPrivate      InformationClassification = 2
-	ClassifiedConfidential InformationClassification = 3
+	Unclassified                 InformationClassification = 0
+	ClassifiedPublic             InformationClassification = 1
+	ClassifiedPrivate            InformationClassification = 2
+	ClassifiedConfidential       InformationClassification = 3
+	ClassifiedHighlyConfidential InformationClassification = 4
 )
 
 func (c InformationClassification) valid() bool {
-	return c >= Unclassified && c <= ClassifiedConfidential
+	return c >= Unclassified && c <= ClassifiedHighlyConfidential
 }
 
 func (c InformationClassification) String() string {
@@ -222,6 +224,8 @@ func (c InformationClassification) String() string {
 		return "Private"
 	case ClassifiedConfidential:
 		return "Confidential"
+	case ClassifiedHighlyConfidential:
+		return "Highly Confidential"
 	default:
 		return fmt.Sprintf("InformationClassification(%d)", int(c))
 	}
@@ -254,8 +258,10 @@ var (
 	criticalityCodes               = map[Criticality]string{CriticalityHigh: "high", CriticalityMedium: "medium", CriticalityLow: "low"}
 	exposureCodes                  = map[Exposure]string{InternetFacing: "internet_facing", Internal: "internal"}
 	lifecycleCodes                 = map[LifecycleStage]string{LifecycleProduction: "production", LifecycleImplementation: "implementation", LifecycleStock: "stock"}
-	informationClassificationCodes = map[InformationClassification]string{ClassifiedPublic: "public", ClassifiedPrivate: "private", ClassifiedConfidential: "confidential"}
-	softwareRoleCodes              = map[SoftwareRole]string{OperatingSystem: "operating_system", Application: "application"}
+	informationClassificationCodes = map[InformationClassification]string{
+		ClassifiedPublic: "public", ClassifiedPrivate: "private", ClassifiedConfidential: "confidential", ClassifiedHighlyConfidential: "highly_confidential",
+	}
+	softwareRoleCodes = map[SoftwareRole]string{OperatingSystem: "operating_system", Application: "application"}
 )
 
 // Code is the stable lowercase snake_case name clients use for the kind, or

@@ -293,3 +293,19 @@ func (w world) viewer(t *testing.T) tenancy.User {
 	}
 	return u
 }
+
+// storedUser is a User of the world's Customer stored in the database, as a
+// close by hand records who made it.
+func (w world) storedUser(t *testing.T, email string, role tenancy.Role) tenancy.User {
+	t.Helper()
+	u, err := tenancy.NewUser(tenancy.UserID(uuid.New()), email, role, w.customer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := w.db.InTx(context.Background(), func(tx *postgres.Tx) error {
+		return pgtest.CreateUser(context.Background(), tx, u, uuid.NewString())
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return u
+}

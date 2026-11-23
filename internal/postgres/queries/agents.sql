@@ -138,3 +138,44 @@ JOIN findings f ON f.id = fp.finding_id
 JOIN cmdb_sources src ON src.id = f.cmdb_source_id
 WHERE src.customer_id = @customer_id AND fp.finding_id = ANY(@findings::uuid[])
 ORDER BY fp.finding_id, fp.placed_at DESC;
+
+-- The Customer's Prioritizations from the first that holds a Finding on,
+-- oldest first, each with the Finding's place in it, null where it does not
+-- hold it: a Finding's history reads them (ADR 0036). The chain is linear, so
+-- creation time orders it.
+-- name: ListFindingVersions :many
+SELECT p.id, p.created_at, p.business_context_version,
+       pf.placement_id, fp.placed_at, pf.group_position, pf.score_rank
+FROM prioritizations p
+LEFT JOIN prioritization_findings pf ON pf.prioritization_id = p.id AND pf.finding_id = @finding_id
+LEFT JOIN finding_placements fp ON fp.id = pf.placement_id
+WHERE p.customer_id = @customer_id
+  AND p.created_at >= (
+      SELECT min(first.created_at)
+      FROM prioritization_findings held
+      JOIN prioritizations first ON first.id = held.prioritization_id
+      WHERE held.finding_id = @finding_id AND first.customer_id = @customer_id
+  )
+ORDER BY p.created_at, p.id;
+
+-- name: ListPrioritizationContents :many
+SELECT id, content
+FROM prioritizations
+WHERE customer_id = @customer_id AND id = ANY(@ids::uuid[]);
+
+-- The Dossiers of some placements of one Finding of the Customer's Assets.
+-- name: ListPlacementDossiers :many
+SELECT fp.id, fp.dossier
+FROM finding_placements fp
+JOIN findings f ON f.id = fp.finding_id
+JOIN cmdb_sources src ON src.id = f.cmdb_source_id
+WHERE src.customer_id = @customer_id AND fp.finding_id = @finding_id AND fp.id = ANY(@ids::uuid[]);
+
+-- Every Feedback on one Finding of the Customer's Prioritizations, oldest
+-- first.
+-- name: ListFeedbackOnFinding :many
+SELECT f.id, f.finding_id, f.author_id, f.verdict_id, f.note, f.via_analista, f.created_at
+FROM prioritization_feedback f
+JOIN prioritizations p ON p.id = f.prioritization_id
+WHERE p.customer_id = @customer_id AND f.finding_id = @finding_id
+ORDER BY f.created_at, f.id;

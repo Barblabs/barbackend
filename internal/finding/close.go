@@ -3,7 +3,7 @@ package finding
 import "fmt"
 
 // CloseReason says why a Finding was closed: its match no longer holds
-// (ADR 0020).
+// (ADR 0020), or a User closed it (ADR 0035).
 type CloseReason int
 
 // Stored as catalog ids (ADR 0006): never renumber.
@@ -17,7 +17,27 @@ const (
 	AssetInactive CloseReason = 3
 	// VulnerabilityRejected: NVD rejected the CVE.
 	VulnerabilityRejected CloseReason = 4
+	// The reasons a User gives to close a Finding by hand (ADR 0035).
+	// Remediated: the User says it was fixed; a match reopens it.
+	Remediated CloseReason = 5
+	// FalsePositive: it does not apply, whatever the CMDB says; never reopened by a match.
+	FalsePositive CloseReason = 6
+	// AcceptedRisk: the Customer accepts it until its reopen time.
+	AcceptedRisk CloseReason = 7
+	// Postponed: it will be attended after its reopen time.
+	Postponed CloseReason = 8
 )
+
+// ByHand reports whether r is a reason a User gives.
+func (r CloseReason) ByHand() bool {
+	return r >= Remediated && r <= Postponed
+}
+
+// Expires reports whether a close for r lasts until a reopen time, after which
+// a match reopens the Finding.
+func (r CloseReason) Expires() bool {
+	return r == AcceptedRisk || r == Postponed
+}
 
 func (r CloseReason) String() string {
 	switch r {
@@ -29,6 +49,14 @@ func (r CloseReason) String() string {
 		return "asset_inactive"
 	case VulnerabilityRejected:
 		return "vulnerability_rejected"
+	case Remediated:
+		return "remediated"
+	case FalsePositive:
+		return "false_positive"
+	case AcceptedRisk:
+		return "accepted_risk"
+	case Postponed:
+		return "postponed"
 	default:
 		return fmt.Sprintf("CloseReason(%d)", int(r))
 	}

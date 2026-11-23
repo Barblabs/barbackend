@@ -6,14 +6,17 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"time"
 
 	"barbackend/internal/finding"
 	"barbackend/internal/inventory"
 	"barbackend/internal/matching"
 	"barbackend/internal/postgres/sqlcgen"
 	"barbackend/internal/scoring"
+	"barbackend/internal/tenancy"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // Candidate is a Software Component of an Active Asset that can be matched,
@@ -71,8 +74,8 @@ func (t *Tx) ComponentsOfSource(ctx context.Context, source inventory.CMDBSource
 }
 
 // SaveMatch opens the Finding of m, updates it when it is open or reopens it
-// when it was closed, and replaces its Match Flags with m's, in one
-// transaction. It returns the Finding's ID, which never changes, and what it
+// when it was closed, unless a User's close holds it (ADR 0035), and replaces
+// its Match Flags with m's, in one transaction. It returns the Finding's ID, which never changes, and what it
 // did.
 func (t *Tx) SaveMatch(ctx context.Context, m finding.Match) (finding.ID, finding.Outcome, error) {
 	evidence, err := json.Marshal(m.Evidence)
@@ -100,6 +103,8 @@ func (t *Tx) SaveMatch(ctx context.Context, m finding.Match) (finding.ID, findin
 	switch {
 	case row.Existed == 0:
 		outcome = finding.Opened
+	case row.StaysClosed:
+		outcome = finding.Held
 	case row.WasClosed:
 		outcome = finding.Reopened
 	}
@@ -129,6 +134,34 @@ func (t *Tx) CloseFinding(ctx context.Context, id finding.ID, reason finding.Clo
 	n, err := t.q.CloseFinding(ctx, sqlcgen.CloseFindingParams{ID: uuid.UUID(id), CloseReasonID: ptr(int16(reason))})
 	if err != nil {
 		return false, fmt.Errorf("close finding %s: %w", id, err)
+	}
+	return n > 0, nil
+}
+
+// ManualClose is a User's close of a Finding (ADR 0035): one of the reasons
+// a User gives, why, and for an accepted risk or a postponed one, when a
+// match may reopen it.
+type ManualClose struct {
+	Reason   finding.CloseReason
+	By       tenancy.UserID
+	Note     string
+	ReopenAt *time.Time
+}
+
+// CloseFindingByHand closes an open Finding of the Customer's Assets as c
+// says. It reports false, changing nothing, when the Customer has no such
+// open Finding.
+func (t *Tx) CloseFindingByHand(ctx context.Context, customer tenancy.CustomerID, id finding.ID, c ManualClose) (bool, error) {
+	n, err := t.q.CloseFindingByHand(ctx, sqlcgen.CloseFindingByHandParams{
+		CloseReasonID: ptr(int16(c.Reason)),
+		ClosedBy:      pgtype.UUID{Bytes: c.By, Valid: true},
+		CloseNote:     &c.Note,
+		ReopenAt:      c.ReopenAt,
+		CustomerID:    uuid.UUID(customer),
+		ID:            uuid.UUID(id),
+	})
+	if err != nil {
+		return false, fmt.Errorf("close finding %s by hand: %w", id, err)
 	}
 	return n > 0, nil
 }

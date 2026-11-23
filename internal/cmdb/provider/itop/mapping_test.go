@@ -155,7 +155,7 @@ func TestSnapshotMapsRecords(t *testing.T) {
 			}),
 			lk: lookups{software: map[string]software{
 				"2": {Vendor: "Oracle", Name: "Oracle DB engine", Version: "19c"},
-				"7": {Name: "Internal portal", Version: "3.1"},
+				"7": {Vendor: " ", Name: "Internal portal", Version: "3.1"},
 			}},
 			want: expected(inventory.Server, func(p *params) {
 				p.Software = append(redHat(),

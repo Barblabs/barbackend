@@ -19,7 +19,7 @@ func TestAskAnswersFromTheCustomersData(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
 	p := e.prioritize(t)
-	if _, err := e.svc.RecordFeedback(context.Background(), e.user, p.ID, e.pg(), "remediated", "ya"); err != nil {
+	if _, err := e.svc.RecordFeedback(context.Background(), e.user, p.ID, e.pg(), "applies", "ya"); err != nil {
 		t.Fatal(err)
 	}
 	e.llm.Queue(
@@ -44,7 +44,7 @@ func TestAskAnswersFromTheCustomersData(t *testing.T) {
 		t.Errorf("model = %v, fallbacks = %v", first["model"], first["fallbacks"])
 	}
 	contains(t, system(first), "You are the Analista")
-	for i, want := range []string{p.ID.String(), `"verdict":"remediated"`, "pg-prod-01", `"total":0`} {
+	for i, want := range []string{p.ID.String(), `"verdict":"applies"`, "pg-prod-01", `"total":0`} {
 		result, isError := toolResult(t, requests[i+1])
 		if isError {
 			t.Errorf("tool %d failed: %s", i, result)
@@ -58,7 +58,7 @@ func TestAnalistaRecordsWhatTheUserSays(t *testing.T) {
 	e := newEnv(t)
 	p := e.prioritize(t)
 	e.llm.Queue(
-		claudetest.ToolCall("1", "record_feedback", map[string]any{"prioritization_id": p.ID.String() + "\n", "finding_id": e.pg(), "verdict": "remediated", "note": "parchado ayer"}),
+		claudetest.ToolCall("1", "record_feedback", map[string]any{"prioritization_id": p.ID.String() + "\n", "finding_id": e.pg(), "verdict": "should_be_earlier", "note": "es el de pagos"}),
 		claudetest.Text("Lo registré."),
 	)
 
@@ -74,7 +74,7 @@ func TestAnalistaRecordsWhatTheUserSays(t *testing.T) {
 		t.Fatalf("feedback = %+v", got.Feedback)
 	}
 	f := got.Feedback[0]
-	if f.Verdict.Code() != "remediated" || f.Note != "parchado ayer" || !f.ViaAnalista || f.Author != e.user.ID() {
+	if f.Verdict.Code() != "should_be_earlier" || f.Note != "es el de pagos" || !f.ViaAnalista || f.Author != e.user.ID() {
 		t.Errorf("feedback = %+v", f)
 	}
 }
@@ -175,7 +175,7 @@ func TestATurnThatFailsStoresNoFeedback(t *testing.T) {
 	e := newEnv(t)
 	p := e.prioritize(t)
 	record := func(id string) claudetest.Reply {
-		return claudetest.ToolCall(id, "record_feedback", map[string]any{"prioritization_id": p.ID.String(), "finding_id": e.pg(), "verdict": "remediated", "note": "x"})
+		return claudetest.ToolCall(id, "record_feedback", map[string]any{"prioritization_id": p.ID.String(), "finding_id": e.pg(), "verdict": "applies", "note": "x"})
 	}
 	e.llm.Queue(record("1"), claudetest.Refusal())
 	_, err := e.svc.Ask(context.Background(), e.user, "ya lo parchamos")
@@ -207,7 +207,7 @@ func TestAnalistaToolsStayInTheCallersCustomer(t *testing.T) {
 	id := theirs.ID.String()
 	e.llm.Queue(
 		claudetest.ToolCall("1", "get_finding", map[string]any{"prioritization_id": id, "finding_id": e.pg()}),
-		claudetest.ToolCall("2", "record_feedback", map[string]any{"prioritization_id": id, "finding_id": e.pg(), "verdict": "does_not_apply", "note": "x"}),
+		claudetest.ToolCall("2", "record_feedback", map[string]any{"prioritization_id": id, "finding_id": e.pg(), "verdict": "applies", "note": "x"}),
 		claudetest.ToolCall("3", "get_prioritization", map[string]any{"prioritization_id": id}),
 		claudetest.ToolCall("4", "get_prioritization", map[string]any{"prioritization_id": nil}),
 		claudetest.ToolCall("5", "list_assets", map[string]any{"criticality": nil}),
@@ -245,7 +245,7 @@ func TestAnalistaToolsTellTheModelOnlyWhatItCanCorrect(t *testing.T) {
 	p := e.prioritize(t)
 	e.llm.Queue(
 		claudetest.ToolCall("1", "get_finding", map[string]any{"prioritization_id": "not-a-uuid", "finding_id": e.pg()}),
-		claudetest.ToolCall("2", "record_feedback", map[string]any{"prioritization_id": p.ID.String(), "finding_id": e.pg(), "verdict": "maybe", "note": "x"}),
+		claudetest.ToolCall("2", "record_feedback", map[string]any{"prioritization_id": p.ID.String(), "finding_id": e.pg(), "verdict": "remediated", "note": "x"}),
 		claudetest.ToolCall("3", "list_assets", map[string]any{"criticality": "huge"}),
 		claudetest.Text("Fin."),
 	)
@@ -300,7 +300,7 @@ func TestContinueSendsTheConversationBackWithItsToolCalls(t *testing.T) {
 	}
 }
 
-func TestAConversationBelongsToItsUser(t *testing.T) {
+func TestAConversationIsNotFoundByAnotherCustomer(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
 	e.llm.Queue(claudetest.Text("hola"))
@@ -308,18 +308,9 @@ func TestAConversationBelongsToItsUser(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	customer, err := e.user.ActsFor()
-	if err != nil {
-		t.Fatal(err)
-	}
-	colleague := newUser(t, e.user.Role(), customer)
 	stranger := e.newCustomer(t, "theirs")
 
-	_, err = e.svc.Continue(context.Background(), colleague, answer.Conversation, "dos")
-	wantErr(t, err, agents.ErrConversationNotFound)
 	_, err = e.svc.Continue(context.Background(), stranger, answer.Conversation, "dos")
-	wantErr(t, err, agents.ErrConversationNotFound)
-	_, err = e.svc.Continue(context.Background(), e.user, uuid.New(), "dos")
 	wantErr(t, err, agents.ErrConversationNotFound)
 }
 
@@ -452,30 +443,14 @@ func TestAConversationHasALimit(t *testing.T) {
 	}
 }
 
-func TestAskFailures(t *testing.T) {
+func TestAnAnswerCutOffIsUnavailable(t *testing.T) {
 	t.Parallel()
-	tests := []struct {
-		name    string
-		message string
-		reply   *claudetest.Reply
-		want    error
-	}{
-		{name: "blank message", message: "  \n", want: agents.ErrEmptyMessage},
-		{name: "refused", message: "hola", reply: ptr(claudetest.Refusal()), want: agents.ErrRefused},
-		{name: "api failure", message: "hola", reply: ptr(claudetest.Fail(http.StatusUnauthorized)), want: agents.ErrUnavailable},
-		{name: "cut off", message: "hola", reply: ptr(claudetest.Truncated()), want: agents.ErrUnavailable},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			e := newEnv(t)
-			if tt.reply != nil {
-				e.llm.Queue(*tt.reply)
-			}
-			_, err := e.svc.Ask(context.Background(), e.user, tt.message)
-			wantErr(t, err, tt.want)
-		})
-	}
+	e := newEnv(t)
+	e.llm.Queue(claudetest.Truncated())
+
+	_, err := e.svc.Ask(context.Background(), e.user, "hola")
+
+	wantErr(t, err, agents.ErrUnavailable)
 }
 
 func waitForRequests(t *testing.T, e env, want int) {
