@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"barbackend/internal/finding"
 	"barbackend/internal/findings"
 	"barbackend/internal/inventory"
 	"barbackend/internal/postgres"
@@ -258,9 +259,15 @@ func countedWorld(t *testing.T) world {
 	w.setScore(t, "a", "CVE-2021-23017", 0.75)
 	w.setScore(t, "a", opensslCVE, 0.25)
 	w.setScore(t, "b", "CVE-2021-23017", 0.45)
-	w.exec(t, `UPDATE vulnerabilities SET object = jsonb_set(object, ARRAY['extensions', $1::text], '{"extension_type":"property-extension"}') WHERE cve_id = $2`,
-		string(stixext.KEVDefinitionID), "CVE-2021-23017")
+	w.markKEV(t, "CVE-2021-23017")
 	return w
+}
+
+// markKEV makes CISA KEV list cve.
+func (w world) markKEV(t *testing.T, cve string) {
+	t.Helper()
+	w.exec(t, `UPDATE vulnerabilities SET object = jsonb_set(object, ARRAY['extensions', $1::text], '{"extension_type":"property-extension"}') WHERE cve_id = $2`,
+		string(stixext.KEVDefinitionID), cve)
 }
 
 // setScore makes every Score of the record's Finding of cve one of Scoring
@@ -309,3 +316,62 @@ func (w world) storedUser(t *testing.T, email string, role tenancy.Role) tenancy
 	}
 	return u
 }
+
+var closesNow = time.Date(2026, time.November, 25, 12, 0, 0, 0, time.UTC)
+
+var openedLongAgo = closesNow.AddDate(0, 0, -100)
+
+func nginxWorld(t *testing.T, records ...string) world {
+	t.Helper()
+	w := newWorld(t)
+	servers := make([]inventory.Record, len(records))
+	for i, r := range records {
+		servers[i] = server(t, r, inventory.CriticalityHigh, app("Nginx", "f5", "nginx", "1.18.0"))
+	}
+	w.sync(t, servers...)
+	w.handleNVD(t, nvdVulnerability(t, "CVE-2021-23017", "Analyzed", nginxBefore1201))
+	for _, r := range records {
+		w.setHistory(t, r, openedLongAgo, time.Time{})
+	}
+	w.findings.SetNow(func() time.Time { return closesNow })
+	return w
+}
+
+func (w world) closeAs(t *testing.T, record string, reason finding.CloseReason, opened, closed time.Time) {
+	t.Helper()
+	var closedBy, note, reopenAt any
+	if reason.ByHand() {
+		closedBy = uuid.UUID(w.storedUser(t, record+"@example.com", tenancy.Viewer).ID())
+		note = "why"
+	}
+	if reason.Expires() {
+		reopenAt = closed.AddDate(1, 0, 0)
+	}
+	w.exec(t, `
+		UPDATE findings
+		SET opened_at = $1, closed_at = $2, close_reason_id = $3, closed_by = $4, close_note = $5, reopen_at = $6
+		WHERE record_id = $7`, opened, closed, int16(reason), closedBy, note, reopenAt, record)
+}
+
+type timedScore struct {
+	model int
+	value float64
+	at    time.Time
+}
+
+// scoreHistory makes scores the only Scores of the record's only Finding.
+func (w world) scoreHistory(t *testing.T, record string, scores ...timedScore) {
+	t.Helper()
+	w.exec(t, `DELETE FROM finding_score_data_gaps WHERE finding_id = (SELECT id FROM findings WHERE record_id = $1)`, record)
+	w.exec(t, `DELETE FROM finding_scores WHERE finding_id = (SELECT id FROM findings WHERE record_id = $1)`, record)
+	for _, s := range scores {
+		w.exec(t, `
+			INSERT INTO finding_scores (finding_id, scored_at, model, value, alpha, beta, gamma, vulnerability,
+			                            criticality_multiplier, exposure_multiplier, lifecycle_multiplier)
+			SELECT id, $2, $3, $4, 0.5, 0.5, 0.5, 0.5, 1, 1, 1 FROM findings WHERE record_id = $1`,
+			record, s.at, s.model, s.value)
+	}
+}
+
+func critical(at time.Time) timedScore { return timedScore{model: 3, value: 0.9, at: at} }
+func high(at time.Time) timedScore     { return timedScore{model: 3, value: 0.5, at: at} }

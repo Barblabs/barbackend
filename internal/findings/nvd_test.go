@@ -54,8 +54,24 @@ func TestHandleNVDClosesAFindingThatNoLongerMatches(t *testing.T) {
 	narrowed.VersionEndExcluding = "1.16.0"
 	w.handleNVD(t, nvdVulnerability(t, "CVE-2021-23017", "Modified", narrowed))
 
-	if f := w.mustFinding(t, "payments", "CVE-2021-23017"); f.open || f.closeReason != "no_longer_affected" {
-		t.Errorf("finding = %+v, want closed no_longer_affected after NVD narrowed the range", f)
+	if f := w.mustFinding(t, "payments", "CVE-2021-23017"); f.open || f.closeReason != "vulnerability_revised" {
+		t.Errorf("finding = %+v, want closed vulnerability_revised after NVD narrowed the range", f)
+	}
+}
+
+func TestHandleNVDReopensARevisedFindingThatMatchesAgain(t *testing.T) {
+	t.Parallel()
+	w := newWorld(t)
+	w.sync(t, server(t, "payments", inventory.CriticalityHigh, app("Nginx", "f5", "nginx", "1.18.0")))
+	w.handleNVD(t, nvdVulnerability(t, "CVE-2021-23017", "Analyzed", nginxBefore1201))
+	narrowed := nginxBefore1201
+	narrowed.VersionEndExcluding = "1.16.0"
+	w.handleNVD(t, nvdVulnerability(t, "CVE-2021-23017", "Modified", narrowed))
+
+	w.handleNVD(t, nvdVulnerability(t, "CVE-2021-23017", "Modified", nginxBefore1201))
+
+	if f := w.mustFinding(t, "payments", "CVE-2021-23017"); !f.open {
+		t.Errorf("finding = %+v, want reopened once NVD's entries match again", f)
 	}
 }
 

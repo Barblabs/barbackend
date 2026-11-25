@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -14,6 +15,7 @@ type weeklyTrend struct {
 		StartsOn string `json:"starts_on"`
 		Opened   int    `json:"opened"`
 		Closed   int    `json:"closed"`
+		Critical *int   `json:"critical_open_at_end"`
 	} `json:"weeks"`
 }
 
@@ -27,8 +29,8 @@ func TestWeeklyTrendHasTwelveWeeksEndingWithTheCurrentOne(t *testing.T) {
 		t.Fatalf("weeks = %d, want 12", len(got.Weeks))
 	}
 	year, week := time.Now().UTC().ISOWeek()
-	if last := got.Weeks[11]; last.Week != fmt.Sprintf("%d-W%02d", year, week) || last.Opened != 0 || last.Closed != 0 {
-		t.Errorf("last week = %+v, want the current ISO week with nothing opened or closed", last)
+	if last := got.Weeks[11]; last.Week != fmt.Sprintf("%d-W%02d", year, week) || last.Opened != 0 || last.Closed != 0 || last.Critical == nil || *last.Critical != 0 {
+		t.Errorf("last week = %+v, want the current ISO week with nothing opened, closed or Critical", last)
 	}
 	if starts, err := time.Parse(time.DateOnly, got.Weeks[0].StartsOn); err != nil || starts.Weekday() != time.Monday {
 		t.Errorf("first week starts on %q, want a Monday", got.Weeks[0].StartsOn)
@@ -44,52 +46,59 @@ func TestWeeklyTrendRefusesMoreThanAYearOfWeeks(t *testing.T) {
 	}
 }
 
-func TestFindingCountsOfACustomerWithoutFindingsAreZeros(t *testing.T) {
+func TestClosesOfACustomerWithoutFindingsAreZerosAndNoMedian(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
-	get := func(path string) *httptest.ResponseRecorder {
-		return e.do(httptest.NewRequest(http.MethodGet, path, nil))
-	}
 
-	summary := decode[map[string]int](t, get("/findings/summary"), http.StatusOK)
-	exposure := decode[struct {
-		By     string `json:"by"`
-		Groups []struct {
-			Value    string  `json:"value"`
-			Name     *string `json:"name"`
-			Critical *int    `json:"critical"`
-		} `json:"groups"`
-	}](t, get("/findings/breakdown"), http.StatusOK)
-	top := decode[struct {
-		Components *[]struct{} `json:"components"`
-		CVEs       *[]struct{} `json:"cves"`
-	}](t, get("/findings/top"), http.StatusOK)
+	got := decode[map[string]any](t, e.do(httptest.NewRequest(http.MethodGet, "/findings/closes", nil)), http.StatusOK)
+
+	zeros := map[string]any{"opened": 0.0, "fixed": 0.0, "went_away": 0.0, "set_aside": 0.0}
+	want := map[string]any{"current": zeros, "previous": zeros, "critical_fixed_median_days": nil}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("closes = %v, want %v", got, want)
+	}
+}
+
+func TestClosesAnswersACustomerAdmin(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	req := httptest.NewRequest(http.MethodGet, "/findings/closes?days=7", nil)
+	req.Header.Set("Authorization", e.adminToken(t))
+
+	if rec := e.do(req); rec.Code != http.StatusOK {
+		t.Errorf("closes as a Customer Admin = %d %s, want 200", rec.Code, rec.Body)
+	}
+}
+
+func TestClosesRefusesDaysOutOfRange(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+
+	for _, days := range []string{"0", "366"} {
+		if rec := e.do(httptest.NewRequest(http.MethodGet, "/findings/closes?days="+days, nil)); rec.Code != http.StatusBadRequest {
+			t.Errorf("%s days = %d %s, want 400", days, rec.Code, rec.Body)
+		}
+	}
+}
+
+func TestFindingsSummaryOfACustomerWithoutFindingsIsZeros(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+
+	summary := decode[map[string]int](t, e.do(httptest.NewRequest(http.MethodGet, "/findings/summary", nil)), http.StatusOK)
 
 	for _, key := range []string{"open", "critical", "high", "medium", "low", "unbanded", "kev", "critical_internet_facing"} {
 		if n, ok := summary[key]; !ok || n != 0 {
 			t.Errorf("summary %s = %d (present %v), want 0", key, n, ok)
 		}
 	}
-	values := []string{}
-	for _, g := range exposure.Groups {
-		values = append(values, g.Value)
-		if g.Name != nil || g.Critical == nil || *g.Critical != 0 {
-			t.Errorf("group %+v, want no name and a zero critical", g)
-		}
-	}
-	if exposure.By != "exposure" || fmt.Sprint(values) != "[internet_facing internal unknown]" {
-		t.Errorf("breakdown by %s = %v, want every exposure by default", exposure.By, values)
-	}
-	if top.Components == nil || len(*top.Components) != 0 || top.CVEs == nil || len(*top.CVEs) != 0 {
-		t.Errorf("top = %+v, want two empty lists", top)
-	}
 }
 
-func TestFindingCountsRefuseAnUnknownGroupingAndTooLongALimit(t *testing.T) {
+func TestAttackMatrixRefusesAnUnknownRoleAndTooLongALimit(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
 
-	for _, path := range []string{"/findings/breakdown?by=kind", "/findings/top?limit=51", "/findings/attack-matrix?role=lateral"} {
+	for _, path := range []string{"/findings/attack-matrix?role=lateral", "/findings/attack-matrix?limit=51"} {
 		if rec := e.do(httptest.NewRequest(http.MethodGet, path, nil)); rec.Code != http.StatusBadRequest {
 			t.Errorf("%s = %d %s, want 400", path, rec.Code, rec.Body)
 		}
@@ -108,29 +117,5 @@ func TestAttackMatrixOfACustomerWithoutFindingsHasNoCoverage(t *testing.T) {
 
 	if got.Coverage["open"] != 0 || got.Coverage["labeled"] != 0 || got.Tactics == nil || got.Techniques == nil || len(*got.Techniques) != 0 {
 		t.Errorf("matrix = %+v, want no coverage, lists and no Techniques", got)
-	}
-}
-
-func TestTimeToCloseOfACustomerWithoutClosesHasEveryBandAndNoDays(t *testing.T) {
-	t.Parallel()
-	e := newEnv(t)
-
-	got := decode[struct {
-		Bands []struct {
-			Band       string   `json:"band"`
-			Closed     int      `json:"closed"`
-			MedianDays *float64 `json:"median_days"`
-		} `json:"bands"`
-	}](t, e.do(httptest.NewRequest(http.MethodGet, "/findings/time-to-close", nil)), http.StatusOK)
-
-	var bands []string
-	for _, b := range got.Bands {
-		bands = append(bands, b.Band)
-		if b.Closed != 0 || b.MedianDays != nil {
-			t.Errorf("band %+v, want nothing closed and no median", b)
-		}
-	}
-	if fmt.Sprint(bands) != "[critical high medium low unbanded]" {
-		t.Errorf("bands = %v, want every Band in order", bands)
 	}
 }

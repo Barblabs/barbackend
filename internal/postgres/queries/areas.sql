@@ -44,3 +44,21 @@ SET owner_email = sqlc.narg(owner_email)
 FROM cmdb_sources s
 WHERE a.id = @id AND s.id = a.cmdb_source_id AND s.customer_id = @customer_id
 RETURNING a.id, a.cmdb_source_id, a.record_id, a.name, a.owner_email, a.inactive_since;
+
+-- The Customer's Active Areas, sorted by name, then id, each with how many
+-- Active Assets reference it.
+-- name: ListActiveAreasOfCustomerWithAssetCounts :many
+SELECT a.id, a.name, a.owner_email,
+       (SELECT count(*) FROM assets x
+        WHERE x.cmdb_source_id = a.cmdb_source_id AND x.area_record_id = a.record_id
+          AND x.inactive_since IS NULL)::integer AS asset_count
+FROM customer_areas a
+JOIN cmdb_sources s ON s.id = a.cmdb_source_id
+WHERE s.customer_id = @customer_id AND a.inactive_since IS NULL
+ORDER BY a.name, a.id;
+
+-- name: CountActiveAssetsWithoutAreaOfCustomer :one
+SELECT count(*)::integer
+FROM assets x
+JOIN cmdb_sources s ON s.id = x.cmdb_source_id
+WHERE s.customer_id = @customer_id AND x.area_record_id IS NULL AND x.inactive_since IS NULL;

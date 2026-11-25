@@ -10,7 +10,6 @@ import (
 
 	"barbackend/internal/finding"
 	"barbackend/internal/inventory"
-	"barbackend/internal/matching"
 	"barbackend/internal/postgres"
 	"barbackend/internal/scoring"
 	"barbackend/internal/stixext"
@@ -113,38 +112,26 @@ func TestFindingWeeksOfCustomerCountOnlyItsOwnFindings(t *testing.T) {
 	}
 }
 
-func TestFindingBandsByAssetOfCustomerCountTheLatestScoreOfOpenFindings(t *testing.T) {
+func TestFindingWeeksOfCustomerReadEachOpenFindingsScoreAtTheWeeksEnd(t *testing.T) {
 	t.Parallel()
 	w := newFindingWorld(t)
-	paymentsNginx, _ := saveMatch(t, w.db, match(t, w.payments, "1.18.0"))
-	saveScore(t, w.db, paymentsNginx, modelThree(0.75))
-	storeVulnerability(t, w.db, "CVE-2024-0001", time.Now(), vulnerabilityObject("CVE-2024-0001", "Analyzed", `[]`))
-	vaultMatch, err := finding.NewMatch(w.payments, vault, "CVE-2024-0001", matching.Result{Matched: true, Evidence: stixext.Affected{Vendor: "hashicorp", Product: "vault", Version: "*"}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	paymentsVault, _ := saveMatch(t, w.db, vaultMatch)
-	saveScore(t, w.db, paymentsVault, modelThree(0.39995)) // shown as 0.4: High
-	lab, _ := saveMatch(t, w.db, match(t, w.lab, "1.18.0"))
-	saveScore(t, w.db, lab, modelThree(0.75))
-	saveScore(t, w.db, lab, paymentsScore) // its latest Score is from Model 2
-	otherSource := newSource(t, w.db, newCustomer(t, w.db))
-	syncRecords(t, w.db, otherSource.ID(), w.paymentsRecord(t))
-	theirs, _ := saveMatch(t, w.db, match(t, inventory.SourceReference{Source: otherSource.ID(), RecordID: "1"}, "1.18.0"))
-	saveScore(t, w.db, theirs, modelThree(0.1))
+	payments, _ := saveMatch(t, w.db, match(t, w.payments, "1.18.0"))
+	high, critical := modelThree(0.5), modelThree(0.8)
+	saveScore(t, w.db, payments, high)
+	firstWeekEnd := time.Now().Truncate(time.Microsecond)
+	saveScore(t, w.db, payments, critical)
 
-	got := inTxValue(t, w.db, func(tx *postgres.Tx) ([]postgres.AssetFindingBands, error) {
-		return tx.FindingBandsByAssetOfCustomer(context.Background(), w.customer)
+	weeks := inTxValue(t, w.db, func(tx *postgres.Tx) ([]postgres.FindingWeek, error) {
+		return tx.FindingWeeksOfCustomer(context.Background(), w.customer, firstWeekEnd.Add(-168*time.Hour), 2)
 	})
 
-	if len(got) != 2 || got[0].AssetName != "lab" || got[1].AssetName != "payments" {
-		t.Fatalf("assets = %+v, want lab then payments, and none of the other Customer", got)
+	if len(weeks) != 2 {
+		t.Fatalf("weeks = %+v, want two", weeks)
 	}
-	if lab := got[0]; lab.Unbanded != 1 || lab.Critical+lab.High+lab.Medium+lab.Low != 0 {
-		t.Errorf("lab = %+v, want its one Finding unbanded by its latest Score", lab)
-	}
-	if p := got[1]; p.Critical != 1 || p.High != 1 || p.Medium+p.Low+p.Unbanded != 0 || p.AssetID == 0 {
-		t.Errorf("payments = %+v, want one Critical and one High", p)
+	for i, want := range []scoring.Score{high, critical} {
+		if got := weeks[i].ScoresAtEnd; len(got) != 1 || got[0].Model != want.Model || got[0].Value != want.Value {
+			t.Errorf("week %d scores at end = %+v, want only payments' %v", i, got, want.Value)
+		}
 	}
 }
 
@@ -162,12 +149,9 @@ func TestOpenFindingFactsOfCustomerReadWhatTheDashboardCountsBy(t *testing.T) {
 	saveScore(t, w.db, payments, modelThree(0.75))
 	lab, _ := saveMatch(t, w.db, match(t, w.lab, "1.18.0"))
 	saveScore(t, w.db, lab, paymentsScore)
-	kev, epss := string(stixext.KEVDefinitionID), string(stixext.EPSSDefinitionID)
+	kev := string(stixext.KEVDefinitionID)
 	inTx(t, w.db, func(tx *postgres.Tx) error {
-		if _, err := tx.SetVulnerabilityExtension(context.Background(), "CVE-2021-23017", kev, json.RawMessage(`{"extension_type":"property-extension"}`)); err != nil {
-			return err
-		}
-		_, err := tx.SetVulnerabilityExtension(context.Background(), "CVE-2021-23017", epss, json.RawMessage(`{"extension_type":"property-extension","probability":0.97}`))
+		_, err := tx.SetVulnerabilityExtension(context.Background(), "CVE-2021-23017", kev, json.RawMessage(`{"extension_type":"property-extension"}`))
 		return err
 	})
 	var page postgres.AssetPage
@@ -183,64 +167,18 @@ func TestOpenFindingFactsOfCustomerReadWhatTheDashboardCountsBy(t *testing.T) {
 	saveScore(t, w.db, theirs, modelThree(0.75))
 
 	facts := inTxValue(t, w.db, func(tx *postgres.Tx) ([]postgres.OpenFindingFact, error) {
-		return tx.OpenFindingFactsOfCustomer(context.Background(), w.customer, kev, epss)
+		return tx.OpenFindingFactsOfCustomer(context.Background(), w.customer, kev)
 	})
 
-	byID := map[finding.ID]postgres.OpenFindingFact{}
-	for _, f := range facts {
-		byID[f.ID] = f
-	}
-	p, okP := byID[payments]
-	l, okL := byID[lab]
-	if len(facts) != 2 || !okP || !okL {
+	p := slices.IndexFunc(facts, func(f postgres.OpenFindingFact) bool { return f.Score.Model == 3 })
+	l := slices.IndexFunc(facts, func(f postgres.OpenFindingFact) bool { return f.Score.Model == paymentsScore.Model })
+	if len(facts) != 2 || p < 0 || l < 0 {
 		t.Fatalf("facts = %+v, want the Customer's two scored Findings", facts)
 	}
-	if p.AssetID != page.Assets[1].ID || p.Criticality != inventory.CriticalityHigh || p.Exposure != inventory.Internal || p.Area != nil {
-		t.Errorf("payments asset facts = %+v, want High, declared Internal and in no Area", p)
+	if f := facts[p]; f.Exposure != inventory.Internal || f.CVE != "CVE-2021-23017" || !f.KEV || f.Score.Value != 0.75 {
+		t.Errorf("payments facts = %+v, want declared Internal, in KEV and its latest Score", f)
 	}
-	if p.Product != (inventory.Product{Vendor: "f5", Name: "nginx"}) || p.Version != "1.18.0" || p.CVE != "CVE-2021-23017" {
-		t.Errorf("payments product facts = %+v", p)
-	}
-	if band, _ := p.Score.Band(); !p.KEV || p.EPSS == nil || *p.EPSS != 0.97 || band != scoring.BandCritical {
-		t.Errorf("payments threat facts = %+v, want in KEV, EPSS 0.97 and Critical", p)
-	}
-	if _, banded := l.Score.Band(); banded || l.Criticality != inventory.CriticalityLow || l.Exposure != inventory.ExposureUnknown {
-		t.Errorf("lab facts = %+v, want unbanded, Low and Unknown", l)
-	}
-}
-
-func TestFindingsOfCustomerClosedSinceReadOnlyItsClosedOnes(t *testing.T) {
-	t.Parallel()
-	w := newFindingWorld(t)
-	before := time.Now().Add(-time.Minute)
-	payments, _ := saveMatch(t, w.db, match(t, w.payments, "1.18.0"))
-	saveScore(t, w.db, payments, modelThree(0.75))
-	lab, _ := saveMatch(t, w.db, match(t, w.lab, "1.18.0"))
-	saveScore(t, w.db, lab, modelThree(0.75))
-	otherSource := newSource(t, w.db, newCustomer(t, w.db))
-	syncRecords(t, w.db, otherSource.ID(), w.paymentsRecord(t))
-	theirs, _ := saveMatch(t, w.db, match(t, inventory.SourceReference{Source: otherSource.ID(), RecordID: "1"}, "1.18.0"))
-	saveScore(t, w.db, theirs, modelThree(0.75))
-	inTx(t, w.db, func(tx *postgres.Tx) error {
-		for _, id := range []finding.ID{payments, theirs} {
-			if _, err := tx.CloseFinding(context.Background(), id, finding.NoLongerAffected); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-
-	closed := inTxValue(t, w.db, func(tx *postgres.Tx) ([]postgres.ClosedFinding, error) {
-		return tx.FindingsOfCustomerClosedSince(context.Background(), w.customer, before)
-	})
-	later := inTxValue(t, w.db, func(tx *postgres.Tx) ([]postgres.ClosedFinding, error) {
-		return tx.FindingsOfCustomerClosedSince(context.Background(), w.customer, time.Now().Add(time.Minute))
-	})
-
-	if len(closed) != 1 || closed[0].Score.Model != 3 || closed[0].Score.Value != 0.75 || closed[0].Closed.Before(closed[0].Opened) {
-		t.Errorf("closed = %+v, want the Customer's one closed Finding, Critical", closed)
-	}
-	if len(later) != 0 {
-		t.Errorf("closed after it = %+v, want none", later)
+	if _, banded := facts[l].Score.Band(); banded || facts[l].Exposure != inventory.ExposureUnknown {
+		t.Errorf("lab facts = %+v, want unbanded and Unknown", facts[l])
 	}
 }

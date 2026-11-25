@@ -70,4 +70,7 @@ func TestAttackMatrixCountsOnlyTheLabelsOfARole(t *testing.T) {
 	if _, err := w.findings.AttackMatrix(context.Background(), w.viewer(t), "lateral", 0); !errors.Is(err, findings.ErrInvalidCount) {
 		t.Errorf("unknown role: err = %v, want ErrInvalidCount", err)
 	}
+	if _, err := w.findings.AttackMatrix(context.Background(), w.viewer(t), "", findings.MaxTopLimit+1); !errors.Is(err, findings.ErrInvalidCount) {
+		t.Errorf("limit %d: err = %v, want ErrInvalidCount", findings.MaxTopLimit+1, err)
+	}
 }

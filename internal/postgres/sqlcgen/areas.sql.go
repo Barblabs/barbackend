@@ -12,6 +12,20 @@ import (
 	"github.com/google/uuid"
 )
 
+const countActiveAssetsWithoutAreaOfCustomer = `-- name: CountActiveAssetsWithoutAreaOfCustomer :one
+SELECT count(*)::integer
+FROM assets x
+JOIN cmdb_sources s ON s.id = x.cmdb_source_id
+WHERE s.customer_id = $1 AND x.area_record_id IS NULL AND x.inactive_since IS NULL
+`
+
+func (q *Queries) CountActiveAssetsWithoutAreaOfCustomer(ctx context.Context, customerID uuid.UUID) (int32, error) {
+	row := q.db.QueryRow(ctx, countActiveAssetsWithoutAreaOfCustomer, customerID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const deactivateAreas = `-- name: DeactivateAreas :execrows
 UPDATE customer_areas
 SET inactive_since = coalesce(inactive_since, now())
@@ -47,6 +61,51 @@ type InsertAreasParams struct {
 	RecordID      string
 	Name          string
 	InactiveSince *time.Time
+}
+
+const listActiveAreasOfCustomerWithAssetCounts = `-- name: ListActiveAreasOfCustomerWithAssetCounts :many
+SELECT a.id, a.name, a.owner_email,
+       (SELECT count(*) FROM assets x
+        WHERE x.cmdb_source_id = a.cmdb_source_id AND x.area_record_id = a.record_id
+          AND x.inactive_since IS NULL)::integer AS asset_count
+FROM customer_areas a
+JOIN cmdb_sources s ON s.id = a.cmdb_source_id
+WHERE s.customer_id = $1 AND a.inactive_since IS NULL
+ORDER BY a.name, a.id
+`
+
+type ListActiveAreasOfCustomerWithAssetCountsRow struct {
+	ID         int64
+	Name       string
+	OwnerEmail *string
+	AssetCount int32
+}
+
+// The Customer's Active Areas, sorted by name, then id, each with how many
+// Active Assets reference it.
+func (q *Queries) ListActiveAreasOfCustomerWithAssetCounts(ctx context.Context, customerID uuid.UUID) ([]ListActiveAreasOfCustomerWithAssetCountsRow, error) {
+	rows, err := q.db.Query(ctx, listActiveAreasOfCustomerWithAssetCounts, customerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListActiveAreasOfCustomerWithAssetCountsRow
+	for rows.Next() {
+		var i ListActiveAreasOfCustomerWithAssetCountsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.OwnerEmail,
+			&i.AssetCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listAreas = `-- name: ListAreas :many

@@ -269,42 +269,38 @@ SELECT w.start::timestamptz AS week,
 FROM generate_series(@since::timestamptz, @last_start::timestamptz, interval '168 hours') AS w(start)
 ORDER BY w.start;
 
--- The latest Score of every open Finding of a Customer's Assets, with its
--- Asset, for counting them by Score Band. A Finding not scored yet is left
--- out, as in ListOpenFindingsOfCustomer. Ordered as Assets are listed.
--- name: ListOpenFindingScoresByAssetOfCustomer :many
-SELECT a.id AS asset_id, a.name AS asset_name, s.model, s.value
-FROM findings f
+-- One row per week from since to last_start and per Finding of a Customer's
+-- Assets open when that week ended, as CountFindingsOfCustomerByWeek counts
+-- it, with the Model and value of its latest Score scored by then. A Finding
+-- with no Score by then has no row.
+-- name: ListOpenFindingScoresOfCustomerByWeek :many
+SELECT w.start::timestamptz AS week, s.model, s.value
+FROM generate_series(@since::timestamptz, @last_start::timestamptz, interval '168 hours') AS w(start)
+JOIN findings f ON f.first_opened_at < w.start + interval '168 hours'
+    AND (f.closed_at IS NULL OR f.closed_at >= w.start + interval '168 hours')
 JOIN cmdb_sources src ON src.id = f.cmdb_source_id
-JOIN assets a ON a.cmdb_source_id = f.cmdb_source_id AND a.record_id = f.record_id
 JOIN LATERAL (
     SELECT sc.model, sc.value
     FROM finding_scores sc
-    WHERE sc.finding_id = f.id
+    WHERE sc.finding_id = f.id AND sc.scored_at <= w.start + interval '168 hours'
     ORDER BY sc.scored_at DESC
     LIMIT 1
 ) s ON true
-WHERE src.customer_id = @customer_id AND f.closed_at IS NULL
-ORDER BY a.name, a.cmdb_source_id, a.record_id;
+WHERE src.customer_id = @customer_id
+ORDER BY w.start;
 
 -- One row per open scored Finding of a Customer's Assets with what the
--- dashboard counts it by: its Asset's Criticality, effective Exposure and
--- Area, its Product and version, its CVE, whether KEV lists it and its EPSS
--- probability, and its latest Score. The extension ids are the kev/1 and
--- epss/1 extension definitions (ADR 0010).
+-- dashboard counts it by: its Asset's effective Exposure, its CVE, whether
+-- KEV lists it, and its latest Score. The extension id is the kev/1
+-- extension definition (ADR 0010).
 -- name: ListOpenFindingFactsOfCustomer :many
-SELECT f.id, a.id AS asset_id, a.criticality_id,
-       coalesce(a.declared_exposure_id, a.imported_exposure_id) AS exposure_id,
-       ar.id AS area_id, ar.name AS area_name,
-       f.product_vendor, f.product_name, f.component_version, f.cve_id,
+SELECT coalesce(a.declared_exposure_id, a.imported_exposure_id) AS exposure_id,
+       f.cve_id,
        ((v.object -> 'extensions' -> @kev_extension_id::text) IS NOT NULL)::boolean AS kev,
-       CASE WHEN v.object -> 'extensions' ? @epss_extension_id::text
-            THEN (v.object -> 'extensions' -> @epss_extension_id::text ->> 'probability')::double precision END AS epss,
        s.model, s.value
 FROM findings f
 JOIN cmdb_sources src ON src.id = f.cmdb_source_id
 JOIN assets a ON a.cmdb_source_id = f.cmdb_source_id AND a.record_id = f.record_id
-LEFT JOIN customer_areas ar ON ar.cmdb_source_id = a.cmdb_source_id AND ar.record_id = a.area_record_id
 JOIN vulnerabilities v ON v.cve_id = f.cve_id
 JOIN LATERAL (
     SELECT sc.model, sc.value
@@ -316,19 +312,82 @@ JOIN LATERAL (
 WHERE src.customer_id = @customer_id AND f.closed_at IS NULL
 ORDER BY f.id;
 
--- The Findings of a Customer's Assets closed from since on, with when they
--- were last opened and their latest Score, for how long closing them took. A
--- Finding not scored is left out.
--- name: ListFindingsOfCustomerClosedSince :many
-SELECT f.opened_at, f.closed_at, s.model, s.value
+-- One row per Finding of a Customer's Assets closed at or after since, with
+-- why, when it last opened and the Model and value of its latest Score, both
+-- 0 when it has none. A reopened Finding keeps only its latest close.
+-- name: ListFindingClosesOfCustomer :many
+SELECT f.close_reason_id::smallint AS close_reason_id, f.opened_at, f.closed_at::timestamptz AS closed_at,
+       coalesce(s.model, 0)::smallint AS model, coalesce(s.value, 0)::float8 AS value
 FROM findings f
 JOIN cmdb_sources src ON src.id = f.cmdb_source_id
-JOIN LATERAL (
+LEFT JOIN LATERAL (
     SELECT sc.model, sc.value
     FROM finding_scores sc
     WHERE sc.finding_id = f.id
     ORDER BY sc.scored_at DESC
     LIMIT 1
 ) s ON true
-WHERE src.customer_id = @customer_id AND f.closed_at >= @since
+WHERE src.customer_id = @customer_id AND f.closed_at >= @since::timestamptz
 ORDER BY f.closed_at;
+
+-- When each Finding of a Customer's Assets first opened at or after since
+-- was first opened.
+-- name: ListFindingFirstOpensOfCustomer :many
+SELECT f.first_opened_at
+FROM findings f
+JOIN cmdb_sources src ON src.id = f.cmdb_source_id
+WHERE src.customer_id = @customer_id AND f.first_opened_at >= @since::timestamptz
+ORDER BY f.first_opened_at;
+
+-- One row per Finding of a Customer's Assets open now or closed at or after
+-- since, with the id of its Asset's Area, null when the Asset has none, when
+-- it was first opened and last closed, why, and the Model and value of its
+-- latest Score, both 0 when it has none. A reopened Finding keeps only its
+-- latest close.
+-- name: ListFindingAreaFactsOfCustomer :many
+SELECT f.id, area.id AS area_id, f.first_opened_at, f.closed_at, f.close_reason_id,
+       coalesce(s.model, 0)::smallint AS model, coalesce(s.value, 0)::float8 AS value
+FROM findings f
+JOIN cmdb_sources src ON src.id = f.cmdb_source_id
+JOIN assets a ON a.cmdb_source_id = f.cmdb_source_id AND a.record_id = f.record_id
+LEFT JOIN customer_areas area ON area.cmdb_source_id = a.cmdb_source_id AND area.record_id = a.area_record_id
+LEFT JOIN LATERAL (
+    SELECT sc.model, sc.value
+    FROM finding_scores sc
+    WHERE sc.finding_id = f.id
+    ORDER BY sc.scored_at DESC
+    LIMIT 1
+) s ON true
+WHERE src.customer_id = @customer_id
+  AND (f.closed_at IS NULL OR f.closed_at >= @since::timestamptz)
+ORDER BY f.id;
+
+-- Every Score of the Findings with ids, newest first within each Finding.
+-- name: ListFindingScoresOf :many
+SELECT finding_id, scored_at, model, value
+FROM finding_scores
+WHERE finding_id = ANY(@ids::uuid[])
+ORDER BY finding_id, scored_at DESC;
+
+-- One row per open Finding of a Customer's Active Assets, with its Asset's
+-- name, whether KEV lists its CVE, whether a News Item published at or after
+-- news_since names its CVE, and the Model and value of its latest Score, both
+-- 0 when it has none.
+-- name: ListOpenFindingAssetFactsOfCustomer :many
+SELECT f.id, a.name AS asset_name,
+       ((v.object -> 'extensions' -> @kev_extension_id::text) IS NOT NULL)::boolean AS kev,
+       EXISTS (SELECT 1 FROM news_items n WHERE n.published_at >= @news_since::timestamptz AND f.cve_id = ANY(n.cve_ids))::boolean AS in_the_news,
+       coalesce(s.model, 0)::smallint AS model, coalesce(s.value, 0)::float8 AS value
+FROM findings f
+JOIN cmdb_sources src ON src.id = f.cmdb_source_id
+JOIN assets a ON a.cmdb_source_id = f.cmdb_source_id AND a.record_id = f.record_id
+JOIN vulnerabilities v ON v.cve_id = f.cve_id
+LEFT JOIN LATERAL (
+    SELECT sc.model, sc.value
+    FROM finding_scores sc
+    WHERE sc.finding_id = f.id
+    ORDER BY sc.scored_at DESC
+    LIMIT 1
+) s ON true
+WHERE src.customer_id = @customer_id AND f.closed_at IS NULL AND a.inactive_since IS NULL
+ORDER BY f.id;

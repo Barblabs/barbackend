@@ -1,13 +1,9 @@
 package httpapi
 
 import (
-	"cmp"
 	"context"
 	"fmt"
-	"math"
 	"net/http"
-	"strconv"
-	"time"
 
 	"barbackend/internal/findings"
 	"barbackend/internal/tenancy"
@@ -24,7 +20,7 @@ func (h findingHandler) register(api huma.API) {
 		Method:      http.MethodGet,
 		Path:        "/findings/weekly-trend",
 		Summary:     "Count the Customer's Findings opened and closed each week",
-		Description: "One entry per ISO week, in UTC, oldest first and the current week last, with zeros for weeks where nothing happened. opened counts Findings first opened that week; closed counts Findings closed that week; open_at_end counts those still open when it ended. A Finding closed and then reopened keeps no record of that close, so it is not counted as closed, and counts as open while it was closed.",
+		Description: "One entry per ISO week, in UTC, oldest first and the current week last, with zeros for weeks where nothing happened. opened counts Findings first opened that week; closed counts Findings closed that week; open_at_end counts those still open when it ended; critical_open_at_end counts those of them whose latest Score by then was in the Critical Band, so for the current week it is critical of /findings/summary. A Finding closed and then reopened keeps no record of that close, so it is not counted as closed, and counts as open while it was closed.",
 		Errors:      []int{http.StatusBadRequest},
 	}, h.weeklyTrend)
 	register(api, huma.Operation{
@@ -35,22 +31,6 @@ func (h findingHandler) register(api huma.API) {
 		Description: "Its open scored Findings by the Score Band of their latest Score, how many of them KEV lists, and how many are Critical on Internet-facing Assets. A Finding not scored yet is left out.",
 	}, h.summary)
 	register(api, huma.Operation{
-		OperationID: "get-findings-breakdown",
-		Method:      http.MethodGet,
-		Path:        "/findings/breakdown",
-		Summary:     "Count the Customer's open Findings by Score Band within each Exposure, Criticality or Area",
-		Description: "By exposure (the effective one) and by criticality every value is there, unknown last, so a heatmap keeps its columns. By area only the Areas with open Findings are, by name, then none for the Assets in no Area. Each Finding is counted in one group. A Finding not scored yet is left out.",
-		Errors:      []int{http.StatusBadRequest},
-	}, h.breakdown)
-	register(api, huma.Operation{
-		OperationID: "get-findings-top",
-		Method:      http.MethodGet,
-		Path:        "/findings/top",
-		Summary:     "List the components and CVEs with the most severe open Findings",
-		Description: "Each list is ordered by its open Findings' Score Bands, most Critical first, then by how many it has. A component is a Product at one version, so updating it closes its Findings. A Finding not scored yet is left out.",
-		Errors:      []int{http.StatusBadRequest},
-	}, h.top)
-	register(api, huma.Operation{
 		OperationID: "get-findings-attack-matrix",
 		Method:      http.MethodGet,
 		Path:        "/findings/attack-matrix",
@@ -59,13 +39,13 @@ func (h findingHandler) register(api huma.API) {
 		Errors:      []int{http.StatusBadRequest},
 	}, h.attackMatrix)
 	register(api, huma.Operation{
-		OperationID: "get-findings-time-to-close",
+		OperationID: "get-findings-closes",
 		Method:      http.MethodGet,
-		Path:        "/findings/time-to-close",
-		Summary:     "Measure how long closing the Customer's Findings took, by Score Band",
-		Description: "The scored Findings closed in the last weeks ISO weeks, in UTC and the current week included, by the Score Band of their latest Score: how many, and the median and average days from when each was last opened to its close. A Finding not scored is left out.",
+		Path:        "/findings/closes",
+		Summary:     "Count the Customer's Findings closed as Fixed, Went away and Set aside",
+		Description: "For the last days days ending now, and for the days days before that: Findings first opened, so a reopen is not new, and Findings closed by bucket. fixed is remediated, component_removed and no_longer_affected; went_away is asset_inactive, vulnerability_rejected and vulnerability_revised; set_aside is accepted_risk, postponed and false_positive. The buckets are never added together. A Finding closed and then reopened keeps no record of that close, so it is not counted as closed.",
 		Errors:      []int{http.StatusBadRequest},
-	}, h.timeToClose)
+	}, h.closes)
 	h.registerCloses(api)
 }
 
@@ -77,6 +57,43 @@ type trendWeeks int
 
 func (trendWeeks) Schema(huma.Registry) *huma.Schema {
 	return &huma.Schema{Type: huma.TypeInteger, Minimum: ptr(1.0), Maximum: ptr(float64(findings.MaxTrendWeeks)), Default: findings.DefaultTrendWeeks}
+}
+
+type closesQuery struct {
+	Days closesDays `query:"days" doc:"How many days each window lasts"`
+}
+
+type closesDays int
+
+func (closesDays) Schema(huma.Registry) *huma.Schema {
+	return &huma.Schema{Type: huma.TypeInteger, Minimum: ptr(1.0), Maximum: ptr(float64(findings.MaxClosesDays)), Default: findings.DefaultClosesDays}
+}
+
+type closesResponse struct {
+	Current                 closeCountsResponse `json:"current" doc:"The last days days, ending now"`
+	Previous                closeCountsResponse `json:"previous" doc:"The days days before current"`
+	CriticalFixedMedianDays *float64            `json:"critical_fixed_median_days" doc:"Median days from opening to closing of the Fixed Findings of current whose latest Score is Critical; null when there are none"`
+}
+
+type closeCountsResponse struct {
+	Opened   int `json:"opened" doc:"Findings first opened"`
+	Fixed    int `json:"fixed"`
+	WentAway int `json:"went_away"`
+	SetAside int `json:"set_aside"`
+}
+
+func newCloseCounts(c findings.CloseCounts) closeCountsResponse {
+	return closeCountsResponse{Opened: c.Opened, Fixed: c.Fixed, WentAway: c.WentAway, SetAside: c.SetAside}
+}
+
+func (h findingHandler) closes(ctx context.Context, caller tenancy.User, in *closesQuery) (*body[closesResponse], error) {
+	c, err := h.findings.Closes(ctx, caller, int(in.Days))
+	if err != nil {
+		return nil, err
+	}
+	return &body[closesResponse]{Body: closesResponse{
+		Current: newCloseCounts(c.Current), Previous: newCloseCounts(c.Previous), CriticalFixedMedianDays: c.CriticalFixedMedianDays,
+	}}, nil
 }
 
 type bandCountsResponse struct {
@@ -108,93 +125,10 @@ func (h findingHandler) summary(ctx context.Context, caller tenancy.User, _ *str
 	}}, nil
 }
 
-type breakdownQuery struct {
-	By string `query:"by" enum:"exposure,criticality,area" default:"exposure"`
-}
-
-var groupings = map[string]findings.Grouping{"exposure": findings.ByExposure, "criticality": findings.ByCriticality, "area": findings.ByArea}
-
-type breakdownResponse struct {
-	By     string          `json:"by"`
-	Groups []groupResponse `json:"groups"`
-}
-
-type groupResponse struct {
-	Value string  `json:"value" doc:"The exposure or criticality code, unknown, the Area's id as in GET /areas, or none for the Assets in no Area"`
-	Name  *string `json:"name" doc:"The Area's name when grouped by area, null otherwise"`
-	bandCountsResponse
-}
-
-func (h findingHandler) breakdown(ctx context.Context, caller tenancy.User, in *breakdownQuery) (*body[breakdownResponse], error) {
-	groups, err := h.findings.Breakdown(ctx, caller, groupings[in.By])
-	if err != nil {
-		return nil, err
-	}
-	resp := breakdownResponse{By: in.By, Groups: make([]groupResponse, len(groups))}
-	for i, g := range groups {
-		group := groupResponse{bandCountsResponse: newBandCounts(g.Bands)}
-		switch in.By {
-		case "exposure":
-			group.Value = cmp.Or(g.Exposure.Code(), unknownFilterCode)
-		case "criticality":
-			group.Value = cmp.Or(g.Criticality.Code(), unknownFilterCode)
-		default:
-			group.Value = "none"
-			if g.Area != nil {
-				group.Value, group.Name = strconv.FormatInt(g.Area.ID, 10), &g.Area.Name
-			}
-		}
-		resp.Groups[i] = group
-	}
-	return &body[breakdownResponse]{Body: resp}, nil
-}
-
-type topQuery struct {
-	Limit topLimit `query:"limit" doc:"How many of each list"`
-}
-
 type topLimit int
 
 func (topLimit) Schema(huma.Registry) *huma.Schema {
 	return &huma.Schema{Type: huma.TypeInteger, Minimum: ptr(1.0), Maximum: ptr(float64(findings.MaxTopLimit)), Default: findings.DefaultTopLimit}
-}
-
-type topResponse struct {
-	Components []componentCountResponse `json:"components"`
-	CVEs       []cveCountResponse       `json:"cves"`
-}
-
-type componentCountResponse struct {
-	Vendor   string `json:"vendor"`
-	Product  string `json:"product"`
-	Version  string `json:"version"`
-	Findings int    `json:"findings"`
-	Assets   int    `json:"assets" doc:"Assets running it with an open Finding"`
-	bandCountsResponse
-}
-
-type cveCountResponse struct {
-	CVEID    string   `json:"cve_id"`
-	KEV      bool     `json:"kev"`
-	EPSS     *float64 `json:"epss" doc:"EPSS probability, null when EPSS has no score for the CVE yet"`
-	Findings int      `json:"findings"`
-	Assets   int      `json:"assets"`
-	bandCountsResponse
-}
-
-func (h findingHandler) top(ctx context.Context, caller tenancy.User, in *topQuery) (*body[topResponse], error) {
-	top, err := h.findings.Top(ctx, caller, int(in.Limit))
-	if err != nil {
-		return nil, err
-	}
-	resp := topResponse{Components: make([]componentCountResponse, len(top.Components)), CVEs: make([]cveCountResponse, len(top.CVEs))}
-	for i, c := range top.Components {
-		resp.Components[i] = componentCountResponse{Vendor: c.Product.Vendor, Product: c.Product.Name, Version: c.Version, Findings: c.Bands.Total(), Assets: c.Assets, bandCountsResponse: newBandCounts(c.Bands)}
-	}
-	for i, c := range top.CVEs {
-		resp.CVEs[i] = cveCountResponse{CVEID: c.CVE, KEV: c.KEV, EPSS: c.EPSS, Findings: c.Bands.Total(), Assets: c.Assets, bandCountsResponse: newBandCounts(c.Bands)}
-	}
-	return &body[topResponse]{Body: resp}, nil
 }
 
 type attackMatrixQuery struct {
@@ -246,38 +180,6 @@ func (h findingHandler) attackMatrix(ctx context.Context, caller tenancy.User, i
 	return &body[attackMatrixResponse]{Body: resp}, nil
 }
 
-type timeToCloseResponse struct {
-	Bands []closeTimeResponse `json:"bands" doc:"critical, high, medium, low, then unbanded"`
-}
-
-type closeTimeResponse struct {
-	Band        string   `json:"band" enum:"critical,high,medium,low,unbanded"`
-	Closed      int      `json:"closed"`
-	MedianDays  *float64 `json:"median_days" doc:"Null when none was closed"`
-	AverageDays *float64 `json:"average_days" doc:"Null when none was closed"`
-}
-
-func newCloseTime(band string, c findings.CloseTime) closeTimeResponse {
-	resp := closeTimeResponse{Band: band, Closed: c.Closed}
-	if c.Closed > 0 {
-		resp.MedianDays, resp.AverageDays = ptr(roundedDays(c.Median)), ptr(roundedDays(c.Average))
-	}
-	return resp
-}
-
-func roundedDays(d time.Duration) float64 { return math.Round(d.Hours()/24*100) / 100 }
-
-func (h findingHandler) timeToClose(ctx context.Context, caller tenancy.User, in *weeklyTrendQuery) (*body[timeToCloseResponse], error) {
-	t, err := h.findings.TimeToClose(ctx, caller, int(in.Weeks))
-	if err != nil {
-		return nil, err
-	}
-	return &body[timeToCloseResponse]{Body: timeToCloseResponse{Bands: []closeTimeResponse{
-		newCloseTime("critical", t.Critical), newCloseTime("high", t.High), newCloseTime("medium", t.Medium),
-		newCloseTime("low", t.Low), newCloseTime("unbanded", t.Unbanded),
-	}}}, nil
-}
-
 type weeklyTrendResponse struct {
 	Weeks []weekResponse `json:"weeks"`
 }
@@ -288,6 +190,7 @@ type weekResponse struct {
 	Opened   int    `json:"opened"`
 	Closed   int    `json:"closed"`
 	OpenAt   int    `json:"open_at_end" doc:"Findings open when the week ended, or open now for the current week: the backlog"`
+	Critical int    `json:"critical_open_at_end" doc:"Findings open when the week ended whose latest Score by then was Critical, or open and Critical now for the current week"`
 }
 
 func (h findingHandler) weeklyTrend(ctx context.Context, caller tenancy.User, in *weeklyTrendQuery) (*body[weeklyTrendResponse], error) {
@@ -298,7 +201,7 @@ func (h findingHandler) weeklyTrend(ctx context.Context, caller tenancy.User, in
 	resp := weeklyTrendResponse{Weeks: make([]weekResponse, len(weeks))}
 	for i, w := range weeks {
 		year, week := w.Start.ISOWeek()
-		resp.Weeks[i] = weekResponse{Week: fmt.Sprintf("%d-W%02d", year, week), StartsOn: w.Start.Format("2006-01-02"), Opened: w.Opened, Closed: w.Closed, OpenAt: w.OpenAtEnd}
+		resp.Weeks[i] = weekResponse{Week: fmt.Sprintf("%d-W%02d", year, week), StartsOn: w.Start.Format("2006-01-02"), Opened: w.Opened, Closed: w.Closed, OpenAt: w.OpenAtEnd, Critical: w.CriticalOpenAtEnd}
 	}
 	return &body[weeklyTrendResponse]{Body: resp}, nil
 }
