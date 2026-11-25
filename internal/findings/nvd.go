@@ -19,7 +19,8 @@ var errNotACVE = errors.New("not a CVE")
 // Software Components of every Active Asset with one of its Products
 // (ADR 0020). A match stores the Vulnerability and opens, updates or reopens
 // its Finding, which is scored. Open Findings of the CVE that no longer match
-// are closed, and all of them when NVD rejected it. Each Vulnerability is one
+// are closed as vulnerability_revised, and all of them as
+// vulnerability_rejected when NVD rejected it. Each Vulnerability is one
 // transaction; a failure is logged and the rest of the batch still runs.
 func (s *Service) HandleNVD(ctx context.Context, batch []stix2.STIXObject) error {
 	defer s.changed()
@@ -63,7 +64,7 @@ func (s *Service) matchIn(ctx context.Context, tx *postgres.Tx, cve string, v *s
 	if err != nil {
 		return err
 	}
-	return closeAll(ctx, tx, unmatched(open, matched), finding.NoLongerAffected)
+	return closeAll(ctx, tx, unmatched(open, matched), finding.VulnerabilityRevised)
 }
 
 // unmatched is the open Findings whose Key is not among matched.

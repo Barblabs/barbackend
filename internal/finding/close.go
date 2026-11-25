@@ -8,8 +8,7 @@ type CloseReason int
 
 // Stored as catalog ids (ADR 0006): never renumber.
 const (
-	// NoLongerAffected: the component's version no longer matches, because it
-	// changed or because NVD changed the Vulnerability's entries.
+	// NoLongerAffected: a Sync shows the component's version no longer matches.
 	NoLongerAffected CloseReason = 1
 	// ComponentRemoved: the Asset no longer has a component with the Product.
 	ComponentRemoved CloseReason = 2
@@ -26,6 +25,9 @@ const (
 	AcceptedRisk CloseReason = 7
 	// Postponed: it will be attended after its reopen time.
 	Postponed CloseReason = 8
+	// VulnerabilityRevised: NVD revised the Vulnerability's entries and they no
+	// longer match the component (ADR 0038).
+	VulnerabilityRevised CloseReason = 9
 )
 
 // ByHand reports whether r is a reason a User gives.
@@ -57,6 +59,8 @@ func (r CloseReason) String() string {
 		return "accepted_risk"
 	case Postponed:
 		return "postponed"
+	case VulnerabilityRevised:
+		return "vulnerability_revised"
 	default:
 		return fmt.Sprintf("CloseReason(%d)", int(r))
 	}

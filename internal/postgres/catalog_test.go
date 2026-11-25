@@ -29,7 +29,7 @@ func TestCatalogsMatchDomainConstants(t *testing.T) {
 		"user_roles":                  names(tenancy.PlatformAdmin, tenancy.CustomerAdmin, tenancy.Viewer),
 		"feedback_verdicts":           names(assessment.VerdictApplies, assessment.VerdictDoesNotApply, assessment.VerdictRemediated, assessment.VerdictShouldBeEarlier, assessment.VerdictShouldBeLater),
 		"match_flags":                 names(matching.VersionUnparsed, matching.DistroBackport),
-		"finding_close_reasons":       names(finding.NoLongerAffected, finding.ComponentRemoved, finding.AssetInactive, finding.VulnerabilityRejected, finding.Remediated, finding.FalsePositive, finding.AcceptedRisk, finding.Postponed),
+		"finding_close_reasons":       names(finding.NoLongerAffected, finding.ComponentRemoved, finding.AssetInactive, finding.VulnerabilityRejected, finding.Remediated, finding.FalsePositive, finding.AcceptedRisk, finding.Postponed, finding.VulnerabilityRevised),
 		"score_data_gaps":             names(scoring.CVSSEstimated, scoring.EPSSPending, scoring.KEVStale, scoring.CriticalityUnknown, scoring.ExposureUndeclared, scoring.LifecycleUnknown, scoring.ClassificationUndeclared),
 	}
 	ctx := context.Background()
