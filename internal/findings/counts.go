@@ -80,6 +80,6 @@ func (s *Service) openFacts(ctx context.Context, caller tenancy.User) ([]postgre
 		return nil, err
 	}
 	return postgres.InTxValue(ctx, s.db, func(tx *postgres.Tx) ([]postgres.OpenFindingFact, error) {
-		return tx.OpenFindingFactsOfCustomer(ctx, customer, string(stixext.KEVDefinitionID), string(stixext.EPSSDefinitionID))
+		return tx.OpenFindingFactsOfCustomer(ctx, customer, string(stixext.KEVDefinitionID))
 	})
 }

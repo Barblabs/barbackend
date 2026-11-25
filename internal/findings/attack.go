@@ -77,7 +77,7 @@ func (s *Service) AttackMatrix(ctx context.Context, caller tenancy.User, role st
 	var byCVE map[string][]postgres.CVETechnique
 	var catalog []postgres.CatalogTechnique
 	err = s.db.InTx(ctx, func(tx *postgres.Tx) (err error) {
-		if facts, err = tx.OpenFindingFactsOfCustomer(ctx, customer, string(stixext.KEVDefinitionID), string(stixext.EPSSDefinitionID)); err != nil {
+		if facts, err = tx.OpenFindingFactsOfCustomer(ctx, customer, string(stixext.KEVDefinitionID)); err != nil {
 			return err
 		}
 		if byCVE, err = tx.TechniquesOfCVEs(ctx, distinctCVEs(facts)); err != nil {

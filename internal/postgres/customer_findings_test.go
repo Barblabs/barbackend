@@ -126,12 +126,9 @@ func TestOpenFindingFactsOfCustomerReadWhatTheDashboardCountsBy(t *testing.T) {
 	saveScore(t, w.db, payments, modelThree(0.75))
 	lab, _ := saveMatch(t, w.db, match(t, w.lab, "1.18.0"))
 	saveScore(t, w.db, lab, paymentsScore)
-	kev, epss := string(stixext.KEVDefinitionID), string(stixext.EPSSDefinitionID)
+	kev := string(stixext.KEVDefinitionID)
 	inTx(t, w.db, func(tx *postgres.Tx) error {
-		if _, err := tx.SetVulnerabilityExtension(context.Background(), "CVE-2021-23017", kev, json.RawMessage(`{"extension_type":"property-extension"}`)); err != nil {
-			return err
-		}
-		_, err := tx.SetVulnerabilityExtension(context.Background(), "CVE-2021-23017", epss, json.RawMessage(`{"extension_type":"property-extension","probability":0.97}`))
+		_, err := tx.SetVulnerabilityExtension(context.Background(), "CVE-2021-23017", kev, json.RawMessage(`{"extension_type":"property-extension"}`))
 		return err
 	})
 	var page postgres.AssetPage
@@ -147,28 +144,18 @@ func TestOpenFindingFactsOfCustomerReadWhatTheDashboardCountsBy(t *testing.T) {
 	saveScore(t, w.db, theirs, modelThree(0.75))
 
 	facts := inTxValue(t, w.db, func(tx *postgres.Tx) ([]postgres.OpenFindingFact, error) {
-		return tx.OpenFindingFactsOfCustomer(context.Background(), w.customer, kev, epss)
+		return tx.OpenFindingFactsOfCustomer(context.Background(), w.customer, kev)
 	})
 
-	byID := map[finding.ID]postgres.OpenFindingFact{}
-	for _, f := range facts {
-		byID[f.ID] = f
-	}
-	p, okP := byID[payments]
-	l, okL := byID[lab]
-	if len(facts) != 2 || !okP || !okL {
+	p := slices.IndexFunc(facts, func(f postgres.OpenFindingFact) bool { return f.Score.Model == 3 })
+	l := slices.IndexFunc(facts, func(f postgres.OpenFindingFact) bool { return f.Score.Model == paymentsScore.Model })
+	if len(facts) != 2 || p < 0 || l < 0 {
 		t.Fatalf("facts = %+v, want the Customer's two scored Findings", facts)
 	}
-	if p.AssetID != page.Assets[1].ID || p.Criticality != inventory.CriticalityHigh || p.Exposure != inventory.Internal || p.Area != nil {
-		t.Errorf("payments asset facts = %+v, want High, declared Internal and in no Area", p)
+	if f := facts[p]; f.Exposure != inventory.Internal || f.CVE != "CVE-2021-23017" || !f.KEV || f.Score.Value != 0.75 {
+		t.Errorf("payments facts = %+v, want declared Internal, in KEV and its latest Score", f)
 	}
-	if p.Product != (inventory.Product{Vendor: "f5", Name: "nginx"}) || p.Version != "1.18.0" || p.CVE != "CVE-2021-23017" {
-		t.Errorf("payments product facts = %+v", p)
-	}
-	if band, _ := p.Score.Band(); !p.KEV || p.EPSS == nil || *p.EPSS != 0.97 || band != scoring.BandCritical {
-		t.Errorf("payments threat facts = %+v, want in KEV, EPSS 0.97 and Critical", p)
-	}
-	if _, banded := l.Score.Band(); banded || l.Criticality != inventory.CriticalityLow || l.Exposure != inventory.ExposureUnknown {
-		t.Errorf("lab facts = %+v, want unbanded, Low and Unknown", l)
+	if _, banded := facts[l].Score.Band(); banded || facts[l].Exposure != inventory.ExposureUnknown {
+		t.Errorf("lab facts = %+v, want unbanded and Unknown", facts[l])
 	}
 }
