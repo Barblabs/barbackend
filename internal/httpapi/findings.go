@@ -3,9 +3,7 @@ package httpapi
 import (
 	"context"
 	"fmt"
-	"math"
 	"net/http"
-	"time"
 
 	"barbackend/internal/findings"
 	"barbackend/internal/tenancy"
@@ -40,14 +38,6 @@ func (h findingHandler) register(api huma.API) {
 		Description: "The Cartógrafo labels a CVE with up to 5 ATT&CK Techniques, each exploiting it, its primary impact or a secondary impact; a Finding has the labels of its CVE. These labels are inferred by a model and must be shown as such. Every tactic of the stored catalog is there, in attack order; a Finding counts once in each tactic and each Technique it has, so the tactics do not add up to the Findings: coverage tells how many Findings have a labeled CVE. With role, only the labels of that role count, but coverage does not change. A Finding not scored yet is left out.",
 		Errors:      []int{http.StatusBadRequest},
 	}, h.attackMatrix)
-	register(api, huma.Operation{
-		OperationID: "get-findings-time-to-close",
-		Method:      http.MethodGet,
-		Path:        "/findings/time-to-close",
-		Summary:     "Measure how long closing the Customer's Findings took, by Score Band",
-		Description: "The scored Findings closed in the last weeks ISO weeks, in UTC and the current week included, by the Score Band of their latest Score: how many, and the median and average days from when each was last opened to its close. A Finding not scored is left out.",
-		Errors:      []int{http.StatusBadRequest},
-	}, h.timeToClose)
 	h.registerCloses(api)
 }
 
@@ -143,38 +133,6 @@ func (h findingHandler) attackMatrix(ctx context.Context, caller tenancy.User, i
 		resp.Techniques[i] = techniqueCountResponse{AttackID: t.AttackID, Name: t.Name, Tactics: t.Tactics, Roles: t.Roles, Findings: t.Bands.Total(), bandCountsResponse: newBandCounts(t.Bands)}
 	}
 	return &body[attackMatrixResponse]{Body: resp}, nil
-}
-
-type timeToCloseResponse struct {
-	Bands []closeTimeResponse `json:"bands" doc:"critical, high, medium, low, then unbanded"`
-}
-
-type closeTimeResponse struct {
-	Band        string   `json:"band" enum:"critical,high,medium,low,unbanded"`
-	Closed      int      `json:"closed"`
-	MedianDays  *float64 `json:"median_days" doc:"Null when none was closed"`
-	AverageDays *float64 `json:"average_days" doc:"Null when none was closed"`
-}
-
-func newCloseTime(band string, c findings.CloseTime) closeTimeResponse {
-	resp := closeTimeResponse{Band: band, Closed: c.Closed}
-	if c.Closed > 0 {
-		resp.MedianDays, resp.AverageDays = ptr(roundedDays(c.Median)), ptr(roundedDays(c.Average))
-	}
-	return resp
-}
-
-func roundedDays(d time.Duration) float64 { return math.Round(d.Hours()/24*100) / 100 }
-
-func (h findingHandler) timeToClose(ctx context.Context, caller tenancy.User, in *weeklyTrendQuery) (*body[timeToCloseResponse], error) {
-	t, err := h.findings.TimeToClose(ctx, caller, int(in.Weeks))
-	if err != nil {
-		return nil, err
-	}
-	return &body[timeToCloseResponse]{Body: timeToCloseResponse{Bands: []closeTimeResponse{
-		newCloseTime("critical", t.Critical), newCloseTime("high", t.High), newCloseTime("medium", t.Medium),
-		newCloseTime("low", t.Low), newCloseTime("unbanded", t.Unbanded),
-	}}}, nil
 }
 
 type weeklyTrendResponse struct {

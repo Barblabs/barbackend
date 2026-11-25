@@ -208,39 +208,3 @@ func TestOpenFindingFactsOfCustomerReadWhatTheDashboardCountsBy(t *testing.T) {
 		t.Errorf("lab facts = %+v, want unbanded, Low and Unknown", l)
 	}
 }
-
-func TestFindingsOfCustomerClosedSinceReadOnlyItsClosedOnes(t *testing.T) {
-	t.Parallel()
-	w := newFindingWorld(t)
-	before := time.Now().Add(-time.Minute)
-	payments, _ := saveMatch(t, w.db, match(t, w.payments, "1.18.0"))
-	saveScore(t, w.db, payments, modelThree(0.75))
-	lab, _ := saveMatch(t, w.db, match(t, w.lab, "1.18.0"))
-	saveScore(t, w.db, lab, modelThree(0.75))
-	otherSource := newSource(t, w.db, newCustomer(t, w.db))
-	syncRecords(t, w.db, otherSource.ID(), w.paymentsRecord(t))
-	theirs, _ := saveMatch(t, w.db, match(t, inventory.SourceReference{Source: otherSource.ID(), RecordID: "1"}, "1.18.0"))
-	saveScore(t, w.db, theirs, modelThree(0.75))
-	inTx(t, w.db, func(tx *postgres.Tx) error {
-		for _, id := range []finding.ID{payments, theirs} {
-			if _, err := tx.CloseFinding(context.Background(), id, finding.NoLongerAffected); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-
-	closed := inTxValue(t, w.db, func(tx *postgres.Tx) ([]postgres.ClosedFinding, error) {
-		return tx.FindingsOfCustomerClosedSince(context.Background(), w.customer, before)
-	})
-	later := inTxValue(t, w.db, func(tx *postgres.Tx) ([]postgres.ClosedFinding, error) {
-		return tx.FindingsOfCustomerClosedSince(context.Background(), w.customer, time.Now().Add(time.Minute))
-	})
-
-	if len(closed) != 1 || closed[0].Score.Model != 3 || closed[0].Score.Value != 0.75 || closed[0].Closed.Before(closed[0].Opened) {
-		t.Errorf("closed = %+v, want the Customer's one closed Finding, Critical", closed)
-	}
-	if len(later) != 0 {
-		t.Errorf("closed after it = %+v, want none", later)
-	}
-}

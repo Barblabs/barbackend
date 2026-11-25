@@ -82,27 +82,3 @@ func TestAttackMatrixOfACustomerWithoutFindingsHasNoCoverage(t *testing.T) {
 		t.Errorf("matrix = %+v, want no coverage, lists and no Techniques", got)
 	}
 }
-
-func TestTimeToCloseOfACustomerWithoutClosesHasEveryBandAndNoDays(t *testing.T) {
-	t.Parallel()
-	e := newEnv(t)
-
-	got := decode[struct {
-		Bands []struct {
-			Band       string   `json:"band"`
-			Closed     int      `json:"closed"`
-			MedianDays *float64 `json:"median_days"`
-		} `json:"bands"`
-	}](t, e.do(httptest.NewRequest(http.MethodGet, "/findings/time-to-close", nil)), http.StatusOK)
-
-	var bands []string
-	for _, b := range got.Bands {
-		bands = append(bands, b.Band)
-		if b.Closed != 0 || b.MedianDays != nil {
-			t.Errorf("band %+v, want nothing closed and no median", b)
-		}
-	}
-	if fmt.Sprint(bands) != "[critical high medium low unbanded]" {
-		t.Errorf("bands = %v, want every Band in order", bands)
-	}
-}

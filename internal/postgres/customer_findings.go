@@ -227,27 +227,6 @@ func (t *Tx) FindingsOfCustomerClosedByHand(ctx context.Context, customer tenanc
 	return out, nil
 }
 
-// ClosedFinding is a closed Finding: when it was last opened and closed,
-// and its latest Score's Model and value, which give its Band.
-type ClosedFinding struct {
-	Opened, Closed time.Time
-	Score          scoring.Score
-}
-
-// FindingsOfCustomerClosedSince is the scored Findings of the Customer's
-// Assets closed from since on, oldest close first.
-func (t *Tx) FindingsOfCustomerClosedSince(ctx context.Context, customer tenancy.CustomerID, since time.Time) ([]ClosedFinding, error) {
-	rows, err := t.q.ListFindingsOfCustomerClosedSince(ctx, sqlcgen.ListFindingsOfCustomerClosedSinceParams{CustomerID: uuid.UUID(customer), Since: &since})
-	if err != nil {
-		return nil, fmt.Errorf("list findings of customer %s closed since %s: %w", customer, since, err)
-	}
-	closed := make([]ClosedFinding, len(rows))
-	for i, row := range rows {
-		closed[i] = ClosedFinding{Opened: row.OpenedAt, Closed: valueOrZero(row.ClosedAt), Score: latestScore(row.Model, row.Value)}
-	}
-	return closed, nil
-}
-
 func latestScore(model int16, value float64) scoring.Score {
 	return scoring.Score{Model: scoring.ModelVersion(model), Value: value}
 }
