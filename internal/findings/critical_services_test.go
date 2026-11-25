@@ -9,7 +9,6 @@ import (
 	"barbackend/internal/business"
 	"barbackend/internal/findings"
 	"barbackend/internal/inventory"
-	"barbackend/internal/stixext"
 	"github.com/google/uuid"
 )
 
@@ -26,8 +25,7 @@ func servicesWorld(t *testing.T) world {
 		server(t, "mail", inventory.CriticalityHigh, app("Nginx", "f5", "nginx", "1.18.0")),
 	)
 	w.handleNVD(t, nvdVulnerability(t, "CVE-2021-23017", "Analyzed", nginxBefore1201), nvdVulnerability(t, opensslCVE, "Analyzed", opensslBefore3))
-	w.exec(t, `UPDATE vulnerabilities SET object = jsonb_set(object, ARRAY['extensions', $1::text], '{"extension_type":"property-extension"}') WHERE cve_id = $2`,
-		string(stixext.KEVDefinitionID), "CVE-2021-23017")
+	w.markKEV(t, "CVE-2021-23017")
 	w.scoreHistory(t, "pay", critical(closesNow.AddDate(0, 0, -40)))
 	w.scoreHistory(t, "hr", critical(closesNow.AddDate(0, 0, -10)))
 	w.scoreHistory(t, "mail", high(closesNow.AddDate(0, 0, -5)))
