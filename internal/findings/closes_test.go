@@ -8,46 +8,9 @@ import (
 
 	"barbackend/internal/finding"
 	"barbackend/internal/findings"
-	"barbackend/internal/inventory"
 	"barbackend/internal/tenancy"
 	"github.com/google/uuid"
 )
-
-var closesNow = time.Date(2026, time.November, 25, 12, 0, 0, 0, time.UTC)
-
-var openedLongAgo = closesNow.AddDate(0, 0, -100)
-
-func nginxWorld(t *testing.T, records ...string) world {
-	t.Helper()
-	w := newWorld(t)
-	servers := make([]inventory.Record, len(records))
-	for i, r := range records {
-		servers[i] = server(t, r, inventory.CriticalityHigh, app("Nginx", "f5", "nginx", "1.18.0"))
-	}
-	w.sync(t, servers...)
-	w.handleNVD(t, nvdVulnerability(t, "CVE-2021-23017", "Analyzed", nginxBefore1201))
-	for _, r := range records {
-		w.setHistory(t, r, openedLongAgo, time.Time{})
-	}
-	w.findings.SetNow(func() time.Time { return closesNow })
-	return w
-}
-
-func (w world) closeAs(t *testing.T, record string, reason finding.CloseReason, opened, closed time.Time) {
-	t.Helper()
-	var closedBy, note, reopenAt any
-	if reason.ByHand() {
-		closedBy = uuid.UUID(w.storedUser(t, record+"@example.com", tenancy.Viewer).ID())
-		note = "why"
-	}
-	if reason.Expires() {
-		reopenAt = closed.AddDate(1, 0, 0)
-	}
-	w.exec(t, `
-		UPDATE findings
-		SET opened_at = $1, closed_at = $2, close_reason_id = $3, closed_by = $4, close_note = $5, reopen_at = $6
-		WHERE record_id = $7`, opened, closed, int16(reason), closedBy, note, reopenAt, record)
-}
 
 func TestClosesCountsEachReasonInItsBucket(t *testing.T) {
 	t.Parallel()
