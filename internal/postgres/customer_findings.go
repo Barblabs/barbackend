@@ -71,6 +71,46 @@ func (t *Tx) FindingWeeksOfCustomer(ctx context.Context, customer tenancy.Custom
 
 const week = 168 * time.Hour
 
+// FindingCloseFact is the latest close of a Finding of a Customer's Assets.
+type FindingCloseFact struct {
+	Reason   finding.CloseReason
+	OpenedAt time.Time
+	ClosedAt time.Time
+	// Score is its latest Score, the zero Score, which has no Band, when it
+	// has none.
+	Score scoring.Score
+}
+
+// FindingCloseFactsOfCustomer is every Finding of the Customer's Assets
+// closed at or after since, oldest close first, read in one query. A
+// reopened Finding is not closed, since a Finding keeps only its latest close.
+func (t *Tx) FindingCloseFactsOfCustomer(ctx context.Context, customer tenancy.CustomerID, since time.Time) ([]FindingCloseFact, error) {
+	rows, err := t.q.ListFindingClosesOfCustomer(ctx, sqlcgen.ListFindingClosesOfCustomerParams{CustomerID: uuid.UUID(customer), Since: since})
+	if err != nil {
+		return nil, fmt.Errorf("list finding closes of customer %s: %w", customer, err)
+	}
+	facts := make([]FindingCloseFact, len(rows))
+	for i, row := range rows {
+		facts[i] = FindingCloseFact{
+			Reason:   finding.CloseReason(row.CloseReasonID),
+			OpenedAt: row.OpenedAt.UTC(),
+			ClosedAt: row.ClosedAt.UTC(),
+			Score:    latestScore(row.Model, row.Value),
+		}
+	}
+	return facts, nil
+}
+
+// FirstOpensOfCustomer is when each Finding of the Customer's Assets first
+// opened at or after since was first opened, oldest first.
+func (t *Tx) FirstOpensOfCustomer(ctx context.Context, customer tenancy.CustomerID, since time.Time) ([]time.Time, error) {
+	opens, err := t.q.ListFindingFirstOpensOfCustomer(ctx, sqlcgen.ListFindingFirstOpensOfCustomerParams{CustomerID: uuid.UUID(customer), Since: since})
+	if err != nil {
+		return nil, fmt.Errorf("list finding first opens of customer %s: %w", customer, err)
+	}
+	return opens, nil
+}
+
 // OpenFindingFact is an open scored Finding of a Customer's Assets with what
 // the dashboard counts it by.
 type OpenFindingFact struct {

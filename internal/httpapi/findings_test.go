@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -41,6 +42,41 @@ func TestWeeklyTrendRefusesMoreThanAYearOfWeeks(t *testing.T) {
 
 	if rec := e.do(httptest.NewRequest(http.MethodGet, "/findings/weekly-trend?weeks=53", nil)); rec.Code != http.StatusBadRequest {
 		t.Errorf("53 weeks = %d %s, want 400", rec.Code, rec.Body)
+	}
+}
+
+func TestClosesOfACustomerWithoutFindingsAreZerosAndNoMedian(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+
+	got := decode[map[string]any](t, e.do(httptest.NewRequest(http.MethodGet, "/findings/closes", nil)), http.StatusOK)
+
+	zeros := map[string]any{"opened": 0.0, "fixed": 0.0, "went_away": 0.0, "set_aside": 0.0}
+	want := map[string]any{"current": zeros, "previous": zeros, "critical_fixed_median_days": nil}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("closes = %v, want %v", got, want)
+	}
+}
+
+func TestClosesAnswersACustomerAdmin(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	req := httptest.NewRequest(http.MethodGet, "/findings/closes?days=7", nil)
+	req.Header.Set("Authorization", e.adminToken(t))
+
+	if rec := e.do(req); rec.Code != http.StatusOK {
+		t.Errorf("closes as a Customer Admin = %d %s, want 200", rec.Code, rec.Body)
+	}
+}
+
+func TestClosesRefusesDaysOutOfRange(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+
+	for _, days := range []string{"0", "366"} {
+		if rec := e.do(httptest.NewRequest(http.MethodGet, "/findings/closes?days="+days, nil)); rec.Code != http.StatusBadRequest {
+			t.Errorf("%s days = %d %s, want 400", days, rec.Code, rec.Body)
+		}
 	}
 }
 
