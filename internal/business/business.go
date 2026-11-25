@@ -132,19 +132,39 @@ func Problems(f Fields) []string {
 // Fields are never nil slices, so an unstated list is an empty JSON array.
 func (c Context) Fields() Fields { return c.fields.clone() }
 
-// ServicesOf is the Critical Services that name the Asset of that name among
-// the Assets that run them. Names match ignoring case and surrounding spaces,
-// since a Critical Service names its Assets as their CMDB Source writes them.
+// ServicesOf is the Critical Services that run on the Asset of that name.
 func (c Context) ServicesOf(asset string) []CriticalService {
-	asset = strings.TrimSpace(asset)
 	var out []CriticalService
 	for _, s := range c.fields.Operations.CriticalServices {
-		if slices.ContainsFunc(s.Assets, func(name string) bool { return strings.EqualFold(strings.TrimSpace(name), asset) }) {
+		if s.RunsOn(asset) {
 			s.Assets = cloned(s.Assets)
 			out = append(out, s)
 		}
 	}
 	return out
+}
+
+// RunsOn is whether s names the Asset of that name among the Assets that run
+// it. Names match ignoring case and surrounding spaces, since a Critical
+// Service names its Assets as their CMDB Source writes them.
+func (s CriticalService) RunsOn(asset string) bool {
+	return slices.ContainsFunc(s.Assets, func(name string) bool { return sameAssetName(name, asset) })
+}
+
+// UnmatchedAssets are the names among s.Assets that match none of assets, as
+// RunsOn matches them.
+func (s CriticalService) UnmatchedAssets(assets []string) []string {
+	out := []string{}
+	for _, name := range s.Assets {
+		if !slices.ContainsFunc(assets, func(asset string) bool { return sameAssetName(name, asset) }) {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+func sameAssetName(a, b string) bool {
+	return strings.EqualFold(strings.TrimSpace(a), strings.TrimSpace(b))
 }
 
 var keyFields = []string{

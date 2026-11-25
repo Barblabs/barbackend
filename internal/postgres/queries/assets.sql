@@ -205,3 +205,11 @@ SET declared_information_classification_id = NULL,
     information_classification_declared_by = NULL,
     information_classification_declared_at = NULL
 WHERE cmdb_source_id = @cmdb_source_id AND record_id = @record_id;
+
+-- The distinct names of a Customer's Active Assets.
+-- name: ListActiveAssetNamesOfCustomer :many
+SELECT DISTINCT x.name
+FROM assets x
+JOIN cmdb_sources s ON s.id = x.cmdb_source_id
+WHERE s.customer_id = @customer_id AND x.inactive_since IS NULL
+ORDER BY x.name;

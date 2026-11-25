@@ -348,3 +348,26 @@ SELECT finding_id, scored_at, model, value
 FROM finding_scores
 WHERE finding_id = ANY(@ids::uuid[])
 ORDER BY finding_id, scored_at DESC;
+
+-- One row per open Finding of a Customer's Active Assets, with its Asset's
+-- name, whether KEV lists its CVE, whether a News Item published at or after
+-- news_since names its CVE, and the Model and value of its latest Score, both
+-- 0 when it has none.
+-- name: ListOpenFindingAssetFactsOfCustomer :many
+SELECT f.id, a.name AS asset_name,
+       ((v.object -> 'extensions' -> @kev_extension_id::text) IS NOT NULL)::boolean AS kev,
+       EXISTS (SELECT 1 FROM news_items n WHERE n.published_at >= @news_since::timestamptz AND f.cve_id = ANY(n.cve_ids))::boolean AS in_the_news,
+       coalesce(s.model, 0)::smallint AS model, coalesce(s.value, 0)::float8 AS value
+FROM findings f
+JOIN cmdb_sources src ON src.id = f.cmdb_source_id
+JOIN assets a ON a.cmdb_source_id = f.cmdb_source_id AND a.record_id = f.record_id
+JOIN vulnerabilities v ON v.cve_id = f.cve_id
+LEFT JOIN LATERAL (
+    SELECT sc.model, sc.value
+    FROM finding_scores sc
+    WHERE sc.finding_id = f.id
+    ORDER BY sc.scored_at DESC
+    LIMIT 1
+) s ON true
+WHERE src.customer_id = @customer_id AND f.closed_at IS NULL AND a.inactive_since IS NULL
+ORDER BY f.id;

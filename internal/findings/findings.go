@@ -2,8 +2,8 @@
 // Vulnerabilities against Software Components with matching, scores the
 // matches with scoring and stores them with postgres. Its Handle functions
 // have the shape of ingest.Feed.Handle, and AfterSync runs after a Sync.
-// WeeklyTrend, Closes and AreaHealth count a Customer's Findings over time for
-// its Users.
+// WeeklyTrend, Closes, AreaHealth and CriticalServiceHealth count a
+// Customer's Findings for its Users.
 package findings
 
 import (

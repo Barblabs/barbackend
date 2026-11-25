@@ -53,6 +53,7 @@ func New(cfg Config) http.Handler {
 	newsDigestHandler{agents: cfg.Agents}.register(api)
 	analistaHandler{agents: cfg.Agents}.register(api)
 	businessContextHandler{contexts: cfg.BusinessContext, agents: cfg.Agents}.register(api)
+	criticalServiceHandler{contexts: cfg.BusinessContext, findings: cfg.Findings}.register(api)
 	customerHandler{users: cfg.Users}.register(api)
 	userHandler{users: cfg.Users}.register(api)
 	meHandler{users: cfg.Users}.register(api)

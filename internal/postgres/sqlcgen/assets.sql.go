@@ -170,6 +170,35 @@ type InsertSoftwareComponentsParams struct {
 	ProductName   *string
 }
 
+const listActiveAssetNamesOfCustomer = `-- name: ListActiveAssetNamesOfCustomer :many
+SELECT DISTINCT x.name
+FROM assets x
+JOIN cmdb_sources s ON s.id = x.cmdb_source_id
+WHERE s.customer_id = $1 AND x.inactive_since IS NULL
+ORDER BY x.name
+`
+
+// The distinct names of a Customer's Active Assets.
+func (q *Queries) ListActiveAssetNamesOfCustomer(ctx context.Context, customerID uuid.UUID) ([]string, error) {
+	rows, err := q.db.Query(ctx, listActiveAssetNamesOfCustomer, customerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		items = append(items, name)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAssets = `-- name: ListAssets :many
 SELECT a.id, a.cmdb_source_id, a.record_id, a.name, a.description, a.kind_id,
        a.hardware_vendor, a.hardware_model, a.criticality_id,
