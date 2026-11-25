@@ -57,8 +57,6 @@ var operations = []struct{ method, path string }{
 	{http.MethodGet, "/assets/findings-summary"},
 	{http.MethodGet, "/findings/weekly-trend"},
 	{http.MethodGet, "/findings/summary"},
-	{http.MethodGet, "/findings/breakdown"},
-	{http.MethodGet, "/findings/top"},
 	{http.MethodGet, "/findings/attack-matrix"},
 	{http.MethodGet, "/findings/time-to-close"},
 	{http.MethodGet, "/findings/closed"},
