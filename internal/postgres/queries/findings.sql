@@ -318,3 +318,33 @@ FROM findings f
 JOIN cmdb_sources src ON src.id = f.cmdb_source_id
 WHERE src.customer_id = @customer_id AND f.first_opened_at >= @since::timestamptz
 ORDER BY f.first_opened_at;
+
+-- One row per Finding of a Customer's Assets open now or closed at or after
+-- since, with the id of its Asset's Area, null when the Asset has none, when
+-- it was first opened and last closed, why, and the Model and value of its
+-- latest Score, both 0 when it has none. A reopened Finding keeps only its
+-- latest close.
+-- name: ListFindingAreaFactsOfCustomer :many
+SELECT f.id, area.id AS area_id, f.first_opened_at, f.closed_at, f.close_reason_id,
+       coalesce(s.model, 0)::smallint AS model, coalesce(s.value, 0)::float8 AS value
+FROM findings f
+JOIN cmdb_sources src ON src.id = f.cmdb_source_id
+JOIN assets a ON a.cmdb_source_id = f.cmdb_source_id AND a.record_id = f.record_id
+LEFT JOIN customer_areas area ON area.cmdb_source_id = a.cmdb_source_id AND area.record_id = a.area_record_id
+LEFT JOIN LATERAL (
+    SELECT sc.model, sc.value
+    FROM finding_scores sc
+    WHERE sc.finding_id = f.id
+    ORDER BY sc.scored_at DESC
+    LIMIT 1
+) s ON true
+WHERE src.customer_id = @customer_id
+  AND (f.closed_at IS NULL OR f.closed_at >= @since::timestamptz)
+ORDER BY f.id;
+
+-- Every Score of the Findings with ids, newest first within each Finding.
+-- name: ListFindingScoresOf :many
+SELECT finding_id, scored_at, model, value
+FROM finding_scores
+WHERE finding_id = ANY(@ids::uuid[])
+ORDER BY finding_id, scored_at DESC;

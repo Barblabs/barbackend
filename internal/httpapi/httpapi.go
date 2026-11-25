@@ -48,7 +48,7 @@ func New(cfg Config) http.Handler {
 	cmdbSourceHandler{cmdb: cfg.CMDB}.register(api)
 	assetHandler{assets: cfg.Assets}.register(api)
 	findingHandler{findings: cfg.Findings}.register(api)
-	areaHandler{areas: cfg.Areas}.register(api)
+	areaHandler{areas: cfg.Areas, findings: cfg.Findings}.register(api)
 	prioritizationHandler{agents: cfg.Agents}.register(api)
 	newsDigestHandler{agents: cfg.Agents}.register(api)
 	analistaHandler{agents: cfg.Agents}.register(api)
