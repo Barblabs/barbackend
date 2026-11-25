@@ -512,6 +512,99 @@ func (q *Queries) ListActiveComponentsWithProducts(ctx context.Context, arg List
 	return items, nil
 }
 
+const listFindingClosesOfCustomer = `-- name: ListFindingClosesOfCustomer :many
+SELECT f.close_reason_id::smallint AS close_reason_id, f.opened_at, f.closed_at::timestamptz AS closed_at,
+       coalesce(s.model, 0)::smallint AS model, coalesce(s.value, 0)::float8 AS value
+FROM findings f
+JOIN cmdb_sources src ON src.id = f.cmdb_source_id
+LEFT JOIN LATERAL (
+    SELECT sc.model, sc.value
+    FROM finding_scores sc
+    WHERE sc.finding_id = f.id
+    ORDER BY sc.scored_at DESC
+    LIMIT 1
+) s ON true
+WHERE src.customer_id = $1 AND f.closed_at >= $2::timestamptz
+ORDER BY f.closed_at
+`
+
+type ListFindingClosesOfCustomerParams struct {
+	CustomerID uuid.UUID
+	Since      time.Time
+}
+
+type ListFindingClosesOfCustomerRow struct {
+	CloseReasonID int16
+	OpenedAt      time.Time
+	ClosedAt      time.Time
+	Model         int16
+	Value         float64
+}
+
+// One row per Finding of a Customer's Assets closed at or after since, with
+// why, when it last opened and the Model and value of its latest Score, both
+// 0 when it has none. A reopened Finding keeps only its latest close.
+func (q *Queries) ListFindingClosesOfCustomer(ctx context.Context, arg ListFindingClosesOfCustomerParams) ([]ListFindingClosesOfCustomerRow, error) {
+	rows, err := q.db.Query(ctx, listFindingClosesOfCustomer, arg.CustomerID, arg.Since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListFindingClosesOfCustomerRow
+	for rows.Next() {
+		var i ListFindingClosesOfCustomerRow
+		if err := rows.Scan(
+			&i.CloseReasonID,
+			&i.OpenedAt,
+			&i.ClosedAt,
+			&i.Model,
+			&i.Value,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listFindingFirstOpensOfCustomer = `-- name: ListFindingFirstOpensOfCustomer :many
+SELECT f.first_opened_at
+FROM findings f
+JOIN cmdb_sources src ON src.id = f.cmdb_source_id
+WHERE src.customer_id = $1 AND f.first_opened_at >= $2::timestamptz
+ORDER BY f.first_opened_at
+`
+
+type ListFindingFirstOpensOfCustomerParams struct {
+	CustomerID uuid.UUID
+	Since      time.Time
+}
+
+// When each Finding of a Customer's Assets first opened at or after since
+// was first opened.
+func (q *Queries) ListFindingFirstOpensOfCustomer(ctx context.Context, arg ListFindingFirstOpensOfCustomerParams) ([]time.Time, error) {
+	rows, err := q.db.Query(ctx, listFindingFirstOpensOfCustomer, arg.CustomerID, arg.Since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []time.Time
+	for rows.Next() {
+		var first_opened_at time.Time
+		if err := rows.Scan(&first_opened_at); err != nil {
+			return nil, err
+		}
+		items = append(items, first_opened_at)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listFindingsOfCustomerClosedByHand = `-- name: ListFindingsOfCustomerClosedByHand :many
 SELECT f.id, f.cve_id, a.id AS asset_id, a.name AS asset_name,
        f.product_vendor, f.product_name, f.component_name, f.component_version,

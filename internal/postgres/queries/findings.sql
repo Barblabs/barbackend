@@ -291,3 +291,30 @@ JOIN LATERAL (
 ) s ON true
 WHERE src.customer_id = @customer_id AND f.closed_at IS NULL
 ORDER BY f.id;
+
+-- One row per Finding of a Customer's Assets closed at or after since, with
+-- why, when it last opened and the Model and value of its latest Score, both
+-- 0 when it has none. A reopened Finding keeps only its latest close.
+-- name: ListFindingClosesOfCustomer :many
+SELECT f.close_reason_id::smallint AS close_reason_id, f.opened_at, f.closed_at::timestamptz AS closed_at,
+       coalesce(s.model, 0)::smallint AS model, coalesce(s.value, 0)::float8 AS value
+FROM findings f
+JOIN cmdb_sources src ON src.id = f.cmdb_source_id
+LEFT JOIN LATERAL (
+    SELECT sc.model, sc.value
+    FROM finding_scores sc
+    WHERE sc.finding_id = f.id
+    ORDER BY sc.scored_at DESC
+    LIMIT 1
+) s ON true
+WHERE src.customer_id = @customer_id AND f.closed_at >= @since::timestamptz
+ORDER BY f.closed_at;
+
+-- When each Finding of a Customer's Assets first opened at or after since
+-- was first opened.
+-- name: ListFindingFirstOpensOfCustomer :many
+SELECT f.first_opened_at
+FROM findings f
+JOIN cmdb_sources src ON src.id = f.cmdb_source_id
+WHERE src.customer_id = @customer_id AND f.first_opened_at >= @since::timestamptz
+ORDER BY f.first_opened_at;
