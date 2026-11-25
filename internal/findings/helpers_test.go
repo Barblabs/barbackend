@@ -259,9 +259,15 @@ func countedWorld(t *testing.T) world {
 	w.setScore(t, "a", "CVE-2021-23017", 0.75)
 	w.setScore(t, "a", opensslCVE, 0.25)
 	w.setScore(t, "b", "CVE-2021-23017", 0.45)
-	w.exec(t, `UPDATE vulnerabilities SET object = jsonb_set(object, ARRAY['extensions', $1::text], '{"extension_type":"property-extension"}') WHERE cve_id = $2`,
-		string(stixext.KEVDefinitionID), "CVE-2021-23017")
+	w.markKEV(t, "CVE-2021-23017")
 	return w
+}
+
+// markKEV makes CISA KEV list cve.
+func (w world) markKEV(t *testing.T, cve string) {
+	t.Helper()
+	w.exec(t, `UPDATE vulnerabilities SET object = jsonb_set(object, ARRAY['extensions', $1::text], '{"extension_type":"property-extension"}') WHERE cve_id = $2`,
+		string(stixext.KEVDefinitionID), cve)
 }
 
 // setScore makes every Score of the record's Finding of cve one of Scoring
