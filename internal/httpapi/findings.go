@@ -38,6 +38,14 @@ func (h findingHandler) register(api huma.API) {
 		Description: "The Cartógrafo labels a CVE with up to 5 ATT&CK Techniques, each exploiting it, its primary impact or a secondary impact; a Finding has the labels of its CVE. These labels are inferred by a model and must be shown as such. Every tactic of the stored catalog is there, in attack order; a Finding counts once in each tactic and each Technique it has, so the tactics do not add up to the Findings: coverage tells how many Findings have a labeled CVE. With role, only the labels of that role count, but coverage does not change. A Finding not scored yet is left out.",
 		Errors:      []int{http.StatusBadRequest},
 	}, h.attackMatrix)
+	register(api, huma.Operation{
+		OperationID: "get-findings-closes",
+		Method:      http.MethodGet,
+		Path:        "/findings/closes",
+		Summary:     "Count the Customer's Findings closed as Fixed, Went away and Set aside",
+		Description: "For the last days days ending now, and for the days days before that: Findings first opened, so a reopen is not new, and Findings closed by bucket. fixed is remediated, component_removed and no_longer_affected; went_away is asset_inactive, vulnerability_rejected and vulnerability_revised; set_aside is accepted_risk, postponed and false_positive. The buckets are never added together. A Finding closed and then reopened keeps no record of that close, so it is not counted as closed.",
+		Errors:      []int{http.StatusBadRequest},
+	}, h.closes)
 	h.registerCloses(api)
 }
 
@@ -49,6 +57,43 @@ type trendWeeks int
 
 func (trendWeeks) Schema(huma.Registry) *huma.Schema {
 	return &huma.Schema{Type: huma.TypeInteger, Minimum: ptr(1.0), Maximum: ptr(float64(findings.MaxTrendWeeks)), Default: findings.DefaultTrendWeeks}
+}
+
+type closesQuery struct {
+	Days closesDays `query:"days" doc:"How many days each window lasts"`
+}
+
+type closesDays int
+
+func (closesDays) Schema(huma.Registry) *huma.Schema {
+	return &huma.Schema{Type: huma.TypeInteger, Minimum: ptr(1.0), Maximum: ptr(float64(findings.MaxClosesDays)), Default: findings.DefaultClosesDays}
+}
+
+type closesResponse struct {
+	Current                 closeCountsResponse `json:"current" doc:"The last days days, ending now"`
+	Previous                closeCountsResponse `json:"previous" doc:"The days days before current"`
+	CriticalFixedMedianDays *float64            `json:"critical_fixed_median_days" doc:"Median days from opening to closing of the Fixed Findings of current whose latest Score is Critical; null when there are none"`
+}
+
+type closeCountsResponse struct {
+	Opened   int `json:"opened" doc:"Findings first opened"`
+	Fixed    int `json:"fixed"`
+	WentAway int `json:"went_away"`
+	SetAside int `json:"set_aside"`
+}
+
+func newCloseCounts(c findings.CloseCounts) closeCountsResponse {
+	return closeCountsResponse{Opened: c.Opened, Fixed: c.Fixed, WentAway: c.WentAway, SetAside: c.SetAside}
+}
+
+func (h findingHandler) closes(ctx context.Context, caller tenancy.User, in *closesQuery) (*body[closesResponse], error) {
+	c, err := h.findings.Closes(ctx, caller, int(in.Days))
+	if err != nil {
+		return nil, err
+	}
+	return &body[closesResponse]{Body: closesResponse{
+		Current: newCloseCounts(c.Current), Previous: newCloseCounts(c.Previous), CriticalFixedMedianDays: c.CriticalFixedMedianDays,
+	}}, nil
 }
 
 type bandCountsResponse struct {
