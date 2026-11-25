@@ -28,29 +28,6 @@ func (w world) inArea(t *testing.T, name string, records ...string) int64 {
 	return id
 }
 
-type timedScore struct {
-	model int
-	value float64
-	at    time.Time
-}
-
-// scoreHistory makes scores the only Scores of the record's only Finding.
-func (w world) scoreHistory(t *testing.T, record string, scores ...timedScore) {
-	t.Helper()
-	w.exec(t, `DELETE FROM finding_score_data_gaps WHERE finding_id = (SELECT id FROM findings WHERE record_id = $1)`, record)
-	w.exec(t, `DELETE FROM finding_scores WHERE finding_id = (SELECT id FROM findings WHERE record_id = $1)`, record)
-	for _, s := range scores {
-		w.exec(t, `
-			INSERT INTO finding_scores (finding_id, scored_at, model, value, alpha, beta, gamma, vulnerability,
-			                            criticality_multiplier, exposure_multiplier, lifecycle_multiplier)
-			SELECT id, $2, $3, $4, 0.5, 0.5, 0.5, 0.5, 1, 1, 1 FROM findings WHERE record_id = $1`,
-			record, s.at, s.model, s.value)
-	}
-}
-
-func critical(at time.Time) timedScore { return timedScore{model: 3, value: 0.9, at: at} }
-func high(at time.Time) timedScore     { return timedScore{model: 3, value: 0.5, at: at} }
-
 func (w world) areaHealth(t *testing.T, caller tenancy.User) []findings.AreaHealth {
 	t.Helper()
 	got, err := w.findings.AreaHealth(context.Background(), caller)

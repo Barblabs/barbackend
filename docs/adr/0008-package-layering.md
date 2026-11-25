@@ -15,7 +15,7 @@ internal/
   agents/              use case on the Agents      -> alert, assessment, business, claude, inventory, news, postgres, tenancy
   businesscontext/     use cases on the Business Context -> business, postgres, tenancy
   newsitems/           use case storing News Items -> news, postgres, stixext
-  findings/            use cases turning Feeds and Syncs into Findings, and counting them -> finding, inventory, matching, postgres, scoring, stixext, tenancy
+  findings/            use cases turning Feeds and Syncs into Findings, and counting them -> business, finding, inventory, matching, postgres, scoring, stixext, tenancy
   slack/               use cases on Slack          -> alert, encryption, postgres, tenancy
   advisories/          use case linking Advisories to Vulnerabilities -> postgres, stixext
   techniques/          use case keeping the ATT&CK catalog -> postgres

@@ -289,6 +289,7 @@ linters:
           files:
             - "**/internal/findings/**"
           allow:
+            - barbackend/internal/business
             - barbackend/internal/finding
             - barbackend/internal/findings
             - barbackend/internal/inventory
@@ -298,8 +299,10 @@ linters:
             - barbackend/internal/stixext
             - barbackend/internal/tenancy
           deny:
+            - pkg: barbackend/internal/businesscontext
+              desc: the findings use case reads the Business Context's types through business, never through another use case (ADR 0008)
             - pkg: barbackend/internal
-              desc: the findings use case calls only finding, inventory, matching, postgres, scoring, stixext and tenancy (ADR 0008, ADR 0020)
+              desc: the findings use case calls only business, finding, inventory, matching, postgres, scoring, stixext and tenancy (ADR 0008, ADR 0020)
         news:
           list-mode: lax
           files:

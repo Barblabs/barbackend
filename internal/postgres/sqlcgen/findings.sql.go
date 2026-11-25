@@ -777,6 +777,72 @@ func (q *Queries) ListFindingsOfCustomerClosedByHand(ctx context.Context, custom
 	return items, nil
 }
 
+const listOpenFindingAssetFactsOfCustomer = `-- name: ListOpenFindingAssetFactsOfCustomer :many
+SELECT f.id, a.name AS asset_name,
+       ((v.object -> 'extensions' -> $1::text) IS NOT NULL)::boolean AS kev,
+       EXISTS (SELECT 1 FROM news_items n WHERE n.published_at >= $2::timestamptz AND f.cve_id = ANY(n.cve_ids))::boolean AS in_the_news,
+       coalesce(s.model, 0)::smallint AS model, coalesce(s.value, 0)::float8 AS value
+FROM findings f
+JOIN cmdb_sources src ON src.id = f.cmdb_source_id
+JOIN assets a ON a.cmdb_source_id = f.cmdb_source_id AND a.record_id = f.record_id
+JOIN vulnerabilities v ON v.cve_id = f.cve_id
+LEFT JOIN LATERAL (
+    SELECT sc.model, sc.value
+    FROM finding_scores sc
+    WHERE sc.finding_id = f.id
+    ORDER BY sc.scored_at DESC
+    LIMIT 1
+) s ON true
+WHERE src.customer_id = $3 AND f.closed_at IS NULL AND a.inactive_since IS NULL
+ORDER BY f.id
+`
+
+type ListOpenFindingAssetFactsOfCustomerParams struct {
+	KevExtensionID string
+	NewsSince      time.Time
+	CustomerID     uuid.UUID
+}
+
+type ListOpenFindingAssetFactsOfCustomerRow struct {
+	ID        uuid.UUID
+	AssetName string
+	Kev       bool
+	InTheNews bool
+	Model     int16
+	Value     float64
+}
+
+// One row per open Finding of a Customer's Active Assets, with its Asset's
+// name, whether KEV lists its CVE, whether a News Item published at or after
+// news_since names its CVE, and the Model and value of its latest Score, both
+// 0 when it has none.
+func (q *Queries) ListOpenFindingAssetFactsOfCustomer(ctx context.Context, arg ListOpenFindingAssetFactsOfCustomerParams) ([]ListOpenFindingAssetFactsOfCustomerRow, error) {
+	rows, err := q.db.Query(ctx, listOpenFindingAssetFactsOfCustomer, arg.KevExtensionID, arg.NewsSince, arg.CustomerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOpenFindingAssetFactsOfCustomerRow
+	for rows.Next() {
+		var i ListOpenFindingAssetFactsOfCustomerRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AssetName,
+			&i.Kev,
+			&i.InTheNews,
+			&i.Model,
+			&i.Value,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOpenFindingFactsOfCustomer = `-- name: ListOpenFindingFactsOfCustomer :many
 SELECT coalesce(a.declared_exposure_id, a.imported_exposure_id) AS exposure_id,
        f.cve_id,
