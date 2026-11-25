@@ -117,7 +117,7 @@ _Avoid_: Countermeasure, course of action (that is its STIX type), remediation (
 ### Risk
 
 **Finding**:
-The fact that one Vulnerability affects one Product installed on one Asset. It is open until it is remediated or no longer applies, then closed with a reason, and reopened if it applies again; it is never deleted. It closes on its own when a Sync or NVD shows it no longer applies, or by a Manual Close. Only open Findings are scored.
+The fact that one Vulnerability affects one Product installed on one Asset. It is open until it is remediated or no longer applies, then closed with a reason, and reopened if it applies again; it is never deleted. It closes on its own when a Sync shows its component's version no longer matches (no longer affected), or the component or the Asset is gone, when NVD revises the Vulnerability's entries so they no longer match (vulnerability revised, which no one fixed) or rejects it, or by a Manual Close (ADR 0038). Only open Findings are scored.
 _Avoid_: Hallazgo, issue, vulnerability instance, alert
 
 **Manual Close**:
