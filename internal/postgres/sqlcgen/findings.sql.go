@@ -906,6 +906,59 @@ func (q *Queries) ListOpenFindingFactsOfCustomer(ctx context.Context, arg ListOp
 	return items, nil
 }
 
+const listOpenFindingScoresOfCustomerByWeek = `-- name: ListOpenFindingScoresOfCustomerByWeek :many
+SELECT w.start::timestamptz AS week, s.model, s.value
+FROM generate_series($1::timestamptz, $2::timestamptz, interval '168 hours') AS w(start)
+JOIN findings f ON f.first_opened_at < w.start + interval '168 hours'
+    AND (f.closed_at IS NULL OR f.closed_at >= w.start + interval '168 hours')
+JOIN cmdb_sources src ON src.id = f.cmdb_source_id
+JOIN LATERAL (
+    SELECT sc.model, sc.value
+    FROM finding_scores sc
+    WHERE sc.finding_id = f.id AND sc.scored_at <= w.start + interval '168 hours'
+    ORDER BY sc.scored_at DESC
+    LIMIT 1
+) s ON true
+WHERE src.customer_id = $3
+ORDER BY w.start
+`
+
+type ListOpenFindingScoresOfCustomerByWeekParams struct {
+	Since      time.Time
+	LastStart  time.Time
+	CustomerID uuid.UUID
+}
+
+type ListOpenFindingScoresOfCustomerByWeekRow struct {
+	Week  time.Time
+	Model int16
+	Value float64
+}
+
+// One row per week from since to last_start and per Finding of a Customer's
+// Assets open when that week ended, as CountFindingsOfCustomerByWeek counts
+// it, with the Model and value of its latest Score scored by then. A Finding
+// with no Score by then has no row.
+func (q *Queries) ListOpenFindingScoresOfCustomerByWeek(ctx context.Context, arg ListOpenFindingScoresOfCustomerByWeekParams) ([]ListOpenFindingScoresOfCustomerByWeekRow, error) {
+	rows, err := q.db.Query(ctx, listOpenFindingScoresOfCustomerByWeek, arg.Since, arg.LastStart, arg.CustomerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOpenFindingScoresOfCustomerByWeekRow
+	for rows.Next() {
+		var i ListOpenFindingScoresOfCustomerByWeekRow
+		if err := rows.Scan(&i.Week, &i.Model, &i.Value); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOpenFindingsOfAsset = `-- name: ListOpenFindingsOfAsset :many
 SELECT f.id, f.cmdb_source_id, f.record_id, f.product_vendor, f.product_name, f.cve_id,
        f.component_name, f.component_version, a.criticality_id,

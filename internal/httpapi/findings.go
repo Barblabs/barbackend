@@ -20,7 +20,7 @@ func (h findingHandler) register(api huma.API) {
 		Method:      http.MethodGet,
 		Path:        "/findings/weekly-trend",
 		Summary:     "Count the Customer's Findings opened and closed each week",
-		Description: "One entry per ISO week, in UTC, oldest first and the current week last, with zeros for weeks where nothing happened. opened counts Findings first opened that week; closed counts Findings closed that week; open_at_end counts those still open when it ended. A Finding closed and then reopened keeps no record of that close, so it is not counted as closed, and counts as open while it was closed.",
+		Description: "One entry per ISO week, in UTC, oldest first and the current week last, with zeros for weeks where nothing happened. opened counts Findings first opened that week; closed counts Findings closed that week; open_at_end counts those still open when it ended; critical_open_at_end counts those of them whose latest Score by then was in the Critical Band, so for the current week it is critical of /findings/summary. A Finding closed and then reopened keeps no record of that close, so it is not counted as closed, and counts as open while it was closed.",
 		Errors:      []int{http.StatusBadRequest},
 	}, h.weeklyTrend)
 	register(api, huma.Operation{
@@ -190,6 +190,7 @@ type weekResponse struct {
 	Opened   int    `json:"opened"`
 	Closed   int    `json:"closed"`
 	OpenAt   int    `json:"open_at_end" doc:"Findings open when the week ended, or open now for the current week: the backlog"`
+	Critical int    `json:"critical_open_at_end" doc:"Findings open when the week ended whose latest Score by then was Critical, or open and Critical now for the current week"`
 }
 
 func (h findingHandler) weeklyTrend(ctx context.Context, caller tenancy.User, in *weeklyTrendQuery) (*body[weeklyTrendResponse], error) {
@@ -200,7 +201,7 @@ func (h findingHandler) weeklyTrend(ctx context.Context, caller tenancy.User, in
 	resp := weeklyTrendResponse{Weeks: make([]weekResponse, len(weeks))}
 	for i, w := range weeks {
 		year, week := w.Start.ISOWeek()
-		resp.Weeks[i] = weekResponse{Week: fmt.Sprintf("%d-W%02d", year, week), StartsOn: w.Start.Format("2006-01-02"), Opened: w.Opened, Closed: w.Closed, OpenAt: w.OpenAtEnd}
+		resp.Weeks[i] = weekResponse{Week: fmt.Sprintf("%d-W%02d", year, week), StartsOn: w.Start.Format("2006-01-02"), Opened: w.Opened, Closed: w.Closed, OpenAt: w.OpenAtEnd, Critical: w.CriticalOpenAtEnd}
 	}
 	return &body[weeklyTrendResponse]{Body: resp}, nil
 }
