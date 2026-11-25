@@ -113,21 +113,6 @@ func (s *Service) List(ctx context.Context, caller tenancy.User, q Query) (Page,
 	return result, nil
 }
 
-type FindingBands = postgres.AssetFindingBands
-
-// FindingsSummary counts the open Findings of each of the Customer's Assets
-// that has a scored one by the Score Band of their latest Score, ordered as
-// List orders Assets.
-func (s *Service) FindingsSummary(ctx context.Context, caller tenancy.User) ([]FindingBands, error) {
-	customer, err := caller.ActsFor()
-	if err != nil {
-		return nil, err
-	}
-	return postgres.InTxValue(ctx, s.db, func(tx *postgres.Tx) ([]FindingBands, error) {
-		return tx.FindingBandsByAssetOfCustomer(ctx, customer)
-	})
-}
-
 // canonicalFilters is the form of f a cursor carries. encoding/json sorts map
 // keys, so equal filters give equal strings.
 func canonicalFilters(f Filter) (string, error) {

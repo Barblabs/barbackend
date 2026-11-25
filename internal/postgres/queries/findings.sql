@@ -269,42 +269,18 @@ SELECT w.start::timestamptz AS week,
 FROM generate_series(@since::timestamptz, @last_start::timestamptz, interval '168 hours') AS w(start)
 ORDER BY w.start;
 
--- The latest Score of every open Finding of a Customer's Assets, with its
--- Asset, for counting them by Score Band. A Finding not scored yet is left
--- out, as in ListOpenFindingsOfCustomer. Ordered as Assets are listed.
--- name: ListOpenFindingScoresByAssetOfCustomer :many
-SELECT a.id AS asset_id, a.name AS asset_name, s.model, s.value
-FROM findings f
-JOIN cmdb_sources src ON src.id = f.cmdb_source_id
-JOIN assets a ON a.cmdb_source_id = f.cmdb_source_id AND a.record_id = f.record_id
-JOIN LATERAL (
-    SELECT sc.model, sc.value
-    FROM finding_scores sc
-    WHERE sc.finding_id = f.id
-    ORDER BY sc.scored_at DESC
-    LIMIT 1
-) s ON true
-WHERE src.customer_id = @customer_id AND f.closed_at IS NULL
-ORDER BY a.name, a.cmdb_source_id, a.record_id;
-
 -- One row per open scored Finding of a Customer's Assets with what the
--- dashboard counts it by: its Asset's Criticality, effective Exposure and
--- Area, its Product and version, its CVE, whether KEV lists it and its EPSS
--- probability, and its latest Score. The extension ids are the kev/1 and
--- epss/1 extension definitions (ADR 0010).
+-- dashboard counts it by: its Asset's effective Exposure, its CVE, whether
+-- KEV lists it, and its latest Score. The extension id is the kev/1
+-- extension definition (ADR 0010).
 -- name: ListOpenFindingFactsOfCustomer :many
-SELECT f.id, a.id AS asset_id, a.criticality_id,
-       coalesce(a.declared_exposure_id, a.imported_exposure_id) AS exposure_id,
-       ar.id AS area_id, ar.name AS area_name,
-       f.product_vendor, f.product_name, f.component_version, f.cve_id,
+SELECT coalesce(a.declared_exposure_id, a.imported_exposure_id) AS exposure_id,
+       f.cve_id,
        ((v.object -> 'extensions' -> @kev_extension_id::text) IS NOT NULL)::boolean AS kev,
-       CASE WHEN v.object -> 'extensions' ? @epss_extension_id::text
-            THEN (v.object -> 'extensions' -> @epss_extension_id::text ->> 'probability')::double precision END AS epss,
        s.model, s.value
 FROM findings f
 JOIN cmdb_sources src ON src.id = f.cmdb_source_id
 JOIN assets a ON a.cmdb_source_id = f.cmdb_source_id AND a.record_id = f.record_id
-LEFT JOIN customer_areas ar ON ar.cmdb_source_id = a.cmdb_source_id AND ar.record_id = a.area_record_id
 JOIN vulnerabilities v ON v.cve_id = f.cve_id
 JOIN LATERAL (
     SELECT sc.model, sc.value
@@ -315,20 +291,3 @@ JOIN LATERAL (
 ) s ON true
 WHERE src.customer_id = @customer_id AND f.closed_at IS NULL
 ORDER BY f.id;
-
--- The Findings of a Customer's Assets closed from since on, with when they
--- were last opened and their latest Score, for how long closing them took. A
--- Finding not scored is left out.
--- name: ListFindingsOfCustomerClosedSince :many
-SELECT f.opened_at, f.closed_at, s.model, s.value
-FROM findings f
-JOIN cmdb_sources src ON src.id = f.cmdb_source_id
-JOIN LATERAL (
-    SELECT sc.model, sc.value
-    FROM finding_scores sc
-    WHERE sc.finding_id = f.id
-    ORDER BY sc.scored_at DESC
-    LIMIT 1
-) s ON true
-WHERE src.customer_id = @customer_id AND f.closed_at >= @since
-ORDER BY f.closed_at;

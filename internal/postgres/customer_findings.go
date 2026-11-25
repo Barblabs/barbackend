@@ -71,88 +71,35 @@ func (t *Tx) FindingWeeksOfCustomer(ctx context.Context, customer tenancy.Custom
 
 const week = 168 * time.Hour
 
-// AssetFindingBands counts an Asset's open Findings by the Score Band of
-// their latest Score.
-type AssetFindingBands struct {
-	// AssetID is the Asset's handle, as StoredAsset.ID.
-	AssetID   int64
-	AssetName string
-	scoring.BandCounts
-}
-
-// FindingBandsByAssetOfCustomer is, for every Asset of the Customer with an
-// open scored Finding, how many it has in each Score Band, ordered as Assets
-// are listed. A Finding not scored yet is left out.
-func (t *Tx) FindingBandsByAssetOfCustomer(ctx context.Context, customer tenancy.CustomerID) ([]AssetFindingBands, error) {
-	rows, err := t.q.ListOpenFindingScoresByAssetOfCustomer(ctx, uuid.UUID(customer))
-	if err != nil {
-		return nil, fmt.Errorf("list open finding scores of customer %s: %w", customer, err)
-	}
-	var assets []AssetFindingBands
-	for _, row := range rows {
-		if len(assets) == 0 || assets[len(assets)-1].AssetID != row.AssetID {
-			assets = append(assets, AssetFindingBands{AssetID: row.AssetID, AssetName: row.AssetName})
-		}
-		assets[len(assets)-1].Add(latestScore(row.Model, row.Value))
-	}
-	return assets, nil
-}
-
 // OpenFindingFact is an open scored Finding of a Customer's Assets with what
 // the dashboard counts it by.
 type OpenFindingFact struct {
-	ID          finding.ID
-	AssetID     int64
-	Criticality inventory.Criticality
 	// Exposure is the Asset's effective Exposure: declared, else imported.
 	Exposure inventory.Exposure
-	// Area is nil for an Asset in no Area.
-	Area    *AreaRef
-	Product inventory.Product
-	Version string
-	CVE     string
-	KEV     bool
-	EPSS    *float64
+	CVE      string
+	KEV      bool
 	// Score is the latest Score's Model and value, which give its Band.
 	Score scoring.Score
 }
 
-// AreaRef names an Area by its handle, as in GET /areas.
-type AreaRef struct {
-	ID   int64
-	Name string
-}
-
 // OpenFindingFactsOfCustomer is every open scored Finding of the Customer's
-// Assets, read in one query. kevExtension and epssExtension are the ids of
-// the kev/1 and epss/1 extension definitions.
-func (t *Tx) OpenFindingFactsOfCustomer(ctx context.Context, customer tenancy.CustomerID, kevExtension, epssExtension string) ([]OpenFindingFact, error) {
+// Assets, read in one query. kevExtension is the id of the kev/1 extension
+// definition.
+func (t *Tx) OpenFindingFactsOfCustomer(ctx context.Context, customer tenancy.CustomerID, kevExtension string) ([]OpenFindingFact, error) {
 	rows, err := t.q.ListOpenFindingFactsOfCustomer(ctx, sqlcgen.ListOpenFindingFactsOfCustomerParams{
-		KevExtensionID: kevExtension, EpssExtensionID: epssExtension, CustomerID: uuid.UUID(customer),
+		KevExtensionID: kevExtension, CustomerID: uuid.UUID(customer),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list open finding facts of customer %s: %w", customer, err)
 	}
 	facts := make([]OpenFindingFact, len(rows))
 	for i, row := range rows {
-		f := OpenFindingFact{
-			ID:          finding.ID(row.ID),
-			AssetID:     row.AssetID,
-			Criticality: inventory.Criticality(valueOrZero(row.CriticalityID)),
-			Exposure:    inventory.Exposure(valueOrZero(row.ExposureID)),
-			Product:     inventory.Product{Vendor: row.ProductVendor, Name: row.ProductName},
-			Version:     row.ComponentVersion,
-			CVE:         row.CveID,
-			KEV:         row.Kev,
-			Score:       latestScore(row.Model, row.Value),
+		facts[i] = OpenFindingFact{
+			Exposure: inventory.Exposure(valueOrZero(row.ExposureID)),
+			CVE:      row.CveID,
+			KEV:      row.Kev,
+			Score:    latestScore(row.Model, row.Value),
 		}
-		if row.AreaID != nil {
-			f.Area = &AreaRef{ID: *row.AreaID, Name: valueOrZero(row.AreaName)}
-		}
-		if p, ok := row.Epss.(float64); ok {
-			f.EPSS = &p
-		}
-		facts[i] = f
 	}
 	return facts, nil
 }
@@ -225,27 +172,6 @@ func (t *Tx) FindingsOfCustomerClosedByHand(ctx context.Context, customer tenanc
 		}
 	}
 	return out, nil
-}
-
-// ClosedFinding is a closed Finding: when it was last opened and closed,
-// and its latest Score's Model and value, which give its Band.
-type ClosedFinding struct {
-	Opened, Closed time.Time
-	Score          scoring.Score
-}
-
-// FindingsOfCustomerClosedSince is the scored Findings of the Customer's
-// Assets closed from since on, oldest close first.
-func (t *Tx) FindingsOfCustomerClosedSince(ctx context.Context, customer tenancy.CustomerID, since time.Time) ([]ClosedFinding, error) {
-	rows, err := t.q.ListFindingsOfCustomerClosedSince(ctx, sqlcgen.ListFindingsOfCustomerClosedSinceParams{CustomerID: uuid.UUID(customer), Since: &since})
-	if err != nil {
-		return nil, fmt.Errorf("list findings of customer %s closed since %s: %w", customer, since, err)
-	}
-	closed := make([]ClosedFinding, len(rows))
-	for i, row := range rows {
-		closed[i] = ClosedFinding{Opened: row.OpenedAt, Closed: valueOrZero(row.ClosedAt), Score: latestScore(row.Model, row.Value)}
-	}
-	return closed, nil
 }
 
 func latestScore(model int16, value float64) scoring.Score {
