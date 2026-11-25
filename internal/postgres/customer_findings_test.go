@@ -10,7 +10,6 @@ import (
 
 	"barbackend/internal/finding"
 	"barbackend/internal/inventory"
-	"barbackend/internal/matching"
 	"barbackend/internal/postgres"
 	"barbackend/internal/scoring"
 	"barbackend/internal/stixext"
@@ -110,41 +109,6 @@ func TestFindingWeeksOfCustomerCountOnlyItsOwnFindings(t *testing.T) {
 	}
 	if weeks[0].Opened != 0 || weeks[0].OpenAtEnd != 0 || weeks[1].Opened != 1 || weeks[1].Closed != 0 || weeks[1].OpenAtEnd != 1 {
 		t.Errorf("weeks = %+v, want the Customer's one Finding opened and open in the last week only", weeks)
-	}
-}
-
-func TestFindingBandsByAssetOfCustomerCountTheLatestScoreOfOpenFindings(t *testing.T) {
-	t.Parallel()
-	w := newFindingWorld(t)
-	paymentsNginx, _ := saveMatch(t, w.db, match(t, w.payments, "1.18.0"))
-	saveScore(t, w.db, paymentsNginx, modelThree(0.75))
-	storeVulnerability(t, w.db, "CVE-2024-0001", time.Now(), vulnerabilityObject("CVE-2024-0001", "Analyzed", `[]`))
-	vaultMatch, err := finding.NewMatch(w.payments, vault, "CVE-2024-0001", matching.Result{Matched: true, Evidence: stixext.Affected{Vendor: "hashicorp", Product: "vault", Version: "*"}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	paymentsVault, _ := saveMatch(t, w.db, vaultMatch)
-	saveScore(t, w.db, paymentsVault, modelThree(0.39995)) // shown as 0.4: High
-	lab, _ := saveMatch(t, w.db, match(t, w.lab, "1.18.0"))
-	saveScore(t, w.db, lab, modelThree(0.75))
-	saveScore(t, w.db, lab, paymentsScore) // its latest Score is from Model 2
-	otherSource := newSource(t, w.db, newCustomer(t, w.db))
-	syncRecords(t, w.db, otherSource.ID(), w.paymentsRecord(t))
-	theirs, _ := saveMatch(t, w.db, match(t, inventory.SourceReference{Source: otherSource.ID(), RecordID: "1"}, "1.18.0"))
-	saveScore(t, w.db, theirs, modelThree(0.1))
-
-	got := inTxValue(t, w.db, func(tx *postgres.Tx) ([]postgres.AssetFindingBands, error) {
-		return tx.FindingBandsByAssetOfCustomer(context.Background(), w.customer)
-	})
-
-	if len(got) != 2 || got[0].AssetName != "lab" || got[1].AssetName != "payments" {
-		t.Fatalf("assets = %+v, want lab then payments, and none of the other Customer", got)
-	}
-	if lab := got[0]; lab.Unbanded != 1 || lab.Critical+lab.High+lab.Medium+lab.Low != 0 {
-		t.Errorf("lab = %+v, want its one Finding unbanded by its latest Score", lab)
-	}
-	if p := got[1]; p.Critical != 1 || p.High != 1 || p.Medium+p.Low+p.Unbanded != 0 || p.AssetID == 0 {
-		t.Errorf("payments = %+v, want one Critical and one High", p)
 	}
 }
 

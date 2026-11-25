@@ -71,33 +71,6 @@ func (t *Tx) FindingWeeksOfCustomer(ctx context.Context, customer tenancy.Custom
 
 const week = 168 * time.Hour
 
-// AssetFindingBands counts an Asset's open Findings by the Score Band of
-// their latest Score.
-type AssetFindingBands struct {
-	// AssetID is the Asset's handle, as StoredAsset.ID.
-	AssetID   int64
-	AssetName string
-	scoring.BandCounts
-}
-
-// FindingBandsByAssetOfCustomer is, for every Asset of the Customer with an
-// open scored Finding, how many it has in each Score Band, ordered as Assets
-// are listed. A Finding not scored yet is left out.
-func (t *Tx) FindingBandsByAssetOfCustomer(ctx context.Context, customer tenancy.CustomerID) ([]AssetFindingBands, error) {
-	rows, err := t.q.ListOpenFindingScoresByAssetOfCustomer(ctx, uuid.UUID(customer))
-	if err != nil {
-		return nil, fmt.Errorf("list open finding scores of customer %s: %w", customer, err)
-	}
-	var assets []AssetFindingBands
-	for _, row := range rows {
-		if len(assets) == 0 || assets[len(assets)-1].AssetID != row.AssetID {
-			assets = append(assets, AssetFindingBands{AssetID: row.AssetID, AssetName: row.AssetName})
-		}
-		assets[len(assets)-1].Add(latestScore(row.Model, row.Value))
-	}
-	return assets, nil
-}
-
 // OpenFindingFact is an open scored Finding of a Customer's Assets with what
 // the dashboard counts it by.
 type OpenFindingFact struct {
