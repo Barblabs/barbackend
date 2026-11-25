@@ -269,6 +269,26 @@ SELECT w.start::timestamptz AS week,
 FROM generate_series(@since::timestamptz, @last_start::timestamptz, interval '168 hours') AS w(start)
 ORDER BY w.start;
 
+-- One row per week from since to last_start and per Finding of a Customer's
+-- Assets open when that week ended, as CountFindingsOfCustomerByWeek counts
+-- it, with the Model and value of its latest Score scored by then. A Finding
+-- with no Score by then has no row.
+-- name: ListOpenFindingScoresOfCustomerByWeek :many
+SELECT w.start::timestamptz AS week, s.model, s.value
+FROM generate_series(@since::timestamptz, @last_start::timestamptz, interval '168 hours') AS w(start)
+JOIN findings f ON f.first_opened_at < w.start + interval '168 hours'
+    AND (f.closed_at IS NULL OR f.closed_at >= w.start + interval '168 hours')
+JOIN cmdb_sources src ON src.id = f.cmdb_source_id
+JOIN LATERAL (
+    SELECT sc.model, sc.value
+    FROM finding_scores sc
+    WHERE sc.finding_id = f.id AND sc.scored_at <= w.start + interval '168 hours'
+    ORDER BY sc.scored_at DESC
+    LIMIT 1
+) s ON true
+WHERE src.customer_id = @customer_id
+ORDER BY w.start;
+
 -- One row per open scored Finding of a Customer's Assets with what the
 -- dashboard counts it by: its Asset's effective Exposure, its CVE, whether
 -- KEV lists it, and its latest Score. The extension id is the kev/1

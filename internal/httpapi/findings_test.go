@@ -15,6 +15,7 @@ type weeklyTrend struct {
 		StartsOn string `json:"starts_on"`
 		Opened   int    `json:"opened"`
 		Closed   int    `json:"closed"`
+		Critical *int   `json:"critical_open_at_end"`
 	} `json:"weeks"`
 }
 
@@ -28,8 +29,8 @@ func TestWeeklyTrendHasTwelveWeeksEndingWithTheCurrentOne(t *testing.T) {
 		t.Fatalf("weeks = %d, want 12", len(got.Weeks))
 	}
 	year, week := time.Now().UTC().ISOWeek()
-	if last := got.Weeks[11]; last.Week != fmt.Sprintf("%d-W%02d", year, week) || last.Opened != 0 || last.Closed != 0 {
-		t.Errorf("last week = %+v, want the current ISO week with nothing opened or closed", last)
+	if last := got.Weeks[11]; last.Week != fmt.Sprintf("%d-W%02d", year, week) || last.Opened != 0 || last.Closed != 0 || last.Critical == nil || *last.Critical != 0 {
+		t.Errorf("last week = %+v, want the current ISO week with nothing opened, closed or Critical", last)
 	}
 	if starts, err := time.Parse(time.DateOnly, got.Weeks[0].StartsOn); err != nil || starts.Weekday() != time.Monday {
 		t.Errorf("first week starts on %q, want a Monday", got.Weeks[0].StartsOn)

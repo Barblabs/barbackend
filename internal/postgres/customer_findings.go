@@ -47,6 +47,9 @@ type FindingWeek struct {
 	Opened    int
 	Closed    int
 	OpenAtEnd int
+	// ScoresAtEnd are the latest Scores, by when it ended, of those open
+	// then that had one.
+	ScoresAtEnd []scoring.Score
 }
 
 // FindingWeeksOfCustomer are the weeks ahead of since, weeks of them, oldest
@@ -54,17 +57,30 @@ type FindingWeek struct {
 // counts only its latest close, and as open while it was closed before, since
 // a Finding keeps no history of its closes.
 func (t *Tx) FindingWeeksOfCustomer(ctx context.Context, customer tenancy.CustomerID, since time.Time, weeks int) ([]FindingWeek, error) {
+	lastStart := since.Add(time.Duration(weeks-1) * week)
 	rows, err := t.q.CountFindingsOfCustomerByWeek(ctx, sqlcgen.CountFindingsOfCustomerByWeekParams{
-		CustomerID: uuid.UUID(customer),
-		Since:      since,
-		LastStart:  since.Add(time.Duration(weeks-1) * week),
+		CustomerID: uuid.UUID(customer), Since: since, LastStart: lastStart,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("count findings of customer %s by week: %w", customer, err)
 	}
+	scores, err := t.q.ListOpenFindingScoresOfCustomerByWeek(ctx, sqlcgen.ListOpenFindingScoresOfCustomerByWeekParams{
+		CustomerID: uuid.UUID(customer), Since: since, LastStart: lastStart,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list open finding scores of customer %s by week: %w", customer, err)
+	}
+	atEnd := make(map[time.Time][]scoring.Score)
+	for _, s := range scores {
+		atEnd[s.Week.UTC()] = append(atEnd[s.Week.UTC()], latestScore(s.Model, s.Value))
+	}
 	counted := make([]FindingWeek, len(rows))
 	for i, row := range rows {
-		counted[i] = FindingWeek{Start: row.Week.UTC(), Opened: int(row.Opened), Closed: int(row.Closed), OpenAtEnd: int(row.OpenAtEnd)}
+		start := row.Week.UTC()
+		counted[i] = FindingWeek{
+			Start: start, Opened: int(row.Opened), Closed: int(row.Closed), OpenAtEnd: int(row.OpenAtEnd),
+			ScoresAtEnd: atEnd[start],
+		}
 	}
 	return counted, nil
 }

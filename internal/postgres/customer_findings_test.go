@@ -112,6 +112,29 @@ func TestFindingWeeksOfCustomerCountOnlyItsOwnFindings(t *testing.T) {
 	}
 }
 
+func TestFindingWeeksOfCustomerReadEachOpenFindingsScoreAtTheWeeksEnd(t *testing.T) {
+	t.Parallel()
+	w := newFindingWorld(t)
+	payments, _ := saveMatch(t, w.db, match(t, w.payments, "1.18.0"))
+	high, critical := modelThree(0.5), modelThree(0.8)
+	saveScore(t, w.db, payments, high)
+	firstWeekEnd := time.Now().Truncate(time.Microsecond)
+	saveScore(t, w.db, payments, critical)
+
+	weeks := inTxValue(t, w.db, func(tx *postgres.Tx) ([]postgres.FindingWeek, error) {
+		return tx.FindingWeeksOfCustomer(context.Background(), w.customer, firstWeekEnd.Add(-168*time.Hour), 2)
+	})
+
+	if len(weeks) != 2 {
+		t.Fatalf("weeks = %+v, want two", weeks)
+	}
+	for i, want := range []scoring.Score{high, critical} {
+		if got := weeks[i].ScoresAtEnd; len(got) != 1 || got[0].Model != want.Model || got[0].Value != want.Value {
+			t.Errorf("week %d scores at end = %+v, want only payments' %v", i, got, want.Value)
+		}
+	}
+}
+
 // modelThree is paymentsScore as Scoring Model 3 scores it, with that value.
 func modelThree(value float64) scoring.Score {
 	s := paymentsScore

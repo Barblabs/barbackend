@@ -74,3 +74,40 @@ func TestWeeklyTrendRefusesWeeksOutOfRange(t *testing.T) {
 		}
 	}
 }
+
+func TestWeeklyTrendCountsTheCurrentWeeksCriticalAsTheSummaryDoes(t *testing.T) {
+	t.Parallel()
+	w := countedWorld(t)
+	w.exec(t, `UPDATE finding_scores SET model = 2, value = 0.95 WHERE finding_id = (SELECT id FROM findings WHERE record_id = 'b')`)
+
+	trend, err := w.findings.WeeklyTrend(context.Background(), w.viewer(t), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum, err := w.findings.Summary(context.Background(), w.viewer(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got := trend[0].CriticalOpenAtEnd; got != 1 || got != sum.Bands.Critical {
+		t.Errorf("critical open at end = %d, summary critical = %d, want both 1: b's Model 2 Score has no Band", got, sum.Bands.Critical)
+	}
+}
+
+func TestWeeklyTrendCountsAFindingCriticalOnlyFromTheWeekItsScoreBecameCritical(t *testing.T) {
+	t.Parallel()
+	w, _ := matchedPayments(t)
+	day := func(d int) time.Time { return time.Date(2026, time.November, d, 10, 0, 0, 0, time.UTC) }
+	w.setHistory(t, "payments", day(3), time.Time{})
+	w.scoreHistory(t, "payments", high(day(4)), critical(day(17)))
+	w.findings.SetNow(func() time.Time { return day(18) })
+
+	trend, err := w.findings.WeeklyTrend(context.Background(), w.viewer(t), 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(trend) != 2 || trend[0].CriticalOpenAtEnd != 0 || trend[1].CriticalOpenAtEnd != 1 {
+		t.Errorf("trend = %+v, want 0 Critical at the end of W46, while High, then 1 in W47", trend)
+	}
+}
