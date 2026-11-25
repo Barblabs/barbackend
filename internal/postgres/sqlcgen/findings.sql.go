@@ -512,6 +512,73 @@ func (q *Queries) ListActiveComponentsWithProducts(ctx context.Context, arg List
 	return items, nil
 }
 
+const listFindingAreaFactsOfCustomer = `-- name: ListFindingAreaFactsOfCustomer :many
+SELECT f.id, area.id AS area_id, f.first_opened_at, f.closed_at, f.close_reason_id,
+       coalesce(s.model, 0)::smallint AS model, coalesce(s.value, 0)::float8 AS value
+FROM findings f
+JOIN cmdb_sources src ON src.id = f.cmdb_source_id
+JOIN assets a ON a.cmdb_source_id = f.cmdb_source_id AND a.record_id = f.record_id
+LEFT JOIN customer_areas area ON area.cmdb_source_id = a.cmdb_source_id AND area.record_id = a.area_record_id
+LEFT JOIN LATERAL (
+    SELECT sc.model, sc.value
+    FROM finding_scores sc
+    WHERE sc.finding_id = f.id
+    ORDER BY sc.scored_at DESC
+    LIMIT 1
+) s ON true
+WHERE src.customer_id = $1
+  AND (f.closed_at IS NULL OR f.closed_at >= $2::timestamptz)
+ORDER BY f.id
+`
+
+type ListFindingAreaFactsOfCustomerParams struct {
+	CustomerID uuid.UUID
+	Since      time.Time
+}
+
+type ListFindingAreaFactsOfCustomerRow struct {
+	ID            uuid.UUID
+	AreaID        *int64
+	FirstOpenedAt time.Time
+	ClosedAt      *time.Time
+	CloseReasonID *int16
+	Model         int16
+	Value         float64
+}
+
+// One row per Finding of a Customer's Assets open now or closed at or after
+// since, with the id of its Asset's Area, null when the Asset has none, when
+// it was first opened and last closed, why, and the Model and value of its
+// latest Score, both 0 when it has none. A reopened Finding keeps only its
+// latest close.
+func (q *Queries) ListFindingAreaFactsOfCustomer(ctx context.Context, arg ListFindingAreaFactsOfCustomerParams) ([]ListFindingAreaFactsOfCustomerRow, error) {
+	rows, err := q.db.Query(ctx, listFindingAreaFactsOfCustomer, arg.CustomerID, arg.Since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListFindingAreaFactsOfCustomerRow
+	for rows.Next() {
+		var i ListFindingAreaFactsOfCustomerRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AreaID,
+			&i.FirstOpenedAt,
+			&i.ClosedAt,
+			&i.CloseReasonID,
+			&i.Model,
+			&i.Value,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listFindingClosesOfCustomer = `-- name: ListFindingClosesOfCustomer :many
 SELECT f.close_reason_id::smallint AS close_reason_id, f.opened_at, f.closed_at::timestamptz AS closed_at,
        coalesce(s.model, 0)::smallint AS model, coalesce(s.value, 0)::float8 AS value
@@ -598,6 +665,46 @@ func (q *Queries) ListFindingFirstOpensOfCustomer(ctx context.Context, arg ListF
 			return nil, err
 		}
 		items = append(items, first_opened_at)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listFindingScoresOf = `-- name: ListFindingScoresOf :many
+SELECT finding_id, scored_at, model, value
+FROM finding_scores
+WHERE finding_id = ANY($1::uuid[])
+ORDER BY finding_id, scored_at DESC
+`
+
+type ListFindingScoresOfRow struct {
+	FindingID uuid.UUID
+	ScoredAt  time.Time
+	Model     int16
+	Value     float64
+}
+
+// Every Score of the Findings with ids, newest first within each Finding.
+func (q *Queries) ListFindingScoresOf(ctx context.Context, ids []uuid.UUID) ([]ListFindingScoresOfRow, error) {
+	rows, err := q.db.Query(ctx, listFindingScoresOf, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListFindingScoresOfRow
+	for rows.Next() {
+		var i ListFindingScoresOfRow
+		if err := rows.Scan(
+			&i.FindingID,
+			&i.ScoredAt,
+			&i.Model,
+			&i.Value,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

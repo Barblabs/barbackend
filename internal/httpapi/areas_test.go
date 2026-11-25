@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
 	"strconv"
 	"testing"
 
@@ -166,5 +167,34 @@ func TestSetOwnerOfAnotherCustomersAreaIsNotFound(t *testing.T) {
 
 	if got.Code != "area_not_found" {
 		t.Errorf("code = %q, want area_not_found", got.Code)
+	}
+}
+
+func TestAreaHealthOfAnAreaWithoutFindingsIsZerosAndNotFlagged(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	e.provider.Snapshot = inventory.Snapshot{Areas: []inventory.AreaRecord{areaRecord(t, "1", "IT")}}
+	e.connect(t, e.customer)
+
+	got := decode[map[string]any](t, e.do(httptest.NewRequest(http.MethodGet, "/areas/health", nil)), http.StatusOK)
+
+	want := map[string]any{"areas": []any{map[string]any{
+		"id": float64(e.areaID(t, "1")), "name": "IT", "owner_email": nil, "asset_count": 0.0,
+		"critical_open": 0.0, "high_open": 0.0, "oldest_critical_days": nil, "fixed": 0.0,
+		"open_now": 0.0, "open_30_days_ago": 0.0, "needs_help": false, "reasons": []any{},
+	}}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("area health = %v, want %v", got, want)
+	}
+}
+
+func TestAreaHealthAnswersACustomerAdmin(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	req := httptest.NewRequest(http.MethodGet, "/areas/health", nil)
+	req.Header.Set("Authorization", e.adminToken(t))
+
+	if rec := e.do(req); rec.Code != http.StatusOK {
+		t.Errorf("area health as a Customer Admin = %d %s, want 200", rec.Code, rec.Body)
 	}
 }

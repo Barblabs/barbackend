@@ -60,6 +60,7 @@ var operations = []struct{ method, path string }{
 	{http.MethodGet, "/findings/attack-matrix"},
 	{http.MethodGet, "/findings/closed"},
 	{http.MethodGet, "/areas"},
+	{http.MethodGet, "/areas/health"},
 	{http.MethodGet, "/prioritizations"},
 	{http.MethodGet, "/news-digests"},
 	{http.MethodGet, "/business-context"},
