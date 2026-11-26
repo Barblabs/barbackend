@@ -374,7 +374,7 @@ func (c *checker) canonicalDomain(path, entry string) (string, bool) {
 
 func (c *checker) canonicalCountry(path, entry string) (string, bool) {
 	iso := strings.ToUpper(entry)
-	if iso != "" && !slices.Contains(countries, iso) {
+	if iso != "" && !IsCountry(iso) {
 		c.fail(path, "is %q, which is not an ISO 3166-1 alpha-2 country code", entry)
 		return "", false
 	}
