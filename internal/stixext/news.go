@@ -1,7 +1,6 @@
 package stixext
 
 import (
-	"encoding/json"
 	"strings"
 
 	"github.com/TcM1911/stix2"
@@ -74,21 +73,4 @@ func VictimID(domain, feed, post string) stix2.Identifier {
 		return ID(stix2.TypeIdentity, "victim:"+domain)
 	}
 	return ID(stix2.TypeIdentity, "victim:"+feed+":"+post)
-}
-
-func decode[T any](extensions stix2.Extensions, id stix2.Identifier) (T, bool) {
-	var zero T
-	raw, ok := extensions[string(id)]
-	if !ok {
-		return zero, false
-	}
-	data, err := json.Marshal(raw)
-	if err != nil {
-		return zero, false
-	}
-	var out T
-	if err := json.Unmarshal(data, &out); err != nil {
-		return zero, false
-	}
-	return out, true
 }

@@ -86,5 +86,5 @@ func NewNVD(n NVD) NVD {
 }
 
 func NVDOf(v *stix2.Vulnerability) (NVD, bool) {
-	return decodeExtension[NVD](v, NVDDefinitionID)
+	return decode[NVD](v.Extensions, NVDDefinitionID)
 }
