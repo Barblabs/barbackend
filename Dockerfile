@@ -1,6 +1,6 @@
 # The build stage runs on the builder's platform and Go cross-compiles, so a
 # multi-arch build needs no emulation.
-FROM --platform=$BUILDPLATFORM golang:1.27.2 AS build
+FROM --platform=$BUILDPLATFORM golang:1.27.4 AS build
 ARG TARGETOS TARGETARCH
 WORKDIR /src
 COPY go.mod go.sum ./

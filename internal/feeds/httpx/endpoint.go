@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 )
 
 // Endpoint is an HTTP client and request defaults for a Feed adapter.
@@ -14,10 +15,14 @@ type Endpoint struct {
 	header http.Header
 }
 
-// NewEndpoint returns an Endpoint, defaulting the client and URL when they are empty.
+var defaultClient = &http.Client{Timeout: 10 * time.Minute}
+
+// NewEndpoint returns an Endpoint, defaulting the client and URL when they
+// are empty. The default client gives up on a request, body included, after
+// 10 minutes.
 func NewEndpoint(client *http.Client, url, defaultURL string) Endpoint {
 	if client == nil {
-		client = http.DefaultClient
+		client = defaultClient
 	}
 	if strings.TrimSpace(url) == "" {
 		url = defaultURL

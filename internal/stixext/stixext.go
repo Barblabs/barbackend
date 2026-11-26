@@ -2,6 +2,7 @@
 package stixext
 
 import (
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
@@ -83,4 +84,21 @@ func ID(typ stix2.STIXType, key string) stix2.Identifier {
 // VulnerabilityID returns the deterministic identifier of the Vulnerability for cveID.
 func VulnerabilityID(cveID string) stix2.Identifier {
 	return ID(stix2.TypeVulnerability, cveID)
+}
+
+func decode[T any](extensions stix2.Extensions, id stix2.Identifier) (T, bool) {
+	var zero T
+	raw, ok := extensions[string(id)]
+	if !ok {
+		return zero, false
+	}
+	data, err := json.Marshal(raw)
+	if err != nil {
+		return zero, false
+	}
+	var out T
+	if err := json.Unmarshal(data, &out); err != nil {
+		return zero, false
+	}
+	return out, true
 }
