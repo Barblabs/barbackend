@@ -73,14 +73,6 @@ func (c *Crew) Read(ctx context.Context, item news.Item) (Run[news.Reading], err
 }
 
 func newReader(model string, item news.Item) agent[news.Reading] {
-	sectors := make([]string, 0, len(business.Sectors()))
-	for _, s := range business.Sectors() {
-		sectors = append(sectors, string(s))
-	}
-	kinds := []string{""}
-	for _, c := range business.Concerns() {
-		kinds = append(kinds, string(c))
-	}
 	return agent[news.Reading]{
 		model:   model,
 		system:  readerSystem,
@@ -89,9 +81,9 @@ func newReader(model string, item news.Item) agent[news.Reading] {
 			"summary": text(),
 			"attacks": arrayOf(object(map[string]any{
 				"victim":    text(),
-				"sectors":   arrayOf(oneOf(sectors...)),
+				"sectors":   arrayOf(oneOf(strs(business.Sectors())...)),
 				"countries": arrayOf(text()),
-				"kind":      oneOf(kinds...),
+				"kind":      optional(business.Concerns()),
 				"attacker":  text(),
 				"quote":     text(),
 			})),

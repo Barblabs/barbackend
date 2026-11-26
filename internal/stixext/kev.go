@@ -21,5 +21,5 @@ func NewKEV(k KEV) KEV {
 }
 
 func KEVOf(v *stix2.Vulnerability) (KEV, bool) {
-	return decodeExtension[KEV](v, KEVDefinitionID)
+	return decode[KEV](v.Extensions, KEVDefinitionID)
 }

@@ -1,6 +1,6 @@
 module barbackend
 
-go 1.27.2
+go 1.27.4
 
 tool (
 	github.com/golangci/golangci-lint/v2/cmd/golangci-lint

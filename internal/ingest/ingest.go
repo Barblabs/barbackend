@@ -83,11 +83,7 @@ func (s *Service) PullAll(ctx context.Context) []Result {
 func (s *Service) Run(ctx context.Context) {
 	var wg sync.WaitGroup
 	for _, f := range s.feeds {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			s.poll(ctx, f)
-		}()
+		wg.Go(func() { s.poll(ctx, f) })
 	}
 	wg.Wait()
 }

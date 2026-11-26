@@ -17,5 +17,5 @@ func NewEPSS(e EPSS) EPSS {
 }
 
 func EPSSOf(v *stix2.Vulnerability) (EPSS, bool) {
-	return decodeExtension[EPSS](v, EPSSDefinitionID)
+	return decode[EPSS](v.Extensions, EPSSDefinitionID)
 }

@@ -1,6 +1,6 @@
 # What the Agents still lack
 
-The Prioritizer, Luna and the Analista work as ADR 0016 describes, and the Drafter as ADR 0017 does. The Prioritizer keeps one lasting order per Customer from the stored Findings, weighing the Business Context and the threats of each Dossier (ADR 0026), but none has answered with a real model yet. The Reader and the Editor exist only in ADR 0025. This is what is missing, most important first. Each item is ready to become an issue.
+The Prioritizer, Luna and the Analista work as ADR 0016 describes, and the Drafter as ADR 0017 does. The Prioritizer keeps one lasting order per Customer from the stored Findings, weighing the Business Context and the threats of each Dossier (ADR 0026), but none has answered with a real model yet. The Reader and the Editor work as ADR 0025 describes. This is what is missing, most important first. Each item is ready to become an issue.
 
 ## 1. A run against Anthropic's API, and an evaluation
 

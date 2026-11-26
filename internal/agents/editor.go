@@ -221,21 +221,16 @@ func truncate(s string, limit int) string {
 // is older than a day, when anything new is relevant to it. A Customer that
 // fails is logged and the rest go on.
 func (s *Service) DigestNews(ctx context.Context) error {
-	customers, err := postgres.InTxValue(ctx, s.db, func(tx *postgres.Tx) ([]postgres.StoredCustomer, error) {
-		return tx.Customers(ctx)
-	})
+	customers, err := s.activeCustomers(ctx)
 	if err != nil {
 		return err
 	}
-	for _, c := range customers {
-		if !c.Deactivated.IsZero() {
-			continue
-		}
-		if err := s.digest(ctx, c.Customer.ID(), time.Now().UTC()); err != nil {
+	for _, customer := range customers {
+		if err := s.digest(ctx, customer, time.Now().UTC()); err != nil {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
-			log.Printf("agents: editor: customer %s: %v", c.Customer.ID(), err)
+			log.Printf("agents: editor: customer %s: %v", customer, err)
 		}
 	}
 	return nil

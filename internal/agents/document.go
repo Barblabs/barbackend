@@ -142,6 +142,8 @@ func docxText(data []byte) (string, error) {
 	return text, err
 }
 
+var wordBreaks = map[string]string{"tab": "\t", "br": "\n", "cr": "\n"}
+
 func wordText(decoder *xml.Decoder) (string, error) {
 	var (
 		b      strings.Builder
@@ -158,7 +160,7 @@ func wordText(decoder *xml.Decoder) (string, error) {
 		switch t := token.(type) {
 		case xml.StartElement:
 			inText = t.Name.Local == "t"
-			b.WriteString(map[string]string{"tab": "\t", "br": "\n", "cr": "\n"}[t.Name.Local])
+			b.WriteString(wordBreaks[t.Name.Local])
 		case xml.EndElement:
 			inText = false
 			if t.Name.Local == "p" {
